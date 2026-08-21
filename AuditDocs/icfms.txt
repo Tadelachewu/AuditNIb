@@ -1,0 +1,299 @@
+BUSINESS REQUIREMENTS DOCUMENT
+
+                           NIB-Control360
+
+       Internal Control Findings Management System (ICFMS)
+                                    Prepared for:
+
+                              NIB International Bank
+                                  Business Owner:
+
+                             Internal Control Division
+                                    Prepared by:
+
+                                  Adonay Yoseph
+                                    Version: 1.0
+
+                                Date: August 2026
+BUSINESS REQUIREMENTS DOCUMENT (BRD)
+
+Internal Control Findings Management System (ICFMS)
+
+Organization: NIB International Bank
+Business Owner: Internal Control Division
+Document Version: 1.0
+Status: Draft
+Date: August 2026
+
+1. Purpose
+
+The purpose of this document is to define the business requirements for developing a
+centralized web-based Internal Control Findings Management System (ICFMS) to
+automate the complete lifecycle of Internal Control findings, including reporting, review,
+rectification, verification, performance measurement, notifications, and management
+reporting.
+
+2. Business Need
+
+The Internal Control Division currently depends on manual Excel-based reporting. This
+process results in:
+
+     Repeated manual data entry
+     Multiple file exchanges
+     Version control problems
+     Delayed reporting
+     Increased operational risk
+     Limited transparency
+     High dependency on Excel formulas
+     Difficulty monitoring outstanding findings
+     No centralized repository
+     Limited analytical capability
+The proposed system will digitize and standardize the entire process.
+
+                                                                                        Prepared by:-Adonay Yoseph
+3. Business Objectives
+
+The system shall:
+
+     Eliminate manual Excel consolidation.
+     Centralize all findings.
+     Automate workflows.
+     Automate performance calculations.
+     Improve monitoring and accountability.
+     Provide real-time dashboards.
+     Support historical analysis.
+     Improve operational efficiency.
+     Support future digital expansion.
+
+4. Stakeholders
+
+Primary Stakeholders
+
+     Internal Control Division
+     Branch Internal Controllers
+     District Internal Controllers
+     Head Office Internal Controllers
+     Branch Managers
+     District Directors
+
+Supporting Stakeholders
+
+     Information Technology support
+     Information Security Team
+     Digital Transformation Office
+     Senior Management
+
+External Future Stakeholder
+
+     Internal Audit Department (future integration)
+
+5. Current Business Process (AS-IS)
+
+    1. Branch Internal Controllers prepare monthly findings in Excel.
+    2. Reports are sent to District Internal Controllers.
+    3. Districts consolidate reports.
+    4. Reports are sent to Head Office Internal Controllers.
+    5. Performance calculations are performed manually using Excel formulas.
+
+                                                                                        Prepared by:-Adonay Yoseph
+6. Results are returned to districts.
+7. Districts distribute reports to Branch Managers.
+8. Branch Managers implement corrective actions.
+9. Rectification reports are submitted.
+10. District Controllers verify the submissions.
+11. Final reports are sent to Head Office.
+12. Executive reports are prepared manually.
+
+6. Future Business Process (TO-BE)
+
+    1. Branch Internal Controllers enter findings directly into the web system.
+    2. District Controllers review submissions online.
+    3. Head Office Internal Controllers monitor findings in real time.
+    4. Branch Managers update rectification status in the system.
+    5. Verification is completed digitally.
+    6. Performance is calculated automatically.
+    7. Dashboards update instantly.
+    8. Reports are generated automatically.
+    9. Notifications are sent automatically.
+    10. Historical records remain permanently available.
+
+7. User Roles
+
+Administrator
+
+Responsible for:
+
+     User creation
+     Role assignment
+     Branch configuration
+     District configuration
+     Category maintenance
+     Workflow configuration
+     System settings
+
+Branch Internal Controller
+
+Can:
+
+     Register findings
+     Edit draft findings
+
+                                                     Prepared by:-Adonay Yoseph
+     Submit findings
+     Verify rectifications (where physical verification is possible)
+     Upload optional evidence
+     View branch history
+
+District Internal Controller
+
+Can:
+     Review branch submissions
+     Verify findings
+     Approve or return findings
+     Transfer outstanding cases
+     Monitor district performance
+     Generate district reports
+
+Head Office Internal Controller
+
+Can:
+     Monitor all districts
+     Register Internal Audit findings received from the Internal Audit Department
+     Generate executive reports
+     Configure performance calculations
+     Monitor national performance
+
+Branch Manager
+
+Can:
+     View assigned findings
+     Record corrective actions
+     Update rectification progress
+     Enter rectified case counts
+     Upload optional supporting evidence
+     Respond to comments
+
+District Director
+
+Can:
+     View district dashboards
+
+                                                                                        Prepared by:-Adonay Yoseph
+     Review branch performance
+     Review high-risk findings
+     Provide comments and recommendations
+     Cannot modify findings or scores
+
+8. Functional Requirements
+
+The system shall provide the following modules:
+
+     User Management
+     Findings Management
+     Rectification Management
+     Verification
+     Case Transfer
+     Performance Calculation
+     Dashboards
+     Reports
+     Notifications
+     Audit Trail
+     Knowledge Base
+     Administration
+
+9. Business Rules
+
+Finding Source
+
+The system shall support two finding sources:
+
+     Internal Control
+     Internal Audit
+
+Internal Audit findings will initially be entered into the system by Head Office Internal
+Controllers until direct integration is implemented.
+
+Performance Calculation
+
+     Internal Control performance is initially calculated using findings classified as
+         Other Cases.
+
+     ATM, IT, Dormant, and Zero Balance findings shall be reported separately and
+         stored for future inclusion in scoring.
+
+     Internal Audit findings follow their own methodology.
+     The District cumulative score combines Internal Control and Internal Audit
+
+         results.
+
+                                                                                        Prepared by:-Adonay Yoseph
+Case Transfer
+
+If an outstanding finding continues into another reporting month:
+     It shall be transferred to the new month.
+     It shall no longer affect the original month's performance.
+     The transferred month becomes responsible for the performance impact.
+     The transfer history shall remain visible.
+
+Evidence
+
+Evidence upload is optional. Verification may rely on physical inspection, documentary
+evidence, or both.
+
+Notifications
+
+The system shall automatically notify relevant users when:
+     A finding is submitted.
+     A rectification is overdue.
+     A verification is pending.
+     A finding is returned.
+     A case is transferred.
+     A comment is added.
+
+Outlook email integration shall be supported.
+
+10. Non-Functional Requirements
+
+The solution shall:
+     Be web-based.
+     Support secure authentication.
+     Use role-based access control.
+     Maintain complete audit logs.
+     Be scalable.
+     Be configurable.
+     Support backup and recovery.
+     Deliver responsive performance.
+     Be compatible with modern browsers.
+
+                                                                                        Prepared by:-Adonay Yoseph
+11. Success Criteria
+
+The project will be successful when:
+     Manual Excel consolidation is eliminated.
+     Users complete workflows entirely through the system.
+     Performance calculations are automatic.
+     Management dashboards are available in real time.
+     Reports are generated on demand.
+     Historical data is searchable and traceable.
+
+12. Future Enhancements
+
+The system architecture should support future additions such as:
+     Direct Internal Audit integration
+     Mobile application
+     Power BI dashboards
+     Digital signatures
+     Workflow automation
+     AI-assisted analytics
+     OCR-based document processing
+     API integration with other bank systems
+
+13. Approval
+
+This document serves as the baseline business requirements for the development of
+the Internal Control Findings Management System and should be reviewed and
+approved by the Internal Control Division, IT Division, and the appropriate management
+authority before development begins.
+
+                                                                                        Prepared by:-Adonay Yoseph
+

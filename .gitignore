@@ -36,6 +36,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# local "database" (see src/lib/db.ts) - generated on first run
+/data/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

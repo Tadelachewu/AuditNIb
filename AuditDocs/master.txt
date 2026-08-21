@@ -1,0 +1,523 @@
+            NIB CONTROL360
+
+Internal Control Findings Management System (ICFMS)
+
+      MASTER IT DEVELOPMENT & IMPLEMENTATION DOCUMENT
+
+                                         NIB International Bank S.C., Ethiopia
+            Version 1.0 | Functional, Technical, Data, Workflow and Implementation Blueprint
+1. Executive Summary
+
+NIB Control360 is an enterprise Internal Control Findings Management System intended to replace the current
+Excel-based monthly findings reporting, consolidation, review, authorization, rectification and performance-
+monitoring process with a centralized, role-based and auditable web application.
+
+The system covers the entire bank: 13 districts and more than 410 branches. Districts and branches must be
+configuration-driven so authorized administrators can add, edit, deactivate or remove them without changing
+application code.
+
+Business objectives
+
+ Centralize Internal Control and Internal Audit findings.
+ Replace manual Excel consolidation and formula adjustment with controlled workflows.
+ Provide role-specific dashboards from branch through district and Head Office.
+ Track case count and financial amount, including partial rectification.
+ Carry unresolved cases between reporting periods without double-counting.
+ Use a configurable performance engine; currently Other Case is the scoring category.
+ Provide audit trail, threaded comments, optional attachments and notifications.
+ Provide controlled monthly reporting periods and management reports.
+
+2. Scope         Requirement
+                 Bank  District  Branch hierarchy; dynamic
+ Area            administration.
+ Organization    Administrator, HO Internal Controller, District
+ Users/Roles     Internal Controller, District Director, Branch Internal
+                 Controller, Branch Manager, Executive Read-only.
+ Findings        Source, month, district, branch, date, operation area,
+                 irregularity, classified case, risk, amount, currency,
+ Workflow        case count, description, recommendation and optional
+                 evidence.
+ Rectification   Branch Controller  District Controller  HO
+ Transfers       Controller  Branch Manager  Rectification 
+ Performance     Authorization.
+ Dashboards      Weekly progress, partial case/amount rectification
+ Administration  and remaining balance.
+ Auditability    Continuation of unresolved cases with history and no
+                 duplicate performance counting.
+                 Configurable scoring; current basis is Other Case; all
+                 categories remain visible.
+                 Role/scope-based KPIs, trends, rankings, risks,
+                 categories and work queues.
+                 Users, roles, districts, branches, sources, categories,
+                 scoring rules, periods and settings.
+                 Approvals, returns, rejections, rectifications, transfers,
+                 comments, attachments and audit logs.
+
+                 Prepared by:-Adonay Yoseph
+3. Current As-Is Process
+
+1) Branch Internal Controller prepares the monthly findings report. 2) District Internal Controllers correct
+structure/content and consolidate branches. 3) District sends the consolidated report to Head Office Internal
+Controllers. 4) Head Office reviews and adjusts formulas/structure. 5) Results return through the district. 6)
+District communicates findings to Branch Managers. 7) Branch Managers take corrective action and report
+progress weekly. 8) Unresolved findings continue into later reporting cycles.
+
+Main problems: duplicate/manual entry, formula risk, weak traceability, difficult partial rectification, transfer
+ambiguity, slow consolidation and limited management visibility.
+
+4. Target To-Be Workflow                     System behavior
+                                             Branch Controller enters finding and may save
+ Stage                                       without submission.
+ Draft                                       Finding enters District Controller queue and
+                                             notification is created.
+ Submit                                      Approve, Reject, Return for Correction, Comment.
+                                             Moves to Head Office Controller for second
+ District review                             approval/review.
+ District approval                           Moves to rejected queue with reason and audit
+                                             history.
+ Rejection                                   Routes to Branch Controller for correction; history is
+                                             retained.
+ Return                                      Routes to Branch Manager for corrective action.
+                                             Manager submits full or partial corrective progress,
+ HO approval                                 amount and cases.
+ Rectification                               District Controller authorizes where policy requires;
+                                             unresolved balance remains.
+ Authorization                               Unresolved cases/amount are carried to a later period
+                                             with transfer history.
+ Transfer                                    Case closes only when eligible remaining
+                                             cases/amount are fully resolved or authorized closure
+ Close                                       applies.
+
+5. Roles and Scope             Scope         Responsibilities
+                               Bank-wide     Users, roles, districts, branches,
+ Role                                        sources/categories, scoring rules
+ Administrator                 Bank-wide     and settings. Only Admin changes
+                                             scoring rules.
+ HO Internal Controller        Own district  Second approval/review, Internal
+                               Own district  Audit entry/import, bank-
+ District Internal Controller                wide/district reporting, comments
+ District Director                           and oversight.
+                                             Review/approve/reject/return,
+                                             consolidation, branch performance
+                                             and reporting-period control.
+                                             Oversight, district/branch
+                                             performance, rankings, trends,
+                                             comments and reports.
+
+                                                      Prepared by:-Adonay Yoseph
+Branch Internal Controller        One branch             Register findings, draft/submit,
+
+                                                         monitor status and respond to
+
+                                                         corrections.
+
+Branch Manager                    One branch             Receive approved findings and
+
+                                                         submit corrective/weekly
+
+                                                         progress.
+
+Executive Read-only               Configured read scope  Read-only management
+
+                                                         dashboards and reports.
+
+Constraints: each branch has one Branch Manager and one Branch Internal Controller. District and Head Office
+
+may have multiple Internal Controllers. A user is assigned to only one branch or district/organizational unit at a
+
+time.
+
+6. Finding Data Requirements
+
+Field                             Req.                   Notes
+Finding ID/Reference              Yes                    Unique identifier.
+Finding Source                    Yes                    Internal Control, Internal Audit and
+                                                         future configurable sources.
+Reporting Month/Period            Yes                    Controlled reporting period.
+                                                         Validated against organizational
+District / Branch                 Yes                    scope.
+                                                         Date identified.
+Finding Date                      Yes                    Process/area involved.
+                                                         Detailed issue type.
+Operation Area                    Yes                    ATM mismatch, ATM long
+                                                         outstanding, IT, dormant, zero
+Type of Irregularity              Yes                    balance, CK book, Other Case.
+                                                         Financial details.
+Classified Case                   Yes                    Individual cases represented.
+                                                         Low/Medium/High/Critical.
+Amount / Currency                 Conditional            Finding narrative.
+Number of Cases                   Yes                    Corrective recommendation.
+Risk Level                        Yes                    Approval must not be blocked
+Description                       Yes                    solely by missing evidence where
+Recommendation                    Optional               authorized physical verification is
+Evidence                          Optional               sufficient.
+                                                         Workflow state, creator, approver,
+Status / Audit metadata           Yes                    dates.
+
+7. Partial Rectification Rules
+
+A finding may represent multiple similar cases with a combined amount. Rectification must support both case
+count and amount.
+
+Example                           Original               After partial rectification
+
+Cases                             3                      2 remaining
+
+Amount                            ETB 45,000             ETB 35,000 remaining
+
+Rectified cases                   0                      1
+
+Rectified amount                  ETB 0                  ETB 10,000
+
+Example: three similar cases of ETB 15,000 + ETB 10,000 + ETB 20,000 = ETB 45,000. If only the ETB 10,000 case
+
+is corrected, record 1 rectified case/ETB 10,000 and 2 outstanding cases/ETB 35,000. The remaining balance may
+
+transfer and later be rectified.
+
+                                                            Prepared by:-Adonay Yoseph
+ Rectified cases cannot exceed eligible cases.
+ Rectified amount cannot exceed eligible amount.
+ Every rectification is a transaction linked to user, date and period.
+ Original finding values must remain auditable.
+ Outstanding = eligible original/current quantity minus cumulative authorized rectification.
+
+8. Transferred Case Engine
+
+A transferred case is a continuation, not a new finding. Preserve the original finding ID and transfer chain.
+
+Requirement                     Rule
+Transfer identity               Keep original finding and full transfer history.
+From/To                         Store source and destination reporting periods.
+Balance                         Transfer only unresolved cases and amount.
+Performance                     Do not double-count the same continuing case in old
+                                and new periods.
+Case age                        Track from original finding date.
+Timeline                        Show transfers and rectification events.
+
+9. Performance / Scoring
+
+Current business rule: districts are evaluated mainly using Other Case. All finding categories must still be shown
+for general information, including total, rectified and outstanding values.
+
+Primary current formula: Performance % = Rectified eligible Other Cases ÷ Total eligible Other Cases × 100.
+
+The exact denominator treatment for transferred cases, reporting-period eligibility and approval status must be
+stored in a versioned Scoring Rule. Do not hard-code these policy decisions.
+
+ Non-scored categories remain visible.
+ Admin alone can add/remove/activate scoring categories.
+ Scoring rules require version, effective date, active state, included categories/sources and calculation basis.
+ District/HO score adjustments, if policy permits, require reason and audit trail.
+
+10. Dashboard Requirements
+
+Role                            Required information
+
+Branch Controller / Manager     Selected month; category totals;
+
+                                total/rectified/outstanding; Other Case summary;
+
+                                performance; monthly trend; risk distribution; recent
+
+                                activity; relevant work queues.
+
+District Controller / Director  District aggregate; branch-by-branch performance;
+
+                                top performers; monthly trend; risks; category totals;
+
+                                outstanding; rectification progress; recent activity.
+
+HO Controller                   Bank and district aggregates; district/branch ranking;
+
+                                top performers; monthly trend; risks; source
+
+                                comparison; outstanding; rectification; period status.
+
+Executive                       Read-only concise KPIs, trends, rankings and
+
+                                exceptions.
+
+Common filters: Reporting Period/Month, District, Branch, Finding Source, Classified Case, Risk, Operation Area
+
+and Status. Filters must never bypass organizational scope.
+
+                                                             Prepared by:-Adonay Yoseph
+ Monthly Performance Trend
+ Risk Distribution
+ Finding by Category
+ Branch Performance by Month
+ District Performance
+ Top Performers
+ Recent Activity
+ KPI cards and exception/work-queue indicators
+
+11. Workflow States      Meaning                  Typical next state
+                         Not submitted            SUBMITTED
+ State                   Submitted by branch      DISTRICT_REVIEW
+ DRAFT                   District action pending  APPROVED / REJECTED /
+ SUBMITTED                                        RETURNED
+ DISTRICT_REVIEW         Passed district          HO_REVIEW
+                         Second approval          HO_APPROVED / RETURNED /
+ DISTRICT_APPROVED                                REJECTED
+ HO_REVIEW               Approved for branch      SENT_TO_BRANCH_MANAGER
+                         Awaiting action          PARTIALLY_RECTIFIED /
+ HO_APPROVED                                      RECTIFIED / TRANSFERRED
+ SENT_TO_BRANCH_MANAGER  Some resolved            PARTIALLY_RECTIFIED /
+                                                  RECTIFIED / TRANSFERRED
+ PARTIALLY_RECTIFIED     Balance moved            SENT_TO_BRANCH_MANAGER /
+                                                  RECTIFIED
+ TRANSFERRED             All eligible resolved    CLOSED
+                         Terminal                 -
+ RECTIFIED
+ CLOSED
+
+12. Comments, Attachments and Notifications
+
+ Threaded comments and replies on findings/workflow actions.
+ Users may add attachments to comments where permitted.
+ Finding evidence is optional.
+ Notifications for submit, approve, reject, return, assignment, rectification, transfer and period events.
+ Outlook/email integration should be implemented through a configurable production notification service.
+
+13. Reporting Period Control
+
+ Monthly periods with Open/Locked status.
+ District and Head Office Controllers can control periods within authorized scope.
+ Locked periods prevent unauthorized reportable changes.
+ Lock/unlock requires audit trail and reason.
+ Exceptional corrections must be explicit and authorized.
+
+14. Core Data Model                             Key attributes
+                                                id, name, username, role, status, organizationUnitId,
+ Entity
+ User                                                                            Prepared by:-Adonay Yoseph
+Role               districtId, branchId, createdAt, lastLogin
+District           id, code, name, permissions, active
+Branch             id, code, name, status
+ReportingPeriod    id, code, name, districtId, status, managerUserId,
+Finding            controllerUserId
+                   id, year, month, dates, status, lockedBy, lockedAt
+Rectification      id, reference, source, period, district, branch, date,
+                   operation area, irregularity, classified case, amount,
+FindingTransfer    currency, cases, risk, description, recommendation,
+                   status
+Comment            id, findingId, periodId, rectifiedCases,
+Evidence           rectifiedAmount, evidence, comment, submittedBy,
+Notification       authorizedBy, dates
+AuditLog           id, findingId, fromPeriodId, toPeriodId,
+ScoringRule        casesTransferred, amountTransferred, reason,
+ScoringAdjustment  createdBy, createdAt
+                   id, findingId, parentCommentId, authorId, text,
+                   attachments, createdAt
+                   id, finding/comment, file metadata, storage key,
+                   uploader, timestamp
+                   id, recipientId, type, title, message, entityId, readAt,
+                   createdAt
+                   id, userId, action, entityType, entityId, oldValue,
+                   newValue, timestamp, reason
+                   id, version, name, active, effectiveFrom, categories,
+                   sources, basis, formulaType
+                   id, target, period, value, reason, adjustedBy, createdAt
+
+15. Recommended Technical Architecture
+
+Recommended production flow: Web UI  API/Application Services  Authentication/Authorization 
+Relational Database  File/Object Storage  Notification Service  Reporting/Export Service.
+
+Frontend
+
+ React + TypeScript modular architecture.
+ Reusable NIB design system.
+ Role-aware navigation and route guards.
+ UI scope is not a security boundary; server/API must enforce access.
+
+Backend
+
+ Centralized authorization and validation.
+ Transactional approval/rectification/transfer operations.
+ Idempotency for sensitive actions where appropriate.
+
+Database
+
+ Relational database recommended.
+ Indexes for district, branch, period, status, source and category.
+ Constraints for one active manager/controller per branch.
+ Immutable or protected audit records.
+
+                   Prepared by:-Adonay Yoseph
+Storage
+
+Use controlled object storage for evidence/attachments and store metadata in the database.
+
+16. Security Requirements
+
+ Production-grade authentication/SSO.
+ Server-side authorization by role and organization scope.
+ Branch users only see their branch; district users only their district; HO users see bank-wide data as
+
+     permitted.
+ Read-only users cannot modify.
+ Audit sensitive actions.
+ Never store passwords in plain text.
+ Secure attachment validation and access controls.
+ HTTPS, session expiry/revocation, secure secrets and logging.
+
+17. Non-Functional Requirements                       Requirement
+                                                      Optimized for bank-scale historical monthly data and
+ Area                                                 dashboards.
+ Performance                                          No hard-coded 13/410 organization limits.
+                                                      Production target and DR to be defined by IT.
+ Scalability                                          All critical workflow/configuration actions traceable.
+ Availability                                         Responsive, accessible, professional banking UI.
+ Auditability                                         Modular code, API documentation, automated tests
+ Usability                                            and CI/CD.
+ Maintainability                                      Transactions prevent invalid partial rectification and
+                                                      duplicate transfers.
+ Data integrity
+
+18. Reports
+
+ Monthly findings
+ Branch performance
+ District performance
+ Bank-wide performance
+ Internal Control vs Internal Audit
+ Category summary
+ Other Case performance
+ Outstanding/unrectified
+ Rectification progress
+ Transferred/continuing cases
+ Risk report
+ Top performer/ranking
+ Reporting-period status
+ Audit trail
+ Excel/CSV/PDF/print exports subject to IT standards
+
+                                                      Prepared by:-Adonay Yoseph
+19. Administration          Required capability
+                            Create/edit/deactivate/reactivate; role and
+ Module                     organizational assignment; active/inactive view.
+ Users                      Add/edit/deactivate/reactivate.
+                            Add/edit/deactivate/reactivate; assign one manager
+ Districts                  and one controller.
+ Branches                   Manage Internal Control/Internal Audit and future
+                            sources.
+ Sources                    Manage classified cases.
+                            Admin-only configuration/versioning/activation.
+ Categories                 Authorized adjustments with reason/audit.
+ Scoring Rules              Create, open/lock/unlock within scope.
+ Scoring Adjustments        Currencies, risk levels, notification settings and other
+ Reporting Periods          configuration.
+ Settings
+                            Acceptance criterion
+20. Testing & Acceptance    Correct modules/data for every role.
+                            No cross-branch/cross-district unauthorized access.
+ Test                       Mandatory validation; draft and submit work.
+ Role access                Branch  District  HO  Manager works with
+ Organization scope         queues.
+ Finding creation           Correct routing, reason and history.
+ Workflow                   3 cases/45,000 can become 1/10,000 rectified and
+                            2/35,000 outstanding.
+ Return/Reject              Only unresolved balance transfers; no duplicate
+ Partial rectification      performance counting.
+                            Other Case calculation reconciles.
+ Transfer                   Only Admin changes scoring configuration.
+                            Unauthorized changes blocked.
+ Scoring                    Critical actions logged.
+ Admin scoring              Threading and optional attachments work securely.
+ Period lock                Totals reconcile to source records.
+ Audit                      Automated build/tests pass.
+ Comments/attachments
+ Reports                    Deliverables
+ Build/deployment           Architecture, authentication, organization,
+                            users/roles, navigation, base UI.
+21. Implementation Roadmap  Role dashboards, filters, KPIs, trends and aggregation.
+                            Finding registration, validation, draft/submit.
+ Phase                      District review/approval/rejection/return, comments
+ 1                          and notifications.
+                            HO second approval and Branch Manager routing.
+ 2                          Rectification, weekly progress, evidence and partial
+ 3                          cases/amounts.
+ 4                          Transfer engine, aging, continuing findings and
+                            reconciliation.
+ 5                          Performance/scoring, configurable rules and
+ 6
+                                                             Prepared by:-Adonay Yoseph
+ 7
+
+ 8
+                      adjustments.
+
+9                     Reports, exports and analytics.
+
+10                    Administration, period locks, audit and production
+
+                      hardening.
+
+11                    Security, performance, UAT, migration and rollout.
+
+22. Excel Migration
+
+ Create standardized import template aligned to Finding model.
+ Validate district/branch codes, periods, categories, currencies and numbers.
+ Duplicate detection using approved business keys.
+ HO Internal Controllers can import/enter Internal Audit findings.
+ Preserve historical source and identifiers where available.
+ Reconcile imported totals to approved Excel reports before cutover.
+ Document any transformation; never silently change historical performance.
+
+23. Governance
+
+ Business owner: Internal Control Division/designated process owner.
+ Technical owner: NIB IT/Digital.
+ Security: NIB Information Security.
+ Infrastructure/DevOps: NIB IT infrastructure.
+ UAT: HO, selected District Controllers, Branch Controllers and Branch Managers.
+ Scoring-rule changes require business approval and versioning.
+ Production changes follow NIB change management.
+
+24. Final Decisions to Confirm Before Production
+
+ Exact denominator and treatment of transferred cases in performance.
+ Whether Internal Audit uses the same workflow or controlled HO entry path.
+ Attachment size/types and retention.
+ Outlook/email integration architecture.
+ Production SSO/identity provider.
+ Final report/export standards.
+ Data retention/archiving.
+ Hosting and disaster recovery targets.
+ Exact score-adjustment policy.
+ Which partial rectification actions require District authorization.
+
+25. Reference Values  Values
+                      Administrator; HO Internal Controller; District
+ Reference            Internal Controller; District Director; Branch Internal
+ Roles                Controller; Branch Manager; Executive Read-only
+                      ATM Mismatch; ATM Long Outstanding; IT Case;
+ Classified Cases     Dormant Account; Zero Balance; CK Book; Other Case
+ Risk                 Low; Medium; High; Critical
+
+                                                       Prepared by:-Adonay Yoseph
+Currency     ETB; USD; EUR; GBP initially; configurable
+User Status  Active; Inactive
+Period       Open; Locked
+
+26. Production Definition of Done
+
+ All approved workflows work end-to-end.
+ Server-side role/scope enforcement.
+ Business calculations reconcile with approved Excel/manual results.
+ Partial rectification and transfer reconcile by cases and amounts.
+ Scoring is versioned/configurable.
+ Period locking and audit are operational.
+ Security and vulnerability testing complete.
+ Performance testing completed with realistic bank-scale data.
+ UAT sign-off obtained.
+ Backup/recovery/monitoring operational.
+ Deployment and rollback plans approved.
+
+                            END OF NIB CONTROL360 MASTER IT DEVELOPMENT DOCUMENT
+
+             Prepared by:-Adonay Yoseph
+
