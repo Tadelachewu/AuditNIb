@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { getIronSession, type IronSession, type SessionOptions } from "iron-session";
+import type { OrgScope } from "@/types";
 
 export interface SessionData {
   isLoggedIn: boolean;
@@ -8,6 +9,10 @@ export interface SessionData {
   name?: string;
   role?: string;
   roleName?: string;
+  // Which role-specific dashboard to render (see src/app/(app)/dashboard/page.tsx)
+  // is decided from this, not from the role code, so custom roles route
+  // sensibly too.
+  orgScope?: OrgScope;
   // Resolved from the user's RoleDefinition at login time (see
   // src/app/api/auth/login/route.ts) and carried in the encrypted cookie so
   // src/proxy.ts can authorize requests without a filesystem read. This

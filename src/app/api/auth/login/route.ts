@@ -55,6 +55,7 @@ export async function POST(request: Request) {
   session.name = user.name;
   session.role = user.role;
   session.roleName = role.name;
+  session.orgScope = role.orgScope;
   // ADMIN always resolves to every permission the catalog currently
   // defines, rather than whatever was snapshotted into role.permissions at
   // seed/creation time - so adding a new page/action to the registry never

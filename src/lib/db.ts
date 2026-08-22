@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { hashPassword } from "@/lib/auth";
-import { ALL_PERMISSION_KEYS, ALL_VIEW_PERMISSION_KEYS } from "@/lib/permissions/registry";
+import { ALL_PERMISSION_KEYS, ALL_VIEW_PERMISSION_KEYS, permissionKey } from "@/lib/permissions/registry";
 import type {
   Database,
   User,
@@ -102,15 +102,70 @@ function buildSeedDatabase(): Database {
     updatedAt: now,
   };
 
-  // Roles are data (Phase 2) - this is the seed, not a hard-coded enum.
-  // ADMIN always gets every permission (isSystem protects it from being
-  // edited away, see src/app/api/admin/roles/[id]/route.ts). The other six
-  // seeded roles start with NO admin-console permissions, matching Phase 1's
-  // actual behavior (only ADMIN could reach /admin/*) - an admin now grants
-  // access deliberately via /admin/roles rather than it being implicit.
-  // EXECUTIVE_READONLY is the one exception: it gets read-only visibility
-  // across the console by default, matching its "read-only oversight" BRD
-  // description, excluding Roles & Permissions itself.
+  // Roles are data (Phase 2) - this is the seed, not a hard-coded enum. Every
+  // seeded role gets a non-empty, BRD-grounded default permission set (see
+  // PHASE5.md) so an admin starts from "this is what the role should
+  // plausibly have" and adjusts from there via /admin/roles, rather than
+  // building every role's access from zero. ADMIN always gets every
+  // permission (isSystem protects it from being edited away, see
+  // src/app/api/admin/roles/[id]/route.ts).
+  //
+  // Defaults are deliberately conservative: icfms.txt reserves "User
+  // creation, Role assignment, Branch/District configuration, Category
+  // maintenance, Workflow configuration, System settings" to the
+  // Administrator alone, so no non-admin role gets create/edit/delete/
+  // toggle-status on org structure, users, or roles by default - only the
+  // view/monitoring access each role's BRD description calls for, plus
+  // (per master.txt §"District and Head Office Controllers can control
+  // periods within authorized scope") reporting-periods.lock for HO and
+  // District Controller specifically, not District Director (whose BRD
+  // description explicitly says "cannot modify findings or scores") and not
+  // Branch roles (period control is district/HO-level per the BRD).
+  const hoPermissions = [
+    permissionKey("admin-dashboard", "view"),
+    permissionKey("users", "view"),
+    permissionKey("districts", "view"),
+    permissionKey("branches", "view"),
+    permissionKey("sources", "view"),
+    permissionKey("categories", "view"),
+    permissionKey("scoring-rules", "view"),
+    permissionKey("scoring-adjustments", "view"),
+    permissionKey("reporting-periods", "view"),
+    permissionKey("reporting-periods", "lock"),
+    permissionKey("settings", "view"),
+    permissionKey("audit-log", "view"),
+  ];
+  const districtControllerPermissions = [
+    permissionKey("districts", "view"),
+    permissionKey("branches", "view"),
+    permissionKey("sources", "view"),
+    permissionKey("categories", "view"),
+    permissionKey("scoring-rules", "view"),
+    permissionKey("scoring-adjustments", "view"),
+    permissionKey("reporting-periods", "view"),
+    permissionKey("reporting-periods", "lock"),
+  ];
+  const districtDirectorPermissions = [
+    permissionKey("districts", "view"),
+    permissionKey("branches", "view"),
+    permissionKey("sources", "view"),
+    permissionKey("categories", "view"),
+    permissionKey("scoring-rules", "view"),
+    permissionKey("scoring-adjustments", "view"),
+    permissionKey("reporting-periods", "view"),
+  ];
+  const branchControllerPermissions = [
+    permissionKey("branch-dashboard", "view"),
+    permissionKey("sources", "view"),
+    permissionKey("categories", "view"),
+    permissionKey("reporting-periods", "view"),
+  ];
+  const branchManagerPermissions = [
+    permissionKey("branch-dashboard", "view"),
+    permissionKey("categories", "view"),
+    permissionKey("reporting-periods", "view"),
+  ];
+
   const roles: RoleDefinition[] = [
     {
       id: "role-admin",
@@ -133,7 +188,7 @@ function buildSeedDatabase(): Database {
       orgScope: "BANK",
       branchSingleton: false,
       isSystem: true,
-      permissions: [],
+      permissions: hoPermissions,
       status: "ACTIVE",
       createdAt: now,
       updatedAt: now,
@@ -146,7 +201,7 @@ function buildSeedDatabase(): Database {
       orgScope: "DISTRICT",
       branchSingleton: false,
       isSystem: true,
-      permissions: [],
+      permissions: districtControllerPermissions,
       status: "ACTIVE",
       createdAt: now,
       updatedAt: now,
@@ -159,7 +214,7 @@ function buildSeedDatabase(): Database {
       orgScope: "DISTRICT",
       branchSingleton: false,
       isSystem: true,
-      permissions: [],
+      permissions: districtDirectorPermissions,
       status: "ACTIVE",
       createdAt: now,
       updatedAt: now,
@@ -172,7 +227,7 @@ function buildSeedDatabase(): Database {
       orgScope: "BRANCH",
       branchSingleton: true,
       isSystem: true,
-      permissions: [],
+      permissions: branchControllerPermissions,
       status: "ACTIVE",
       createdAt: now,
       updatedAt: now,
@@ -185,7 +240,7 @@ function buildSeedDatabase(): Database {
       orgScope: "BRANCH",
       branchSingleton: true,
       isSystem: true,
-      permissions: [],
+      permissions: branchManagerPermissions,
       status: "ACTIVE",
       createdAt: now,
       updatedAt: now,

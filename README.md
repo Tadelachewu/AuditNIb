@@ -11,7 +11,14 @@ module — see [PHASE1.md](PHASE1.md). Phase 2 replaced the fixed 7-role
 system with dynamic, admin-editable roles and a page/action permission
 matrix — see [PHASE2.md](PHASE2.md). Phase 3 completed CRUD (in-place edit
 everywhere, real delete where it's safe) and added confirmation dialogs to
-every risky action — see [PHASE3.md](PHASE3.md).
+every risky action — see [PHASE3.md](PHASE3.md). Phase 4 is building the
+BRD's role-specific dashboards one at a time, starting with Branch — real
+data where it exists, honest "no data yet" states for anything that needs
+the not-yet-built Findings module — see [PHASE4.md](PHASE4.md). Phase 5
+made every dashboard/feature its own permission and gave every seeded role
+a non-empty, BRD-grounded default permission set, so an admin adjusts
+access from a sensible starting point instead of nothing — see
+[PHASE5.md](PHASE5.md).
 
 ## Getting started
 
@@ -53,22 +60,25 @@ convenience, not the real access-control boundary.
 
 Seeded on first run, one user per role (see [src/lib/db.ts](src/lib/db.ts)):
 
-| Role | Username | Password | Default admin-console access |
+| Role | Username | Password | Default permissions |
 |---|---|---|---|
 | Administrator | `admin` | `Admin@123` | Everything |
-| HO Internal Controller | `ho.controller` | `Ho@12345` | None — grant via `/admin/roles` |
-| District Internal Controller | `district.controller` | `District@123` | None — grant via `/admin/roles` |
-| District Director | `district.director` | `Director@123` | None — grant via `/admin/roles` |
-| Branch Internal Controller | `branch.controller` | `Branch@123` | None — grant via `/admin/roles` |
-| Branch Manager | `branch.manager` | `Manager@123` | None — grant via `/admin/roles` |
+| HO Internal Controller | `ho.controller` | `Ho@12345` | View access bank-wide + reporting-period lock/unlock |
+| District Internal Controller | `district.controller` | `District@123` | View access for their district + reporting-period lock/unlock |
+| District Director | `district.director` | `Director@123` | View access for their district (no lock/unlock — BRD: "cannot modify") |
+| Branch Internal Controller | `branch.controller` | `Branch@123` | Branch Dashboard + Sources/Categories/Reporting-Periods view |
+| Branch Manager | `branch.manager` | `Manager@123` | Branch Dashboard + Categories/Reporting-Periods view |
 | Executive (Read-only) | `executive` | `Executive@123` | View-only, every page except Roles & Permissions |
 
-These are also listed on the login page under "Demo accounts". Change or
-remove them before any real deployment. Roles themselves are editable data
-at `/admin/roles` — create new roles, and grant/revoke page-by-page,
-action-by-action access to any role (including these seven) without a code
-change. A permission change only takes effect the next time that role's
-users log in (see PHASE2.md §4).
+Every seeded role starts with a non-empty, BRD-grounded default (see
+[PHASE5.md](PHASE5.md) for the reasoning behind each one) rather than
+zero access — an admin narrows or widens from there. These are also listed
+on the login page under "Demo accounts". Change or remove them before any
+real deployment. Roles themselves are editable data at `/admin/roles` —
+create new roles, and grant/revoke page-by-page, action-by-action access to
+any role (including these seven, and every dashboard — not just the admin
+console) without a code change. A permission change only takes effect the
+next time that role's users log in (see PHASE2.md §4).
 
 ## What's implemented
 

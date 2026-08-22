@@ -1,9 +1,17 @@
-// The permission *catalog*: every page the Administration console has, and
-// the actions each page supports. This list is static (it corresponds to
-// real routes/API handlers that exist in code - you can't grant a
-// permission for a page that doesn't exist), but which *roles* hold which
-// permissions is fully dynamic, stored on RoleDefinition.permissions and
-// editable at /admin/roles. See PHASE2.md for the full design.
+// The permission *catalog*: every page in the app - the Administration
+// console AND every role dashboard - and the actions each page supports.
+// This list is static (it corresponds to real routes/components that exist
+// in code - you can't grant a permission for a page that doesn't exist),
+// but which *roles* hold which permissions is fully dynamic, stored on
+// RoleDefinition.permissions and editable at /admin/roles. See PHASE2.md
+// for the full design.
+//
+// Standing rule (see PHASE5.md): every dashboard or feature added to this
+// app gets a PAGE_REGISTRY entry with at least a "view" action, gated by
+// requirePermission()/hasPermission() at its actual enforcement point
+// (an API route, src/proxy.ts, or an inline check like
+// src/app/(app)/dashboard/page.tsx's). Nothing should be reachable by role
+// alone once it has a registry entry - only by permission.
 
 export type PermissionAction = "view" | "create" | "edit" | "toggle-status" | "delete" | "activate" | "lock" | "manage";
 
@@ -32,6 +40,7 @@ const D: PageAction = { action: "delete", label: "Delete" };
 // referenced elsewhere (see the corresponding [id]/route.ts files).
 export const PAGE_REGISTRY: PageDefinition[] = [
   { code: "admin-dashboard", label: "Admin Dashboard", actions: [V] },
+  { code: "branch-dashboard", label: "Branch Dashboard", actions: [V] },
   { code: "users", label: "Users", actions: [V, C, E, T] },
   { code: "districts", label: "Districts", actions: [V, C, E, T, D] },
   { code: "branches", label: "Branches", actions: [V, C, E, T, D] },
@@ -70,7 +79,13 @@ export function pageLabel(pageCode: string): string {
   return PAGE_REGISTRY.find((p) => p.code === pageCode)?.label ?? pageCode;
 }
 
-/** The admin-page URL segment for a given page code is identical by convention (see src/proxy.ts). */
+/**
+ * For pages under /admin/<code>, the URL segment is identical to the page
+ * code by convention (see src/proxy.ts). Non-admin pages that host more
+ * than one role's view behind one route (e.g. /dashboard) aren't proxy-
+ * gated this way - they check hasPermission() inline instead (see
+ * src/app/(app)/dashboard/page.tsx).
+ */
 export function isValidPermissionKey(key: string): boolean {
   const [pageCode, action] = key.split(".");
   const page = PAGE_REGISTRY.find((p) => p.code === pageCode);

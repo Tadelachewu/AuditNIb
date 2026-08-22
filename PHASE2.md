@@ -264,24 +264,16 @@ roles can't be changed."
 
 ## 7. What the seeded roles actually grant now
 
-Phase 1's seed implicitly gave six of the seven roles *zero* admin-console
-access (only `ADMIN` could reach `/admin/*` at all). Phase 2's seed makes
-that explicit and preserves it as the literal starting state - migrating
-to Phase 2 does not silently grant anyone new access:
-
-| Role | Seeded permissions |
-|---|---|
-| `ADMIN` | `ALL_PERMISSION_KEYS` - every page, every action |
-| `HO_CONTROLLER`, `DISTRICT_CONTROLLER`, `DISTRICT_DIRECTOR`, `BRANCH_CONTROLLER`, `BRANCH_MANAGER` | `[]` - none; an admin must deliberately grant access via `/admin/roles` |
-| `EXECUTIVE_READONLY` | `ALL_VIEW_PERMISSION_KEYS` - every `.view` key **except** `roles.view` |
-
-Executive is the one exception, given a non-empty default because it
-matches the BRD's own description of the role ("read-only management
-dashboards and reports") closely enough that shipping it non-functional by
-default would be a worse demonstration of the feature than a sensible
-read-only default is a security risk. `roles.view` is excluded even from
-Executive by default - visibility into the role/permission structure itself
-stays admin-opt-in.
+> **Updated in Phase 5** ([PHASE5.md](PHASE5.md)): this section originally
+> described every non-Executive role starting with **zero** permissions
+> (mirroring Phase 1, where only `ADMIN` could reach `/admin/*`), on the
+> theory that an admin should grant access deliberately. That was reversed
+> in Phase 5 at explicit request: every seeded role now ships with a
+> non-empty, BRD-grounded default so an admin adjusts from "what this role
+> should plausibly have" rather than building access from nothing. See
+> PHASE5.md §2 for the current defaults and the reasoning behind each one.
+> The *mechanism* described below - permissions are still just data on
+> `RoleDefinition`, still fully admin-editable - is unchanged.
 
 ---
 
