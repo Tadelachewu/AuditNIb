@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireRole } from "@/lib/guard";
+import { requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { appendAuditLog } from "@/lib/audit";
 
 export async function GET() {
-  const auth = await requireRole("ADMIN");
+  const auth = await requirePermission("settings.view");
   if (!auth.ok) return auth.response;
   return NextResponse.json({ settings: readDb().settings });
 }
@@ -22,7 +22,7 @@ const updateSchema = z.object({
 });
 
 export async function PATCH(request: Request) {
-  const auth = await requireRole("ADMIN");
+  const auth = await requirePermission("settings.edit");
   if (!auth.ok) return auth.response;
 
   const parsed = updateSchema.safeParse(await request.json().catch(() => null));

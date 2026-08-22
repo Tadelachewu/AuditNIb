@@ -3,36 +3,41 @@
 // designed to be swapped for a real relational database later without
 // changing these shapes.
 
-export const ROLES = [
-  "ADMIN",
-  "HO_CONTROLLER",
-  "DISTRICT_CONTROLLER",
-  "DISTRICT_DIRECTOR",
-  "BRANCH_CONTROLLER",
-  "BRANCH_MANAGER",
-  "EXECUTIVE_READONLY",
-] as const;
-
-export type Role = (typeof ROLES)[number];
-
-export const ROLE_LABELS: Record<Role, string> = {
-  ADMIN: "Administrator",
-  HO_CONTROLLER: "Head Office Internal Controller",
-  DISTRICT_CONTROLLER: "District Internal Controller",
-  DISTRICT_DIRECTOR: "District Director",
-  BRANCH_CONTROLLER: "Branch Internal Controller",
-  BRANCH_MANAGER: "Branch Manager",
-  EXECUTIVE_READONLY: "Executive (Read-only)",
-};
-
 export type Status = "ACTIVE" | "INACTIVE";
+
+// Roles are no longer a fixed set (Phase 2) - they're data, editable at
+// /admin/roles. `User.role` stores a RoleDefinition.code, a plain string,
+// not a literal union: which codes exist is only known at runtime. See
+// PHASE2.md for the full design and src/lib/permissions/registry.ts for the
+// static catalog of pages/actions that a role's `permissions` are drawn from.
+export type OrgScope = "BANK" | "DISTRICT" | "BRANCH";
+
+export interface RoleDefinition {
+  id: string;
+  code: string;
+  name: string;
+  description?: string;
+  orgScope: OrgScope;
+  // Only meaningful when orgScope === "BRANCH": at most one ACTIVE user
+  // holding this role per branch (the BRD's "one Branch Manager + one
+  // Branch Internal Controller per branch" rule, generalized to any
+  // branch-scoped role - see src/lib/org.ts).
+  branchSingleton: boolean;
+  // Seeded roles: code/orgScope are locked, and (for ADMIN specifically)
+  // permissions can't be edited away, to prevent a self-lockout.
+  isSystem: boolean;
+  permissions: string[];
+  status: Status;
+  createdAt: string;
+  updatedAt: string;
+}
 
 export interface User {
   id: string;
   name: string;
   username: string;
   passwordHash: string;
-  role: Role;
+  role: string;
   status: Status;
   districtId?: string | null;
   branchId?: string | null;
@@ -155,6 +160,7 @@ export interface AuditLogEntry {
 
 export interface Database {
   users: User[];
+  roles: RoleDefinition[];
   districts: District[];
   branches: Branch[];
   sources: Source[];

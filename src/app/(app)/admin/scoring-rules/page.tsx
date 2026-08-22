@@ -6,6 +6,7 @@ import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input, Label } from "@/components/ui/Field";
 import { Badge } from "@/components/ui/Badge";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import type { ScoringRule, ClassifiedCategory, Source } from "@/types";
 
 const emptyForm = {
@@ -27,6 +28,7 @@ export default function ScoringRulesPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [rowBusy, setRowBusy] = useState<string | null>(null);
+  const { confirm, dialog } = useConfirm();
 
   async function load() {
     setLoading(true);
@@ -59,6 +61,20 @@ export default function ScoringRulesPage() {
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     setFormError(null);
+
+    if (form.activateNow) {
+      const currentlyActive = rules.find((r) => r.active);
+      const result = await confirm({
+        title: "Activate this rule immediately?",
+        message: currentlyActive
+          ? `This creates v${rules.reduce((max, r) => Math.max(max, r.version), 0) + 1} and makes it the live scoring rule, replacing "v${currentlyActive.version} — ${currentlyActive.name}". Performance figures calculated from this point on will use the new rule.`
+          : "This creates the rule and makes it the live scoring rule immediately.",
+        confirmLabel: "Create & Activate",
+        tone: "danger",
+      });
+      if (result === false) return;
+    }
+
     setSubmitting(true);
     try {
       await apiSend("/api/admin/scoring-rules", "POST", form);
@@ -72,6 +88,16 @@ export default function ScoringRulesPage() {
   }
 
   async function setActive(rule: ScoringRule, active: boolean) {
+    const result = await confirm({
+      title: active ? "Activate this scoring rule version?" : "Deactivate this scoring rule version?",
+      message: active
+        ? `"v${rule.version} — ${rule.name}" becomes the live scoring rule, replacing whichever version is currently active. Performance figures calculated from this point on will use it.`
+        : `No scoring rule will be active afterward. Performance percentages will be unavailable until a rule is activated again.`,
+      confirmLabel: active ? "Activate" : "Deactivate",
+      tone: "danger",
+    });
+    if (result === false) return;
+
     setRowBusy(rule.id);
     try {
       await apiSend(`/api/admin/scoring-rules/${rule.id}`, "PATCH", { active });
@@ -209,6 +235,7 @@ export default function ScoringRulesPage() {
             ))}
         </div>
       </Card>
+      {dialog}
     </div>
   );
 }

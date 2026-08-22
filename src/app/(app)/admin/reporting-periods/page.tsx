@@ -6,6 +6,7 @@ import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Select, Label } from "@/components/ui/Field";
 import { Badge } from "@/components/ui/Badge";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import type { ReportingPeriod } from "@/types";
 
 const MONTHS = [
@@ -21,6 +22,7 @@ export default function ReportingPeriodsPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [rowBusy, setRowBusy] = useState<string | null>(null);
+  const { confirm, dialog } = useConfirm();
 
   async function load() {
     setLoading(true);
@@ -49,8 +51,17 @@ export default function ReportingPeriodsPage() {
 
   async function toggleLock(p: ReportingPeriod) {
     const nextStatus = p.status === "OPEN" ? "LOCKED" : "OPEN";
-    const reason = window.prompt(`Reason to ${nextStatus === "LOCKED" ? "lock" : "unlock"} ${p.code}:`);
-    if (!reason) return;
+    const reason = await confirm({
+      title: nextStatus === "LOCKED" ? `Lock ${p.code}?` : `Unlock ${p.code}?`,
+      message:
+        nextStatus === "LOCKED"
+          ? `Locking blocks new writes against ${p.code} bank-wide, except explicitly authorized exceptions. This can be reversed by unlocking.`
+          : `Unlocking reopens ${p.code} for new writes bank-wide.`,
+      confirmLabel: nextStatus === "LOCKED" ? "Lock" : "Unlock",
+      tone: "danger",
+      needsReason: true,
+    });
+    if (reason === false) return;
     setRowBusy(p.id);
     try {
       await apiSend(`/api/admin/reporting-periods/${p.id}`, "PATCH", { status: nextStatus, reason });
@@ -142,6 +153,7 @@ export default function ReportingPeriodsPage() {
           </table>
         </div>
       </Card>
+      {dialog}
     </div>
   );
 }

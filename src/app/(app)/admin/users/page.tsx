@@ -1,27 +1,32 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { apiGet, apiSend, ApiError } from "@/lib/api-client";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input, Select, Label } from "@/components/ui/Field";
 import { StatusBadge } from "@/components/ui/Badge";
-import { ROLES, ROLE_LABELS, type Role, type SafeUser, type District, type Branch } from "@/types";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
+import type { SafeUser, District, Branch, RoleDefinition } from "@/types";
 
-const BRANCH_SCOPED: Role[] = ["BRANCH_CONTROLLER", "BRANCH_MANAGER"];
-const DISTRICT_SCOPED: Role[] = ["DISTRICT_CONTROLLER", "DISTRICT_DIRECTOR"];
-
-const emptyForm = { name: "", username: "", password: "", role: "BRANCH_CONTROLLER" as Role, districtId: "", branchId: "" };
+const emptyForm = { name: "", username: "", password: "", role: "", districtId: "", branchId: "" };
+const emptyEditForm = { name: "", role: "", districtId: "", branchId: "", password: "" };
 
 export default function UsersPage() {
   const [users, setUsers] = useState<SafeUser[]>([]);
   const [districts, setDistricts] = useState<District[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
+  const [roles, setRoles] = useState<RoleDefinition[]>([]);
+  const [rolesError, setRolesError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState(emptyForm);
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [rowBusy, setRowBusy] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState(emptyEditForm);
+  const [editError, setEditError] = useState<string | null>(null);
+  const { confirm, dialog } = useConfirm();
 
   async function loadAll() {
     setLoading(true);
@@ -33,6 +38,24 @@ export default function UsersPage() {
     setUsers(u.users);
     setDistricts(d.districts);
     setBranches(b.branches);
+
+    // Assigning a role requires being able to see the role catalog, i.e.
+    // the "roles.view" permission too - kept as its own request so a role
+    // that can manage users but not roles still gets a working page (with a
+    // clear explanation) instead of the whole page failing to load.
+    try {
+      const r = await apiGet<{ roles: RoleDefinition[] }>("/api/admin/roles");
+      setRoles(r.roles);
+      setRolesError(null);
+      setForm((f) => (f.role ? f : { ...f, role: r.roles.find((role) => role.status === "ACTIVE")?.code ?? "" }));
+    } catch (err) {
+      setRolesError(
+        err instanceof ApiError && err.status === 403
+          ? "You don't have permission to view the role catalog, so new users can't be assigned a role here. Ask an administrator to grant you \"Roles & Permissions › View\"."
+          : "Failed to load roles."
+      );
+    }
+
     setLoading(false);
   }
 
@@ -40,9 +63,16 @@ export default function UsersPage() {
     loadAll();
   }, []);
 
+  const activeRoles = useMemo(() => roles.filter((r) => r.status === "ACTIVE"), [roles]);
+  const selectedRole = useMemo(() => roles.find((r) => r.code === form.role), [roles, form.role]);
+  const editSelectedRole = useMemo(() => roles.find((r) => r.code === editForm.role), [roles, editForm.role]);
   const branchesInDistrict = useMemo(
     () => branches.filter((b) => (form.districtId ? b.districtId === form.districtId : true)),
     [branches, form.districtId]
+  );
+  const editBranchesInDistrict = useMemo(
+    () => branches.filter((b) => (editForm.districtId ? b.districtId === editForm.districtId : true)),
+    [branches, editForm.districtId]
   );
 
   function districtName(id?: string | null) {
@@ -50,6 +80,9 @@ export default function UsersPage() {
   }
   function branchName(id?: string | null) {
     return branches.find((b) => b.id === id)?.name ?? "—";
+  }
+  function roleName(code: string) {
+    return roles.find((r) => r.code === code)?.name ?? code;
   }
 
   async function handleCreate(e: React.FormEvent) {
@@ -65,7 +98,7 @@ export default function UsersPage() {
         districtId: form.districtId || null,
         branchId: form.branchId || null,
       });
-      setForm(emptyForm);
+      setForm({ ...emptyForm, role: form.role });
       await loadAll();
     } catch (err) {
       setFormError(err instanceof ApiError ? err.message : "Failed to create user");
@@ -74,7 +107,49 @@ export default function UsersPage() {
     }
   }
 
+  function startEdit(user: SafeUser) {
+    setEditingId(user.id);
+    setEditForm({
+      name: user.name,
+      role: user.role,
+      districtId: user.districtId ?? "",
+      branchId: user.branchId ?? "",
+      password: "",
+    });
+    setEditError(null);
+  }
+
+  async function saveEdit(user: SafeUser) {
+    setRowBusy(user.id);
+    setEditError(null);
+    try {
+      const payload: Record<string, unknown> = {
+        name: editForm.name,
+        role: editForm.role,
+        districtId: editForm.districtId || null,
+        branchId: editForm.branchId || null,
+      };
+      if (editForm.password) payload.password = editForm.password;
+      await apiSend(`/api/admin/users/${user.id}`, "PATCH", payload);
+      setEditingId(null);
+      await loadAll();
+    } catch (err) {
+      setEditError(err instanceof ApiError ? err.message : "Failed to save changes");
+    } finally {
+      setRowBusy(null);
+    }
+  }
+
   async function toggleStatus(user: SafeUser) {
+    if (user.status === "ACTIVE") {
+      const result = await confirm({
+        title: "Deactivate user?",
+        message: `"${user.name}" (${user.username}) will no longer be able to sign in. Any branch/district role they hold becomes available for reassignment. This can be reversed.`,
+        confirmLabel: "Deactivate",
+        tone: "danger",
+      });
+      if (result === false) return;
+    }
     setRowBusy(user.id);
     try {
       await apiSend(`/api/admin/users/${user.id}`, "PATCH", {
@@ -88,16 +163,20 @@ export default function UsersPage() {
     }
   }
 
-  const isBranchScoped = BRANCH_SCOPED.includes(form.role);
-  const isDistrictScoped = DISTRICT_SCOPED.includes(form.role);
+  const isBranchScoped = selectedRole?.orgScope === "BRANCH";
+  const isDistrictScoped = selectedRole?.orgScope === "DISTRICT";
+  const editIsBranchScoped = editSelectedRole?.orgScope === "BRANCH";
+  const editIsDistrictScoped = editSelectedRole?.orgScope === "DISTRICT";
 
   return (
     <div>
       <h1 className="text-lg font-semibold text-slate-900">Users</h1>
       <p className="mt-1 text-sm text-slate-500">
-        Create, deactivate/reactivate users and assign role + organization unit. Each branch may have at most one
-        active Branch Manager and one active Branch Internal Controller.
+        Create, edit, deactivate/reactivate users and assign role + organization unit. Branch-scoped roles marked
+        &quot;one active user per branch&quot; (in Roles &amp; Permissions) can only be held by one active person per
+        branch at a time.
       </p>
+      {rolesError && <p className="mt-2 text-sm text-amber-700">{rolesError}</p>}
 
       <Card className="mt-5">
         <CardHeader title="Add User" />
@@ -130,12 +209,14 @@ export default function UsersPage() {
             <Label htmlFor="role">Role</Label>
             <Select
               id="role"
+              required
               value={form.role}
-              onChange={(e) => setForm({ ...form, role: e.target.value as Role, districtId: "", branchId: "" })}
+              onChange={(e) => setForm({ ...form, role: e.target.value, districtId: "", branchId: "" })}
             >
-              {ROLES.map((r) => (
-                <option key={r} value={r}>
-                  {ROLE_LABELS[r]}
+              <option value="">Select role</option>
+              {activeRoles.map((r) => (
+                <option key={r.id} value={r.code}>
+                  {r.name}
                 </option>
               ))}
             </Select>
@@ -181,7 +262,7 @@ export default function UsersPage() {
 
           <div className="sm:col-span-2 lg:col-span-3">
             {formError && <p className="mb-2 text-sm text-red-600">{formError}</p>}
-            <Button type="submit" disabled={submitting}>
+            <Button type="submit" disabled={submitting || !form.role}>
               {submitting ? "Creating..." : "Create User"}
             </Button>
           </div>
@@ -212,35 +293,133 @@ export default function UsersPage() {
                 </tr>
               )}
               {!loading &&
-                users.map((u) => (
-                  <tr key={u.id}>
-                    <td className="px-4 py-2 font-medium text-slate-900">{u.name}</td>
-                    <td className="px-4 py-2 font-mono text-xs text-slate-600">{u.username}</td>
-                    <td className="px-4 py-2 text-slate-600">{ROLE_LABELS[u.role]}</td>
-                    <td className="px-4 py-2 text-slate-600">
-                      {u.branchId ? branchName(u.branchId) : u.districtId ? districtName(u.districtId) : "Bank-wide"}
-                    </td>
-                    <td className="px-4 py-2">
-                      <StatusBadge status={u.status} />
-                    </td>
-                    <td className="px-4 py-2 text-xs text-slate-400">
-                      {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString() : "Never"}
-                    </td>
-                    <td className="px-4 py-2 text-right">
-                      <Button
-                        variant={u.status === "ACTIVE" ? "danger" : "secondary"}
-                        disabled={rowBusy === u.id}
-                        onClick={() => toggleStatus(u)}
-                      >
-                        {u.status === "ACTIVE" ? "Deactivate" : "Reactivate"}
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
+                users.map((u) => {
+                  const isEditing = editingId === u.id;
+                  return (
+                    <Fragment key={u.id}>
+                      <tr>
+                        <td className="px-4 py-2 font-medium text-slate-900">{u.name}</td>
+                        <td className="px-4 py-2 font-mono text-xs text-slate-600">{u.username}</td>
+                        <td className="px-4 py-2 text-slate-600">{roleName(u.role)}</td>
+                        <td className="px-4 py-2 text-slate-600">
+                          {u.branchId ? branchName(u.branchId) : u.districtId ? districtName(u.districtId) : "Bank-wide"}
+                        </td>
+                        <td className="px-4 py-2">
+                          <StatusBadge status={u.status} />
+                        </td>
+                        <td className="px-4 py-2 text-xs text-slate-400">
+                          {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString() : "Never"}
+                        </td>
+                        <td className="px-4 py-2 text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button variant="secondary" onClick={() => (isEditing ? setEditingId(null) : startEdit(u))}>
+                              {isEditing ? "Cancel" : "Edit"}
+                            </Button>
+                            <Button
+                              variant={u.status === "ACTIVE" ? "danger" : "secondary"}
+                              disabled={rowBusy === u.id}
+                              onClick={() => toggleStatus(u)}
+                            >
+                              {u.status === "ACTIVE" ? "Deactivate" : "Reactivate"}
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                      {isEditing && (
+                        <tr>
+                          <td colSpan={7} className="bg-slate-50 px-4 py-3">
+                            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                              <div>
+                                <Label htmlFor="edit-name">Full name</Label>
+                                <Input
+                                  id="edit-name"
+                                  value={editForm.name}
+                                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                                />
+                              </div>
+                              <div>
+                                <Label htmlFor="edit-role">Role</Label>
+                                <Select
+                                  id="edit-role"
+                                  value={editForm.role}
+                                  onChange={(e) =>
+                                    setEditForm({ ...editForm, role: e.target.value, districtId: "", branchId: "" })
+                                  }
+                                >
+                                  {roles.map((r) => (
+                                    <option key={r.id} value={r.code}>
+                                      {r.name}
+                                      {r.status === "INACTIVE" ? " (inactive)" : ""}
+                                    </option>
+                                  ))}
+                                </Select>
+                              </div>
+                              {(editIsDistrictScoped || editIsBranchScoped) && (
+                                <div>
+                                  <Label htmlFor="edit-districtId">District</Label>
+                                  <Select
+                                    id="edit-districtId"
+                                    value={editForm.districtId}
+                                    onChange={(e) => setEditForm({ ...editForm, districtId: e.target.value, branchId: "" })}
+                                  >
+                                    <option value="">Select district</option>
+                                    {districts.map((d) => (
+                                      <option key={d.id} value={d.id}>
+                                        {d.name}
+                                      </option>
+                                    ))}
+                                  </Select>
+                                </div>
+                              )}
+                              {editIsBranchScoped && (
+                                <div>
+                                  <Label htmlFor="edit-branchId">Branch</Label>
+                                  <Select
+                                    id="edit-branchId"
+                                    value={editForm.branchId}
+                                    onChange={(e) => setEditForm({ ...editForm, branchId: e.target.value })}
+                                  >
+                                    <option value="">Select branch</option>
+                                    {editBranchesInDistrict.map((b) => (
+                                      <option key={b.id} value={b.id}>
+                                        {b.name}
+                                      </option>
+                                    ))}
+                                  </Select>
+                                </div>
+                              )}
+                              <div>
+                                <Label htmlFor="edit-password">Reset password (optional)</Label>
+                                <Input
+                                  id="edit-password"
+                                  type="password"
+                                  minLength={8}
+                                  placeholder="Leave blank to keep current"
+                                  value={editForm.password}
+                                  onChange={(e) => setEditForm({ ...editForm, password: e.target.value })}
+                                />
+                              </div>
+                            </div>
+                            {editError && <p className="mt-2 text-sm text-red-600">{editError}</p>}
+                            <div className="mt-3 flex justify-end gap-2">
+                              <Button variant="secondary" onClick={() => setEditingId(null)}>
+                                Cancel
+                              </Button>
+                              <Button disabled={rowBusy === u.id} onClick={() => saveEdit(u)}>
+                                {rowBusy === u.id ? "Saving..." : "Save Changes"}
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
             </tbody>
           </table>
         </div>
       </Card>
+      {dialog}
     </div>
   );
 }

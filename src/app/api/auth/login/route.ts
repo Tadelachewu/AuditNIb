@@ -29,6 +29,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "This account has been deactivated" }, { status: 403 });
   }
 
+  const role = db.roles.find((r) => r.code === user.role);
+  if (!role || role.status !== "ACTIVE") {
+    return NextResponse.json({ error: "Your role has been deactivated. Contact an administrator." }, { status: 403 });
+  }
+
   const loginTime = new Date().toISOString();
   updateDb((current) => {
     const u = current.users.find((x) => x.id === user.id);
@@ -48,6 +53,8 @@ export async function POST(request: Request) {
   session.username = user.username;
   session.name = user.name;
   session.role = user.role;
+  session.roleName = role.name;
+  session.permissions = role.permissions;
   session.districtId = user.districtId ?? null;
   session.branchId = user.branchId ?? null;
   await session.save();

@@ -6,6 +6,7 @@ import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input, Label } from "@/components/ui/Field";
 import { Badge } from "@/components/ui/Badge";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import type { ClassifiedCategory } from "@/types";
 
 export default function CategoriesPage() {
@@ -15,6 +16,10 @@ export default function CategoriesPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [rowBusy, setRowBusy] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editError, setEditError] = useState<string | null>(null);
+  const { confirm, dialog } = useConfirm();
 
   async function load() {
     setLoading(true);
@@ -42,7 +47,36 @@ export default function CategoriesPage() {
     }
   }
 
+  function startEdit(c: ClassifiedCategory) {
+    setEditingId(c.id);
+    setEditName(c.name);
+    setEditError(null);
+  }
+
+  async function saveEdit(c: ClassifiedCategory) {
+    setRowBusy(c.id);
+    setEditError(null);
+    try {
+      await apiSend(`/api/admin/categories/${c.id}`, "PATCH", { name: editName });
+      setEditingId(null);
+      await load();
+    } catch (err) {
+      setEditError(err instanceof ApiError ? err.message : "Failed to save changes");
+    } finally {
+      setRowBusy(null);
+    }
+  }
+
   async function toggleActive(c: ClassifiedCategory) {
+    if (c.active) {
+      const result = await confirm({
+        title: "Deactivate category?",
+        message: `"${c.name}" will no longer be selectable when registering new findings. This can be reversed.`,
+        confirmLabel: "Deactivate",
+        tone: "danger",
+      });
+      if (result === false) return;
+    }
     setRowBusy(c.id);
     try {
       await apiSend(`/api/admin/categories/${c.id}`, "PATCH", { active: !c.active });
@@ -55,9 +89,19 @@ export default function CategoriesPage() {
   }
 
   async function toggleScored(c: ClassifiedCategory) {
+    const goingScored = !c.scored;
+    const result = await confirm({
+      title: goingScored ? "Include in scoring?" : "Remove from scoring?",
+      message: goingScored
+        ? `"${c.name}" will be eligible to be included in scoring rules and can affect the live performance calculation once added to the active rule.`
+        : `"${c.name}" will no longer be eligible for scoring rules. If it's part of the active scoring rule, performance figures will change.`,
+      confirmLabel: goingScored ? "Mark as scored" : "Remove from scoring",
+      tone: goingScored ? "default" : "danger",
+    });
+    if (result === false) return;
     setRowBusy(c.id);
     try {
-      await apiSend(`/api/admin/categories/${c.id}`, "PATCH", { scored: !c.scored });
+      await apiSend(`/api/admin/categories/${c.id}`, "PATCH", { scored: goingScored });
       await load();
     } catch (err) {
       alert(err instanceof ApiError ? err.message : "Failed to update category");
@@ -126,33 +170,62 @@ export default function CategoriesPage() {
                 </tr>
               )}
               {!loading &&
-                categories.map((c) => (
-                  <tr key={c.id}>
-                    <td className="px-4 py-2 font-mono text-xs text-slate-600">{c.code}</td>
-                    <td className="px-4 py-2 font-medium text-slate-900">{c.name}</td>
-                    <td className="px-4 py-2">
-                      <button onClick={() => toggleScored(c)} disabled={rowBusy === c.id}>
-                        <Badge tone={c.scored ? "blue" : "gray"}>{c.scored ? "Scored" : "Informational"}</Badge>
-                      </button>
-                    </td>
-                    <td className="px-4 py-2">
-                      <Badge tone={c.active ? "green" : "gray"}>{c.active ? "Active" : "Inactive"}</Badge>
-                    </td>
-                    <td className="px-4 py-2 text-right">
-                      <Button
-                        variant={c.active ? "danger" : "secondary"}
-                        disabled={rowBusy === c.id}
-                        onClick={() => toggleActive(c)}
-                      >
-                        {c.active ? "Deactivate" : "Activate"}
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
+                categories.map((c) => {
+                  const isEditing = editingId === c.id;
+                  return (
+                    <tr key={c.id}>
+                      <td className="px-4 py-2 font-mono text-xs text-slate-600">{c.code}</td>
+                      <td className="px-4 py-2 font-medium text-slate-900">
+                        {isEditing ? (
+                          <>
+                            <Input value={editName} onChange={(e) => setEditName(e.target.value)} className="max-w-56" />
+                            {editError && <p className="mt-1 text-xs text-red-600">{editError}</p>}
+                          </>
+                        ) : (
+                          c.name
+                        )}
+                      </td>
+                      <td className="px-4 py-2">
+                        <button onClick={() => toggleScored(c)} disabled={rowBusy === c.id}>
+                          <Badge tone={c.scored ? "blue" : "gray"}>{c.scored ? "Scored" : "Informational"}</Badge>
+                        </button>
+                      </td>
+                      <td className="px-4 py-2">
+                        <Badge tone={c.active ? "green" : "gray"}>{c.active ? "Active" : "Inactive"}</Badge>
+                      </td>
+                      <td className="px-4 py-2 text-right">
+                        {isEditing ? (
+                          <div className="flex justify-end gap-2">
+                            <Button variant="secondary" onClick={() => setEditingId(null)}>
+                              Cancel
+                            </Button>
+                            <Button disabled={rowBusy === c.id} onClick={() => saveEdit(c)}>
+                              {rowBusy === c.id ? "Saving..." : "Save"}
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="flex justify-end gap-2">
+                            <Button variant="secondary" onClick={() => startEdit(c)}>
+                              Edit
+                            </Button>
+                            <Button
+                              variant={c.active ? "danger" : "secondary"}
+                              disabled={rowBusy === c.id}
+                              onClick={() => toggleActive(c)}
+                            >
+                              {c.active ? "Deactivate" : "Activate"}
+                            </Button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
             </tbody>
           </table>
         </div>
       </Card>
+      {dialog}
     </div>
   );
 }

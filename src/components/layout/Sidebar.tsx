@@ -3,9 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { NAV_SECTIONS, isNavItemVisible } from "@/lib/nav";
-import type { Role } from "@/types";
 
-export function Sidebar({ role }: { role: Role }) {
+export function Sidebar({ permissions }: { permissions: string[] }) {
   const pathname = usePathname();
 
   return (
@@ -16,7 +15,7 @@ export function Sidebar({ role }: { role: Role }) {
       </div>
 
       {NAV_SECTIONS.map((section) => {
-        const items = section.items.filter((item) => isNavItemVisible(item, role));
+        const items = section.items.filter((item) => isNavItemVisible(item, permissions));
         if (items.length === 0) return null;
         return (
           <div key={section.label}>

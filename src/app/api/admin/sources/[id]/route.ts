@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireRole } from "@/lib/guard";
+import { requireToggleOrEditPermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { appendAuditLog } from "@/lib/audit";
 
@@ -10,14 +10,16 @@ const updateSchema = z.object({
 });
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requireRole("ADMIN");
-  if (!auth.ok) return auth.response;
   const { id } = await params;
 
   const parsed = updateSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid input" }, { status: 400 });
   }
+
+  const auth = await requireToggleOrEditPermission("sources", parsed.data, "active");
+  if (!auth.ok) return auth.response;
+
   const db = readDb();
   const existing = db.sources.find((s) => s.id === id);
   if (!existing) return NextResponse.json({ error: "Source not found" }, { status: 404 });

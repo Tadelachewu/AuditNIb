@@ -1,15 +1,22 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getIronSession } from "iron-session";
 import { sessionOptions, type SessionData } from "@/lib/session";
+import { hasPermission, permissionKey } from "@/lib/permissions/registry";
 
 const PUBLIC_PATHS = ["/login"];
 
-// Every route under /admin is Administrator-only. Non-admin authenticated
-// users land on /dashboard instead. This is a UX convenience only - the
-// actual authorization boundary is enforced again in every API route via
-// requireRole() (see src/lib/guard.ts), since middleware/UI checks can
-// never be trusted on their own.
-const ADMIN_ONLY_PREFIXES = ["/admin"];
+// Every /admin/<page> route needs "<page>.view" on the caller's session
+// (permissions are resolved from the user's role at login time - see
+// src/app/api/auth/login/route.ts - and carried in the encrypted cookie, so
+// this check needs no filesystem/database read). This is a UX convenience
+// only - the actual authorization boundary is enforced again, action by
+// action, in every API route via requirePermission() (see
+// src/lib/guard.ts), since middleware/UI checks can never be trusted alone.
+function adminPageCodeFor(pathname: string): string | null {
+  if (pathname === "/admin") return "admin-dashboard";
+  const match = pathname.match(/^\/admin\/([^/]+)/);
+  return match ? match[1] : null;
+}
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -37,7 +44,8 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 
-  if (isLoggedIn && ADMIN_ONLY_PREFIXES.some((p) => pathname.startsWith(p)) && session.role !== "ADMIN") {
+  const pageCode = adminPageCodeFor(pathname);
+  if (isLoggedIn && pageCode && !hasPermission(session.permissions, permissionKey(pageCode, "view"))) {
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 

@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import { v4 as uuid } from "uuid";
 import { z } from "zod";
-import { requireRole } from "@/lib/guard";
+import { requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { appendAuditLog } from "@/lib/audit";
 
 export async function GET() {
-  const auth = await requireRole("ADMIN");
+  const auth = await requirePermission("scoring-adjustments.view");
   if (!auth.ok) return auth.response;
   const adjustments = [...readDb().scoringAdjustments].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   return NextResponse.json({ scoringAdjustments: adjustments });
@@ -23,7 +23,7 @@ const createSchema = z.object({
 // A mandatory reason plus an immutable audit-log entry is the compensating
 // control for this being a manual override of the computed score.
 export async function POST(request: Request) {
-  const auth = await requireRole("ADMIN");
+  const auth = await requirePermission("scoring-adjustments.create");
   if (!auth.ok) return auth.response;
 
   const parsed = createSchema.safeParse(await request.json().catch(() => null));

@@ -1,9 +1,11 @@
 import fs from "node:fs";
 import path from "node:path";
 import { hashPassword } from "@/lib/auth";
+import { ALL_PERMISSION_KEYS, ALL_VIEW_PERMISSION_KEYS } from "@/lib/permissions/registry";
 import type {
   Database,
   User,
+  RoleDefinition,
   District,
   Branch,
   Source,
@@ -99,6 +101,109 @@ function buildSeedDatabase(): Database {
     notification: { provider: "NONE", fromAddress: "" },
     updatedAt: now,
   };
+
+  // Roles are data (Phase 2) - this is the seed, not a hard-coded enum.
+  // ADMIN always gets every permission (isSystem protects it from being
+  // edited away, see src/app/api/admin/roles/[id]/route.ts). The other six
+  // seeded roles start with NO admin-console permissions, matching Phase 1's
+  // actual behavior (only ADMIN could reach /admin/*) - an admin now grants
+  // access deliberately via /admin/roles rather than it being implicit.
+  // EXECUTIVE_READONLY is the one exception: it gets read-only visibility
+  // across the console by default, matching its "read-only oversight" BRD
+  // description, excluding Roles & Permissions itself.
+  const roles: RoleDefinition[] = [
+    {
+      id: "role-admin",
+      code: "ADMIN",
+      name: "Administrator",
+      description: "Full bank-wide access to every module, including Roles & Permissions.",
+      orgScope: "BANK",
+      branchSingleton: false,
+      isSystem: true,
+      permissions: ALL_PERMISSION_KEYS,
+      status: "ACTIVE",
+      createdAt: now,
+      updatedAt: now,
+    },
+    {
+      id: "role-ho-controller",
+      code: "HO_CONTROLLER",
+      name: "Head Office Internal Controller",
+      description: "Second approval/review, Internal Audit entry, bank-wide reporting.",
+      orgScope: "BANK",
+      branchSingleton: false,
+      isSystem: true,
+      permissions: [],
+      status: "ACTIVE",
+      createdAt: now,
+      updatedAt: now,
+    },
+    {
+      id: "role-district-controller",
+      code: "DISTRICT_CONTROLLER",
+      name: "District Internal Controller",
+      description: "Review/approve/reject/return, district reporting-period control.",
+      orgScope: "DISTRICT",
+      branchSingleton: false,
+      isSystem: true,
+      permissions: [],
+      status: "ACTIVE",
+      createdAt: now,
+      updatedAt: now,
+    },
+    {
+      id: "role-district-director",
+      code: "DISTRICT_DIRECTOR",
+      name: "District Director",
+      description: "District oversight, performance and reporting; cannot modify findings or scores.",
+      orgScope: "DISTRICT",
+      branchSingleton: false,
+      isSystem: true,
+      permissions: [],
+      status: "ACTIVE",
+      createdAt: now,
+      updatedAt: now,
+    },
+    {
+      id: "role-branch-controller",
+      code: "BRANCH_CONTROLLER",
+      name: "Branch Internal Controller",
+      description: "Register/submit findings, verify rectifications for one branch.",
+      orgScope: "BRANCH",
+      branchSingleton: true,
+      isSystem: true,
+      permissions: [],
+      status: "ACTIVE",
+      createdAt: now,
+      updatedAt: now,
+    },
+    {
+      id: "role-branch-manager",
+      code: "BRANCH_MANAGER",
+      name: "Branch Manager",
+      description: "Record corrective actions and rectification progress for one branch.",
+      orgScope: "BRANCH",
+      branchSingleton: true,
+      isSystem: true,
+      permissions: [],
+      status: "ACTIVE",
+      createdAt: now,
+      updatedAt: now,
+    },
+    {
+      id: "role-executive",
+      code: "EXECUTIVE_READONLY",
+      name: "Executive (Read-only)",
+      description: "Read-only oversight dashboards and reports across the bank.",
+      orgScope: "BANK",
+      branchSingleton: false,
+      isSystem: true,
+      permissions: ALL_VIEW_PERMISSION_KEYS,
+      status: "ACTIVE",
+      createdAt: now,
+      updatedAt: now,
+    },
+  ];
 
   const users: User[] = [
     {
@@ -196,6 +301,7 @@ function buildSeedDatabase(): Database {
 
   return {
     users,
+    roles,
     districts,
     branches,
     sources,

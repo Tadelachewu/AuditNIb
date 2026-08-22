@@ -1,9 +1,10 @@
-import type { Role } from "@/types";
+import { permissionKey } from "@/lib/permissions/registry";
 
 export interface NavItem {
   label: string;
   href: string;
-  roles: Role[] | "all";
+  /** A "<pageCode>.view" permission key, or undefined for links every logged-in user can see. */
+  permission?: string;
 }
 
 export interface NavSection {
@@ -14,26 +15,35 @@ export interface NavSection {
 export const NAV_SECTIONS: NavSection[] = [
   {
     label: "Overview",
-    items: [{ label: "Dashboard", href: "/dashboard", roles: "all" }],
+    items: [{ label: "Dashboard", href: "/dashboard" }],
   },
   {
     label: "Administration",
     items: [
-      { label: "Admin Dashboard", href: "/admin", roles: ["ADMIN"] },
-      { label: "Users", href: "/admin/users", roles: ["ADMIN"] },
-      { label: "Districts", href: "/admin/districts", roles: ["ADMIN"] },
-      { label: "Branches", href: "/admin/branches", roles: ["ADMIN"] },
-      { label: "Sources", href: "/admin/sources", roles: ["ADMIN"] },
-      { label: "Classified Categories", href: "/admin/categories", roles: ["ADMIN"] },
-      { label: "Scoring Rules", href: "/admin/scoring-rules", roles: ["ADMIN"] },
-      { label: "Scoring Adjustments", href: "/admin/scoring-adjustments", roles: ["ADMIN"] },
-      { label: "Reporting Periods", href: "/admin/reporting-periods", roles: ["ADMIN"] },
-      { label: "Settings", href: "/admin/settings", roles: ["ADMIN"] },
-      { label: "Audit Log", href: "/admin/audit-log", roles: ["ADMIN"] },
+      { label: "Admin Dashboard", href: "/admin", permission: permissionKey("admin-dashboard", "view") },
+      { label: "Users", href: "/admin/users", permission: permissionKey("users", "view") },
+      { label: "Districts", href: "/admin/districts", permission: permissionKey("districts", "view") },
+      { label: "Branches", href: "/admin/branches", permission: permissionKey("branches", "view") },
+      { label: "Sources", href: "/admin/sources", permission: permissionKey("sources", "view") },
+      { label: "Classified Categories", href: "/admin/categories", permission: permissionKey("categories", "view") },
+      { label: "Scoring Rules", href: "/admin/scoring-rules", permission: permissionKey("scoring-rules", "view") },
+      {
+        label: "Scoring Adjustments",
+        href: "/admin/scoring-adjustments",
+        permission: permissionKey("scoring-adjustments", "view"),
+      },
+      {
+        label: "Reporting Periods",
+        href: "/admin/reporting-periods",
+        permission: permissionKey("reporting-periods", "view"),
+      },
+      { label: "Roles & Permissions", href: "/admin/roles", permission: permissionKey("roles", "view") },
+      { label: "Settings", href: "/admin/settings", permission: permissionKey("settings", "view") },
+      { label: "Audit Log", href: "/admin/audit-log", permission: permissionKey("audit-log", "view") },
     ],
   },
 ];
 
-export function isNavItemVisible(item: NavItem, role: Role): boolean {
-  return item.roles === "all" || item.roles.includes(role);
+export function isNavItemVisible(item: NavItem, permissions: string[]): boolean {
+  return !item.permission || permissions.includes(item.permission);
 }

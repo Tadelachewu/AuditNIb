@@ -1,13 +1,19 @@
 import { cookies } from "next/headers";
 import { getIronSession, type IronSession, type SessionOptions } from "iron-session";
-import type { Role } from "@/types";
 
 export interface SessionData {
   isLoggedIn: boolean;
   userId?: string;
   username?: string;
   name?: string;
-  role?: Role;
+  role?: string;
+  roleName?: string;
+  // Resolved from the user's RoleDefinition at login time (see
+  // src/app/api/auth/login/route.ts) and carried in the encrypted cookie so
+  // src/proxy.ts can authorize requests without a filesystem read. This
+  // means a permission change to a role only takes effect for a user's
+  // *next* login, same trade-off already made for `status` (see PHASE1.md).
+  permissions?: string[];
   districtId?: string | null;
   branchId?: string | null;
 }

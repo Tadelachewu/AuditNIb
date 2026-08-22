@@ -6,6 +6,7 @@ import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input, Select, Label } from "@/components/ui/Field";
 import { StatusBadge, Badge } from "@/components/ui/Badge";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import type { District, Branch } from "@/types";
 
 type BranchRow = Branch & { managerName: string | null; controllerName: string | null };
@@ -18,6 +19,10 @@ export default function BranchesPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [rowBusy, setRowBusy] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({ name: "", districtId: "" });
+  const [editError, setEditError] = useState<string | null>(null);
+  const { confirm, dialog } = useConfirm();
 
   async function load() {
     setLoading(true);
@@ -53,7 +58,36 @@ export default function BranchesPage() {
     }
   }
 
+  function startEdit(b: BranchRow) {
+    setEditingId(b.id);
+    setEditForm({ name: b.name, districtId: b.districtId });
+    setEditError(null);
+  }
+
+  async function saveEdit(b: BranchRow) {
+    setRowBusy(b.id);
+    setEditError(null);
+    try {
+      await apiSend(`/api/admin/branches/${b.id}`, "PATCH", editForm);
+      setEditingId(null);
+      await load();
+    } catch (err) {
+      setEditError(err instanceof ApiError ? err.message : "Failed to save changes");
+    } finally {
+      setRowBusy(null);
+    }
+  }
+
   async function toggleStatus(b: BranchRow) {
+    if (b.status === "ACTIVE") {
+      const result = await confirm({
+        title: "Deactivate branch?",
+        message: `"${b.name}" will no longer be selectable for new findings or user assignments. Its current Manager/Controller stay assigned. This can be reversed.`,
+        confirmLabel: "Deactivate",
+        tone: "danger",
+      });
+      if (result === false) return;
+    }
     setRowBusy(b.id);
     try {
       await apiSend(`/api/admin/branches/${b.id}`, "PATCH", { status: b.status === "ACTIVE" ? "INACTIVE" : "ACTIVE" });
@@ -132,35 +166,83 @@ export default function BranchesPage() {
                 </tr>
               )}
               {!loading &&
-                branches.map((b) => (
-                  <tr key={b.id}>
-                    <td className="px-4 py-2 font-mono text-xs text-slate-600">{b.code}</td>
-                    <td className="px-4 py-2 font-medium text-slate-900">{b.name}</td>
-                    <td className="px-4 py-2 text-slate-600">{districtName(b.districtId)}</td>
-                    <td className="px-4 py-2">
-                      {b.managerName ? b.managerName : <Badge tone="amber">Unassigned</Badge>}
-                    </td>
-                    <td className="px-4 py-2">
-                      {b.controllerName ? b.controllerName : <Badge tone="amber">Unassigned</Badge>}
-                    </td>
-                    <td className="px-4 py-2">
-                      <StatusBadge status={b.status} />
-                    </td>
-                    <td className="px-4 py-2 text-right">
-                      <Button
-                        variant={b.status === "ACTIVE" ? "danger" : "secondary"}
-                        disabled={rowBusy === b.id}
-                        onClick={() => toggleStatus(b)}
-                      >
-                        {b.status === "ACTIVE" ? "Deactivate" : "Reactivate"}
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
+                branches.map((b) => {
+                  const isEditing = editingId === b.id;
+                  return (
+                    <tr key={b.id}>
+                      <td className="px-4 py-2 font-mono text-xs text-slate-600">{b.code}</td>
+                      <td className="px-4 py-2 font-medium text-slate-900">
+                        {isEditing ? (
+                          <Input
+                            value={editForm.name}
+                            onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                            className="max-w-48"
+                          />
+                        ) : (
+                          b.name
+                        )}
+                      </td>
+                      <td className="px-4 py-2 text-slate-600">
+                        {isEditing ? (
+                          <Select
+                            value={editForm.districtId}
+                            onChange={(e) => setEditForm({ ...editForm, districtId: e.target.value })}
+                          >
+                            {districts.map((d) => (
+                              <option key={d.id} value={d.id}>
+                                {d.name}
+                              </option>
+                            ))}
+                          </Select>
+                        ) : (
+                          districtName(b.districtId)
+                        )}
+                      </td>
+                      <td className="px-4 py-2">
+                        {b.managerName ? b.managerName : <Badge tone="amber">Unassigned</Badge>}
+                      </td>
+                      <td className="px-4 py-2">
+                        {b.controllerName ? b.controllerName : <Badge tone="amber">Unassigned</Badge>}
+                      </td>
+                      <td className="px-4 py-2">
+                        <StatusBadge status={b.status} />
+                      </td>
+                      <td className="px-4 py-2 text-right">
+                        {isEditing ? (
+                          <div className="flex flex-col items-end gap-1">
+                            {editError && <p className="text-xs text-red-600">{editError}</p>}
+                            <div className="flex justify-end gap-2">
+                              <Button variant="secondary" onClick={() => setEditingId(null)}>
+                                Cancel
+                              </Button>
+                              <Button disabled={rowBusy === b.id} onClick={() => saveEdit(b)}>
+                                {rowBusy === b.id ? "Saving..." : "Save"}
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex justify-end gap-2">
+                            <Button variant="secondary" onClick={() => startEdit(b)}>
+                              Edit
+                            </Button>
+                            <Button
+                              variant={b.status === "ACTIVE" ? "danger" : "secondary"}
+                              disabled={rowBusy === b.id}
+                              onClick={() => toggleStatus(b)}
+                            >
+                              {b.status === "ACTIVE" ? "Deactivate" : "Reactivate"}
+                            </Button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
             </tbody>
           </table>
         </div>
       </Card>
+      {dialog}
     </div>
   );
 }

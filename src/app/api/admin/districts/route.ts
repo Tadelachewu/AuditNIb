@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import { v4 as uuid } from "uuid";
 import { z } from "zod";
-import { requireRole } from "@/lib/guard";
+import { requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { appendAuditLog } from "@/lib/audit";
 
 export async function GET() {
-  const auth = await requireRole("ADMIN");
+  const auth = await requirePermission("districts.view");
   if (!auth.ok) return auth.response;
   const db = readDb();
   return NextResponse.json({ districts: db.districts });
@@ -18,7 +18,7 @@ const createSchema = z.object({
 });
 
 export async function POST(request: Request) {
-  const auth = await requireRole("ADMIN");
+  const auth = await requirePermission("districts.create");
   if (!auth.ok) return auth.response;
 
   const parsed = createSchema.safeParse(await request.json().catch(() => null));

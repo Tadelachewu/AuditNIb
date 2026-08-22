@@ -1,16 +1,15 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireRole } from "@/lib/guard";
+import { requireToggleOrEditPermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { hashPassword } from "@/lib/auth";
 import { resolveOrgAssignment } from "@/lib/org";
 import { appendAuditLog } from "@/lib/audit";
 import { toSafeUser } from "@/lib/sanitize";
-import { ROLES } from "@/types";
 
 const updateUserSchema = z.object({
   name: z.string().min(1).optional(),
-  role: z.enum(ROLES).optional(),
+  role: z.string().min(1).optional(),
   districtId: z.string().nullable().optional(),
   branchId: z.string().nullable().optional(),
   status: z.enum(["ACTIVE", "INACTIVE"]).optional(),
@@ -18,8 +17,6 @@ const updateUserSchema = z.object({
 });
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requireRole("ADMIN");
-  if (!auth.ok) return auth.response;
   const { id } = await params;
 
   const body = await request.json().catch(() => null);
@@ -28,6 +25,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid input" }, { status: 400 });
   }
   const input = parsed.data;
+
+  // A pure {status} PATCH (what the deactivate/reactivate button sends) is
+  // gated by "users.toggle-status"; anything that touches name/role/org/
+  // password is a real edit and needs "users.edit" - action-level, not just
+  // page-level, permissions.
+  const auth = await requireToggleOrEditPermission("users", input);
+  if (!auth.ok) return auth.response;
 
   const db = readDb();
   const existing = db.users.find((u) => u.id === id);
@@ -43,7 +47,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const assignment = resolveOrgAssignment(
       db,
       {
-        role: nextRole,
+        roleCode: nextRole,
         districtId: input.districtId !== undefined ? input.districtId : existing.districtId,
         branchId: input.branchId !== undefined ? input.branchId : existing.branchId,
       },
