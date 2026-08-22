@@ -98,6 +98,25 @@ export default function RolesPage() {
     }
   }
 
+  async function deleteRole(role: RoleDefinition) {
+    const result = await confirm({
+      title: "Permanently delete role?",
+      message: `This removes "${role.name}" entirely - unlike deactivating, this cannot be undone. Only allowed if no user still holds this role.`,
+      confirmLabel: "Delete Permanently",
+      tone: "danger",
+    });
+    if (result === false) return;
+    setRowBusy(role.id);
+    try {
+      await apiSend(`/api/admin/roles/${role.id}`, "DELETE");
+      await load();
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : "Failed to delete role");
+    } finally {
+      setRowBusy(null);
+    }
+  }
+
   async function toggleStatus(role: RoleDefinition) {
     if (role.status === "ACTIVE") {
       const result = await confirm({
@@ -244,6 +263,11 @@ export default function RolesPage() {
                       {!isAdminRole && (
                         <Button variant={role.status === "ACTIVE" ? "danger" : "secondary"} disabled={rowBusy === role.id} onClick={() => toggleStatus(role)}>
                           {role.status === "ACTIVE" ? "Deactivate" : "Reactivate"}
+                        </Button>
+                      )}
+                      {!role.isSystem && (
+                        <Button variant="danger" disabled={rowBusy === role.id} onClick={() => deleteRole(role)}>
+                          Delete
                         </Button>
                       )}
                     </div>

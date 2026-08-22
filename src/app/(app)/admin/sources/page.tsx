@@ -67,6 +67,25 @@ export default function SourcesPage() {
     }
   }
 
+  async function deleteSource(s: Source) {
+    const result = await confirm({
+      title: "Permanently delete source?",
+      message: `This removes "${s.name}" entirely - unlike deactivating, this cannot be undone. Only allowed if no scoring rule still references it.`,
+      confirmLabel: "Delete Permanently",
+      tone: "danger",
+    });
+    if (result === false) return;
+    setRowBusy(s.id);
+    try {
+      await apiSend(`/api/admin/sources/${s.id}`, "DELETE");
+      await load();
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : "Failed to delete source");
+    } finally {
+      setRowBusy(null);
+    }
+  }
+
   async function toggleActive(s: Source) {
     if (s.active) {
       const result = await confirm({
@@ -173,6 +192,9 @@ export default function SourcesPage() {
                               onClick={() => toggleActive(s)}
                             >
                               {s.active ? "Deactivate" : "Activate"}
+                            </Button>
+                            <Button variant="danger" disabled={rowBusy === s.id} onClick={() => deleteSource(s)}>
+                              Delete
                             </Button>
                           </div>
                         )}

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireToggleOrEditPermission } from "@/lib/guard";
+import { requireToggleOrEditPermission, requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { appendAuditLog } from "@/lib/audit";
 
@@ -48,4 +48,40 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   });
 
   return NextResponse.json({ branch: updated });
+}
+
+// See src/app/api/admin/districts/[id]/route.ts's DELETE for the same
+// reasoning. Blocked with 409 if any user (active or not) still has this
+// branch as their branchId, so a Branch Manager/Controller assignment can
+// never be left pointing at a deleted branch.
+export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requirePermission("branches.delete");
+  if (!auth.ok) return auth.response;
+  const { id } = await params;
+
+  const db = readDb();
+  const existing = db.branches.find((b) => b.id === id);
+  if (!existing) return NextResponse.json({ error: "Branch not found" }, { status: 404 });
+
+  const userCount = db.users.filter((u) => u.branchId === id).length;
+  if (userCount > 0) {
+    return NextResponse.json(
+      { error: `Cannot delete: ${userCount} user(s) are still assigned to this branch. Reassign or remove them first.` },
+      { status: 409 }
+    );
+  }
+
+  updateDb((current) => {
+    current.branches = current.branches.filter((b) => b.id !== id);
+    appendAuditLog(current, {
+      userId: auth.session.userId!,
+      userName: auth.session.name!,
+      action: "DELETE",
+      entityType: "Branch",
+      entityId: id,
+      oldValue: existing,
+    });
+  });
+
+  return NextResponse.json({ ok: true });
 }

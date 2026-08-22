@@ -5,7 +5,7 @@
 // permissions is fully dynamic, stored on RoleDefinition.permissions and
 // editable at /admin/roles. See PHASE2.md for the full design.
 
-export type PermissionAction = "view" | "create" | "edit" | "toggle-status" | "activate" | "lock" | "manage";
+export type PermissionAction = "view" | "create" | "edit" | "toggle-status" | "delete" | "activate" | "lock" | "manage";
 
 export interface PageAction {
   action: PermissionAction;
@@ -22,14 +22,21 @@ const V: PageAction = { action: "view", label: "View" };
 const C: PageAction = { action: "create", label: "Create" };
 const E: PageAction = { action: "edit", label: "Edit" };
 const T: PageAction = { action: "toggle-status", label: "Activate / Deactivate" };
+const D: PageAction = { action: "delete", label: "Delete" };
 
+// Users never gets a "delete" action, by BRD design (section 3.1 lists only
+// create/edit/deactivate/reactivate) and for audit-integrity reasons - see
+// PHASE1.md/PHASE2.md. Districts/Branches/Sources/Categories/Roles are pure
+// reference/config data, so a real delete is legitimate admin cleanup - each
+// DELETE route still blocks the operation with a 409 if the record is
+// referenced elsewhere (see the corresponding [id]/route.ts files).
 export const PAGE_REGISTRY: PageDefinition[] = [
   { code: "admin-dashboard", label: "Admin Dashboard", actions: [V] },
   { code: "users", label: "Users", actions: [V, C, E, T] },
-  { code: "districts", label: "Districts", actions: [V, C, E, T] },
-  { code: "branches", label: "Branches", actions: [V, C, E, T] },
-  { code: "sources", label: "Sources", actions: [V, C, E, T] },
-  { code: "categories", label: "Classified Categories", actions: [V, C, E, T] },
+  { code: "districts", label: "Districts", actions: [V, C, E, T, D] },
+  { code: "branches", label: "Branches", actions: [V, C, E, T, D] },
+  { code: "sources", label: "Sources", actions: [V, C, E, T, D] },
+  { code: "categories", label: "Classified Categories", actions: [V, C, E, T, D] },
   { code: "scoring-rules", label: "Scoring Rules", actions: [V, C, { action: "activate", label: "Activate / Deactivate" }] },
   { code: "scoring-adjustments", label: "Scoring Adjustments", actions: [V, C] },
   { code: "reporting-periods", label: "Reporting Periods", actions: [V, C, { action: "lock", label: "Lock / Unlock" }] },

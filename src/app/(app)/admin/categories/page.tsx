@@ -88,6 +88,25 @@ export default function CategoriesPage() {
     }
   }
 
+  async function deleteCategory(c: ClassifiedCategory) {
+    const result = await confirm({
+      title: "Permanently delete category?",
+      message: `This removes "${c.name}" entirely - unlike deactivating, this cannot be undone. Only allowed if no scoring rule still references it.`,
+      confirmLabel: "Delete Permanently",
+      tone: "danger",
+    });
+    if (result === false) return;
+    setRowBusy(c.id);
+    try {
+      await apiSend(`/api/admin/categories/${c.id}`, "DELETE");
+      await load();
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : "Failed to delete category");
+    } finally {
+      setRowBusy(null);
+    }
+  }
+
   async function toggleScored(c: ClassifiedCategory) {
     const goingScored = !c.scored;
     const result = await confirm({
@@ -214,6 +233,9 @@ export default function CategoriesPage() {
                               onClick={() => toggleActive(c)}
                             >
                               {c.active ? "Deactivate" : "Activate"}
+                            </Button>
+                            <Button variant="danger" disabled={rowBusy === c.id} onClick={() => deleteCategory(c)}>
+                              Delete
                             </Button>
                           </div>
                         )}

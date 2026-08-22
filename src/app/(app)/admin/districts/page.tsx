@@ -67,6 +67,25 @@ export default function DistrictsPage() {
     }
   }
 
+  async function deleteDistrict(d: District) {
+    const result = await confirm({
+      title: "Permanently delete district?",
+      message: `This removes "${d.name}" entirely - unlike deactivating, this cannot be undone. Only allowed if no branches or users still belong to it.`,
+      confirmLabel: "Delete Permanently",
+      tone: "danger",
+    });
+    if (result === false) return;
+    setRowBusy(d.id);
+    try {
+      await apiSend(`/api/admin/districts/${d.id}`, "DELETE");
+      await load();
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : "Failed to delete district");
+    } finally {
+      setRowBusy(null);
+    }
+  }
+
   async function toggleStatus(d: District) {
     if (d.status === "ACTIVE") {
       const result = await confirm({
@@ -171,6 +190,9 @@ export default function DistrictsPage() {
                             onClick={() => toggleStatus(d)}
                           >
                             {d.status === "ACTIVE" ? "Deactivate" : "Reactivate"}
+                          </Button>
+                          <Button variant="danger" disabled={rowBusy === d.id} onClick={() => deleteDistrict(d)}>
+                            Delete
                           </Button>
                         </div>
                       )}

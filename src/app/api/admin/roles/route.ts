@@ -4,15 +4,19 @@ import { z } from "zod";
 import { requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { appendAuditLog } from "@/lib/audit";
-import { PAGE_REGISTRY, isValidPermissionKey } from "@/lib/permissions/registry";
+import { PAGE_REGISTRY, ALL_PERMISSION_KEYS, isValidPermissionKey } from "@/lib/permissions/registry";
 
 export async function GET() {
   const auth = await requirePermission("roles.view");
   if (!auth.ok) return auth.response;
   const db = readDb();
+  // ADMIN always displays as holding every current permission, same as it
+  // resolves at login (see src/app/api/auth/login/route.ts) - never the
+  // possibly-stale snapshot stored on the record.
+  const roles = db.roles.map((r) => (r.code === "ADMIN" ? { ...r, permissions: ALL_PERMISSION_KEYS } : r));
   // The registry travels with the list so the UI can render the full
   // page x action matrix without a second round trip.
-  return NextResponse.json({ roles: db.roles, registry: PAGE_REGISTRY });
+  return NextResponse.json({ roles, registry: PAGE_REGISTRY });
 }
 
 const createSchema = z.object({

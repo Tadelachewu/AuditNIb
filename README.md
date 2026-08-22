@@ -9,7 +9,9 @@ For a deep dive into how every piece of this Phase 1 build works and relates
 to the others — data model, auth flow, role/org-unit scoping, each admin
 module — see [PHASE1.md](PHASE1.md). Phase 2 replaced the fixed 7-role
 system with dynamic, admin-editable roles and a page/action permission
-matrix — see [PHASE2.md](PHASE2.md).
+matrix — see [PHASE2.md](PHASE2.md). Phase 3 completed CRUD (in-place edit
+everywhere, real delete where it's safe) and added confirmation dialogs to
+every risky action — see [PHASE3.md](PHASE3.md).
 
 ## Getting started
 
@@ -76,14 +78,24 @@ users log in (see PHASE2.md §4).
   one-active-holder-per-branch rule are per-role data, not hard-coded (see
   PHASE2.md)
 - Admin Dashboard: bank-wide KPIs, unassigned-branch warnings, recent activity
-- Full CRUD on every admin entity — create, list, **edit in place**, and
-  deactivate/reactivate (there is no hard delete anywhere in the app: every
-  entity is soft-deleted via `status`, so audit history and foreign-key
-  references — e.g. a district a branch still points to — never dangle).
-  Destructive or high-blast-radius actions (deactivating anything, locking/
-  unlocking a period, activating/deactivating a scoring rule) require an
-  explicit confirmation dialog before they run; period lock/unlock collects
-  its mandatory reason in that same dialog
+- Full CRUD on every admin entity — create, list, **edit in place**,
+  deactivate/reactivate, and, where it's actually safe, **permanent delete**.
+  Districts, Branches, Sources, Categories, and custom Roles support a real
+  delete — each is blocked with a clear error if anything still references
+  it (a branch in the district, a user on the branch, a scoring rule citing
+  the source/category, a user holding the role), so nothing can be left
+  with a dangling reference. Users, Scoring Rules, Scoring Adjustments,
+  Reporting Periods, and the 7 built-in roles are deactivate-only, by
+  design (see PHASE3.md) — never a hard delete, since they're either
+  BRD-restricted to create/edit/deactivate (Users), append-only/versioned
+  for reconciliation integrity (Scoring Rules, Reporting Periods), or
+  themselves immutable audit-style records (Scoring Adjustments). Every
+  delete is still recorded in the audit log with a full snapshot of what
+  was removed. Destructive or high-blast-radius actions (deactivating
+  anything, deleting anything, locking/unlocking a period, activating/
+  deactivating a scoring rule) require an explicit confirmation dialog
+  before they run; period lock/unlock collects its mandatory reason in that
+  same dialog
 - Users: create/edit (name, role, org-unit, password reset)/deactivate/
   reactivate, enforces the per-role branch-singleton constraint (e.g. one
   active Branch Manager and one active Branch Internal Controller per

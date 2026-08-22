@@ -97,3 +97,44 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   return NextResponse.json({ role: updated });
 }
+
+// Custom (non-system) roles only - the 7 seeded roles are load-bearing
+// (login, org.ts's BRANCH_MANAGER/BRANCH_CONTROLLER singleton lookups, the
+// ADMIN lockout guard above all assume they exist) and can never be
+// deleted, only deactivated. Also blocked with 409 if any user - active or
+// not - still references this role's code, so User.role can never dangle.
+export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requirePermission("roles.manage");
+  if (!auth.ok) return auth.response;
+  const { id } = await params;
+
+  const db = readDb();
+  const existing = db.roles.find((r) => r.id === id);
+  if (!existing) return NextResponse.json({ error: "Role not found" }, { status: 404 });
+
+  if (existing.isSystem) {
+    return NextResponse.json({ error: "Built-in roles can be deactivated but not deleted" }, { status: 409 });
+  }
+
+  const userCount = db.users.filter((u) => u.role === existing.code).length;
+  if (userCount > 0) {
+    return NextResponse.json(
+      { error: `Cannot delete: ${userCount} user(s) still hold this role. Reassign or remove them first.` },
+      { status: 409 }
+    );
+  }
+
+  updateDb((current) => {
+    current.roles = current.roles.filter((r) => r.id !== id);
+    appendAuditLog(current, {
+      userId: auth.session.userId!,
+      userName: auth.session.name!,
+      action: "DELETE",
+      entityType: "RoleDefinition",
+      entityId: id,
+      oldValue: existing,
+    });
+  });
+
+  return NextResponse.json({ ok: true });
+}

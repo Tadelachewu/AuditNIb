@@ -78,6 +78,25 @@ export default function BranchesPage() {
     }
   }
 
+  async function deleteBranch(b: BranchRow) {
+    const result = await confirm({
+      title: "Permanently delete branch?",
+      message: `This removes "${b.name}" entirely - unlike deactivating, this cannot be undone. Only allowed if no users are still assigned to it.`,
+      confirmLabel: "Delete Permanently",
+      tone: "danger",
+    });
+    if (result === false) return;
+    setRowBusy(b.id);
+    try {
+      await apiSend(`/api/admin/branches/${b.id}`, "DELETE");
+      await load();
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : "Failed to delete branch");
+    } finally {
+      setRowBusy(null);
+    }
+  }
+
   async function toggleStatus(b: BranchRow) {
     if (b.status === "ACTIVE") {
       const result = await confirm({
@@ -231,6 +250,9 @@ export default function BranchesPage() {
                               onClick={() => toggleStatus(b)}
                             >
                               {b.status === "ACTIVE" ? "Deactivate" : "Reactivate"}
+                            </Button>
+                            <Button variant="danger" disabled={rowBusy === b.id} onClick={() => deleteBranch(b)}>
+                              Delete
                             </Button>
                           </div>
                         )}

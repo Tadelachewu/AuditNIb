@@ -5,6 +5,7 @@ import { verifyPassword } from "@/lib/auth";
 import { getSession } from "@/lib/session";
 import { appendAuditLog } from "@/lib/audit";
 import { toSafeUser } from "@/lib/sanitize";
+import { ALL_PERMISSION_KEYS } from "@/lib/permissions/registry";
 
 const loginSchema = z.object({
   username: z.string().min(1),
@@ -54,7 +55,11 @@ export async function POST(request: Request) {
   session.name = user.name;
   session.role = user.role;
   session.roleName = role.name;
-  session.permissions = role.permissions;
+  // ADMIN always resolves to every permission the catalog currently
+  // defines, rather than whatever was snapshotted into role.permissions at
+  // seed/creation time - so adding a new page/action to the registry never
+  // leaves Administrators without it until someone manually re-grants it.
+  session.permissions = role.code === "ADMIN" ? ALL_PERMISSION_KEYS : role.permissions;
   session.districtId = user.districtId ?? null;
   session.branchId = user.branchId ?? null;
   await session.save();
