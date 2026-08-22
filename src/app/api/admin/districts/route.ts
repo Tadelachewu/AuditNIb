@@ -4,12 +4,24 @@ import { z } from "zod";
 import { requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { appendAuditLog } from "@/lib/audit";
+import { findDistrictControllers, findDistrictDirectors } from "@/lib/org";
 
 export async function GET() {
   const auth = await requirePermission("districts.view");
   if (!auth.ok) return auth.response;
   const db = readDb();
-  return NextResponse.json({ districts: db.districts });
+
+  // Unlike a branch's manager/controller, a district can have several
+  // active District Controllers/Directors (BRD: "District and Head Office
+  // may have multiple Internal Controllers"), so these come back as arrays
+  // of names, not a single one.
+  const districts = db.districts.map((d) => ({
+    ...d,
+    controllerNames: findDistrictControllers(db, d.id).map((u) => u.name),
+    directorNames: findDistrictDirectors(db, d.id).map((u) => u.name),
+  }));
+
+  return NextResponse.json({ districts });
 }
 
 const createSchema = z.object({

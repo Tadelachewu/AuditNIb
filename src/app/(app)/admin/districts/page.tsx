@@ -9,8 +9,15 @@ import { StatusBadge } from "@/components/ui/Badge";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import type { District } from "@/types";
 
+type DistrictRow = District & { controllerNames: string[]; directorNames: string[] };
+
+/** Comma-joined names, or a literal "--" when nobody is assigned. */
+function namesOrDash(names: string[]) {
+  return names.length > 0 ? names.join(", ") : "--";
+}
+
 export default function DistrictsPage() {
-  const [districts, setDistricts] = useState<District[]>([]);
+  const [districts, setDistricts] = useState<DistrictRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState({ code: "", name: "" });
   const [formError, setFormError] = useState<string | null>(null);
@@ -23,7 +30,7 @@ export default function DistrictsPage() {
 
   async function load() {
     setLoading(true);
-    const res = await apiGet<{ districts: District[] }>("/api/admin/districts");
+    const res = await apiGet<{ districts: DistrictRow[] }>("/api/admin/districts");
     setDistricts(res.districts);
     setLoading(false);
   }
@@ -140,6 +147,8 @@ export default function DistrictsPage() {
               <tr>
                 <th className="px-4 py-2 font-medium">Code</th>
                 <th className="px-4 py-2 font-medium">Name</th>
+                <th className="px-4 py-2 font-medium">District Controller(s)</th>
+                <th className="px-4 py-2 font-medium">District Director(s)</th>
                 <th className="px-4 py-2 font-medium">Status</th>
                 <th className="px-4 py-2" />
               </tr>
@@ -147,7 +156,7 @@ export default function DistrictsPage() {
             <tbody className="divide-y divide-slate-100">
               {loading && (
                 <tr>
-                  <td className="px-4 py-4 text-slate-400" colSpan={4}>
+                  <td className="px-4 py-4 text-slate-400" colSpan={6}>
                     Loading...
                   </td>
                 </tr>
@@ -166,6 +175,8 @@ export default function DistrictsPage() {
                       )}
                       {editingId === d.id && editError && <p className="mt-1 text-xs text-red-600">{editError}</p>}
                     </td>
+                    <td className="px-4 py-2 text-slate-600">{namesOrDash(d.controllerNames)}</td>
+                    <td className="px-4 py-2 text-slate-600">{namesOrDash(d.directorNames)}</td>
                     <td className="px-4 py-2">
                       <StatusBadge status={d.status} />
                     </td>

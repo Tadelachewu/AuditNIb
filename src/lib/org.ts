@@ -15,6 +15,21 @@ export function findBranchController(db: Database, branchId: string): User | und
   return findBranchRoleHolder(db, branchId, "BRANCH_CONTROLLER");
 }
 
+export function findDistrictRoleHolders(db: Database, districtId: string, roleCode: string): User[] {
+  return db.users.filter((u) => u.districtId === districtId && u.role === roleCode && u.status === "ACTIVE");
+}
+
+// Unlike branches, a district is not a singleton per role - the BRD is
+// explicit that "District and Head Office may have multiple Internal
+// Controllers" - so these return every active holder, not one.
+export function findDistrictControllers(db: Database, districtId: string): User[] {
+  return findDistrictRoleHolders(db, districtId, "DISTRICT_CONTROLLER");
+}
+
+export function findDistrictDirectors(db: Database, districtId: string): User[] {
+  return findDistrictRoleHolders(db, districtId, "DISTRICT_DIRECTOR");
+}
+
 /**
  * Enforces "at most one active user per branch" for any role whose
  * RoleDefinition.branchSingleton is true - a generalization of the BRD's
