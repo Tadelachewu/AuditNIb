@@ -5,17 +5,21 @@ import { hasPermission, permissionKey } from "@/lib/permissions/registry";
 
 const PUBLIC_PATHS = ["/login"];
 
-// Every /admin/<page> route needs "<page>.view" on the caller's session
-// (permissions are resolved from the user's role at login time - see
-// src/app/api/auth/login/route.ts - and carried in the encrypted cookie, so
-// this check needs no filesystem/database read). This is a UX convenience
-// only - the actual authorization boundary is enforced again, action by
-// action, in every API route via requirePermission() (see
-// src/lib/guard.ts), since middleware/UI checks can never be trusted alone.
-function adminPageCodeFor(pathname: string): string | null {
+// Every /admin/<page> route, and every /findings route (list, new, detail
+// - all one page code regardless of sub-path), needs "<page>.view" on the
+// caller's session (permissions are resolved from the user's role at
+// login time - see src/app/api/auth/login/route.ts - and carried in the
+// encrypted cookie, so this check needs no filesystem/database read). This
+// is a UX convenience only - the actual authorization boundary is
+// enforced again, action by action, in every API route via
+// requirePermission() (see src/lib/guard.ts), since middleware/UI checks
+// can never be trusted alone.
+function pageCodeFor(pathname: string): string | null {
   if (pathname === "/admin") return "admin-dashboard";
-  const match = pathname.match(/^\/admin\/([^/]+)/);
-  return match ? match[1] : null;
+  const adminMatch = pathname.match(/^\/admin\/([^/]+)/);
+  if (adminMatch) return adminMatch[1];
+  if (pathname === "/findings" || pathname.startsWith("/findings/")) return "findings";
+  return null;
 }
 
 export async function proxy(request: NextRequest) {
@@ -44,7 +48,7 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 
-  const pageCode = adminPageCodeFor(pathname);
+  const pageCode = pageCodeFor(pathname);
   if (isLoggedIn && pageCode && !hasPermission(session.permissions, permissionKey(pageCode, "view"))) {
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }

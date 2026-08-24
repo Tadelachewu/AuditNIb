@@ -18,6 +18,10 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [{ label: "Dashboard", href: "/dashboard" }],
   },
   {
+    label: "Findings",
+    items: [{ label: "Findings", href: "/findings", permission: permissionKey("findings", "view") }],
+  },
+  {
     label: "Administration",
     items: [
       { label: "Admin Dashboard", href: "/admin", permission: permissionKey("admin-dashboard", "view") },

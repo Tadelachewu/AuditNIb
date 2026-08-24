@@ -2,27 +2,7 @@
 
 import { useState } from "react";
 import { Select, Label } from "@/components/ui/Field";
-import type { ReportingPeriod, District, Branch, Source, ClassifiedCategory } from "@/types";
-
-// The BRD's workflow state list (master.txt §11) - Finding.status doesn't
-// exist yet (no Finding entity), but the option set is fixed by the BRD, so
-// it's listed here now and this filter will start doing something the
-// moment Findings registration ships.
-const FINDING_STATUSES = [
-  "DRAFT",
-  "SUBMITTED",
-  "DISTRICT_REVIEW",
-  "DISTRICT_APPROVED",
-  "HO_REVIEW",
-  "HO_APPROVED",
-  "SENT_TO_BRANCH_MANAGER",
-  "PARTIALLY_RECTIFIED",
-  "RECTIFIED",
-  "TRANSFERRED",
-  "REJECTED",
-  "RETURNED",
-  "CLOSED",
-];
+import { FINDING_STATUSES, type ReportingPeriod, type District, type Branch, type Source, type ClassifiedCategory } from "@/types";
 
 export interface DashboardFilters {
   periodId: string;
@@ -56,6 +36,8 @@ export interface FilterBarProps {
   fixedDistrict?: { id: string; name: string };
   fixedBranch?: { id: string; name: string };
   onChange?: (filters: DashboardFilters) => void;
+  /** Small caption under the bar, e.g. explaining what these filters do (or don't yet) drive. */
+  hint?: string;
 }
 
 /**
@@ -78,6 +60,7 @@ export function FilterBar({
   fixedDistrict,
   fixedBranch,
   onChange,
+  hint,
 }: FilterBarProps) {
   const [filters, setFilters] = useState<DashboardFilters>({
     ...EMPTY_FILTERS,
@@ -197,10 +180,7 @@ export function FilterBar({
           </Select>
         </div>
       </div>
-      <p className="mt-2 text-xs text-slate-400">
-        These filters will apply once Findings registration is live; the widgets below don&apos;t have any Finding
-        data to filter yet.
-      </p>
+      {hint && <p className="mt-2 text-xs text-slate-400">{hint}</p>}
     </div>
   );
 }

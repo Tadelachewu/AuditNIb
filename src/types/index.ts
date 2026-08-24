@@ -145,6 +145,90 @@ export interface Settings {
   updatedBy?: string;
 }
 
+// The BRD's literal workflow state list (master.txt §11 + the roadmap doc's
+// clean one-liner). TRANSFERRED is kept for type completeness but is
+// unreachable for now - the Transfer Engine (BRD §3.7) is a deferred,
+// separate feature; see PHASE6.md.
+export const FINDING_STATUSES = [
+  "DRAFT",
+  "SUBMITTED",
+  "DISTRICT_REVIEW",
+  "DISTRICT_APPROVED",
+  "HO_REVIEW",
+  "HO_APPROVED",
+  "SENT_TO_BRANCH_MANAGER",
+  "PARTIALLY_RECTIFIED",
+  "RECTIFIED",
+  "TRANSFERRED",
+  "REJECTED",
+  "RETURNED",
+  "CLOSED",
+] as const;
+
+export type FindingStatus = (typeof FINDING_STATUSES)[number];
+
+// Only DRAFT and RETURNED are editable (plan doc §3.3). "SUBMITTED" and
+// "DISTRICT_APPROVED"/"HO_APPROVED" are momentary pass-through statuses -
+// see src/lib/findings.ts's transitionFinding() for why they still exist
+// as real, briefly-held values instead of being skipped entirely.
+export interface Finding {
+  id: string;
+  reference: string;
+  sourceId: string;
+  periodId: string;
+  districtId: string;
+  branchId: string;
+  findingDate: string;
+  operationArea: string;
+  irregularityType: string;
+  categoryId: string;
+  amount: number;
+  currency: string;
+  caseCount: number;
+  riskLevel: string;
+  description: string;
+  recommendation?: string;
+  // Text reference only (e.g. "filed in branch cabinet, ref #4") - there is
+  // no file/object storage in the app yet (BRD §3.12 flags this as an open
+  // infra decision), so this deliberately isn't a real upload.
+  evidenceNote?: string;
+  status: FindingStatus;
+  // Cumulative across all RectificationEntry rows for this finding.
+  // Outstanding = caseCount - rectifiedCases / amount - rectifiedAmount,
+  // computed on read rather than stored, so it can never drift.
+  rectifiedCases: number;
+  rectifiedAmount: number;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FindingTransition {
+  id: string;
+  findingId: string;
+  fromStatus: string;
+  toStatus: string;
+  action: string;
+  userId: string;
+  userName: string;
+  reason?: string;
+  createdAt: string;
+}
+
+// One rectification event's own amount, not a running total - the running
+// total lives on Finding.rectifiedCases/rectifiedAmount (see above), kept
+// in lockstep by transitionFinding() in the same request that appends this.
+export interface RectificationEntry {
+  id: string;
+  findingId: string;
+  rectifiedCases: number;
+  rectifiedAmount: number;
+  note?: string;
+  submittedBy: string;
+  submittedByName: string;
+  createdAt: string;
+}
+
 export interface AuditLogEntry {
   id: string;
   userId: string;
@@ -168,6 +252,9 @@ export interface Database {
   scoringRules: ScoringRule[];
   scoringAdjustments: ScoringAdjustment[];
   reportingPeriods: ReportingPeriod[];
+  findings: Finding[];
+  findingTransitions: FindingTransition[];
+  rectifications: RectificationEntry[];
   settings: Settings;
   auditLogs: AuditLogEntry[];
 }

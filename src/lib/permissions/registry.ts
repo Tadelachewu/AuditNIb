@@ -13,7 +13,20 @@
 // src/app/(app)/dashboard/page.tsx's). Nothing should be reachable by role
 // alone once it has a registry entry - only by permission.
 
-export type PermissionAction = "view" | "create" | "edit" | "toggle-status" | "delete" | "activate" | "lock" | "manage";
+export type PermissionAction =
+  | "view"
+  | "create"
+  | "edit"
+  | "toggle-status"
+  | "delete"
+  | "activate"
+  | "lock"
+  | "manage"
+  | "submit"
+  | "district-review"
+  | "ho-review"
+  | "rectify"
+  | "close";
 
 export interface PageAction {
   action: PermissionAction;
@@ -41,6 +54,25 @@ const D: PageAction = { action: "delete", label: "Delete" };
 export const PAGE_REGISTRY: PageDefinition[] = [
   { code: "admin-dashboard", label: "Admin Dashboard", actions: [V] },
   { code: "branch-dashboard", label: "Branch Dashboard", actions: [V] },
+  {
+    code: "findings",
+    label: "Findings",
+    // "delete" only ever applies while a finding is still DRAFT (see
+    // src/app/api/findings/[id]/route.ts) - matching Users/edit-while-
+    // draft-or-returned's rule that the action set here is the ceiling,
+    // not a guarantee the action always succeeds.
+    actions: [
+      V,
+      C,
+      E,
+      D,
+      { action: "submit", label: "Submit" },
+      { action: "district-review", label: "District Approve / Reject / Return" },
+      { action: "ho-review", label: "HO Approve / Reject / Return" },
+      { action: "rectify", label: "Record Rectification" },
+      { action: "close", label: "Close (Verify)" },
+    ],
+  },
   { code: "users", label: "Users", actions: [V, C, E, T] },
   { code: "districts", label: "Districts", actions: [V, C, E, T, D] },
   { code: "branches", label: "Branches", actions: [V, C, E, T, D] },

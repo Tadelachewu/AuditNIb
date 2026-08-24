@@ -134,6 +134,12 @@ function buildSeedDatabase(): Database {
     permissionKey("reporting-periods", "lock"),
     permissionKey("settings", "view"),
     permissionKey("audit-log", "view"),
+    // "Register Internal Audit findings received from the Internal Audit
+    // Department" (icfms.txt) + the second-approval stage of the workflow.
+    permissionKey("findings", "view"),
+    permissionKey("findings", "create"),
+    permissionKey("findings", "ho-review"),
+    permissionKey("findings", "close"),
   ];
   const districtControllerPermissions = [
     permissionKey("districts", "view"),
@@ -144,6 +150,11 @@ function buildSeedDatabase(): Database {
     permissionKey("scoring-adjustments", "view"),
     permissionKey("reporting-periods", "view"),
     permissionKey("reporting-periods", "lock"),
+    // "Review branch submissions... Approve or return findings" (icfms.txt);
+    // closure is their verification duty per master.txt §"Verification".
+    permissionKey("findings", "view"),
+    permissionKey("findings", "district-review"),
+    permissionKey("findings", "close"),
   ];
   const districtDirectorPermissions = [
     permissionKey("districts", "view"),
@@ -153,17 +164,30 @@ function buildSeedDatabase(): Database {
     permissionKey("scoring-rules", "view"),
     permissionKey("scoring-adjustments", "view"),
     permissionKey("reporting-periods", "view"),
+    // View only - icfms.txt is explicit: "Cannot modify findings or scores."
+    permissionKey("findings", "view"),
   ];
   const branchControllerPermissions = [
     permissionKey("branch-dashboard", "view"),
     permissionKey("sources", "view"),
     permissionKey("categories", "view"),
     permissionKey("reporting-periods", "view"),
+    // "Register findings, Edit draft findings, Submit findings, Verify
+    // rectifications" (icfms.txt).
+    permissionKey("findings", "view"),
+    permissionKey("findings", "create"),
+    permissionKey("findings", "edit"),
+    permissionKey("findings", "delete"),
+    permissionKey("findings", "submit"),
+    permissionKey("findings", "rectify"),
   ];
   const branchManagerPermissions = [
     permissionKey("branch-dashboard", "view"),
     permissionKey("categories", "view"),
     permissionKey("reporting-periods", "view"),
+    // "Record corrective actions... Enter rectified case counts" (icfms.txt).
+    permissionKey("findings", "view"),
+    permissionKey("findings", "rectify"),
   ];
 
   const roles: RoleDefinition[] = [
@@ -364,6 +388,9 @@ function buildSeedDatabase(): Database {
     scoringRules,
     scoringAdjustments: [],
     reportingPeriods,
+    findings: [],
+    findingTransitions: [],
+    rectifications: [],
     settings,
     auditLogs: [],
   };
