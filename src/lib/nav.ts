@@ -21,6 +21,7 @@ export const NAV_SECTIONS: NavSection[] = [
     label: "Findings",
     items: [
       { label: "Findings", href: "/findings", permission: permissionKey("findings", "view") },
+      { label: "Register Finding", href: "/findings/new", permission: permissionKey("findings", "create") },
       { label: "Import Findings", href: "/findings/import", permission: permissionKey("findings", "import") },
       { label: "Reports", href: "/reports", permission: permissionKey("reports", "view") },
     ],
