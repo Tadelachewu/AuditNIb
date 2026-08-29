@@ -11,9 +11,20 @@ type Variant = "primary" | "secondary" | "danger" | "ghost";
 // hover/press feedback on top of that resting gold. `danger` keeps its
 // own red, unchanged - a destructive action losing its red cue would
 // undermine the warning it's there for.
+//
+// `secondary` used to also be solid gold (bg-brand-gold, same as
+// `primary`, differing only by a border) - visually indistinguishable
+// from a page's one genuinely primary action (Create/Save/Submit) on
+// every page that also has secondary actions (Cancel, Edit, Show My
+// Queue, toggle buttons) sitting right next to it, which flattens the
+// hierarchy the two variants exist to express. Given a neutral outline
+// style instead - still a clear, deliberate action, just visually
+// subordinate to gold - so gold reads as "the one thing to do here"
+// again rather than "every button on this page."
 const VARIANT_CLASSES: Record<Variant, string> = {
   primary: "bg-brand-gold text-slate-900 hover:bg-brand-gold-dark disabled:bg-amber-100 disabled:text-slate-400",
-  secondary: "bg-brand-gold text-slate-900 border border-brand-gold-dark hover:bg-brand-gold-dark disabled:bg-amber-100 disabled:text-slate-400 disabled:border-amber-200",
+  secondary:
+    "bg-white text-slate-700 border border-slate-300 hover:bg-slate-50 hover:border-slate-400 disabled:bg-slate-50 disabled:text-slate-300 disabled:border-slate-200",
   danger: "bg-red-600 text-white hover:bg-red-700 disabled:bg-red-300",
   ghost: "text-slate-600 hover:bg-brand-gold hover:text-slate-900 disabled:text-slate-300",
 };

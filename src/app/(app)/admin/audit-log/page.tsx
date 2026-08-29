@@ -4,18 +4,25 @@ import { useEffect, useState } from "react";
 import { apiGet } from "@/lib/api-client";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
+import { Pagination } from "@/components/ui/Pagination";
 import type { AuditLogEntry } from "@/types";
 
 export default function AuditLogPage() {
   const [logs, setLogs] = useState<AuditLogEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [pageInfo, setPageInfo] = useState({ total: 0, pageSize: 50, totalPages: 1 });
 
   useEffect(() => {
-    apiGet<{ auditLogs: AuditLogEntry[] }>("/api/admin/audit-log").then((res) => {
+    setLoading(true);
+    apiGet<{ auditLogs: AuditLogEntry[]; total: number; pageSize: number; totalPages: number }>(
+      `/api/admin/audit-log?page=${page}`
+    ).then((res) => {
       setLogs(res.auditLogs);
+      setPageInfo({ total: res.total, pageSize: res.pageSize, totalPages: res.totalPages });
       setLoading(false);
     });
-  }, []);
+  }, [page]);
 
   return (
     <div>
@@ -23,7 +30,7 @@ export default function AuditLogPage() {
       <p className="mt-1 text-sm text-slate-500">Immutable record of workflow, configuration and authentication events.</p>
 
       <Card className="mt-5">
-        <CardHeader title="Recent Events" description={`${logs.length} shown`} />
+        <CardHeader title="Recent Events" description={`${pageInfo.total} total`} />
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead className="border-b border-slate-100 text-xs uppercase text-slate-400">
@@ -58,6 +65,7 @@ export default function AuditLogPage() {
             </tbody>
           </table>
         </div>
+        <Pagination page={page} totalPages={pageInfo.totalPages} total={pageInfo.total} pageSize={pageInfo.pageSize} onPageChange={setPage} />
       </Card>
     </div>
   );

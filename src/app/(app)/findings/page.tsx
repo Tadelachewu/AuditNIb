@@ -5,8 +5,10 @@ import { readDb } from "@/lib/db";
 import { findingsInScope } from "@/lib/findings-scope";
 import { queueStatusesForSession } from "@/lib/findings";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
+import { paginate, parsePage } from "@/lib/pagination";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { Pagination } from "@/components/ui/Pagination";
 import { FindingStatusBadge } from "@/components/findings/FindingStatusBadge";
 import { FindingsFilterBar } from "@/components/findings/FindingsFilterBar";
 import type { Finding } from "@/types";
@@ -48,6 +50,22 @@ export default async function FindingsPage({
 
   findings = [...findings].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 
+  // Server-side pagination: only the current page's rows are ever
+  // rendered/sent to the client, no matter how large the filtered result
+  // set grows - the Findings table is the one dataset in this app with
+  // genuinely unbounded growth (every registered finding, forever).
+  const { items: pageFindings, page, pageSize, totalPages, total } = paginate(findings, parsePage(get("page")));
+  function hrefFor(targetPage: number) {
+    const q = new URLSearchParams();
+    for (const [key, value] of Object.entries(params)) {
+      if (key === "page") continue;
+      if (typeof value === "string" && value) q.set(key, value);
+    }
+    if (targetPage > 1) q.set("page", String(targetPage));
+    const qs = q.toString();
+    return qs ? `/findings?${qs}` : "/findings";
+  }
+
   const district = db.districts.find((d) => d.id === user.districtId);
   const branch = db.branches.find((b) => b.id === user.branchId);
   const canCreate = hasPermission(user.permissions, permissionKey("findings", "create"));
@@ -70,7 +88,7 @@ export default async function FindingsPage({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h1 className="text-lg font-semibold text-slate-900">Findings</h1>
-          <p className="mt-1 text-sm text-slate-500">{findings.length} shown</p>
+          <p className="mt-1 text-sm text-slate-500">{total} matching</p>
         </div>
         {canCreate && (
           <Link href="/findings/new">
@@ -119,14 +137,14 @@ export default async function FindingsPage({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {findings.length === 0 && (
+              {pageFindings.length === 0 && (
                 <tr>
                   <td className="px-4 py-6 text-center text-slate-400" colSpan={10}>
                     {queueOnly ? "Nothing in your queue." : "No findings match these filters."}
                   </td>
                 </tr>
               )}
-              {findings.map((f) => (
+              {pageFindings.map((f) => (
                 <tr key={f.id} className="hover:bg-slate-50">
                   <td className="px-4 py-2">
                     <Link href={`/findings/${f.id}`} className="font-mono text-xs text-blue-800 hover:underline">
@@ -151,6 +169,7 @@ export default async function FindingsPage({
             </tbody>
           </table>
         </div>
+        <Pagination page={page} totalPages={totalPages} total={total} pageSize={pageSize} hrefFor={hrefFor} />
       </Card>
     </div>
   );

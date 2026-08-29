@@ -5,7 +5,9 @@ import { readDb } from "@/lib/db";
 import { findingsInScope } from "@/lib/findings-scope";
 import { computePerformance } from "@/lib/findings";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
+import { paginate, parsePage } from "@/lib/pagination";
 import { Card, CardHeader } from "@/components/ui/Card";
+import { Pagination } from "@/components/ui/Pagination";
 import { FindingStatusBadge } from "@/components/findings/FindingStatusBadge";
 import { FindingsFilterBar } from "@/components/findings/FindingsFilterBar";
 import { TimeRangeFilter } from "@/components/reports/TimeRangeFilter";
@@ -108,6 +110,23 @@ export default async function ReportsPage({
     .filter((t) => findingIdsInScope.has(t.findingId))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
+  // Server-side pagination for the two tables on this page that can grow
+  // unboundedly (every finding matching the filters, every transfer ever
+  // recorded) - the rest (performance/category/risk breakdowns) are
+  // small, fixed-size aggregates by nature, not raw per-record lists.
+  function hrefWithPage(param: string, targetPage: number) {
+    const q = new URLSearchParams();
+    for (const [key, value] of Object.entries(params)) {
+      if (key === param) continue;
+      if (typeof value === "string" && value) q.set(key, value);
+    }
+    if (targetPage > 1) q.set(param, String(targetPage));
+    const qs = q.toString();
+    return qs ? `/reports?${qs}` : "/reports";
+  }
+  const findingsPage = paginate(findings, parsePage(get("page")));
+  const transfersPage = paginate(transfers, parsePage(get("transfersPage")));
+
   return (
     <div className="flex flex-col gap-5">
       <style>{`@media print { nav, header, .no-print { display: none !important; } main { padding: 0 !important; } }`}</style>
@@ -164,14 +183,14 @@ export default async function ReportsPage({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {findings.length === 0 && (
+              {findingsPage.items.length === 0 && (
                 <tr>
                   <td className="px-4 py-6 text-center text-slate-400" colSpan={9}>
                     No findings match these filters.
                   </td>
                 </tr>
               )}
-              {findings.map((f) => (
+              {findingsPage.items.map((f) => (
                 <tr key={f.id}>
                   <td className="px-4 py-2 font-mono text-xs text-slate-700">{f.reference}</td>
                   <td className="px-4 py-2 text-slate-900">{f.title}</td>
@@ -193,6 +212,13 @@ export default async function ReportsPage({
             </tbody>
           </table>
         </div>
+        <Pagination
+          page={findingsPage.page}
+          totalPages={findingsPage.totalPages}
+          total={findingsPage.total}
+          pageSize={findingsPage.pageSize}
+          hrefFor={(p) => hrefWithPage("page", p)}
+        />
       </Card>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -272,8 +298,8 @@ export default async function ReportsPage({
       <Card>
         <CardHeader title="Transfers" description="Findings carried into a later reporting period, matching the current filters" />
         <div className="divide-y divide-slate-100">
-          {transfers.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-400">No transfers recorded.</p>}
-          {transfers.map((t) => {
+          {transfersPage.items.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-400">No transfers recorded.</p>}
+          {transfersPage.items.map((t) => {
             const finding = db.findings.find((f) => f.id === t.findingId);
             return (
               <div key={t.id} className="flex items-center justify-between px-4 py-2 text-sm">
@@ -289,6 +315,13 @@ export default async function ReportsPage({
             );
           })}
         </div>
+        <Pagination
+          page={transfersPage.page}
+          totalPages={transfersPage.totalPages}
+          total={transfersPage.total}
+          pageSize={transfersPage.pageSize}
+          hrefFor={(p) => hrefWithPage("transfersPage", p)}
+        />
       </Card>
 
       <Card className="no-print">

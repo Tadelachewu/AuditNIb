@@ -30,9 +30,14 @@ export async function GET() {
       })
     : peek;
 
+  // Every notification ever sent to this user, unbounded, polled every
+  // 30s by every logged-in user - capped to the most recent 100 the same
+  // way the audit log caps its own unbounded history, since a bell
+  // dropdown needs a server-side bound, not full Prev/Next pagination UI.
   const mine = db.notifications
     .filter((n) => n.recipientUserId === auth.session.userId)
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .slice(0, 100);
 
   return NextResponse.json({ notifications: mine });
 }

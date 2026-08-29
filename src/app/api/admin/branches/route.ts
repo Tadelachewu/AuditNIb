@@ -5,20 +5,32 @@ import { requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { appendAuditLog } from "@/lib/audit";
 import { findBranchManager, findBranchController, findBranchSubManager } from "@/lib/org";
+import { paginate, parsePage } from "@/lib/pagination";
 
-export async function GET() {
+// A large bank can have hundreds of branches - paginated the same way
+// Users/Audit Log are. `page` is optional: other callers (e.g. the Users
+// page's own branch-picker dropdowns) still want the full list, so
+// omitting it returns everything unpaginated, same as before.
+export async function GET(request: Request) {
   const auth = await requirePermission("branches.view");
   if (!auth.ok) return auth.response;
+  const { searchParams } = new URL(request.url);
   const db = readDb();
 
-  const branches = db.branches.map((b) => ({
-    ...b,
-    managerName: findBranchManager(db, b.id)?.name ?? null,
-    subManagerName: findBranchSubManager(db, b.id)?.name ?? null,
-    controllerName: findBranchController(db, b.id)?.name ?? null,
-  }));
+  const branches = [...db.branches]
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((b) => ({
+      ...b,
+      managerName: findBranchManager(db, b.id)?.name ?? null,
+      subManagerName: findBranchSubManager(db, b.id)?.name ?? null,
+      controllerName: findBranchController(db, b.id)?.name ?? null,
+    }));
 
-  return NextResponse.json({ branches });
+  const pageParam = searchParams.get("page");
+  if (!pageParam) return NextResponse.json({ branches });
+
+  const result = paginate(branches, parsePage(pageParam), 25);
+  return NextResponse.json({ branches: result.items, total: result.total, page: result.page, pageSize: result.pageSize, totalPages: result.totalPages });
 }
 
 const createSchema = z.object({

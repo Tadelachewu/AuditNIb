@@ -6,6 +6,7 @@ import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input, Select, Label } from "@/components/ui/Field";
 import { StatusBadge, Badge } from "@/components/ui/Badge";
+import { Pagination } from "@/components/ui/Pagination";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import type { District, Branch } from "@/types";
 
@@ -22,22 +23,26 @@ export default function BranchesPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ name: "", districtId: "" });
   const [editError, setEditError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [pageInfo, setPageInfo] = useState({ total: 0, pageSize: 25, totalPages: 1 });
   const { confirm, dialog } = useConfirm();
 
   async function load() {
     setLoading(true);
     const [b, d] = await Promise.all([
-      apiGet<{ branches: BranchRow[] }>("/api/admin/branches"),
+      apiGet<{ branches: BranchRow[]; total: number; pageSize: number; totalPages: number }>(`/api/admin/branches?page=${page}`),
       apiGet<{ districts: District[] }>("/api/admin/districts"),
     ]);
     setBranches(b.branches);
+    setPageInfo({ total: b.total, pageSize: b.pageSize, totalPages: b.totalPages });
     setDistricts(d.districts);
     setLoading(false);
   }
 
   useEffect(() => {
     load();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page]);
 
   function districtName(id: string) {
     return districts.find((d) => d.id === id)?.name ?? "—";
@@ -162,7 +167,7 @@ export default function BranchesPage() {
       </Card>
 
       <Card className="mt-5">
-        <CardHeader title="All Branches" description={`${branches.length} total`} />
+        <CardHeader title="All Branches" description={`${pageInfo.total} total`} />
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead className="border-b border-slate-100 text-xs uppercase text-slate-400">
@@ -265,6 +270,7 @@ export default function BranchesPage() {
             </tbody>
           </table>
         </div>
+        <Pagination page={page} totalPages={pageInfo.totalPages} total={pageInfo.total} pageSize={pageInfo.pageSize} onPageChange={setPage} />
       </Card>
       {dialog}
     </div>

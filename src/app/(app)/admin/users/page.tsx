@@ -6,6 +6,7 @@ import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input, Select, Label } from "@/components/ui/Field";
 import { StatusBadge } from "@/components/ui/Badge";
+import { Pagination } from "@/components/ui/Pagination";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import type { SafeUser, District, Branch, Department, RoleDefinition } from "@/types";
 
@@ -27,16 +28,19 @@ export default function UsersPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState(emptyEditForm);
   const [editError, setEditError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [pageInfo, setPageInfo] = useState({ total: 0, pageSize: 25, totalPages: 1 });
   const { confirm, dialog } = useConfirm();
 
   async function loadAll() {
     setLoading(true);
     const [u, d, b] = await Promise.all([
-      apiGet<{ users: SafeUser[] }>("/api/admin/users"),
+      apiGet<{ users: SafeUser[]; total: number; pageSize: number; totalPages: number }>(`/api/admin/users?page=${page}`),
       apiGet<{ districts: District[] }>("/api/admin/districts"),
       apiGet<{ branches: Branch[] }>("/api/admin/branches"),
     ]);
     setUsers(u.users);
+    setPageInfo({ total: u.total, pageSize: u.pageSize, totalPages: u.totalPages });
     setDistricts(d.districts);
     setBranches(b.branches);
 
@@ -72,7 +76,8 @@ export default function UsersPage() {
 
   useEffect(() => {
     loadAll();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page]);
 
   const activeRoles = useMemo(() => roles.filter((r) => r.status === "ACTIVE"), [roles]);
   const selectedRole = useMemo(() => roles.find((r) => r.code === form.role), [roles, form.role]);
@@ -323,7 +328,7 @@ export default function UsersPage() {
       </Card>
 
       <Card className="mt-5">
-        <CardHeader title="All Users" description={`${users.length} total`} />
+        <CardHeader title="All Users" description={`${pageInfo.total} total`} />
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead className="border-b border-slate-100 text-xs uppercase text-slate-400">
@@ -488,6 +493,7 @@ export default function UsersPage() {
             </tbody>
           </table>
         </div>
+        <Pagination page={page} totalPages={pageInfo.totalPages} total={pageInfo.total} pageSize={pageInfo.pageSize} onPageChange={setPage} />
       </Card>
       {dialog}
     </div>

@@ -7,13 +7,20 @@ import { hashPassword } from "@/lib/auth";
 import { resolveOrgAssignment, isDepartmentExactScopeForUser } from "@/lib/org";
 import { appendAuditLog } from "@/lib/audit";
 import { toSafeUser } from "@/lib/sanitize";
+import { paginate, parsePage } from "@/lib/pagination";
 
-export async function GET() {
+// A real bank deployment can have hundreds of users (several per branch,
+// across every branch bank-wide) - paginated the same way Branches/Audit
+// Log are, rather than shipping every user row on every page load.
+export async function GET(request: Request) {
   const auth = await requirePermission("users.view");
   if (!auth.ok) return auth.response;
 
+  const { searchParams } = new URL(request.url);
   const db = readDb();
-  return NextResponse.json({ users: db.users.map(toSafeUser) });
+  const sorted = [...db.users].sort((a, b) => a.name.localeCompare(b.name));
+  const result = paginate(sorted.map(toSafeUser), parsePage(searchParams.get("page") ?? undefined), 25);
+  return NextResponse.json({ users: result.items, total: result.total, page: result.page, pageSize: result.pageSize, totalPages: result.totalPages });
 }
 
 const createUserSchema = z.object({
