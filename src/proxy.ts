@@ -28,7 +28,13 @@ export async function proxy(request: NextRequest) {
   if (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/api") ||
-    pathname.startsWith("/favicon")
+    pathname.startsWith("/favicon") ||
+    // Static files served directly from /public (logos, icons, etc.) must
+    // never require a session - besides being genuinely public, Next's own
+    // image optimizer fetches these internally without forwarding the
+    // caller's cookies, so gating them here made next/image fail with
+    // "not a valid image" instead of a real auth error.
+    /\.(png|jpe?g|gif|svg|webp|avif|ico)$/i.test(pathname)
   ) {
     return NextResponse.next();
   }

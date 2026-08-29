@@ -12,10 +12,18 @@ export async function GET() {
   return NextResponse.json({ reportingPeriods: periods });
 }
 
-const createSchema = z.object({
-  year: z.number().int().min(2000).max(2100),
-  month: z.number().int().min(1).max(12),
-});
+// year/month are derived from `startsAt` (the reporting window's own
+// start), not entered separately - one date range is the source of truth
+// instead of three overlapping fields that could disagree.
+const createSchema = z
+  .object({
+    startsAt: z.string().min(1, "Start date/time is required"),
+    endsAt: z.string().min(1, "End date/time is required"),
+  })
+  .refine((v) => new Date(v.endsAt).getTime() > new Date(v.startsAt).getTime(), {
+    message: "End date/time must be after the start date/time",
+    path: ["endsAt"],
+  });
 
 export async function POST(request: Request) {
   const auth = await requirePermission("reporting-periods.create");
@@ -25,7 +33,13 @@ export async function POST(request: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid input" }, { status: 400 });
   }
-  const { year, month } = parsed.data;
+  const { startsAt, endsAt } = parsed.data;
+  const start = new Date(startsAt);
+  if (Number.isNaN(start.getTime())) {
+    return NextResponse.json({ error: "Invalid start date/time" }, { status: 400 });
+  }
+  const year = start.getFullYear();
+  const month = start.getMonth() + 1;
   const code = `${year}-${String(month).padStart(2, "0")}`;
 
   const db = readDb();
@@ -39,6 +53,8 @@ export async function POST(request: Request) {
     year,
     month,
     code,
+    startsAt: start.toISOString(),
+    endsAt: new Date(endsAt).toISOString(),
     status: "OPEN" as const,
     lockedBy: null,
     lockedAt: null,

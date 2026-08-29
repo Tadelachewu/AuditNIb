@@ -3,13 +3,16 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "dev": "next dev --webpack",
+    "build": "next build --webpack",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "tunnel": "lt --port 3000",
+    "tunnel:cloudflare": "cloudflared tunnel --url http://localhost:3000"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
+    "exceljs": "^4.4.0",
     "iron-session": "^8.0.4",
     "next": "16.3.2",
     "react": "19.2.8",
@@ -24,8 +27,10 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/uuid": "^10.0.0",
+    "cloudflared": "^0.7.3",
     "eslint": "^9",
     "eslint-config-next": "16.3.2",
+    "localtunnel": "^2.0.2",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

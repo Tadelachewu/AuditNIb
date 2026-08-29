@@ -14,10 +14,22 @@ const emptyForm = {
   effectiveFrom: new Date().toISOString().slice(0, 10),
   categories: [] as string[],
   sources: [] as string[],
-  basis: "Rectified eligible Other Cases ÷ Total eligible Other Cases × 100",
+  basis: generateBasisText([]),
   formulaType: "PERCENTAGE",
   activateNow: true,
 };
+
+// Document_3 §20's formula, generalized to whichever categories are
+// actually selected - "Other Case" was only ever the *seeded* eligible
+// category, never something to hard-code into the label. Regenerated
+// live as categories are toggled, so the displayed basis never drifts
+// from what's actually configured (that drift - the field silently
+// keeping its "...Other Cases..." default text even after different
+// categories were picked - was the actual bug being reported).
+function generateBasisText(categoryNames: string[]): string {
+  const label = categoryNames.length > 0 ? `eligible ${categoryNames.join("/")} cases` : "eligible cases";
+  return `Rectified ${label} ÷ Total ${label} × 100`;
+}
 
 export default function ScoringRulesPage() {
   const [rules, setRules] = useState<ScoringRule[]>([]);
@@ -28,6 +40,14 @@ export default function ScoringRulesPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [rowBusy, setRowBusy] = useState<string | null>(null);
+  const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState({ name: "", effectiveFrom: "", categories: [] as string[], sources: [] as string[], basis: "" });
+  const [editError, setEditError] = useState<string | null>(null);
+  // Once the admin types into "Calculation basis" directly, stop
+  // overwriting it when categories change - a manual override is
+  // respected, not fought.
+  const [basisEditedManually, setBasisEditedManually] = useState(false);
+  const [editBasisEditedManually, setEditBasisEditedManually] = useState(false);
   const { confirm, dialog } = useConfirm();
 
   async function load() {
@@ -48,10 +68,14 @@ export default function ScoringRulesPage() {
   }, []);
 
   function toggleMulti(field: "categories" | "sources", id: string) {
-    setForm((f) => ({
-      ...f,
-      [field]: f[field].includes(id) ? f[field].filter((x) => x !== id) : [...f[field], id],
-    }));
+    setForm((f) => {
+      const nextValues = f[field].includes(id) ? f[field].filter((x) => x !== id) : [...f[field], id];
+      const next = { ...f, [field]: nextValues };
+      if (field === "categories" && !basisEditedManually) {
+        next.basis = generateBasisText(nextValues.map((cid) => nameFor(categories, cid)));
+      }
+      return next;
+    });
   }
 
   function nameFor(list: { id: string; name: string }[], id: string) {
@@ -79,11 +103,62 @@ export default function ScoringRulesPage() {
     try {
       await apiSend("/api/admin/scoring-rules", "POST", form);
       setForm(emptyForm);
+      setBasisEditedManually(false);
       await load();
     } catch (err) {
       setFormError(err instanceof ApiError ? err.message : "Failed to create scoring rule");
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  function startEditRule(rule: ScoringRule) {
+    setEditingRuleId(rule.id);
+    setEditDraft({
+      name: rule.name,
+      effectiveFrom: rule.effectiveFrom.slice(0, 10),
+      categories: rule.categories,
+      sources: rule.sources,
+      basis: rule.basis,
+    });
+    // If the saved text still matches what auto-generation would produce
+    // for its own categories, it was never customized - safe to keep
+    // auto-updating as categories change. If it's been hand-edited to
+    // something else, respect that and stop touching it.
+    setEditBasisEditedManually(rule.basis !== generateBasisText(rule.categories.map((cid) => nameFor(categories, cid))));
+    setEditError(null);
+  }
+
+  async function saveRuleEdit(rule: ScoringRule) {
+    setRowBusy(rule.id);
+    setEditError(null);
+    try {
+      await apiSend(`/api/admin/scoring-rules/${rule.id}`, "PATCH", editDraft);
+      setEditingRuleId(null);
+      await load();
+    } catch (err) {
+      setEditError(err instanceof ApiError ? err.message : "Failed to update scoring rule");
+    } finally {
+      setRowBusy(null);
+    }
+  }
+
+  async function deleteRule(rule: ScoringRule) {
+    const result = await confirm({
+      title: "Delete this scoring rule version?",
+      message: `"v${rule.version} — ${rule.name}" has never gone live, so deleting it doesn't affect any historical figures. This cannot be undone.`,
+      confirmLabel: "Delete Permanently",
+      tone: "danger",
+    });
+    if (result === false) return;
+    setRowBusy(rule.id);
+    try {
+      await apiSend(`/api/admin/scoring-rules/${rule.id}`, "DELETE");
+      await load();
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : "Failed to delete scoring rule");
+    } finally {
+      setRowBusy(null);
     }
   }
 
@@ -180,7 +255,18 @@ export default function ScoringRulesPage() {
 
           <div>
             <Label htmlFor="basis">Calculation basis</Label>
-            <Input id="basis" required value={form.basis} onChange={(e) => setForm({ ...form, basis: e.target.value })} />
+            <Input
+              id="basis"
+              required
+              value={form.basis}
+              onChange={(e) => {
+                setBasisEditedManually(true);
+                setForm({ ...form, basis: e.target.value });
+              }}
+            />
+            <p className="mt-1 text-xs text-slate-400">
+              Auto-fills from the categories selected above - edit it directly to override.
+            </p>
           </div>
 
           <div className="flex items-center gap-2">
@@ -210,27 +296,143 @@ export default function ScoringRulesPage() {
           {!loading &&
             rules.map((r) => (
               <div key={r.id} className="px-4 py-3">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <span className="text-sm font-medium text-slate-900">
                       v{r.version} — {r.name}
-                    </span>
+                    </span>{" "}
                     {r.active && <Badge tone="green">Active</Badge>}
+                    {!r.everActivated && <Badge tone="gray">Draft — never activated</Badge>}
                   </div>
-                  <Button
-                    variant={r.active ? "secondary" : "primary"}
-                    disabled={rowBusy === r.id}
-                    onClick={() => setActive(r, !r.active)}
-                  >
-                    {r.active ? "Deactivate" : "Activate"}
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant={r.active ? "secondary" : "primary"}
+                      disabled={rowBusy === r.id}
+                      onClick={() => setActive(r, !r.active)}
+                    >
+                      {r.active ? "Deactivate" : "Activate"}
+                    </Button>
+                    {!r.everActivated && (
+                      <>
+                        <Button
+                          variant="secondary"
+                          disabled={rowBusy === r.id}
+                          onClick={() => (editingRuleId === r.id ? setEditingRuleId(null) : startEditRule(r))}
+                        >
+                          {editingRuleId === r.id ? "Cancel" : "Edit"}
+                        </Button>
+                        <Button variant="danger" disabled={rowBusy === r.id} onClick={() => deleteRule(r)}>
+                          Delete
+                        </Button>
+                      </>
+                    )}
+                  </div>
                 </div>
-                <p className="mt-1 text-xs text-slate-500">{r.basis}</p>
-                <p className="mt-1 text-xs text-slate-400">
-                  Effective {new Date(r.effectiveFrom).toLocaleDateString()} · Categories:{" "}
-                  {r.categories.map((id) => nameFor(categories, id)).join(", ") || "—"} · Sources:{" "}
-                  {r.sources.map((id) => nameFor(sources, id)).join(", ") || "—"}
-                </p>
+
+                {editingRuleId === r.id ? (
+                  <div className="mt-3 flex flex-col gap-3 rounded-md border border-slate-200 p-3">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <div>
+                        <Label htmlFor={`edit-name-${r.id}`}>Name</Label>
+                        <Input
+                          id={`edit-name-${r.id}`}
+                          value={editDraft.name}
+                          onChange={(e) => setEditDraft({ ...editDraft, name: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor={`edit-effectiveFrom-${r.id}`}>Effective from</Label>
+                        <Input
+                          id={`edit-effectiveFrom-${r.id}`}
+                          type="date"
+                          value={editDraft.effectiveFrom}
+                          onChange={(e) => setEditDraft({ ...editDraft, effectiveFrom: e.target.value })}
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <Label>Included categories</Label>
+                      <div className="flex flex-wrap gap-2">
+                        {categories.map((c) => (
+                          <button
+                            type="button"
+                            key={c.id}
+                            onClick={() =>
+                              setEditDraft((d) => {
+                                const nextCategories = d.categories.includes(c.id)
+                                  ? d.categories.filter((x) => x !== c.id)
+                                  : [...d.categories, c.id];
+                                return {
+                                  ...d,
+                                  categories: nextCategories,
+                                  basis: editBasisEditedManually
+                                    ? d.basis
+                                    : generateBasisText(nextCategories.map((cid) => nameFor(categories, cid))),
+                                };
+                              })
+                            }
+                            className={`rounded-full px-2.5 py-1 text-xs ring-1 ring-inset ${
+                              editDraft.categories.includes(c.id) ? "bg-blue-900 text-white ring-blue-900" : "bg-white text-slate-600 ring-slate-300"
+                            }`}
+                          >
+                            {c.name}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <Label>Included sources</Label>
+                      <div className="flex flex-wrap gap-2">
+                        {sources.map((s) => (
+                          <button
+                            type="button"
+                            key={s.id}
+                            onClick={() =>
+                              setEditDraft((d) => ({
+                                ...d,
+                                sources: d.sources.includes(s.id) ? d.sources.filter((x) => x !== s.id) : [...d.sources, s.id],
+                              }))
+                            }
+                            className={`rounded-full px-2.5 py-1 text-xs ring-1 ring-inset ${
+                              editDraft.sources.includes(s.id) ? "bg-blue-900 text-white ring-blue-900" : "bg-white text-slate-600 ring-slate-300"
+                            }`}
+                          >
+                            {s.name}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <Label htmlFor={`edit-basis-${r.id}`}>Calculation basis</Label>
+                      <Input
+                        id={`edit-basis-${r.id}`}
+                        value={editDraft.basis}
+                        onChange={(e) => {
+                          setEditBasisEditedManually(true);
+                          setEditDraft({ ...editDraft, basis: e.target.value });
+                        }}
+                      />
+                      <p className="mt-1 text-xs text-slate-400">
+                        Auto-fills from the categories selected above - edit it directly to override.
+                      </p>
+                    </div>
+                    {editError && <p className="text-sm text-red-600">{editError}</p>}
+                    <div>
+                      <Button disabled={rowBusy === r.id} onClick={() => saveRuleEdit(r)}>
+                        {rowBusy === r.id ? "Saving..." : "Save Changes"}
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <p className="mt-1 text-xs text-slate-500">{r.basis}</p>
+                    <p className="mt-1 text-xs text-slate-400">
+                      Effective {new Date(r.effectiveFrom).toLocaleDateString()} · Categories:{" "}
+                      {r.categories.map((id) => nameFor(categories, id)).join(", ") || "—"} · Sources:{" "}
+                      {r.sources.map((id) => nameFor(sources, id)).join(", ") || "—"}
+                    </p>
+                  </>
+                )}
               </div>
             ))}
         </div>

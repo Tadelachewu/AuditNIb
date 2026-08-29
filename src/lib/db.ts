@@ -9,6 +9,7 @@ import type {
   District,
   Branch,
   Source,
+  Department,
   ClassifiedCategory,
   ScoringRule,
   ReportingPeriod,
@@ -53,11 +54,32 @@ function buildSeedDatabase(): Database {
     { id: "source-2", code: "IA", name: "Internal Audit", active: true, createdAt: now, updatedAt: now },
   ];
 
+  // Not from the BRD - a starting list an admin can extend at
+  // /admin/departments, mirroring Source's shape/lifecycle plus the same
+  // OrgScope pattern as User/RoleDefinition: most departments here are
+  // BANK-wide (available on any finding), with one DISTRICT and one
+  // BRANCH example seeded to demonstrate the narrower scopes.
+  const departments: Department[] = [
+    { id: "dept-1", code: "OPS", name: "Operations", active: true, orgScope: "BANK", districtId: null, branchId: null, createdAt: now, updatedAt: now },
+    { id: "dept-2", code: "CREDIT", name: "Credit", active: true, orgScope: "BANK", districtId: null, branchId: null, createdAt: now, updatedAt: now },
+    { id: "dept-3", code: "FINANCE", name: "Finance", active: true, orgScope: "BANK", districtId: null, branchId: null, createdAt: now, updatedAt: now },
+    { id: "dept-4", code: "IT", name: "Information Technology", active: true, orgScope: "BANK", districtId: null, branchId: null, createdAt: now, updatedAt: now },
+    { id: "dept-5", code: "HR", name: "Human Resources", active: true, orgScope: "BANK", districtId: null, branchId: null, createdAt: now, updatedAt: now },
+    { id: "dept-6", code: "LEGAL", name: "Legal & Compliance", active: true, orgScope: "BANK", districtId: null, branchId: null, createdAt: now, updatedAt: now },
+    { id: "dept-7", code: "RISK", name: "Risk Management", active: true, orgScope: "BANK", districtId: null, branchId: null, createdAt: now, updatedAt: now },
+    { id: "dept-8", code: "TREASURY", name: "Treasury", active: true, orgScope: "BANK", districtId: null, branchId: null, createdAt: now, updatedAt: now },
+    { id: "dept-9", code: "CUSTOMER_SERVICE", name: "Customer Service", active: true, orgScope: "DISTRICT", districtId: "district-1", branchId: null, createdAt: now, updatedAt: now },
+    { id: "dept-10", code: "INTERNAL_AUDIT", name: "Internal Audit", active: true, orgScope: "BRANCH", districtId: "district-1", branchId: "branch-1", createdAt: now, updatedAt: now },
+  ];
+
+  // Names match master.txt §25's reference list exactly ("ATM Mismatch;
+  // ATM Long Outstanding; IT Case; Dormant Account; Zero Balance; CK Book;
+  // Other Case").
   const categories: ClassifiedCategory[] = [
     { id: "cat-1", code: "ATM_MISMATCH", name: "ATM Mismatch", scored: false, active: true, createdAt: now, updatedAt: now },
-    { id: "cat-2", code: "ATM_LONG_OS", name: "ATM Long O/S", scored: false, active: true, createdAt: now, updatedAt: now },
-    { id: "cat-3", code: "IT", name: "IT", scored: false, active: true, createdAt: now, updatedAt: now },
-    { id: "cat-4", code: "DORMANT", name: "Dormant", scored: false, active: true, createdAt: now, updatedAt: now },
+    { id: "cat-2", code: "ATM_LONG_OS", name: "ATM Long Outstanding", scored: false, active: true, createdAt: now, updatedAt: now },
+    { id: "cat-3", code: "IT", name: "IT Case", scored: false, active: true, createdAt: now, updatedAt: now },
+    { id: "cat-4", code: "DORMANT", name: "Dormant Account", scored: false, active: true, createdAt: now, updatedAt: now },
     { id: "cat-5", code: "ZERO_BALANCE", name: "Zero Balance", scored: false, active: true, createdAt: now, updatedAt: now },
     { id: "cat-6", code: "CK_BOOK", name: "CK Book", scored: false, active: true, createdAt: now, updatedAt: now },
     { id: "cat-7", code: "OTHER_CASE", name: "Other Case", scored: true, active: true, createdAt: now, updatedAt: now },
@@ -69,6 +91,7 @@ function buildSeedDatabase(): Database {
       version: 1,
       name: "Other Case Performance v1",
       active: true,
+      everActivated: true,
       effectiveFrom: now,
       categories: ["cat-7"],
       sources: ["source-1", "source-2"],
@@ -80,12 +103,16 @@ function buildSeedDatabase(): Database {
   ];
 
   const today = new Date();
+  const seedPeriodStart = new Date(today.getFullYear(), today.getMonth(), 1, 0, 0);
+  const seedPeriodEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59);
   const reportingPeriods: ReportingPeriod[] = [
     {
       id: "period-1",
       year: today.getFullYear(),
       month: today.getMonth() + 1,
       code: `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`,
+      startsAt: seedPeriodStart.toISOString(),
+      endsAt: seedPeriodEnd.toISOString(),
       status: "OPEN",
       lockedBy: null,
       lockedAt: null,
@@ -96,9 +123,40 @@ function buildSeedDatabase(): Database {
   ];
 
   const settings: Settings = {
-    currencies: ["ETB", "USD"],
+    // master.txt §25: "ETB; USD; EUR; GBP initially; configurable."
+    currencies: ["ETB", "USD", "EUR", "GBP"],
     riskLevels: ["Low", "Medium", "High", "Critical"],
+    // Sample areas an admin can edit at /admin/settings - not from the BRD,
+    // a reasonable starting list of real bank operational areas.
+    operationAreas: [
+      "Teller Counter",
+      "Vault",
+      "ATM Operations",
+      "Loan Processing",
+      "Account Opening",
+      "Fund Transfer",
+      "Clearing House",
+      "Reconciliation",
+      "Cybersecurity",
+      "Branch Security",
+    ],
+    priorityLevels: ["Low", "Medium", "High", "Urgent"],
+    irregularityTypes: [
+      "Cash Shortage",
+      "Cash Excess",
+      "Unauthorized Transaction",
+      "Fraud",
+      "Forgery",
+      "System Error",
+      "Policy Violation",
+      "Documentation Deficiency",
+      "Reconciliation Discrepancy",
+      "Access Control Violation",
+    ],
     notification: { provider: "NONE", fromAddress: "" },
+    autoTransferOnLock: false,
+    rankingVisibility: { branches: true, districts: true },
+    rectificationReminders: { enabled: false, thresholdDays: 7 },
     updatedAt: now,
   };
 
@@ -127,6 +185,7 @@ function buildSeedDatabase(): Database {
     permissionKey("districts", "view"),
     permissionKey("branches", "view"),
     permissionKey("sources", "view"),
+    permissionKey("departments", "view"),
     permissionKey("categories", "view"),
     permissionKey("scoring-rules", "view"),
     permissionKey("scoring-adjustments", "view"),
@@ -140,11 +199,19 @@ function buildSeedDatabase(): Database {
     permissionKey("findings", "create"),
     permissionKey("findings", "ho-review"),
     permissionKey("findings", "close"),
+    permissionKey("findings", "comment"),
+    // master.txt §22: "HO Internal Controllers can import/enter Internal
+    // Audit findings" - the bulk sibling of the single-record "create"
+    // path just above, both landing in the exact same DRAFT-first workflow.
+    permissionKey("findings", "import"),
+    permissionKey("reports", "view"),
+    permissionKey("ho-dashboard", "view"),
   ];
   const districtControllerPermissions = [
     permissionKey("districts", "view"),
     permissionKey("branches", "view"),
     permissionKey("sources", "view"),
+    permissionKey("departments", "view"),
     permissionKey("categories", "view"),
     permissionKey("scoring-rules", "view"),
     permissionKey("scoring-adjustments", "view"),
@@ -155,21 +222,34 @@ function buildSeedDatabase(): Database {
     permissionKey("findings", "view"),
     permissionKey("findings", "district-review"),
     permissionKey("findings", "close"),
+    // "Transfer outstanding cases" (icfms.txt).
+    permissionKey("findings", "transfer"),
+    permissionKey("findings", "comment"),
+    permissionKey("reports", "view"),
+    permissionKey("district-dashboard", "view"),
   ];
   const districtDirectorPermissions = [
     permissionKey("districts", "view"),
     permissionKey("branches", "view"),
     permissionKey("sources", "view"),
+    permissionKey("departments", "view"),
     permissionKey("categories", "view"),
     permissionKey("scoring-rules", "view"),
     permissionKey("scoring-adjustments", "view"),
     permissionKey("reporting-periods", "view"),
     // View only - icfms.txt is explicit: "Cannot modify findings or scores."
     permissionKey("findings", "view"),
+    // The one mutating exception: proposal.txt §6 - "District Directors
+    // shall have view and comment access" - explicitly authorized, unlike
+    // modifying a finding or its score.
+    permissionKey("findings", "comment"),
+    permissionKey("reports", "view"),
+    permissionKey("district-dashboard", "view"),
   ];
   const branchControllerPermissions = [
     permissionKey("branch-dashboard", "view"),
     permissionKey("sources", "view"),
+    permissionKey("departments", "view"),
     permissionKey("categories", "view"),
     permissionKey("reporting-periods", "view"),
     // "Register findings, Edit draft findings, Submit findings, Verify
@@ -180,6 +260,9 @@ function buildSeedDatabase(): Database {
     permissionKey("findings", "delete"),
     permissionKey("findings", "submit"),
     permissionKey("findings", "rectify"),
+    // "Upload optional evidence... Verify rectifications" (icfms.txt).
+    permissionKey("findings", "evidence"),
+    permissionKey("findings", "comment"),
   ];
   const branchManagerPermissions = [
     permissionKey("branch-dashboard", "view"),
@@ -188,6 +271,9 @@ function buildSeedDatabase(): Database {
     // "Record corrective actions... Enter rectified case counts" (icfms.txt).
     permissionKey("findings", "view"),
     permissionKey("findings", "rectify"),
+    // "Upload optional supporting evidence... Respond to comments" (icfms.txt).
+    permissionKey("findings", "evidence"),
+    permissionKey("findings", "comment"),
   ];
 
   const roles: RoleDefinition[] = [
@@ -264,6 +350,24 @@ function buildSeedDatabase(): Database {
       orgScope: "BRANCH",
       branchSingleton: true,
       isSystem: true,
+      permissions: branchManagerPermissions,
+      status: "ACTIVE",
+      createdAt: now,
+      updatedAt: now,
+    },
+    {
+      id: "role-branch-sub-manager",
+      code: "BRANCH_SUB_MANAGER",
+      name: "Branch Sub-Manager",
+      description: "Deputy for the Branch Manager - identical responsibilities for one branch.",
+      orgScope: "BRANCH",
+      // One deputy per branch, same singleton convention as Manager/
+      // Controller - not a BRD-mandated role (hence isSystem: false, so an
+      // admin can delete it outright if unwanted, unlike the core seven),
+      // but seeded with the Branch Manager's exact permission set so it
+      // starts genuinely equivalent rather than needing manual setup.
+      branchSingleton: true,
+      isSystem: false,
       permissions: branchManagerPermissions,
       status: "ACTIVE",
       createdAt: now,
@@ -384,6 +488,7 @@ function buildSeedDatabase(): Database {
     districts,
     branches,
     sources,
+    departments,
     categories,
     scoringRules,
     scoringAdjustments: [],
@@ -391,6 +496,18 @@ function buildSeedDatabase(): Database {
     findings: [],
     findingTransitions: [],
     rectifications: [],
+    findingTransfers: [],
+    findingClosures: [],
+    importBatches: [],
+    findingCases: [],
+    // A fresh seed's ADMIN role is already ALL_PERMISSION_KEYS, so every
+    // key starts "already synced" - nothing to backfill until a future
+    // registry addition, exactly the scenario syncAdminPermissions() below
+    // exists for.
+    permissionRegistrySyncedKeys: [...ALL_PERMISSION_KEYS],
+    evidence: [],
+    comments: [],
+    notifications: [],
     settings,
     auditLogs: [],
   };
@@ -406,10 +523,136 @@ function ensureDataFile(): void {
   }
 }
 
+// A PAGE_REGISTRY addition (a new page, or a new action on an existing
+// page - like this very change adding findings.import and
+// scoring-rules.edit/delete) must never silently strip access from an
+// already-seeded ADMIN role; only a deliberate edit through /admin/roles
+// should ever narrow it (see PATCH .../admin/roles/[id] - ADMIN can be
+// narrowed there on purpose, unlike before). Each key is granted at most
+// once, ever: recorded in permissionRegistrySyncedKeys the moment it's
+// synced, so a later intentional uncheck of that same key is never
+// silently reverted. Returns whether it changed anything.
+function syncAdminPermissions(db: Database): boolean {
+  const admin = db.roles.find((r) => r.code === "ADMIN");
+  if (!admin) return false;
+  const synced = new Set(db.permissionRegistrySyncedKeys);
+  const newKeys = ALL_PERMISSION_KEYS.filter((k) => !synced.has(k));
+  if (newKeys.length === 0) return false;
+
+  const granted = new Set(admin.permissions);
+  newKeys.forEach((k) => granted.add(k));
+  admin.permissions = [...granted];
+  db.permissionRegistrySyncedKeys = [...synced, ...newKeys];
+  return true;
+}
+
+// db.json has no migration system - it's read as-is, so a field added to
+// the schema after some findings already exist on disk needs an explicit
+// default here, or every read of an older record throws on the missing
+// property (e.g. db.findingClosures.push(...) on `undefined`). Returns
+// whether anything was actually backfilled, so the caller can decide
+// whether the fix is worth persisting immediately.
+function normalizeDb(db: Database): { db: Database; changed: boolean } {
+  let changed = false;
+  if (!db.findingClosures) {
+    db.findingClosures = [];
+    changed = true;
+  }
+  if (!db.importBatches) {
+    db.importBatches = [];
+    changed = true;
+  }
+  if (!db.permissionRegistrySyncedKeys) {
+    // Unknown history: assume nothing has been synced yet, so
+    // syncAdminPermissions() below backfills every current key once.
+    db.permissionRegistrySyncedKeys = [];
+    changed = true;
+  }
+  if (!db.findingCases) {
+    db.findingCases = [];
+    changed = true;
+  }
+  if (db.settings.autoTransferOnLock === undefined) {
+    db.settings.autoTransferOnLock = false;
+    changed = true;
+  }
+  if (!db.settings.rankingVisibility) {
+    db.settings.rankingVisibility = { branches: true, districts: true };
+    changed = true;
+  }
+  if (!db.settings.rectificationReminders) {
+    // Off by default for pre-existing installs - an Admin opts in
+    // explicitly at /admin/settings rather than suddenly starting to page
+    // people who never expected it.
+    db.settings.rectificationReminders = { enabled: false, thresholdDays: 7 };
+    changed = true;
+  }
+  for (const p of db.reportingPeriods) {
+    if (!p.startsAt || !p.endsAt) {
+      // Predates the date-range field: default to the calendar month
+      // year/month already encoded, so existing periods keep behaving
+      // exactly as before (nothing reads startsAt/endsAt for anything
+      // that already worked off year/month/code).
+      const start = new Date(p.year, p.month - 1, 1, 0, 0);
+      const end = new Date(p.year, p.month, 0, 23, 59);
+      p.startsAt = start.toISOString();
+      p.endsAt = end.toISOString();
+      changed = true;
+    }
+  }
+  for (const t of db.findingTransfers) {
+    if (!t.method) {
+      // Every transfer predating this field was necessarily a manual one -
+      // automatic transfer didn't exist yet to have produced any.
+      t.method = "MANUAL";
+      changed = true;
+    }
+    if (t.originalCaseCount === undefined || t.originalAmount === undefined || t.caseAgeAtTransferDays === undefined) {
+      // Predates these fields: best-effort backfill from the finding's
+      // current totals (caseCount/amount don't change over a finding's
+      // life in the normal flow, so this is exact for anything that
+      // hasn't been hand-edited) and its age as of *now* rather than as
+      // of the original transfer, which is the closest available proxy.
+      const f = db.findings.find((x) => x.id === t.findingId);
+      t.originalCaseCount = f?.caseCount ?? t.casesTransferred;
+      t.originalAmount = f?.amount ?? t.amountTransferred;
+      t.caseAgeAtTransferDays = f ? Math.floor((Date.now() - new Date(f.createdAt).getTime()) / 86_400_000) : 0;
+      changed = true;
+    }
+  }
+  for (const f of db.findings) {
+    if (f.closedCases === undefined) {
+      f.closedCases = 0;
+      changed = true;
+    }
+    if (f.closedAmount === undefined) {
+      f.closedAmount = 0;
+      changed = true;
+    }
+  }
+  // A rule predating this field: default to "has gone live at least once"
+  // since that history is genuinely unknown - the safe assumption, since
+  // it only blocks edit/delete (never view/activate), and a rule that
+  // truly never went live can simply be recreated instead.
+  for (const r of db.scoringRules) {
+    if (r.everActivated === undefined) {
+      r.everActivated = true;
+      changed = true;
+    }
+  }
+  if (syncAdminPermissions(db)) changed = true;
+  return { db, changed };
+}
+
 export function readDb(): Database {
   ensureDataFile();
   const raw = fs.readFileSync(DB_FILE, "utf-8");
-  return JSON.parse(raw) as Database;
+  const { db, changed } = normalizeDb(JSON.parse(raw) as Database);
+  // Persisted immediately rather than left to the next unrelated write -
+  // syncAdminPermissions() in particular must not depend on some other
+  // action happening to save the file first.
+  if (changed) fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2), "utf-8");
+  return db;
 }
 
 export function writeDb(db: Database): void {

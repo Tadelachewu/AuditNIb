@@ -3,6 +3,8 @@ import { z } from "zod";
 import { requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { appendAuditLog } from "@/lib/audit";
+import { notifyUsers, usersWithFindingsPermission } from "@/lib/notifications";
+import { autoTransferOnLock } from "@/lib/findings";
 
 const updateSchema = z.object({
   status: z.enum(["OPEN", "LOCKED"]),
@@ -45,6 +47,45 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       newValue: { status },
       reason,
     });
+
+    // Configurable Automatic Transfer: only ever runs on the LOCKED
+    // transition, only when the Admin has it enabled (Settings), and only
+    // sweeps findings still genuinely in this period - anything already
+    // manually transferred out is naturally excluded (see
+    // autoTransferOnLock()'s own doc comment).
+    if (status === "LOCKED") {
+      const { transferredCount } = autoTransferOnLock(current, p, {
+        userId: auth.session.userId!,
+        userName: auth.session.name!,
+      });
+      if (transferredCount > 0) {
+        appendAuditLog(current, {
+          userId: auth.session.userId!,
+          userName: auth.session.name!,
+          action: "AUTO_TRANSFER",
+          entityType: "ReportingPeriod",
+          entityId: p.id,
+          newValue: { transferredCount },
+        });
+      }
+    }
+
+    // master.txt §12: "period events" is one of the listed notification
+    // triggers - district and HO controllers bank-wide need to know a
+    // period just locked (their outstanding findings now need Transfer)
+    // or unlocked.
+    const recipients = new Set([
+      ...usersWithFindingsPermission(current, "district-review"),
+      ...usersWithFindingsPermission(current, "rectify"),
+    ]);
+    notifyUsers(current, [...recipients], {
+      type: status === "LOCKED" ? "PERIOD_LOCKED" : "PERIOD_UNLOCKED",
+      title: `${p.code} ${status === "LOCKED" ? "locked" : "unlocked"}`,
+      message: reason,
+      entityType: "ReportingPeriod",
+      entityId: p.id,
+    });
+
     return p;
   });
 

@@ -9,7 +9,7 @@ import { StatusBadge, Badge } from "@/components/ui/Badge";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import type { District, Branch } from "@/types";
 
-type BranchRow = Branch & { managerName: string | null; controllerName: string | null };
+type BranchRow = Branch & { managerName: string | null; subManagerName: string | null; controllerName: string | null };
 
 export default function BranchesPage() {
   const [branches, setBranches] = useState<BranchRow[]>([]);
@@ -171,6 +171,7 @@ export default function BranchesPage() {
                 <th className="px-4 py-2 font-medium">Name</th>
                 <th className="px-4 py-2 font-medium">District</th>
                 <th className="px-4 py-2 font-medium">Manager</th>
+                <th className="px-4 py-2 font-medium">Sub-Manager</th>
                 <th className="px-4 py-2 font-medium">Controller</th>
                 <th className="px-4 py-2 font-medium">Status</th>
                 <th className="px-4 py-2" />
@@ -179,7 +180,7 @@ export default function BranchesPage() {
             <tbody className="divide-y divide-slate-100">
               {loading && (
                 <tr>
-                  <td className="px-4 py-4 text-slate-400" colSpan={7}>
+                  <td className="px-4 py-4 text-slate-400" colSpan={8}>
                     Loading...
                   </td>
                 </tr>
@@ -220,6 +221,7 @@ export default function BranchesPage() {
                       <td className="px-4 py-2">
                         {b.managerName ? b.managerName : <Badge tone="amber">Unassigned</Badge>}
                       </td>
+                      <td className="px-4 py-2 text-slate-500">{b.subManagerName ? b.subManagerName : "—"}</td>
                       <td className="px-4 py-2">
                         {b.controllerName ? b.controllerName : <Badge tone="amber">Unassigned</Badge>}
                       </td>

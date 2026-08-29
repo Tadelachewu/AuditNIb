@@ -4,7 +4,7 @@ import { z } from "zod";
 import { requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { hashPassword } from "@/lib/auth";
-import { resolveOrgAssignment } from "@/lib/org";
+import { resolveOrgAssignment, isDepartmentExactScopeForUser } from "@/lib/org";
 import { appendAuditLog } from "@/lib/audit";
 import { toSafeUser } from "@/lib/sanitize";
 
@@ -26,6 +26,7 @@ const createUserSchema = z.object({
   role: z.string().min(1, "Role is required"),
   districtId: z.string().nullable().optional(),
   branchId: z.string().nullable().optional(),
+  departmentId: z.string().nullable().optional(),
 });
 
 export async function POST(request: Request) {
@@ -53,6 +54,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: assignment.error }, { status: 409 });
   }
 
+  let departmentId: string | null = null;
+  if (input.departmentId) {
+    const department = db.departments.find((d) => d.id === input.departmentId && d.active);
+    if (!department) return NextResponse.json({ error: "Selected department is not active" }, { status: 400 });
+    const role = db.roles.find((r) => r.code === input.role)!;
+    if (!isDepartmentExactScopeForUser(department, role.orgScope, assignment)) {
+      return NextResponse.json({ error: "Selected department does not match this user's district/branch" }, { status: 400 });
+    }
+    departmentId = department.id;
+  }
+
   const now = new Date().toISOString();
   const user = {
     id: uuid(),
@@ -63,6 +75,7 @@ export async function POST(request: Request) {
     status: "ACTIVE" as const,
     districtId: assignment.districtId,
     branchId: assignment.branchId,
+    departmentId,
     createdAt: now,
     updatedAt: now,
     lastLoginAt: null,

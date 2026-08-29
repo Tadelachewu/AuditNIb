@@ -3,7 +3,7 @@ import { z } from "zod";
 import { requireToggleOrEditPermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { hashPassword } from "@/lib/auth";
-import { resolveOrgAssignment } from "@/lib/org";
+import { resolveOrgAssignment, isDepartmentExactScopeForUser } from "@/lib/org";
 import { appendAuditLog } from "@/lib/audit";
 import { toSafeUser } from "@/lib/sanitize";
 
@@ -12,6 +12,7 @@ const updateUserSchema = z.object({
   role: z.string().min(1).optional(),
   districtId: z.string().nullable().optional(),
   branchId: z.string().nullable().optional(),
+  departmentId: z.string().nullable().optional(),
   status: z.enum(["ACTIVE", "INACTIVE"]).optional(),
   password: z.string().min(8).optional(),
 });
@@ -58,7 +59,34 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     branchId = assignment.branchId;
   }
 
-  const before = { name: existing.name, role: existing.role, status: existing.status, districtId: existing.districtId, branchId: existing.branchId };
+  // Re-validated whenever the department itself changes, or whenever the
+  // org scope changes underneath it - e.g. moving a user to a different
+  // branch shouldn't silently leave them holding a department scoped to
+  // their old branch.
+  let departmentId: string | null = existing.departmentId ?? null;
+  if (input.departmentId !== undefined || wantsOrgChange) {
+    const targetDepartmentId = input.departmentId !== undefined ? input.departmentId : existing.departmentId;
+    if (targetDepartmentId) {
+      const department = db.departments.find((d) => d.id === targetDepartmentId && d.active);
+      if (!department) return NextResponse.json({ error: "Selected department is not active" }, { status: 400 });
+      const role = db.roles.find((r) => r.code === nextRole)!;
+      if (!isDepartmentExactScopeForUser(department, role.orgScope, { districtId, branchId })) {
+        return NextResponse.json({ error: "Selected department does not match this user's district/branch" }, { status: 400 });
+      }
+      departmentId = department.id;
+    } else {
+      departmentId = null;
+    }
+  }
+
+  const before = {
+    name: existing.name,
+    role: existing.role,
+    status: existing.status,
+    districtId: existing.districtId,
+    branchId: existing.branchId,
+    departmentId: existing.departmentId,
+  };
 
   const updated = updateDb((current) => {
     const u = current.users.find((x) => x.id === id)!;
@@ -68,6 +96,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     u.role = nextRole;
     u.districtId = districtId;
     u.branchId = branchId;
+    u.departmentId = departmentId;
     u.updatedAt = new Date().toISOString();
 
     appendAuditLog(current, {
@@ -77,7 +106,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       entityType: "User",
       entityId: u.id,
       oldValue: before,
-      newValue: { name: u.name, role: u.role, status: u.status, districtId: u.districtId, branchId: u.branchId },
+      newValue: { name: u.name, role: u.role, status: u.status, districtId: u.districtId, branchId: u.branchId, departmentId: u.departmentId },
     });
 
     return u;

@@ -19,7 +19,11 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     label: "Findings",
-    items: [{ label: "Findings", href: "/findings", permission: permissionKey("findings", "view") }],
+    items: [
+      { label: "Findings", href: "/findings", permission: permissionKey("findings", "view") },
+      { label: "Import Findings", href: "/findings/import", permission: permissionKey("findings", "import") },
+      { label: "Reports", href: "/reports", permission: permissionKey("reports", "view") },
+    ],
   },
   {
     label: "Administration",
@@ -29,6 +33,7 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: "Districts", href: "/admin/districts", permission: permissionKey("districts", "view") },
       { label: "Branches", href: "/admin/branches", permission: permissionKey("branches", "view") },
       { label: "Sources", href: "/admin/sources", permission: permissionKey("sources", "view") },
+      { label: "Departments", href: "/admin/departments", permission: permissionKey("departments", "view") },
       { label: "Classified Categories", href: "/admin/categories", permission: permissionKey("categories", "view") },
       { label: "Scoring Rules", href: "/admin/scoring-rules", permission: permissionKey("scoring-rules", "view") },
       {

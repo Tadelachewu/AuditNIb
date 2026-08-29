@@ -43,8 +43,8 @@ export default async function FindingsPage({
   if (risk) findings = findings.filter((f) => f.riskLevel === risk);
   if (status) findings = findings.filter((f) => f.status === status);
 
-  const queueStatuses = queueStatusesForSession(user);
-  if (queueOnly) findings = findings.filter((f) => queueStatuses.includes(f.status));
+  const isQueued = queueStatusesForSession(user);
+  if (queueOnly) findings = findings.filter(isQueued);
 
   findings = [...findings].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 
@@ -60,6 +60,9 @@ export default async function FindingsPage({
   }
   function sourceName(id: string) {
     return db.sources.find((s) => s.id === id)?.name ?? "—";
+  }
+  function departmentName(id: string) {
+    return db.departments.find((d) => d.id === id)?.name ?? "—";
   }
 
   return (
@@ -104,7 +107,9 @@ export default async function FindingsPage({
             <thead className="border-b border-slate-100 text-xs uppercase text-slate-400">
               <tr>
                 <th className="px-4 py-2 font-medium">Reference</th>
+                <th className="px-4 py-2 font-medium">Title</th>
                 <th className="px-4 py-2 font-medium">Branch</th>
+                <th className="px-4 py-2 font-medium">Department</th>
                 <th className="px-4 py-2 font-medium">Category</th>
                 <th className="px-4 py-2 font-medium">Source</th>
                 <th className="px-4 py-2 font-medium">Risk</th>
@@ -116,7 +121,7 @@ export default async function FindingsPage({
             <tbody className="divide-y divide-slate-100">
               {findings.length === 0 && (
                 <tr>
-                  <td className="px-4 py-6 text-center text-slate-400" colSpan={8}>
+                  <td className="px-4 py-6 text-center text-slate-400" colSpan={10}>
                     {queueOnly ? "Nothing in your queue." : "No findings match these filters."}
                   </td>
                 </tr>
@@ -128,7 +133,9 @@ export default async function FindingsPage({
                       {f.reference}
                     </Link>
                   </td>
+                  <td className="px-4 py-2 text-slate-900">{f.title}</td>
                   <td className="px-4 py-2 text-slate-600">{branchName(f.branchId)}</td>
+                  <td className="px-4 py-2 text-slate-600">{departmentName(f.departmentId)}</td>
                   <td className="px-4 py-2 text-slate-600">{categoryName(f.categoryId)}</td>
                   <td className="px-4 py-2 text-slate-600">{sourceName(f.sourceId)}</td>
                   <td className="px-4 py-2 text-slate-600">{f.riskLevel}</td>

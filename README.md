@@ -1,10 +1,11 @@
 # NIB Control360 — ICFMS
 
 Internal Control Findings Management System. This repo implements the
-foundation, the Administration console, and the core Findings module: full
-registration through district/HO review, rectification, and verified
-closure. Transfer-across-periods, file-based evidence/comments, and
-reports/exports described in `AuditDocs/` ship in later phases.
+foundation, the Administration console, and the full Findings module:
+registration through district/HO review, rectification, cross-period
+transfer, file evidence, threaded comments, in-app notifications, and
+verified closure — plus reporting/CSV export and a real dashboard for
+every role (Branch, District, HO, Executive).
 
 For a deep dive into how every piece of this Phase 1 build works and relates
 to the others — data model, auth flow, role/org-unit scoping, each admin
@@ -21,7 +22,27 @@ permission set — see [PHASE5.md](PHASE5.md). Phase 6 built the Findings
 module itself: the `Finding` entity, the complete workflow state machine
 (register → district review → HO review → rectify → verified close), and
 wired the Branch dashboard's Phase 4 placeholders up to the real numbers —
-see [PHASE6.md](PHASE6.md).
+see [PHASE6.md](PHASE6.md). Phase 7 closed the remaining BRD gaps: the
+cross-period Transfer Engine, real local-disk evidence upload, threaded
+comments, an in-app notification center, a Reports/CSV-export module, and
+real District/HO/Executive dashboards (plus a real risk-distribution and
+monthly-trend widget on all four dashboards, Branch included) — see
+[PHASE7.md](PHASE7.md).
+
+Several companion documents look at the finished app from different
+angles: [BRD_COMPLIANCE.md](BRD_COMPLIANCE.md) is a strict
+requirement-by-requirement cross-check against every document in
+`AuditDocs/`; [APP_DOCUMENT.md](APP_DOCUMENT.md) is a business-facing,
+screen-by-screen walkthrough of every feature and *why* the bank needs
+it, verified end-to-end in a live test pass rather than described from
+the code alone; [FINDINGS_WORKFLOW.md](FINDINGS_WORKFLOW.md) is the
+complete state-machine reference for the Finding lifecycle - every
+status, every action, who can trigger it, and every side-flow (evidence,
+comments, notifications, transfer, period locking) attached to it;
+[RECTIFICATION.md](RECTIFICATION.md) is a focused deep-dive on exactly
+how `PARTIALLY_RECTIFIED` vs. `RECTIFIED` is decided and what each one
+does and doesn't allow next; and [SCENARIOS.md](SCENARIOS.md) is a full
+start-to-end test-case list covering the whole app.
 
 ## Getting started
 
@@ -32,6 +53,11 @@ npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000). You'll be redirected to `/login`.
+
+To let someone outside this machine reach the running app (a demo, a
+quick review), see [EXPOSE_TO_INTERNET.md](EXPOSE_TO_INTERNET.md) —
+`npm run tunnel:cloudflare` is the one confirmed to work on NIB's
+corporate network.
 
 ## Data storage
 
@@ -131,18 +157,25 @@ next time that role's users log in (see PHASE2.md §4).
   another district/branch's findings — not just hidden in the UI); every
   transition is recorded with who/when/from/to/reason. See
   [PHASE6.md](PHASE6.md) for the full design and a live, scripted
-  verification of the BRD's own acceptance example.
-- Branch Dashboard: now backed by real Finding data (KPIs, category
-  totals, work queue, recent activity) rather than Phase 4's placeholders.
+  verification of the BRD's own acceptance example. Phase 7 added a
+  Transfer-to-next-period action, real evidence file upload/download,
+  threaded comments, and an in-app notification bell — see
+  [PHASE7.md](PHASE7.md).
+- Dashboards: Branch, District, HO, and Executive all backed by real
+  Finding data (KPIs, category totals, risk distribution, monthly trend,
+  work queue, recent activity), each its own permission-gated page.
+- Reports: `/reports` with a filterable Findings Report, Branch/District
+  Performance rankings, Category/Risk breakdowns, a Transfers list, a real
+  CSV export, and a Print/Save-as-PDF button.
 
 ## What's not implemented yet
 
-The Transfer Engine (carrying an unresolved balance to a new period, BRD
-§3.7), real file-based evidence/attachment upload (no object storage
-exists yet — evidence is a text note for now), threaded comments,
-in-app/email notifications, configurable per-source workflow routing,
-scoring-adjustment integration into the computed performance figure, and
-the District/HO/Executive dashboards (Branch is done; the others are still
-Phase 4's placeholder pattern, not yet wired to real Finding data) — see
-`AuditDocs/NIB_Control360_Development_Plan.md` for the phased roadmap and
-PHASE6.md §7 for exactly what's deferred and why.
+The Excel Migration Toolkit (master.txt §22), an in-app Knowledge Base
+(icfms.txt §8), configurable per-source workflow routing, scoring-
+adjustment integration into the computed performance figure, and email/
+Outlook delivery for notifications (the in-app notification center exists;
+there's no mail server or Graph API credential to send through) — see
+`AuditDocs/master.txt` §21 for the original phased roadmap and PHASE7.md
+for exactly what's deferred and why. [BRD_COMPLIANCE.md](BRD_COMPLIANCE.md)
+is a full requirement-by-requirement cross-check of the app against every
+document in `AuditDocs/`.

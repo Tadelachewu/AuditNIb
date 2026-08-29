@@ -125,6 +125,14 @@ custom or the other six built-in roles - only `ADMIN` is special-cased,
 consistent with it being the one role the whole permission model treats as
 "always everything, always a way back in."
 
+> **Superseded**: a later change allows `ADMIN`'s permissions to be
+> narrowed like any other role (an explicit admin request), which removed
+> both live-`ALL_PERMISSION_KEYS` overrides described above. The only
+> permission `ADMIN` can never lose is `roles.manage` - see
+> [src/app/api/admin/roles/[id]/route.ts](src/app/api/admin/roles/[id]/route.ts).
+> One consequence: a newly added registry permission no longer
+> auto-grants to `ADMIN` - it needs to be checked like any other role's.
+
 ## 5. Verified end-to-end
 
 Directly against a running server: `ADMIN`'s session permission count rose

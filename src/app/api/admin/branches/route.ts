@@ -4,7 +4,7 @@ import { z } from "zod";
 import { requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { appendAuditLog } from "@/lib/audit";
-import { findBranchManager, findBranchController } from "@/lib/org";
+import { findBranchManager, findBranchController, findBranchSubManager } from "@/lib/org";
 
 export async function GET() {
   const auth = await requirePermission("branches.view");
@@ -14,6 +14,7 @@ export async function GET() {
   const branches = db.branches.map((b) => ({
     ...b,
     managerName: findBranchManager(db, b.id)?.name ?? null,
+    subManagerName: findBranchSubManager(db, b.id)?.name ?? null,
     controllerName: findBranchController(db, b.id)?.name ?? null,
   }));
 

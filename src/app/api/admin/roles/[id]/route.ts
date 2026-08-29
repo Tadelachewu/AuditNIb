@@ -3,7 +3,9 @@ import { z } from "zod";
 import { requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { appendAuditLog } from "@/lib/audit";
-import { isValidPermissionKey, ALL_PERMISSION_KEYS } from "@/lib/permissions/registry";
+import { isValidPermissionKey, permissionKey } from "@/lib/permissions/registry";
+
+const ROLES_MANAGE_KEY = permissionKey("roles", "manage");
 
 const updateSchema = z.object({
   name: z.string().min(1).optional(),
@@ -41,14 +43,20 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const existing = db.roles.find((r) => r.id === id);
   if (!existing) return NextResponse.json({ error: "Role not found" }, { status: 404 });
 
-  // The ADMIN role always has every permission and is always active - both
-  // are what makes it safe to assume "an Administrator can always fix
-  // access," including undoing a permissions mistake made on any other
-  // role. Without this guard, an admin could accidentally strip their own
-  // role's access and lock every administrator out of the console.
+  // The ADMIN role's permissions can be narrowed like any other role's -
+  // that's an explicit choice, not the default: doing so is how an
+  // organization can, for example, require a second Administrator to grant
+  // Roles & Permissions access rather than every Admin having it
+  // implicitly. The one line that can't be crossed is roles.manage itself:
+  // without it, nobody could ever open this screen again to undo a mistake,
+  // and Admin is always active (see below) so there'd be no other route
+  // back in. Every other permission is fair game to remove.
   if (existing.code === "ADMIN") {
-    if (input.permissions && input.permissions.length !== ALL_PERMISSION_KEYS.length) {
-      return NextResponse.json({ error: "The Administrator role must always hold every permission" }, { status: 409 });
+    if (input.permissions && !input.permissions.includes(ROLES_MANAGE_KEY)) {
+      return NextResponse.json(
+        { error: "The Administrator role must always keep \"Roles & Permissions: Manage\" - removing it would lock every admin out of this screen for good" },
+        { status: 409 }
+      );
     }
     if (input.status === "INACTIVE") {
       return NextResponse.json({ error: "The Administrator role cannot be deactivated" }, { status: 409 });

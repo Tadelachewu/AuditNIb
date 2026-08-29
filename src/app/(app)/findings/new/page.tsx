@@ -20,12 +20,16 @@ export default async function NewFindingPage() {
 
       <NewFindingForm
         sources={db.sources.filter((s) => s.active)}
+        departments={db.departments.filter((d) => d.active)}
         categories={db.categories.filter((c) => c.active)}
         periods={db.reportingPeriods.filter((p) => p.status === "OPEN")}
         districts={db.districts.filter((d) => d.status === "ACTIVE")}
         branches={db.branches.filter((b) => b.status === "ACTIVE")}
         currencies={db.settings.currencies}
         riskLevels={db.settings.riskLevels}
+        operationAreas={db.settings.operationAreas}
+        priorityLevels={db.settings.priorityLevels}
+        irregularityTypes={db.settings.irregularityTypes}
         fixedDistrict={user.orgScope === "BRANCH" && district ? { id: district.id, name: district.name } : undefined}
         fixedBranch={user.orgScope === "BRANCH" && branch ? { id: branch.id, name: branch.name } : undefined}
       />

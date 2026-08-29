@@ -5,7 +5,6 @@ import { verifyPassword } from "@/lib/auth";
 import { getSession } from "@/lib/session";
 import { appendAuditLog } from "@/lib/audit";
 import { toSafeUser } from "@/lib/sanitize";
-import { ALL_PERMISSION_KEYS } from "@/lib/permissions/registry";
 
 const loginSchema = z.object({
   username: z.string().min(1),
@@ -56,11 +55,14 @@ export async function POST(request: Request) {
   session.role = user.role;
   session.roleName = role.name;
   session.orgScope = role.orgScope;
-  // ADMIN always resolves to every permission the catalog currently
-  // defines, rather than whatever was snapshotted into role.permissions at
-  // seed/creation time - so adding a new page/action to the registry never
-  // leaves Administrators without it until someone manually re-grants it.
-  session.permissions = role.code === "ADMIN" ? ALL_PERMISSION_KEYS : role.permissions;
+  // Resolved from whatever's actually stored on the role, same as any
+  // other role - ADMIN's permissions can be narrowed (see PATCH
+  // .../api/admin/roles/[id]), so forcing every permission here would make
+  // that narrowing silently ineffective. One consequence: adding a new
+  // page/action to the registry no longer auto-grants it to ADMIN - an
+  // existing Administrator (who still holds roles.manage, always
+  // guaranteed) needs to check the new box the same as for any role.
+  session.permissions = role.permissions;
   session.districtId = user.districtId ?? null;
   session.branchId = user.branchId ?? null;
   await session.save();

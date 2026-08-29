@@ -3,7 +3,8 @@ import { z } from "zod";
 import { requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { assertFindingInScope } from "@/lib/findings-scope";
-import { transitionFinding, hoApproveFinding } from "@/lib/findings";
+import { transitionFinding, hoApproveFinding, assertPeriodWritable } from "@/lib/findings";
+import { notifyFindingsPermissionHolders, notifyUsers, usersWithFindingsPermission } from "@/lib/notifications";
 
 const reviewSchema = z
   .object({
@@ -40,10 +41,20 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "This finding is not awaiting HO review" }, { status: 409 });
   }
 
+  const periodError = assertPeriodWritable(db, existing.periodId);
+  if (periodError) return NextResponse.json({ error: periodError }, { status: 409 });
+
   const updated = updateDb((current) => {
     const f = current.findings.find((x) => x.id === id)!;
     if (decision === "APPROVE") {
       hoApproveFinding(current, f, auth.session.userId!, auth.session.name!);
+      notifyFindingsPermissionHolders(current, "rectify", { branchId: f.branchId }, {
+        type: "HO_APPROVED",
+        title: `${f.reference} approved - awaiting rectification`,
+        message: `${auth.session.name} approved this finding at HO level.`,
+        entityType: "Finding",
+        entityId: f.id,
+      });
     } else {
       transitionFinding(current, f, {
         toStatus: decision === "REJECT" ? "REJECTED" : "RETURNED",
@@ -51,6 +62,28 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         userId: auth.session.userId!,
         userName: auth.session.name!,
         reason,
+      });
+      // Document_3 §9/§30: HO's return is depicted as HO -> District ->
+      // Branch Controller, not a single hop straight to whoever created
+      // it. The finding itself still lands with the creator to fix
+      // (resubmitting naturally routes back through DISTRICT_REVIEW
+      // before HO sees it again - submitFinding() already does that), but
+      // the District Controller needs to be notified at the moment of
+      // the return too, not just once a resubmission happens to reach
+      // them - otherwise they're not "kept in the loop" as the doc's
+      // diagram shows.
+      const recipients = new Set([f.createdBy]);
+      if (decision === "RETURN") {
+        for (const districtControllerId of usersWithFindingsPermission(current, "district-review", { districtId: f.districtId })) {
+          recipients.add(districtControllerId);
+        }
+      }
+      notifyUsers(current, [...recipients], {
+        type: decision === "REJECT" ? "REJECTED" : "RETURNED",
+        title: `${f.reference} ${decision === "REJECT" ? "rejected" : "returned"} by HO`,
+        message: reason ?? "",
+        entityType: "Finding",
+        entityId: f.id,
       });
     }
     return f;

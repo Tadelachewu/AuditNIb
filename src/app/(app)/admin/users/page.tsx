@@ -7,15 +7,16 @@ import { Button } from "@/components/ui/Button";
 import { Input, Select, Label } from "@/components/ui/Field";
 import { StatusBadge } from "@/components/ui/Badge";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
-import type { SafeUser, District, Branch, RoleDefinition } from "@/types";
+import type { SafeUser, District, Branch, Department, RoleDefinition } from "@/types";
 
-const emptyForm = { name: "", username: "", password: "", role: "", districtId: "", branchId: "" };
-const emptyEditForm = { name: "", role: "", districtId: "", branchId: "", password: "" };
+const emptyForm = { name: "", username: "", password: "", role: "", districtId: "", branchId: "", departmentId: "" };
+const emptyEditForm = { name: "", role: "", districtId: "", branchId: "", departmentId: "", password: "" };
 
 export default function UsersPage() {
   const [users, setUsers] = useState<SafeUser[]>([]);
   const [districts, setDistricts] = useState<District[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
   const [roles, setRoles] = useState<RoleDefinition[]>([]);
   const [rolesError, setRolesError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -38,6 +39,16 @@ export default function UsersPage() {
     setUsers(u.users);
     setDistricts(d.districts);
     setBranches(b.branches);
+
+    // Same reasoning as the roles fetch below - department assignment is
+    // optional, so a role that can manage users but lacks "departments.view"
+    // still gets a working page, just without that one field.
+    try {
+      const dept = await apiGet<{ departments: Department[] }>("/api/admin/departments");
+      setDepartments(dept.departments.filter((x) => x.active));
+    } catch {
+      setDepartments([]);
+    }
 
     // Assigning a role requires being able to see the role catalog, i.e.
     // the "roles.view" permission too - kept as its own request so a role
@@ -75,6 +86,25 @@ export default function UsersPage() {
     [branches, editForm.districtId]
   );
 
+  // Stricter than NewFindingForm.tsx's departmentOptions (which also allows
+  // bank-wide as a fallback): a user's department must match their role's
+  // own org tier exactly - a branch-scoped user only sees departments
+  // scoped to that exact branch, a district-scoped user only that exact
+  // district, and a bank-scoped user (Admin/HO/Executive) only bank-wide
+  // ones. No cross-tier fallback, unlike Finding registration.
+  const departmentOptions = useMemo(() => {
+    if (selectedRole?.orgScope === "BRANCH") return departments.filter((d) => d.orgScope === "BRANCH" && d.branchId === form.branchId);
+    if (selectedRole?.orgScope === "DISTRICT") return departments.filter((d) => d.orgScope === "DISTRICT" && d.districtId === form.districtId);
+    return departments.filter((d) => d.orgScope === "BANK");
+  }, [departments, selectedRole, form.districtId, form.branchId]);
+
+  const editDepartmentOptions = useMemo(() => {
+    if (editSelectedRole?.orgScope === "BRANCH") return departments.filter((d) => d.orgScope === "BRANCH" && d.branchId === editForm.branchId);
+    if (editSelectedRole?.orgScope === "DISTRICT") return departments.filter((d) => d.orgScope === "DISTRICT" && d.districtId === editForm.districtId);
+    return departments.filter((d) => d.orgScope === "BANK");
+  }, [departments, editSelectedRole, editForm.districtId, editForm.branchId]
+  );
+
   function districtName(id?: string | null) {
     return districts.find((d) => d.id === id)?.name ?? "—";
   }
@@ -83,6 +113,10 @@ export default function UsersPage() {
   }
   function roleName(code: string) {
     return roles.find((r) => r.code === code)?.name ?? code;
+  }
+  function departmentName(id?: string | null) {
+    if (!id) return "—";
+    return departments.find((d) => d.id === id)?.name ?? "—";
   }
 
   async function handleCreate(e: React.FormEvent) {
@@ -97,6 +131,7 @@ export default function UsersPage() {
         role: form.role,
         districtId: form.districtId || null,
         branchId: form.branchId || null,
+        departmentId: form.departmentId || null,
       });
       setForm({ ...emptyForm, role: form.role });
       await loadAll();
@@ -114,6 +149,7 @@ export default function UsersPage() {
       role: user.role,
       districtId: user.districtId ?? "",
       branchId: user.branchId ?? "",
+      departmentId: user.departmentId ?? "",
       password: "",
     });
     setEditError(null);
@@ -128,6 +164,7 @@ export default function UsersPage() {
         role: editForm.role,
         districtId: editForm.districtId || null,
         branchId: editForm.branchId || null,
+        departmentId: editForm.departmentId || null,
       };
       if (editForm.password) payload.password = editForm.password;
       await apiSend(`/api/admin/users/${user.id}`, "PATCH", payload);
@@ -229,7 +266,7 @@ export default function UsersPage() {
                 id="districtId"
                 required
                 value={form.districtId}
-                onChange={(e) => setForm({ ...form, districtId: e.target.value, branchId: "" })}
+                onChange={(e) => setForm({ ...form, districtId: e.target.value, branchId: "", departmentId: "" })}
               >
                 <option value="">Select district</option>
                 {districts.map((d) => (
@@ -248,7 +285,7 @@ export default function UsersPage() {
                 id="branchId"
                 required
                 value={form.branchId}
-                onChange={(e) => setForm({ ...form, branchId: e.target.value })}
+                onChange={(e) => setForm({ ...form, branchId: e.target.value, departmentId: "" })}
               >
                 <option value="">Select branch</option>
                 {branchesInDistrict.map((b) => (
@@ -259,6 +296,22 @@ export default function UsersPage() {
               </Select>
             </div>
           )}
+
+          <div>
+            <Label htmlFor="departmentId">Department (optional)</Label>
+            <Select
+              id="departmentId"
+              value={form.departmentId}
+              onChange={(e) => setForm({ ...form, departmentId: e.target.value })}
+            >
+              <option value="">No department</option>
+              {departmentOptions.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name}
+                </option>
+              ))}
+            </Select>
+          </div>
 
           <div className="sm:col-span-2 lg:col-span-3">
             {formError && <p className="mb-2 text-sm text-red-600">{formError}</p>}
@@ -279,6 +332,7 @@ export default function UsersPage() {
                 <th className="px-4 py-2 font-medium">Username</th>
                 <th className="px-4 py-2 font-medium">Role</th>
                 <th className="px-4 py-2 font-medium">Org Unit</th>
+                <th className="px-4 py-2 font-medium">Department</th>
                 <th className="px-4 py-2 font-medium">Status</th>
                 <th className="px-4 py-2 font-medium">Last Login</th>
                 <th className="px-4 py-2" />
@@ -287,7 +341,7 @@ export default function UsersPage() {
             <tbody className="divide-y divide-slate-100">
               {loading && (
                 <tr>
-                  <td className="px-4 py-4 text-slate-400" colSpan={7}>
+                  <td className="px-4 py-4 text-slate-400" colSpan={8}>
                     Loading...
                   </td>
                 </tr>
@@ -304,6 +358,7 @@ export default function UsersPage() {
                         <td className="px-4 py-2 text-slate-600">
                           {u.branchId ? branchName(u.branchId) : u.districtId ? districtName(u.districtId) : "Bank-wide"}
                         </td>
+                        <td className="px-4 py-2 text-slate-600">{departmentName(u.departmentId)}</td>
                         <td className="px-4 py-2">
                           <StatusBadge status={u.status} />
                         </td>
@@ -327,7 +382,7 @@ export default function UsersPage() {
                       </tr>
                       {isEditing && (
                         <tr>
-                          <td colSpan={7} className="bg-slate-50 px-4 py-3">
+                          <td colSpan={8} className="bg-slate-50 px-4 py-3">
                             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
                               <div>
                                 <Label htmlFor="edit-name">Full name</Label>
@@ -360,7 +415,7 @@ export default function UsersPage() {
                                   <Select
                                     id="edit-districtId"
                                     value={editForm.districtId}
-                                    onChange={(e) => setEditForm({ ...editForm, districtId: e.target.value, branchId: "" })}
+                                    onChange={(e) => setEditForm({ ...editForm, districtId: e.target.value, branchId: "", departmentId: "" })}
                                   >
                                     <option value="">Select district</option>
                                     {districts.map((d) => (
@@ -377,7 +432,7 @@ export default function UsersPage() {
                                   <Select
                                     id="edit-branchId"
                                     value={editForm.branchId}
-                                    onChange={(e) => setEditForm({ ...editForm, branchId: e.target.value })}
+                                    onChange={(e) => setEditForm({ ...editForm, branchId: e.target.value, departmentId: "" })}
                                   >
                                     <option value="">Select branch</option>
                                     {editBranchesInDistrict.map((b) => (
@@ -388,6 +443,21 @@ export default function UsersPage() {
                                   </Select>
                                 </div>
                               )}
+                              <div>
+                                <Label htmlFor="edit-departmentId">Department (optional)</Label>
+                                <Select
+                                  id="edit-departmentId"
+                                  value={editForm.departmentId}
+                                  onChange={(e) => setEditForm({ ...editForm, departmentId: e.target.value })}
+                                >
+                                  <option value="">No department</option>
+                                  {editDepartmentOptions.map((d) => (
+                                    <option key={d.id} value={d.id}>
+                                      {d.name}
+                                    </option>
+                                  ))}
+                                </Select>
+                              </div>
                               <div>
                                 <Label htmlFor="edit-password">Reset password (optional)</Label>
                                 <Input

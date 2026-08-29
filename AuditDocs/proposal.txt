@@ -1,0 +1,223 @@
+        PROJECT PROPOSAL
+
+                     NIB-Control360
+
+Internal Control Findings Management System (ICFMS)
+                            Prepared for:
+
+                      NIB International Bank
+                          Business Owner:
+
+                     Internal Control Division
+                             Prepared by:
+
+                           Adonay Yoseph
+                             Version: 1.0
+
+                         Date: August 2026
+PROJECT PROPOSAL
+
+Development of Internal Control Findings Management System (ICFMS)
+
+Prepared for:
+NIB International Bank
+Business Owner:
+Internal Control Division
+Project Type:
+Digital Transformation Initiative
+Version: 1.0
+Date: August 2026
+1. Executive Summary
+NIB International Bank has made significant progress in digitizing its core banking and operational
+processes. However, the Internal Control Division still relies heavily on manual Excel-based processes
+for collecting, consolidating, tracking, verifying, and reporting Internal Control findings across
+branches and districts.
+The current process requires multiple exchanges of Excel files between Branch Internal Controllers,
+District Internal Controllers, Head Office Internal Controllers, Branch Management, and Head Office,
+resulting in repetitive manual work, delays, duplicate data entry, version control challenges, and
+limited real-time visibility.
+To address these challenges, this proposal recommends the development of a web-based Internal
+Control Findings Management System (ICFMS) that will automate the complete lifecycle of
+Internal Control findings, from finding registration through rectification, verification, performance
+measurement, reporting, and management dashboards.
+The proposed solution will improve operational efficiency, strengthen governance, enhance
+transparency, provide real-time monitoring, and support better management decision-making.
+2. Background
+Currently, Branch Internal Controllers perform monthly internal control reviews and prepare findings
+using standardized Excel templates.
+The process involves:
+Branch Internal Controllers prepare monthly findings.
+Reports are submitted to District Internal Controllers.
+
+                                                                                                   Prepared by:-Adonay Yoseph
+District Internal Controllers consolidate all branch reports.
+Consolidated reports are forwarded to Head Office Internal Controllers.
+Head Office applies formulas and generates performance results.
+Results are returned to districts.
+Districts distribute reports to Branch Managers.
+Branch Managers implement corrective actions.
+Rectification status is reported back.
+District Controllers verify submissions.
+Consolidated reports are again submitted to Head Office.
+Head Office prepares management reports.
+This process is repeated every month.
+In addition, the Head Office Internal Audit Department performs independent branch visits. Their
+findings are currently managed separately and later incorporated into the Internal Control reporting
+process for overall performance calculation.
+3. Problem Statement
+The current manual Excel-based process has several limitations:
+Repetitive manual data consolidation.
+Multiple versions of the same Excel file.
+High risk of human error.
+Delayed reporting.
+Lack of real-time monitoring.
+Limited management visibility.
+No centralized findings repository.
+Difficulty tracking transferred findings.
+Time-consuming performance calculations.
+Limited historical analysis.
+Dependency on Excel formulas.
+4. Project Objective
+To develop a centralized web-based Internal Control Findings Management System that automates the
+complete Internal Control findings management process.
+5. Specific Objectives
+The proposed system will:
+Centralize all Internal Control findings.
+
+                                                                                                   Prepared by:-Adonay Yoseph
+Eliminate manual Excel consolidation.
+Automate workflow.
+Automate notifications.
+Calculate performance automatically.
+Track outstanding findings.
+Manage transferred cases.
+Generate dashboards.
+Produce executive reports.
+Improve accountability.
+Support future digital transformation initiatives.
+6. Scope of the Project
+The system shall include:
+User Management
+User registration
+Role management
+Branch assignment
+District assignment
+Permission management
+Findings Management
+Finding registration
+Finding editing
+Submission
+Approval
+Verification
+Closure
+Finding Sources
+Initially, the system will support:
+Internal Control Findings
+Branch Internal Controllers will directly register findings into the system.
+Head Office Internal Audit Findings
+Since Internal Audit is a separate department, they will continue using their existing process. Head
+Office Internal Controllers will manually register Internal Audit findings into the system for
+performance calculation and centralized reporting.
+
+                                                                                                   Prepared by:-Adonay Yoseph
+The system architecture should allow future direct integration with the Internal Audit Department.
+Case Transfer Management
+The system shall support case transfer functionality.
+If an outstanding finding continues into the next reporting month:
+The finding shall be transferred.
+The original month shall no longer include the transferred case in its performance calculation.
+The transferred month becomes responsible for the performance impact.
+Full transfer history shall be maintained.
+Multiple consecutive transfers shall be supported.
+Performance Management
+Current business rule:
+For Internal Control findings, the performance percentage is calculated using findings classified under
+Other Cases.
+Example:
+Total Other Cases = 120
+Rectified Cases = 60
+Performance = (60 ÷ 120) × 100 = 50%
+Other classifications (ATM(Mismatch & Long O/S), IT, Dormant, Zero Balance, Ck Book) will be
+stored and reported but will not initially affect the performance percentage.
+The system must be configurable so these categories can be included in future scoring without
+redesign.
+Internal Audit findings follow their own scoring methodology, and the system will combine both
+results into the District's cumulative performance score.
+Evidence Management
+Evidence upload shall be optional.
+Where physical verification is possible, Branch Internal Controllers may approve findings without
+uploaded evidence.
+District and Head Office Internal Controllers may request supporting documents whenever physical
+verification is not possible.
+Notifications
+Automatic notifications shall be generated for:
+New findings
+Pending rectification
+
+                                                                                                   Prepared by:-Adonay Yoseph
+Overdue findings
+Verification requests
+Returned findings
+Transfer completion
+Comments
+The system shall integrate with the bank's Microsoft Outlook email environment.
+Management Dashboard
+Dashboards shall provide:
+District performance
+Branch performance
+Outstanding findings
+High-risk findings
+Repeat findings
+Transfer statistics
+Monthly trends
+Executive summaries
+District Directors shall have view and comment access.
+7. Expected Benefits
+The project will deliver:
+Reduced manual work
+Faster reporting
+Improved data accuracy
+Centralized information
+Better accountability
+Real-time monitoring
+Improved management decisions
+Increased operational efficiency
+Stronger governance
+Better regulatory readiness
+8. Success Factors
+The project will be considered successful when:
+Excel-based consolidation is eliminated.
+Performance is automatically calculated.
+
+                                                                                                   Prepared by:-Adonay Yoseph
+All findings are centrally stored.
+Reports are generated automatically.
+Management dashboards are available in real time.
+Users adopt the system successfully.
+9. Risks
+Potential risks include:
+Resistance to change.
+User training requirements.
+Data migration challenges.
+Integration with existing infrastructure.
+Initial implementation effort.
+These risks can be mitigated through phased implementation, user training, pilot testing, and
+continuous stakeholder engagement.
+10. Recommendations
+It is recommended that NIB International Bank approve the development of the Internal Control
+Findings Management System as a strategic digital transformation initiative.
+The project should be implemented in phases, beginning with Internal Control operations while
+maintaining compatibility for future integration with Internal Audit and other control-related
+functions.
+The solution should be designed as a scalable, secure, configurable, and enterprise-grade platform
+capable of supporting the bank's future operational and governance requirements.
+11. Conclusion
+The proposed Internal Control Findings Management System will replace manual Excel-based
+reporting with an integrated digital platform that improves efficiency, transparency, accountability,
+and decision-making.
+By automating workflows, supporting case transfers, enabling real-time monitoring, and providing
+comprehensive reporting and dashboards, the system will strengthen the Internal Control Division's
+effectiveness and contribute to the bank's broader digital transformation strategy.
+
+                                                                                                   Prepared by:-Adonay Yoseph
+

@@ -56,6 +56,7 @@ export async function POST(request: Request) {
     version: nextVersion,
     name: input.name,
     active: activateNow,
+    everActivated: activateNow,
     effectiveFrom: input.effectiveFrom,
     categories: input.categories,
     sources: input.sources,

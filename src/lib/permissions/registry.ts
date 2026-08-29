@@ -26,7 +26,11 @@ export type PermissionAction =
   | "district-review"
   | "ho-review"
   | "rectify"
-  | "close";
+  | "close"
+  | "transfer"
+  | "evidence"
+  | "comment"
+  | "import";
 
 export interface PageAction {
   action: PermissionAction;
@@ -71,14 +75,30 @@ export const PAGE_REGISTRY: PageDefinition[] = [
       { action: "ho-review", label: "HO Approve / Reject / Return" },
       { action: "rectify", label: "Record Rectification" },
       { action: "close", label: "Close (Verify)" },
+      { action: "transfer", label: "Transfer to Next Period" },
+      { action: "evidence", label: "Upload Evidence" },
+      { action: "comment", label: "Comment" },
+      { action: "import", label: "Bulk Import (Excel)" },
     ],
   },
+  { code: "reports", label: "Reports", actions: [V] },
+  { code: "district-dashboard", label: "District Dashboard", actions: [V] },
+  { code: "ho-dashboard", label: "HO Dashboard", actions: [V] },
+  { code: "executive-dashboard", label: "Executive Dashboard", actions: [V] },
   { code: "users", label: "Users", actions: [V, C, E, T] },
   { code: "districts", label: "Districts", actions: [V, C, E, T, D] },
   { code: "branches", label: "Branches", actions: [V, C, E, T, D] },
   { code: "sources", label: "Sources", actions: [V, C, E, T, D] },
+  { code: "departments", label: "Departments", actions: [V, C, E, T, D] },
   { code: "categories", label: "Classified Categories", actions: [V, C, E, T, D] },
-  { code: "scoring-rules", label: "Scoring Rules", actions: [V, C, { action: "activate", label: "Activate / Deactivate" }] },
+  {
+    code: "scoring-rules",
+    label: "Scoring Rules",
+    // Edit/delete only ever apply to a version that has never gone live
+    // (ScoringRule.everActivated) - enforced in
+    // src/app/api/admin/scoring-rules/[id]/route.ts, not just here.
+    actions: [V, C, E, D, { action: "activate", label: "Activate / Deactivate" }],
+  },
   { code: "scoring-adjustments", label: "Scoring Adjustments", actions: [V, C] },
   { code: "reporting-periods", label: "Reporting Periods", actions: [V, C, { action: "lock", label: "Lock / Unlock" }] },
   { code: "settings", label: "Settings", actions: [V, E] },

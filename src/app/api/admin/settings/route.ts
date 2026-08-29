@@ -13,11 +13,24 @@ export async function GET() {
 const updateSchema = z.object({
   currencies: z.array(z.string().min(1)).min(1, "At least one currency is required"),
   riskLevels: z.array(z.string().min(1)).min(1, "At least one risk level is required"),
+  operationAreas: z.array(z.string().min(1)).min(1, "At least one operation area is required"),
+  priorityLevels: z.array(z.string().min(1)).min(1, "At least one priority level is required"),
+  irregularityTypes: z.array(z.string().min(1)).min(1, "At least one irregularity type is required"),
   notification: z.object({
     provider: z.enum(["NONE", "SMTP", "GRAPH"]),
     fromAddress: z.string(),
     smtpHost: z.string().optional(),
     smtpPort: z.number().int().optional(),
+  }),
+  autoTransferOnLock: z.boolean(),
+  rankingVisibility: z.object({
+    branches: z.boolean(),
+    districts: z.boolean(),
+  }),
+  rectificationReminders: z.object({
+    enabled: z.boolean(),
+    thresholdDays: z.number().int().min(1).max(365),
+    lastCheckedAt: z.string().optional(),
   }),
 });
 

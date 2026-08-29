@@ -6,22 +6,37 @@ import { apiSend, ApiError } from "@/lib/api-client";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input, Select, Label, Textarea } from "@/components/ui/Field";
-import type { Source, ClassifiedCategory, ReportingPeriod, District, Branch, Finding } from "@/types";
+import type { Source, Department, ClassifiedCategory, ReportingPeriod, District, Branch, Finding } from "@/types";
 
 interface Props {
   sources: Source[];
+  departments: Department[];
   categories: ClassifiedCategory[];
   periods: ReportingPeriod[];
   districts: District[];
   branches: Branch[];
   currencies: string[];
   riskLevels: string[];
+  operationAreas: string[];
+  priorityLevels: string[];
+  irregularityTypes: string[];
   fixedDistrict?: { id: string; name: string };
   fixedBranch?: { id: string; name: string };
+  // Edit mode: every field prefilled from this finding, PATCHing it in
+  // place instead of POSTing a new one - the only field never offered
+  // here is `reference` itself (always system-generated, and regenerated
+  // server-side if branch/period change - see PATCH .../findings/[id]).
+  // Rendered inline (no card/page nav) inside FindingDetailClient's own
+  // "Finding Details" card.
+  finding?: Finding;
+  onSaved?: () => void;
+  onCancel?: () => void;
 }
 
 const emptyForm = {
+  title: "",
   sourceId: "",
+  departmentId: "",
   periodId: "",
   districtId: "",
   branchId: "",
@@ -33,8 +48,10 @@ const emptyForm = {
   currency: "",
   caseCount: "1",
   riskLevel: "",
+  priority: "",
   description: "",
   recommendation: "",
+  rootCause: "",
   evidenceNote: "",
 };
 
@@ -47,37 +64,118 @@ const emptyForm = {
 // FilterBar.
 export function NewFindingForm({
   sources,
+  departments,
   categories,
   periods,
   districts,
   branches,
   currencies,
   riskLevels,
+  operationAreas,
+  priorityLevels,
+  irregularityTypes,
   fixedDistrict,
   fixedBranch,
+  finding,
+  onSaved,
+  onCancel,
 }: Props) {
   const router = useRouter();
-  const [form, setForm] = useState({
-    ...emptyForm,
-    districtId: fixedDistrict?.id ?? "",
-    branchId: fixedBranch?.id ?? "",
-    currency: currencies[0] ?? "",
-    riskLevel: riskLevels[0] ?? "",
-  });
+  const isEditing = Boolean(finding);
+  const [form, setForm] = useState(() =>
+    finding
+      ? {
+          title: finding.title,
+          sourceId: finding.sourceId,
+          departmentId: finding.departmentId,
+          periodId: finding.periodId,
+          districtId: finding.districtId,
+          branchId: finding.branchId,
+          findingDate: finding.findingDate.slice(0, 10),
+          operationArea: finding.operationArea,
+          irregularityType: finding.irregularityType,
+          categoryId: finding.categoryId,
+          amount: String(finding.amount),
+          currency: finding.currency,
+          caseCount: String(finding.caseCount),
+          riskLevel: finding.riskLevel,
+          priority: finding.priority,
+          description: finding.description,
+          recommendation: finding.recommendation ?? "",
+          rootCause: finding.rootCause ?? "",
+          evidenceNote: finding.evidenceNote ?? "",
+        }
+      : {
+          ...emptyForm,
+          districtId: fixedDistrict?.id ?? "",
+          branchId: fixedBranch?.id ?? "",
+          // Not auto-selected like currency/riskLevel below - which
+          // department is even valid depends on district/branch, so this
+          // starts unset rather than risk defaulting to one that's
+          // actually out of scope.
+          departmentId: "",
+          currency: currencies[0] ?? "",
+          riskLevel: riskLevels[0] ?? "",
+          operationArea: operationAreas[0] ?? "",
+          priority: priorityLevels[0] ?? "",
+          irregularityType: irregularityTypes[0] ?? "",
+        }
+  );
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState<"draft" | "submit" | null>(null);
+
+  // Document_3 §12/§34: optional per-case breakdown instead of just a
+  // total (create-only - there's no case-breakdown-edit flow yet, and an
+  // already-itemized finding can't have its totals changed via edit at
+  // all, so offering this toggle there would be misleading).
+  const [itemizeCases, setItemizeCases] = useState(false);
+  const [caseAmounts, setCaseAmounts] = useState<string[]>([]);
+
+  function setCaseCount(value: string) {
+    setForm((f) => ({ ...f, caseCount: value }));
+    const n = Math.max(0, Math.min(500, Number(value) || 0));
+    setCaseAmounts((prev) => {
+      const next = prev.slice(0, n);
+      while (next.length < n) next.push("");
+      return next;
+    });
+  }
+
+  const caseAmountsSum = caseAmounts.reduce((sum, a) => sum + (Number(a) || 0), 0);
+  const caseAmountsMatch = Math.abs(caseAmountsSum - (Number(form.amount) || 0)) < 0.01;
 
   const branchOptions = useMemo(
     () => (form.districtId ? branches.filter((b) => b.districtId === form.districtId) : branches),
     [branches, form.districtId]
   );
 
+  // A department is selectable when it's bank-wide, or scoped to whichever
+  // district/branch this finding is currently set to - same narrowing
+  // relationship branchOptions has with districtId, just against
+  // Department.orgScope instead of Branch.districtId.
+  const departmentOptions = useMemo(
+    () =>
+      departments.filter(
+        (d) =>
+          d.orgScope === "BANK" ||
+          (d.orgScope === "DISTRICT" && d.districtId === form.districtId) ||
+          (d.orgScope === "BRANCH" && d.branchId === form.branchId)
+      ),
+    [departments, form.districtId, form.branchId]
+  );
+
   async function save(submit: boolean) {
     setError(null);
+    if (!isEditing && itemizeCases && !caseAmountsMatch) {
+      setError("Case breakdown must add up to the amount involved before saving");
+      return;
+    }
     setSubmitting(submit ? "submit" : "draft");
     try {
       const payload = {
+        title: form.title,
         sourceId: form.sourceId,
+        departmentId: form.departmentId,
         periodId: form.periodId,
         districtId: fixedDistrict ? undefined : form.districtId || undefined,
         branchId: fixedBranch ? undefined : form.branchId || undefined,
@@ -89,14 +187,22 @@ export function NewFindingForm({
         currency: form.currency,
         caseCount: Number(form.caseCount),
         riskLevel: form.riskLevel,
+        priority: form.priority,
         description: form.description,
         recommendation: form.recommendation || undefined,
+        rootCause: form.rootCause || undefined,
         evidenceNote: form.evidenceNote || undefined,
-        submit,
+        caseAmounts: !isEditing && itemizeCases ? caseAmounts.map((a) => Number(a) || 0) : undefined,
       };
-      const res = await apiSend<{ finding: Finding }>("/api/findings", "POST", payload);
-      router.push(`/findings/${res.finding.id}`);
-      router.refresh();
+      if (finding) {
+        await apiSend<{ finding: Finding }>(`/api/findings/${finding.id}`, "PATCH", payload);
+        router.refresh();
+        onSaved?.();
+      } else {
+        const res = await apiSend<{ finding: Finding }>("/api/findings", "POST", { ...payload, submit });
+        router.push(`/findings/${res.finding.id}`);
+        router.refresh();
+      }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to save finding");
     } finally {
@@ -104,15 +210,25 @@ export function NewFindingForm({
     }
   }
 
-  return (
-    <Card className="mt-5 p-4">
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          save(false);
-        }}
-        className="flex flex-col gap-4"
-      >
+  const formEl = (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        save(false);
+      }}
+      className="flex flex-col gap-4"
+    >
+        <div>
+          <Label htmlFor="title">Finding title</Label>
+          <Input
+            id="title"
+            required
+            placeholder="A short, descriptive title for this finding"
+            value={form.title}
+            onChange={(e) => setForm({ ...form, title: e.target.value })}
+          />
+        </div>
+
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
             <Label htmlFor="sourceId">Source</Label>
@@ -124,6 +240,23 @@ export function NewFindingForm({
                 </option>
               ))}
             </Select>
+          </div>
+          <div>
+            <Label htmlFor="departmentId">Department</Label>
+            <Select
+              id="departmentId"
+              required
+              value={form.departmentId}
+              onChange={(e) => setForm({ ...form, departmentId: e.target.value })}
+            >
+              <option value="">Select department</option>
+              {departmentOptions.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name}
+                </option>
+              ))}
+            </Select>
+            <p className="mt-1 text-xs text-slate-400">Bank-wide departments, plus any scoped to the district/branch below.</p>
           </div>
           <div>
             <Label htmlFor="periodId">Reporting period</Label>
@@ -151,7 +284,7 @@ export function NewFindingForm({
                 id="districtId"
                 required
                 value={form.districtId}
-                onChange={(e) => setForm({ ...form, districtId: e.target.value, branchId: "" })}
+                onChange={(e) => setForm({ ...form, districtId: e.target.value, branchId: "", departmentId: "" })}
               >
                 <option value="">Select district</option>
                 {districts.map((d) => (
@@ -173,7 +306,7 @@ export function NewFindingForm({
           ) : (
             <div>
               <Label htmlFor="branchId">Branch</Label>
-              <Select id="branchId" required value={form.branchId} onChange={(e) => setForm({ ...form, branchId: e.target.value })}>
+              <Select id="branchId" required value={form.branchId} onChange={(e) => setForm({ ...form, branchId: e.target.value, departmentId: "" })}>
                 <option value="">Select branch</option>
                 {branchOptions.map((b) => (
                   <option key={b.id} value={b.id}>
@@ -208,49 +341,60 @@ export function NewFindingForm({
 
           <div>
             <Label htmlFor="operationArea">Operation area</Label>
-            <Input
+            <Select
               id="operationArea"
               required
-              placeholder="e.g. Teller operations, ATM channel"
               value={form.operationArea}
               onChange={(e) => setForm({ ...form, operationArea: e.target.value })}
-            />
+            >
+              <option value="">Select operation area</option>
+              {operationAreas.map((a) => (
+                <option key={a} value={a}>
+                  {a}
+                </option>
+              ))}
+            </Select>
           </div>
           <div>
             <Label htmlFor="irregularityType">Type of irregularity</Label>
-            <Input
+            <Select
               id="irregularityType"
               required
               value={form.irregularityType}
               onChange={(e) => setForm({ ...form, irregularityType: e.target.value })}
-            />
+            >
+              <option value="">Select irregularity type</option>
+              {irregularityTypes.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </Select>
           </div>
 
           <div>
-            <Label htmlFor="amount">Amount</Label>
-            <div className="flex gap-2">
-              <Select
-                className="w-24 shrink-0"
-                value={form.currency}
-                onChange={(e) => setForm({ ...form, currency: e.target.value })}
-              >
-                {currencies.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </Select>
-              <Input
-                id="amount"
-                type="number"
-                min="0"
-                step="0.01"
-                required
-                value={form.amount}
-                onChange={(e) => setForm({ ...form, amount: e.target.value })}
-              />
-            </div>
+            <Label htmlFor="currency">Currency</Label>
+            <Select id="currency" required value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })}>
+              {currencies.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </Select>
           </div>
+          <div>
+            <Label htmlFor="amount">Amount involved</Label>
+            <Input
+              id="amount"
+              type="number"
+              min="0"
+              step="0.01"
+              required
+              value={form.amount}
+              onChange={(e) => setForm({ ...form, amount: e.target.value })}
+            />
+          </div>
+
           <div>
             <Label htmlFor="caseCount">Number of cases</Label>
             <Input
@@ -260,10 +404,9 @@ export function NewFindingForm({
               step="1"
               required
               value={form.caseCount}
-              onChange={(e) => setForm({ ...form, caseCount: e.target.value })}
+              onChange={(e) => setCaseCount(e.target.value)}
             />
           </div>
-
           <div>
             <Label htmlFor="riskLevel">Risk level</Label>
             <Select id="riskLevel" required value={form.riskLevel} onChange={(e) => setForm({ ...form, riskLevel: e.target.value })}>
@@ -274,7 +417,58 @@ export function NewFindingForm({
               ))}
             </Select>
           </div>
+
+          <div>
+            <Label htmlFor="priority">Priority</Label>
+            <Select id="priority" required value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })}>
+              {priorityLevels.map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
+            </Select>
+          </div>
         </div>
+
+        {!isEditing && Number(form.caseCount) > 1 && (
+          <div className="rounded-md border border-slate-200 p-3">
+            <label className="flex items-center gap-2 text-sm text-slate-700">
+              <input
+                type="checkbox"
+                checked={itemizeCases}
+                onChange={(e) => setItemizeCases(e.target.checked)}
+                className="h-4 w-4 rounded border-slate-300"
+              />
+              Track individual case amounts (optional)
+            </label>
+            <p className="mt-1 text-xs text-slate-400">
+              Lets a future rectification pick specific cases (e.g. &quot;only Case 2&quot;) instead of just a
+              count/amount that happens to add up.
+            </p>
+            {itemizeCases && (
+              <div className="mt-3 flex flex-col gap-2">
+                {caseAmounts.map((value, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <span className="w-14 shrink-0 text-xs text-slate-500">Case {i + 1}</span>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={value}
+                      onChange={(e) =>
+                        setCaseAmounts((prev) => prev.map((v, idx) => (idx === i ? e.target.value : v)))
+                      }
+                    />
+                  </div>
+                ))}
+                <p className={`text-xs ${caseAmountsMatch ? "text-slate-500" : "text-red-600"}`}>
+                  Case total: {caseAmountsSum.toLocaleString()} / Amount involved: {(Number(form.amount) || 0).toLocaleString()}
+                  {!caseAmountsMatch && " — these must match"}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
 
         <div>
           <Label htmlFor="description">Description</Label>
@@ -284,6 +478,16 @@ export function NewFindingForm({
             rows={3}
             value={form.description}
             onChange={(e) => setForm({ ...form, description: e.target.value })}
+          />
+        </div>
+        <div>
+          <Label htmlFor="rootCause">Root cause (optional)</Label>
+          <Textarea
+            id="rootCause"
+            rows={2}
+            placeholder="Why did this happen? - distinct from the description of what happened"
+            value={form.rootCause}
+            onChange={(e) => setForm({ ...form, rootCause: e.target.value })}
           />
         </div>
         <div>
@@ -308,14 +512,28 @@ export function NewFindingForm({
         {error && <p className="text-sm text-red-600">{error}</p>}
 
         <div className="flex gap-2">
-          <Button type="submit" variant="secondary" disabled={submitting !== null}>
-            {submitting === "draft" ? "Saving..." : "Save Draft"}
-          </Button>
-          <Button type="button" disabled={submitting !== null} onClick={() => save(true)}>
-            {submitting === "submit" ? "Submitting..." : "Save & Submit"}
-          </Button>
+          {isEditing ? (
+            <>
+              <Button type="button" variant="secondary" disabled={submitting !== null} onClick={onCancel}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={submitting !== null}>
+                {submitting === "draft" ? "Saving..." : "Save Changes"}
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button type="submit" variant="secondary" disabled={submitting !== null}>
+                {submitting === "draft" ? "Saving..." : "Save Draft"}
+              </Button>
+              <Button type="button" disabled={submitting !== null} onClick={() => save(true)}>
+                {submitting === "submit" ? "Submitting..." : "Save & Submit"}
+              </Button>
+            </>
+          )}
         </div>
-      </form>
-    </Card>
+    </form>
   );
+
+  return isEditing ? formEl : <Card className="mt-5 p-4">{formEl}</Card>;
 }

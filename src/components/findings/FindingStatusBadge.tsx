@@ -12,6 +12,7 @@ const TONES: Record<FindingStatus, "green" | "gray" | "amber" | "red" | "blue"> 
   PARTIALLY_RECTIFIED: "amber",
   RECTIFIED: "blue",
   TRANSFERRED: "gray",
+  RECTIFICATION_RETURNED: "red",
   REJECTED: "red",
   RETURNED: "amber",
   CLOSED: "green",

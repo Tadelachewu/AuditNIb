@@ -4,21 +4,29 @@ import { useEffect, useState } from "react";
 import { apiGet, apiSend, ApiError } from "@/lib/api-client";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { Select, Label } from "@/components/ui/Field";
+import { Input, Label } from "@/components/ui/Field";
 import { Badge } from "@/components/ui/Badge";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import type { ReportingPeriod } from "@/types";
 
-const MONTHS = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-];
+function startOfMonthLocal(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  return `${y}-${m}-01T00:00`;
+}
+function endOfMonthLocal(d: Date): string {
+  const end = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59);
+  const y = end.getFullYear();
+  const m = String(end.getMonth() + 1).padStart(2, "0");
+  const day = String(end.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}T23:59`;
+}
 
 export default function ReportingPeriodsPage() {
   const [periods, setPeriods] = useState<ReportingPeriod[]>([]);
   const [loading, setLoading] = useState(true);
   const now = new Date();
-  const [form, setForm] = useState({ year: now.getFullYear(), month: now.getMonth() + 1 });
+  const [form, setForm] = useState({ startsAt: startOfMonthLocal(now), endsAt: endOfMonthLocal(now) });
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [rowBusy, setRowBusy] = useState<string | null>(null);
@@ -81,27 +89,25 @@ export default function ReportingPeriodsPage() {
       </p>
 
       <Card className="mt-5">
-        <CardHeader title="Open a New Period" />
+        <CardHeader title="Open a New Period" description="The period's code/month is derived from its start date/time." />
         <form onSubmit={handleCreate} className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3 sm:items-end">
           <div>
-            <Label htmlFor="year">Year</Label>
-            <Select id="year" value={form.year} onChange={(e) => setForm({ ...form, year: Number(e.target.value) })}>
-              {Array.from({ length: 6 }, (_, i) => now.getFullYear() - 2 + i).map((y) => (
-                <option key={y} value={y}>
-                  {y}
-                </option>
-              ))}
-            </Select>
+            <Label htmlFor="startsAt">Starts at (date &amp; time)</Label>
+            <Input
+              id="startsAt"
+              type="datetime-local"
+              value={form.startsAt}
+              onChange={(e) => setForm({ ...form, startsAt: e.target.value })}
+            />
           </div>
           <div>
-            <Label htmlFor="month">Month</Label>
-            <Select id="month" value={form.month} onChange={(e) => setForm({ ...form, month: Number(e.target.value) })}>
-              {MONTHS.map((m, i) => (
-                <option key={m} value={i + 1}>
-                  {m}
-                </option>
-              ))}
-            </Select>
+            <Label htmlFor="endsAt">Ends at (date &amp; time)</Label>
+            <Input
+              id="endsAt"
+              type="datetime-local"
+              value={form.endsAt}
+              onChange={(e) => setForm({ ...form, endsAt: e.target.value })}
+            />
           </div>
           <div>
             {formError && <p className="mb-2 text-sm text-red-600">{formError}</p>}
@@ -119,6 +125,7 @@ export default function ReportingPeriodsPage() {
             <thead className="border-b border-slate-100 text-xs uppercase text-slate-400">
               <tr>
                 <th className="px-4 py-2 font-medium">Period</th>
+                <th className="px-4 py-2 font-medium">Date/Time Range</th>
                 <th className="px-4 py-2 font-medium">Status</th>
                 <th className="px-4 py-2 font-medium">Last Change</th>
                 <th className="px-4 py-2" />
@@ -127,7 +134,7 @@ export default function ReportingPeriodsPage() {
             <tbody className="divide-y divide-slate-100">
               {loading && (
                 <tr>
-                  <td className="px-4 py-4 text-slate-400" colSpan={4}>
+                  <td className="px-4 py-4 text-slate-400" colSpan={5}>
                     Loading...
                   </td>
                 </tr>
@@ -136,6 +143,9 @@ export default function ReportingPeriodsPage() {
                 periods.map((p) => (
                   <tr key={p.id}>
                     <td className="px-4 py-2 font-medium text-slate-900">{p.code}</td>
+                    <td className="px-4 py-2 text-xs text-slate-500">
+                      {new Date(p.startsAt).toLocaleString()} — {new Date(p.endsAt).toLocaleString()}
+                    </td>
                     <td className="px-4 py-2">
                       <Badge tone={p.status === "OPEN" ? "green" : "red"}>{p.status}</Badge>
                     </td>

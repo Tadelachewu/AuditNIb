@@ -11,6 +11,7 @@ const QUICK_LINKS: { label: string; href: string; pageCode: string }[] = [
   { label: "Districts", href: "/admin/districts", pageCode: "districts" },
   { label: "Branches", href: "/admin/branches", pageCode: "branches" },
   { label: "Sources", href: "/admin/sources", pageCode: "sources" },
+  { label: "Departments", href: "/admin/departments", pageCode: "departments" },
   { label: "Classified Categories", href: "/admin/categories", pageCode: "categories" },
   { label: "Scoring Rules", href: "/admin/scoring-rules", pageCode: "scoring-rules" },
   { label: "Scoring Adjustments", href: "/admin/scoring-adjustments", pageCode: "scoring-adjustments" },
@@ -94,7 +95,7 @@ export default async function AdminDashboardPage() {
               <Link
                 key={link.href}
                 href={link.href}
-                className="rounded-md px-2.5 py-1.5 text-sm text-slate-600 hover:bg-slate-50 hover:text-blue-900"
+                className="rounded-md px-2.5 py-1.5 text-sm text-slate-600 transition-colors hover:bg-brand-gold hover:text-slate-900"
               >
                 {link.label}
               </Link>

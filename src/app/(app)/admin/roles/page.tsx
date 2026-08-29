@@ -8,7 +8,9 @@ import { Input, Select, Label } from "@/components/ui/Field";
 import { Badge } from "@/components/ui/Badge";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import type { RoleDefinition, OrgScope } from "@/types";
-import type { PageDefinition } from "@/lib/permissions/registry";
+import { permissionKey, type PageDefinition } from "@/lib/permissions/registry";
+
+const ROLES_MANAGE_KEY = permissionKey("roles", "manage");
 
 const ORG_SCOPE_LABELS: Record<OrgScope, string> = {
   BANK: "Bank-wide",
@@ -143,8 +145,8 @@ export default function RolesPage() {
       <h1 className="text-lg font-semibold text-slate-900">Roles &amp; Permissions</h1>
       <p className="mt-1 text-sm text-slate-500">
         Roles are data, not code: create as many as your organization needs, and grant each one page-by-page,
-        action-by-action access. The Administrator role always holds every permission and can&apos;t be edited away,
-        so there&apos;s always a way back in.
+        action-by-action access. The Administrator role can be narrowed like any other, except it always keeps
+        &quot;Roles &amp; Permissions: Manage&quot;, so there&apos;s always a way back in.
       </p>
 
       <Card className="mt-5">
@@ -291,34 +293,36 @@ export default function RolesPage() {
                         </div>
                       </div>
 
-                      {isAdminRole ? (
+                      {isAdminRole && (
                         <p className="mt-3 text-xs text-slate-500">
-                          The Administrator role always holds every permission and can&apos;t be narrowed - only its
-                          name and description can change here.
+                          Narrowing the Administrator role is allowed, except for one line that can&apos;t be
+                          crossed: it must always keep &quot;Roles &amp; Permissions: Manage&quot;, or no
+                          administrator could ever open this screen again to undo a mistake.
                         </p>
-                      ) : (
-                        <div className="mt-3 flex flex-col gap-2">
-                          {registry.map((page) => (
-                            <div key={page.code} className="flex flex-wrap items-center gap-3">
-                              <span className="w-44 shrink-0 text-sm text-slate-700">{page.label}</span>
-                              {page.actions.map((a) => {
-                                const key = `${page.code}.${a.action}`;
-                                return (
-                                  <label key={key} className="flex items-center gap-1.5 text-xs text-slate-600">
-                                    <input
-                                      type="checkbox"
-                                      checked={draftPermissions.includes(key)}
-                                      onChange={() => togglePermission(draftPermissions, setDraftPermissions, key)}
-                                      className="h-3.5 w-3.5 rounded border-slate-300"
-                                    />
-                                    {a.label}
-                                  </label>
-                                );
-                              })}
-                            </div>
-                          ))}
-                        </div>
                       )}
+                      <div className="mt-3 flex flex-col gap-2">
+                        {registry.map((page) => (
+                          <div key={page.code} className="flex flex-wrap items-center gap-3">
+                            <span className="w-44 shrink-0 text-sm text-slate-700">{page.label}</span>
+                            {page.actions.map((a) => {
+                              const key = `${page.code}.${a.action}`;
+                              const locked = isAdminRole && key === ROLES_MANAGE_KEY;
+                              return (
+                                <label key={key} className="flex items-center gap-1.5 text-xs text-slate-600">
+                                  <input
+                                    type="checkbox"
+                                    checked={draftPermissions.includes(key)}
+                                    disabled={locked}
+                                    onChange={() => togglePermission(draftPermissions, setDraftPermissions, key)}
+                                    className="h-3.5 w-3.5 rounded border-slate-300 disabled:opacity-50"
+                                  />
+                                  {a.label}
+                                </label>
+                              );
+                            })}
+                          </div>
+                        ))}
+                      </div>
 
                       {editError && <p className="mt-2 text-sm text-red-600">{editError}</p>}
                       <div className="mt-3">

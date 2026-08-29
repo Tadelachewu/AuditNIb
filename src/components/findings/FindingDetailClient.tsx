@@ -5,15 +5,33 @@ import { useRouter } from "next/navigation";
 import { apiSend, ApiError } from "@/lib/api-client";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { Input, Label, Textarea } from "@/components/ui/Field";
+import { Input, Label } from "@/components/ui/Field";
+import { Badge } from "@/components/ui/Badge";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { FindingStatusBadge } from "@/components/findings/FindingStatusBadge";
-import type { Finding, FindingTransition, RectificationEntry } from "@/types";
+import { NewFindingForm } from "@/components/findings/NewFindingForm";
+import type {
+  Finding,
+  FindingTransition,
+  RectificationEntry,
+  FindingTransfer,
+  FindingClosure,
+  FindingCase,
+  Evidence,
+  Comment,
+  Source,
+  Department,
+  ClassifiedCategory,
+  ReportingPeriod,
+  District,
+  Branch,
+} from "@/types";
 
 interface Lookups {
   branchName: string;
   districtName: string;
   sourceName: string;
+  departmentName: string;
   categoryName: string;
   periodCode: string;
 }
@@ -26,18 +44,71 @@ interface Permissions {
   canHoReview: boolean;
   canRectify: boolean;
   canClose: boolean;
+  canTransfer: boolean;
+  canReturnRectification: boolean;
+  canResubmitRectification: boolean;
+  canUploadEvidence: boolean;
+  canComment: boolean;
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 export function FindingDetailClient({
   finding,
   transitions,
   rectifications,
+  transfers,
+  closures,
+  findingCases,
+  evidence,
+  comments,
+  otherOpenPeriods,
+  caseAgeDays,
+  operationAreas,
+  priorityLevels,
+  irregularityTypes,
+  editSources,
+  editDepartments,
+  editCategories,
+  editPeriods,
+  editDistricts,
+  editBranches,
+  editCurrencies,
+  editRiskLevels,
+  fixedDistrict,
+  fixedBranch,
   lookups,
   permissions,
 }: {
   finding: Finding;
   transitions: FindingTransition[];
   rectifications: RectificationEntry[];
+  transfers: FindingTransfer[];
+  closures: FindingClosure[];
+  findingCases: FindingCase[];
+  evidence: Evidence[];
+  comments: Comment[];
+  otherOpenPeriods: { id: string; code: string }[];
+  caseAgeDays: number;
+  operationAreas: string[];
+  priorityLevels: string[];
+  irregularityTypes: string[];
+  // All for the inline edit form (NewFindingForm in edit mode) - same
+  // reference data the registration form itself uses.
+  editSources: Source[];
+  editDepartments: Department[];
+  editCategories: ClassifiedCategory[];
+  editPeriods: ReportingPeriod[];
+  editDistricts: District[];
+  editBranches: Branch[];
+  editCurrencies: string[];
+  editRiskLevels: string[];
+  fixedDistrict?: { id: string; name: string };
+  fixedBranch?: { id: string; name: string };
   lookups: Lookups;
   permissions: Permissions;
 }) {
@@ -47,46 +118,31 @@ export function FindingDetailClient({
   const [error, setError] = useState<string | null>(null);
 
   const [editing, setEditing] = useState(false);
-  const [editForm, setEditForm] = useState({
-    operationArea: finding.operationArea,
-    irregularityType: finding.irregularityType,
-    amount: String(finding.amount),
-    caseCount: String(finding.caseCount),
-    description: finding.description,
-    recommendation: finding.recommendation ?? "",
-    evidenceNote: finding.evidenceNote ?? "",
-  });
 
   const [rectifying, setRectifying] = useState(false);
   const [rectifyForm, setRectifyForm] = useState({ rectifiedCases: "", rectifiedAmount: "", note: "" });
+  const [selectedCaseIds, setSelectedCaseIds] = useState<string[]>([]);
+  const outstandingFindingCases = findingCases.filter((fc) => fc.status === "OUTSTANDING");
+  const isItemized = findingCases.length > 0;
+
+  const [transferring, setTransferring] = useState(false);
+  const [transferPeriodId, setTransferPeriodId] = useState(otherOpenPeriods[0]?.id ?? "");
+
+  const [uploadingEvidence, setUploadingEvidence] = useState(false);
+
+  const [commentText, setCommentText] = useState("");
+  const [commentFile, setCommentFile] = useState<File | null>(null);
+  const [replyTo, setReplyTo] = useState<string | null>(null);
+  const [replyText, setReplyText] = useState("");
+  const [replyFile, setReplyFile] = useState<File | null>(null);
 
   const outstandingCases = finding.caseCount - finding.rectifiedCases;
   const outstandingAmount = finding.amount - finding.rectifiedAmount;
+  const closableCases = finding.rectifiedCases - finding.closedCases;
+  const closableAmount = finding.rectifiedAmount - finding.closedAmount;
 
   function refresh() {
     router.refresh();
-  }
-
-  async function saveEdit() {
-    setBusy(true);
-    setError(null);
-    try {
-      await apiSend(`/api/findings/${finding.id}`, "PATCH", {
-        operationArea: editForm.operationArea,
-        irregularityType: editForm.irregularityType,
-        amount: Number(editForm.amount),
-        caseCount: Number(editForm.caseCount),
-        description: editForm.description,
-        recommendation: editForm.recommendation || undefined,
-        evidenceNote: editForm.evidenceNote || undefined,
-      });
-      setEditing(false);
-      await refresh();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to save changes");
-    } finally {
-      setBusy(false);
-    }
   }
 
   async function handleDelete() {
@@ -164,13 +220,20 @@ export function FindingDetailClient({
     setBusy(true);
     setError(null);
     try {
-      await apiSend(`/api/findings/${finding.id}/rectify`, "POST", {
-        rectifiedCases: Number(rectifyForm.rectifiedCases || 0),
-        rectifiedAmount: Number(rectifyForm.rectifiedAmount || 0),
-        note: rectifyForm.note || undefined,
-      });
+      await apiSend(
+        `/api/findings/${finding.id}/rectify`,
+        "POST",
+        isItemized
+          ? { caseIds: selectedCaseIds, note: rectifyForm.note || undefined }
+          : {
+              rectifiedCases: Number(rectifyForm.rectifiedCases || 0),
+              rectifiedAmount: Number(rectifyForm.rectifiedAmount || 0),
+              note: rectifyForm.note || undefined,
+            }
+      );
       setRectifying(false);
       setRectifyForm({ rectifiedCases: "", rectifiedAmount: "", note: "" });
+      setSelectedCaseIds([]);
       await refresh();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to record rectification");
@@ -180,9 +243,13 @@ export function FindingDetailClient({
   }
 
   async function handleClose() {
+    const willFullyClose =
+      finding.closedCases + closableCases >= finding.caseCount && finding.closedAmount + closableAmount >= finding.amount;
     const result = await confirm({
-      title: "Close this finding?",
-      message: "This verifies the rectification and is terminal - the finding cannot be reopened.",
+      title: willFullyClose ? "Close this finding?" : "Close the rectified portion?",
+      message: willFullyClose
+        ? "This verifies the rectification and is terminal - the finding cannot be reopened."
+        : `This verifies and closes ${closableCases} case(s) / ${finding.currency} ${closableAmount.toLocaleString()} that's been rectified so far. The remaining ${outstandingCases} case(s) / ${finding.currency} ${outstandingAmount.toLocaleString()} stays open until it's rectified and closed too.`,
       confirmLabel: "Close",
       tone: "danger",
     });
@@ -199,13 +266,121 @@ export function FindingDetailClient({
     }
   }
 
+  async function handleReturnRectification() {
+    const result = await confirm({
+      title: "Return for correction?",
+      message:
+        "Sends this back to the Branch Manager instead of closing/transferring it. They'll need to address the issue and resubmit before it can be closed, partially closed, or transferred.",
+      confirmLabel: "Return for Correction",
+      tone: "danger",
+      needsReason: true,
+    });
+    if (result === false) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await apiSend(`/api/findings/${finding.id}/return-rectification`, "POST", { reason: result });
+      await refresh();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to return finding for correction");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleResubmitRectification() {
+    setBusy(true);
+    setError(null);
+    try {
+      await apiSend(`/api/findings/${finding.id}/resubmit-rectification`, "POST");
+      await refresh();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to resubmit finding");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleTransfer() {
+    const period = otherOpenPeriods.find((p) => p.id === transferPeriodId);
+    const result = await confirm({
+      title: `Transfer to ${period?.code ?? "next period"}?`,
+      message: `Moves the outstanding ${finding.currency} ${outstandingAmount.toLocaleString()} (${outstandingCases} case(s)) forward. The finding stays open under this new period.`,
+      confirmLabel: "Transfer",
+      tone: "danger",
+      needsReason: true,
+    });
+    if (result === false) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await apiSend(`/api/findings/${finding.id}/transfer`, "POST", { toPeriodId: transferPeriodId, reason: result });
+      setTransferring(false);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to transfer finding");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Shared by finding-level evidence uploads and comment attachments
+  // (BR-WF-018) - the only difference is whether commentId is set, which
+  // the API route itself uses to decide findings.evidence vs
+  // findings.comment as the required permission.
+  async function uploadEvidence(file: File, commentId?: string) {
+    const formData = new FormData();
+    formData.append("file", file);
+    if (commentId) formData.append("commentId", commentId);
+    const res = await fetch(`/api/findings/${finding.id}/evidence`, { method: "POST", body: formData });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new ApiError(body?.error ?? "Upload failed", res.status);
+  }
+
+  async function handleEvidenceUpload(file: File) {
+    setUploadingEvidence(true);
+    setError(null);
+    try {
+      await uploadEvidence(file);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to upload evidence");
+    } finally {
+      setUploadingEvidence(false);
+    }
+  }
+
+  async function postComment(text: string, parentCommentId?: string, file?: File | null) {
+    if (!text.trim()) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const { comment } = await apiSend<{ comment: Comment }>(`/api/findings/${finding.id}/comments`, "POST", {
+        text,
+        parentCommentId,
+      });
+      if (file) await uploadEvidence(file, comment.id);
+      setCommentText("");
+      setCommentFile(null);
+      setReplyTo(null);
+      setReplyText("");
+      setReplyFile(null);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to post comment");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <h1 className="font-mono text-lg font-semibold text-slate-900">{finding.reference}</h1>
+          <h1 className="text-lg font-semibold text-slate-900">{finding.title}</h1>
           <p className="mt-1 text-sm text-slate-500">
-            {lookups.branchName} · {lookups.districtName} · {lookups.periodCode}
+            <span className="font-mono text-xs text-slate-400">{finding.reference}</span> · {lookups.branchName} ·{" "}
+            {lookups.districtName} · {lookups.periodCode}
           </p>
         </div>
         <FindingStatusBadge status={finding.status} />
@@ -216,87 +391,35 @@ export function FindingDetailClient({
       <Card>
         <CardHeader title="Finding Details" />
         {editing ? (
-          <div className="flex flex-col gap-3 p-4">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div>
-                <Label htmlFor="e-operationArea">Operation area</Label>
-                <Input
-                  id="e-operationArea"
-                  value={editForm.operationArea}
-                  onChange={(e) => setEditForm({ ...editForm, operationArea: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label htmlFor="e-irregularityType">Type of irregularity</Label>
-                <Input
-                  id="e-irregularityType"
-                  value={editForm.irregularityType}
-                  onChange={(e) => setEditForm({ ...editForm, irregularityType: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label htmlFor="e-amount">Amount ({finding.currency})</Label>
-                <Input
-                  id="e-amount"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={editForm.amount}
-                  onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label htmlFor="e-caseCount">Number of cases</Label>
-                <Input
-                  id="e-caseCount"
-                  type="number"
-                  min="1"
-                  step="1"
-                  value={editForm.caseCount}
-                  onChange={(e) => setEditForm({ ...editForm, caseCount: e.target.value })}
-                />
-              </div>
-            </div>
-            <div>
-              <Label htmlFor="e-description">Description</Label>
-              <Textarea
-                id="e-description"
-                rows={3}
-                value={editForm.description}
-                onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
-              />
-            </div>
-            <div>
-              <Label htmlFor="e-recommendation">Recommendation</Label>
-              <Textarea
-                id="e-recommendation"
-                rows={2}
-                value={editForm.recommendation}
-                onChange={(e) => setEditForm({ ...editForm, recommendation: e.target.value })}
-              />
-            </div>
-            <div>
-              <Label htmlFor="e-evidenceNote">Evidence note</Label>
-              <Input
-                id="e-evidenceNote"
-                value={editForm.evidenceNote}
-                onChange={(e) => setEditForm({ ...editForm, evidenceNote: e.target.value })}
-              />
-            </div>
-            <div className="flex gap-2">
-              <Button variant="secondary" onClick={() => setEditing(false)} disabled={busy}>
-                Cancel
-              </Button>
-              <Button onClick={saveEdit} disabled={busy}>
-                {busy ? "Saving..." : "Save Changes"}
-              </Button>
-            </div>
+          <div className="p-4">
+            <NewFindingForm
+              finding={finding}
+              sources={editSources}
+              departments={editDepartments}
+              categories={editCategories}
+              periods={editPeriods}
+              districts={editDistricts}
+              branches={editBranches}
+              currencies={editCurrencies}
+              riskLevels={editRiskLevels}
+              operationAreas={operationAreas}
+              priorityLevels={priorityLevels}
+              irregularityTypes={irregularityTypes}
+              fixedDistrict={fixedDistrict}
+              fixedBranch={fixedBranch}
+              onCancel={() => setEditing(false)}
+              onSaved={() => setEditing(false)}
+            />
           </div>
         ) : (
           <dl className="grid grid-cols-1 gap-x-6 gap-y-3 p-4 text-sm sm:grid-cols-2">
             <div>
               <dt className="text-xs text-slate-400">Source</dt>
               <dd className="text-slate-900">{lookups.sourceName}</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-slate-400">Department</dt>
+              <dd className="text-slate-900">{lookups.departmentName}</dd>
             </div>
             <div>
               <dt className="text-xs text-slate-400">Classified case</dt>
@@ -311,6 +434,10 @@ export function FindingDetailClient({
               <dd className="text-slate-900">{finding.riskLevel}</dd>
             </div>
             <div>
+              <dt className="text-xs text-slate-400">Priority</dt>
+              <dd className="text-slate-900">{finding.priority}</dd>
+            </div>
+            <div>
               <dt className="text-xs text-slate-400">Operation area</dt>
               <dd className="text-slate-900">{finding.operationArea}</dd>
             </div>
@@ -319,7 +446,11 @@ export function FindingDetailClient({
               <dd className="text-slate-900">{finding.irregularityType}</dd>
             </div>
             <div>
-              <dt className="text-xs text-slate-400">Amount</dt>
+              <dt className="text-xs text-slate-400">Currency</dt>
+              <dd className="text-slate-900">{finding.currency}</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-slate-400">Amount involved</dt>
               <dd className="text-slate-900">
                 {finding.currency} {finding.amount.toLocaleString()} ({finding.caseCount} case
                 {finding.caseCount === 1 ? "" : "s"})
@@ -332,10 +463,23 @@ export function FindingDetailClient({
                 {outstandingCases === 1 ? "" : "s"})
               </dd>
             </div>
+            <div>
+              <dt className="text-xs text-slate-400">Closed (verified)</dt>
+              <dd className="text-slate-900">
+                {finding.currency} {finding.closedAmount.toLocaleString()} ({finding.closedCases} case
+                {finding.closedCases === 1 ? "" : "s"})
+              </dd>
+            </div>
             <div className="sm:col-span-2">
               <dt className="text-xs text-slate-400">Description</dt>
               <dd className="text-slate-900">{finding.description}</dd>
             </div>
+            {finding.rootCause && (
+              <div className="sm:col-span-2">
+                <dt className="text-xs text-slate-400">Root cause</dt>
+                <dd className="text-slate-900">{finding.rootCause}</dd>
+              </div>
+            )}
             {finding.recommendation && (
               <div className="sm:col-span-2">
                 <dt className="text-xs text-slate-400">Recommendation</dt>
@@ -414,41 +558,83 @@ export function FindingDetailClient({
           />
           {rectifying ? (
             <div className="flex flex-col gap-3 p-4">
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {isItemized ? (
                 <div>
-                  <Label htmlFor="r-cases">Rectified cases (this entry)</Label>
-                  <Input
-                    id="r-cases"
-                    type="number"
-                    min="0"
-                    max={outstandingCases}
-                    step="1"
-                    value={rectifyForm.rectifiedCases}
-                    onChange={(e) => setRectifyForm({ ...rectifyForm, rectifiedCases: e.target.value })}
-                  />
+                  <Label>Select outstanding case(s) to rectify</Label>
+                  <div className="mt-1 flex flex-col gap-1.5 rounded-md border border-slate-200 p-2">
+                    {outstandingFindingCases.length === 0 && (
+                      <p className="p-2 text-sm text-slate-400">No cases currently outstanding.</p>
+                    )}
+                    {outstandingFindingCases.map((fc) => (
+                      <label key={fc.id} className="flex items-center gap-2 rounded px-2 py-1 text-sm hover:bg-slate-50">
+                        <input
+                          type="checkbox"
+                          checked={selectedCaseIds.includes(fc.id)}
+                          onChange={(e) =>
+                            setSelectedCaseIds((prev) =>
+                              e.target.checked ? [...prev, fc.id] : prev.filter((id) => id !== fc.id)
+                            )
+                          }
+                          className="h-4 w-4 rounded border-slate-300"
+                        />
+                        Case {fc.seq} — {finding.currency} {fc.amount.toLocaleString()}
+                      </label>
+                    ))}
+                  </div>
+                  {selectedCaseIds.length > 0 && (
+                    <p className="mt-1 text-xs text-slate-500">
+                      Selected: {selectedCaseIds.length} case(s) / {finding.currency}{" "}
+                      {outstandingFindingCases
+                        .filter((fc) => selectedCaseIds.includes(fc.id))
+                        .reduce((sum, fc) => sum + fc.amount, 0)
+                        .toLocaleString()}
+                    </p>
+                  )}
                 </div>
-                <div>
-                  <Label htmlFor="r-amount">Rectified amount (this entry)</Label>
-                  <Input
-                    id="r-amount"
-                    type="number"
-                    min="0"
-                    max={outstandingAmount}
-                    step="0.01"
-                    value={rectifyForm.rectifiedAmount}
-                    onChange={(e) => setRectifyForm({ ...rectifyForm, rectifiedAmount: e.target.value })}
-                  />
+              ) : (
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div>
+                    <Label htmlFor="r-cases">Rectified cases (this entry)</Label>
+                    <Input
+                      id="r-cases"
+                      type="number"
+                      min="0"
+                      max={outstandingCases}
+                      step="1"
+                      value={rectifyForm.rectifiedCases}
+                      onChange={(e) => setRectifyForm({ ...rectifyForm, rectifiedCases: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="r-amount">Rectified amount (this entry)</Label>
+                    <Input
+                      id="r-amount"
+                      type="number"
+                      min="0"
+                      max={outstandingAmount}
+                      step="0.01"
+                      value={rectifyForm.rectifiedAmount}
+                      onChange={(e) => setRectifyForm({ ...rectifyForm, rectifiedAmount: e.target.value })}
+                    />
+                  </div>
                 </div>
-              </div>
+              )}
               <div>
                 <Label htmlFor="r-note">Note (optional)</Label>
                 <Input id="r-note" value={rectifyForm.note} onChange={(e) => setRectifyForm({ ...rectifyForm, note: e.target.value })} />
               </div>
               <div className="flex gap-2">
-                <Button variant="secondary" onClick={() => setRectifying(false)} disabled={busy}>
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setRectifying(false);
+                    setSelectedCaseIds([]);
+                  }}
+                  disabled={busy}
+                >
                   Cancel
                 </Button>
-                <Button onClick={handleRectify} disabled={busy}>
+                <Button onClick={handleRectify} disabled={busy || (isItemized && selectedCaseIds.length === 0)}>
                   {busy ? "Saving..." : "Record Rectification"}
                 </Button>
               </div>
@@ -461,13 +647,293 @@ export function FindingDetailClient({
         </Card>
       )}
 
-      {permissions.canClose && (
+      {(permissions.canClose || permissions.canReturnRectification) && (
         <Card>
-          <CardHeader title="Verify & Close" description="Confirms the rectification and closes the finding." />
+          <CardHeader
+            title="Verify & Close"
+            description={
+              permissions.canClose
+                ? `${closableCases} case(s) / ${finding.currency} ${closableAmount.toLocaleString()} rectified and awaiting verification. ${outstandingCases} case(s) / ${finding.currency} ${outstandingAmount.toLocaleString()} still unrectified and will stay open.`
+                : "Review the recorded rectification before it can be closed."
+            }
+          />
+          <div className="flex gap-2 p-4">
+            {permissions.canClose && (
+              <Button variant="danger" onClick={handleClose} disabled={busy}>
+                {outstandingCases > 0 || outstandingAmount > 0 ? "Close Rectified Portion" : "Close"}
+              </Button>
+            )}
+            {permissions.canReturnRectification && (
+              <Button variant="secondary" onClick={handleReturnRectification} disabled={busy}>
+                Return for Correction
+              </Button>
+            )}
+          </div>
+        </Card>
+      )}
+
+      {permissions.canResubmitRectification && (
+        <Card>
+          <CardHeader
+            title="Sent Back for Correction"
+            description={
+              transitions.find((t) => t.action === "RETURN_RECTIFICATION")?.reason ??
+              "A controller returned this finding - address the issue and resubmit."
+            }
+          />
           <div className="p-4">
-            <Button variant="danger" onClick={handleClose} disabled={busy}>
-              Close
+            <Button onClick={handleResubmitRectification} disabled={busy}>
+              {busy ? "Resubmitting..." : "Resubmit for Verification"}
             </Button>
+          </div>
+        </Card>
+      )}
+
+      {permissions.canTransfer && (
+        <Card>
+          <CardHeader
+            title="Transfer to Next Period"
+            description={`Case age: ${caseAgeDays} day${caseAgeDays === 1 ? "" : "s"} since original finding date.`}
+          />
+          {transferring ? (
+            otherOpenPeriods.length === 0 ? (
+              <p className="p-4 text-sm text-slate-500">No other open reporting period is available to transfer into.</p>
+            ) : (
+              <div className="flex flex-col gap-3 p-4">
+                <div>
+                  <Label htmlFor="t-period">Destination period</Label>
+                  <select
+                    id="t-period"
+                    className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                    value={transferPeriodId}
+                    onChange={(e) => setTransferPeriodId(e.target.value)}
+                  >
+                    {otherOpenPeriods.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.code}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex gap-2">
+                  <Button variant="secondary" onClick={() => setTransferring(false)} disabled={busy}>
+                    Cancel
+                  </Button>
+                  <Button variant="danger" onClick={handleTransfer} disabled={busy || !transferPeriodId}>
+                    {busy ? "Transferring..." : "Transfer"}
+                  </Button>
+                </div>
+              </div>
+            )
+          ) : (
+            <div className="p-4">
+              <Button variant="secondary" onClick={() => setTransferring(true)}>
+                Transfer to Next Period
+              </Button>
+            </div>
+          )}
+        </Card>
+      )}
+
+      {(permissions.canUploadEvidence || evidence.some((e) => !e.commentId)) && (
+        <Card>
+          <CardHeader title="Evidence" description="Optional supporting files (PDF, PNG, JPG, XLSX, DOCX, CSV - up to 10 MB). Comment attachments are shown inline under their comment instead." />
+          <div className="flex flex-col gap-2 p-4">
+            {permissions.canUploadEvidence && (
+              <input
+                type="file"
+                disabled={uploadingEvidence}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  e.target.value = "";
+                  if (file) void handleEvidenceUpload(file);
+                }}
+                className="text-sm text-slate-600"
+              />
+            )}
+            {uploadingEvidence && <p className="text-xs text-slate-400">Uploading...</p>}
+            {evidence.filter((e) => !e.commentId).length === 0 ? (
+              <p className="text-sm text-slate-500">No evidence uploaded yet.</p>
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {evidence.filter((e) => !e.commentId).map((e) => (
+                  <div key={e.id} className="flex items-center justify-between py-2 text-sm">
+                    <div>
+                      <a
+                        href={`/api/findings/${finding.id}/evidence/${e.id}`}
+                        className="font-medium text-blue-700 hover:underline"
+                      >
+                        {e.fileName}
+                      </a>
+                      <p className="text-xs text-slate-400">
+                        {formatBytes(e.size)} · {e.uploadedByName} · {new Date(e.createdAt).toLocaleString()}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </Card>
+      )}
+
+      {(permissions.canComment || comments.length > 0) && (
+        <Card>
+          <CardHeader title="Comments" description="Attachments on a comment are optional (BR-WF-018)." />
+          <div className="flex flex-col gap-3 p-4">
+            {comments.length === 0 ? (
+              <p className="text-sm text-slate-500">No comments yet.</p>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {comments
+                  .filter((c) => !c.parentCommentId)
+                  .map((c) => {
+                    const commentEvidence = evidence.filter((e) => e.commentId === c.id);
+                    return (
+                      <div key={c.id} className="flex flex-col gap-2">
+                        <div className="rounded-md bg-slate-50 p-2 text-sm">
+                          <p className="text-slate-700">
+                            <span className="font-medium text-slate-900">{c.authorName}</span> {c.text}
+                          </p>
+                          {commentEvidence.map((e) => (
+                            <a
+                              key={e.id}
+                              href={`/api/findings/${finding.id}/evidence/${e.id}`}
+                              className="mt-1 flex items-center gap-1 text-xs text-blue-700 hover:underline"
+                            >
+                              📎 {e.fileName} ({formatBytes(e.size)})
+                            </a>
+                          ))}
+                          <div className="mt-1 flex items-center gap-2">
+                            <span className="text-xs text-slate-400">{new Date(c.createdAt).toLocaleString()}</span>
+                            {permissions.canComment && (
+                              <button
+                                type="button"
+                                className="text-xs text-blue-700 hover:underline"
+                                onClick={() => setReplyTo(replyTo === c.id ? null : c.id)}
+                              >
+                                Reply
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                        {comments
+                          .filter((r) => r.parentCommentId === c.id)
+                          .map((r) => {
+                            const replyEvidence = evidence.filter((e) => e.commentId === r.id);
+                            return (
+                              <div key={r.id} className="ml-6 rounded-md bg-slate-50 p-2 text-sm">
+                                <p className="text-slate-700">
+                                  <span className="font-medium text-slate-900">{r.authorName}</span> {r.text}
+                                </p>
+                                {replyEvidence.map((e) => (
+                                  <a
+                                    key={e.id}
+                                    href={`/api/findings/${finding.id}/evidence/${e.id}`}
+                                    className="mt-1 flex items-center gap-1 text-xs text-blue-700 hover:underline"
+                                  >
+                                    📎 {e.fileName} ({formatBytes(e.size)})
+                                  </a>
+                                ))}
+                                <span className="text-xs text-slate-400">{new Date(r.createdAt).toLocaleString()}</span>
+                              </div>
+                            );
+                          })}
+                        {replyTo === c.id && (
+                          <div className="ml-6 flex flex-col gap-1.5">
+                            <div className="flex gap-2">
+                              <Input
+                                value={replyText}
+                                onChange={(e) => setReplyText(e.target.value)}
+                                placeholder="Write a reply..."
+                              />
+                              <Button onClick={() => postComment(replyText, c.id, replyFile)} disabled={busy}>
+                                Reply
+                              </Button>
+                            </div>
+                            <input
+                              type="file"
+                              onChange={(e) => setReplyFile(e.target.files?.[0] ?? null)}
+                              className="text-xs text-slate-500"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+              </div>
+            )}
+            {permissions.canComment && (
+              <div className="flex flex-col gap-1.5 border-t border-slate-100 pt-3">
+                <div className="flex gap-2">
+                  <Input
+                    value={commentText}
+                    onChange={(e) => setCommentText(e.target.value)}
+                    placeholder="Add a comment..."
+                  />
+                  <Button onClick={() => postComment(commentText, undefined, commentFile)} disabled={busy}>
+                    Post
+                  </Button>
+                </div>
+                <input
+                  type="file"
+                  onChange={(e) => setCommentFile(e.target.files?.[0] ?? null)}
+                  className="text-xs text-slate-500"
+                />
+              </div>
+            )}
+          </div>
+        </Card>
+      )}
+
+      {isItemized && (
+        <Card>
+          <CardHeader title="Cases" description="Individually tracked cases within this finding (Document_3 §12)" />
+          <div className="divide-y divide-slate-100">
+            {findingCases
+              .slice()
+              .sort((a, b) => a.seq - b.seq)
+              .map((fc) => (
+                <div key={fc.id} className="flex items-center justify-between px-4 py-2 text-sm">
+                  <span className="text-slate-600">
+                    <span className="font-medium text-slate-900">Case {fc.seq}</span> — {finding.currency}{" "}
+                    {fc.amount.toLocaleString()}
+                    {fc.status === "RECTIFIED" && fc.rectifiedByName && (
+                      <span className="text-slate-400">
+                        {" "}
+                        — rectified by {fc.rectifiedByName}
+                        {fc.rectifiedAt && ` on ${new Date(fc.rectifiedAt).toLocaleDateString()}`}
+                      </span>
+                    )}
+                  </span>
+                  <Badge tone={fc.status === "RECTIFIED" ? "green" : "amber"}>{fc.status === "RECTIFIED" ? "Rectified" : "Outstanding"}</Badge>
+                </div>
+              ))}
+          </div>
+        </Card>
+      )}
+
+      {transfers.length > 0 && (
+        <Card>
+          <CardHeader title="Transfer History" />
+          <div className="divide-y divide-slate-100">
+            {transfers.map((t) => (
+              <div key={t.id} className="flex flex-col gap-0.5 px-4 py-2 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-600">
+                    <Badge tone={t.method === "AUTOMATIC" ? "blue" : "gray"}>{t.method === "AUTOMATIC" ? "Automatic" : "Manual"}</Badge>{" "}
+                    <span className="font-medium text-slate-900">{t.createdByName}</span> transferred {t.casesTransferred}{" "}
+                    case(s) / {finding.currency} {t.amountTransferred.toLocaleString()}
+                    <span className="text-slate-400"> — {t.reason}</span>
+                  </span>
+                  <span className="text-xs text-slate-400">{new Date(t.createdAt).toLocaleString()}</span>
+                </div>
+                <p className="pl-1 text-xs text-slate-400">
+                  Original: {t.originalCaseCount} case(s) / {finding.currency} {t.originalAmount.toLocaleString()} · Case age at
+                  transfer: {t.caseAgeAtTransferDays} day{t.caseAgeAtTransferDays === 1 ? "" : "s"}
+                </p>
+              </div>
+            ))}
           </div>
         </Card>
       )}
@@ -484,6 +950,23 @@ export function FindingDetailClient({
                   {r.note && <span className="text-slate-400"> — {r.note}</span>}
                 </span>
                 <span className="text-xs text-slate-400">{new Date(r.createdAt).toLocaleString()}</span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {closures.length > 0 && (
+        <Card>
+          <CardHeader title="Closure Ledger" />
+          <div className="divide-y divide-slate-100">
+            {closures.map((c) => (
+              <div key={c.id} className="flex items-center justify-between px-4 py-2 text-sm">
+                <span className="text-slate-600">
+                  <span className="font-medium text-slate-900">{c.submittedByName}</span> verified and closed{" "}
+                  {c.closedCases} case(s) / {finding.currency} {c.closedAmount.toLocaleString()}
+                </span>
+                <span className="text-xs text-slate-400">{new Date(c.createdAt).toLocaleString()}</span>
               </div>
             ))}
           </div>

@@ -3,11 +3,21 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  /* Sampled from public/Nib_International_Bank.png - the gold of the
+     logo's lower half / the brown of its upper half. --brand-gold-dark is
+     a ~15% darkened gold, used only for the hover/press state of buttons
+     whose resting state is already --brand-gold. */
+  --brand-gold: #feb914;
+  --brand-gold-dark: #d89d11;
+  --brand-brown: #8a4d21;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-brand-gold: var(--brand-gold);
+  --color-brand-gold-dark: var(--brand-gold-dark);
+  --color-brand-brown: var(--brand-brown);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
