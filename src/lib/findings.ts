@@ -371,20 +371,18 @@ function findingCasesEligibleInPeriod(db: Database, finding: Finding, periodId: 
 }
 
 /**
- * The active ScoringRule's own formula (plan doc §3.8): "Rectified
- * eligible Other Cases ÷ Total eligible Other Cases × 100", generalized to
- * whatever categories/sources that rule currently includes rather than
- * hard-coding "Other Case". Returns null when there's no active rule or no
- * eligible cases yet (an honest "not computable," not a fabricated 0%).
- *
- * When scoped to a period, each finding's rectified credit comes from its
- * RectificationEntry ledger rows stamped with that periodId - not the
- * finding's lifetime `rectifiedCases` - so a case rectified before a
- * transfer stays credited to the period it actually happened in, and a
- * destination period only gets credit for work done after the case arrived
- * (see findingCasesEligibleInPeriod() above for the matching denominator).
+ * The raw numerator/denominator behind computePerformance()'s formula -
+ * factored out so a caller that needs to sum eligible/rectified counts
+ * across several periods (a cumulative multi-period ranking, say) can add
+ * up real counts first and divide once at the end, rather than only ever
+ * getting back a single period's ratio. Same eligibility/crediting rules
+ * as computePerformance() (see its own doc comment): generalized to
+ * whatever categories/sources the active ScoringRule currently includes,
+ * never hard-coded to "Other Case". Returns null under the same conditions
+ * computePerformance() would return null for (no active rule, no eligible
+ * cases in scope).
  */
-export function computePerformance(db: Database, scope: PerformanceScope): number | null {
+export function computeEligibleCaseCounts(db: Database, scope: PerformanceScope): { totalCases: number; rectifiedCases: number } | null {
   const rule = db.scoringRules.find((r) => r.active);
   if (!rule) return null;
 
@@ -401,7 +399,7 @@ export function computePerformance(db: Database, scope: PerformanceScope): numbe
     const totalCases = candidates.reduce((sum, f) => sum + f.caseCount, 0);
     if (totalCases === 0) return null;
     const rectifiedCases = candidates.reduce((sum, f) => sum + f.rectifiedCases, 0);
-    return (rectifiedCases / totalCases) * 100;
+    return { totalCases, rectifiedCases };
   }
 
   let totalCases = 0;
@@ -415,5 +413,25 @@ export function computePerformance(db: Database, scope: PerformanceScope): numbe
       .reduce((sum, r) => sum + r.rectifiedCases, 0);
   }
   if (totalCases === 0) return null;
-  return (rectifiedCases / totalCases) * 100;
+  return { totalCases, rectifiedCases };
+}
+
+/**
+ * The active ScoringRule's own formula (plan doc §3.8): "Rectified
+ * eligible Other Cases ÷ Total eligible Other Cases × 100", generalized to
+ * whatever categories/sources that rule currently includes rather than
+ * hard-coding "Other Case". Returns null when there's no active rule or no
+ * eligible cases yet (an honest "not computable," not a fabricated 0%).
+ *
+ * When scoped to a period, each finding's rectified credit comes from its
+ * RectificationEntry ledger rows stamped with that periodId - not the
+ * finding's lifetime `rectifiedCases` - so a case rectified before a
+ * transfer stays credited to the period it actually happened in, and a
+ * destination period only gets credit for work done after the case arrived
+ * (see findingCasesEligibleInPeriod() above for the matching denominator).
+ */
+export function computePerformance(db: Database, scope: PerformanceScope): number | null {
+  const counts = computeEligibleCaseCounts(db, scope);
+  if (!counts) return null;
+  return (counts.rectifiedCases / counts.totalCases) * 100;
 }

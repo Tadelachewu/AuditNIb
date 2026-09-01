@@ -339,6 +339,11 @@ export default async function ReportsPage({
               Audit Trail →
             </Link>
           )}
+          {hasPermission(user.permissions, permissionKey("report-templates", "view")) && (
+            <Link href="/reports/templates" className="font-medium text-blue-800 hover:underline">
+              Report Templates →
+            </Link>
+          )}
         </div>
       </Card>
     </div>

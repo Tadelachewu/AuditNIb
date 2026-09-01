@@ -32,7 +32,17 @@ export type PermissionAction =
   | "transfer"
   | "evidence"
   | "comment"
-  | "import";
+  | "import"
+  | "uncovered-branches"
+  | "category-detail-by-district"
+  | "monthly-summary"
+  | "monthly-district-history"
+  | "monthly-district-detail"
+  | "district-ranking-other-cases"
+  | "weekly-executive-summary"
+  | "district-ranking-all-cases"
+  | "category-performance-summary"
+  | "mid-month-district-snapshot";
 
 export interface PageAction {
   action: PermissionAction;
@@ -93,7 +103,32 @@ export const PAGE_REGISTRY: PageDefinition[] = [
       { action: "import", label: "Bulk Import (Excel)" },
     ],
   },
-  { code: "reports", label: "Reports", actions: [V] },
+  // Its own dedicated "view" label rather than the shared V constant - once
+  // Report Templates (below) exists alongside it, "View" alone no longer
+  // distinguishes this page from the other one in the Roles UI.
+  { code: "reports", label: "Reports", actions: [{ action: "view", label: "View Standard Reports" }] },
+  // The bank's own named Internal Control Division reports (previously
+  // hand-assembled in Excel - see report/*.xlsx) as real, permission-gated
+  // views - one action per template so an admin can grant any subset
+  // independently, not just an all-or-nothing "view reports" toggle. See
+  // src/lib/reportTemplates.ts for what each one computes.
+  {
+    code: "report-templates",
+    label: "Report Templates",
+    actions: [
+      V,
+      { action: "uncovered-branches", label: "Uncovered Branches Report" },
+      { action: "category-detail-by-district", label: "Category Detail by District Report" },
+      { action: "monthly-summary", label: "Monthly Summary Report" },
+      { action: "monthly-district-history", label: "Monthly District History Report" },
+      { action: "monthly-district-detail", label: "Monthly District Detail Report" },
+      { action: "district-ranking-other-cases", label: "District Ranking - Other Cases Report" },
+      { action: "weekly-executive-summary", label: "Weekly Executive Summary Report" },
+      { action: "district-ranking-all-cases", label: "District Ranking - All Cases Report" },
+      { action: "category-performance-summary", label: "Category Performance Summary Report" },
+      { action: "mid-month-district-snapshot", label: "Mid-Month District Snapshot Report" },
+    ],
+  },
   { code: "district-dashboard", label: "District Dashboard", actions: [V] },
   { code: "ho-dashboard", label: "HO Dashboard", actions: [V] },
   { code: "executive-dashboard", label: "Executive Dashboard", actions: [V] },
@@ -102,6 +137,10 @@ export const PAGE_REGISTRY: PageDefinition[] = [
   { code: "branches", label: "Branches", actions: [V, C, E, T, D] },
   { code: "sources", label: "Sources", actions: [V, C, E, T, D] },
   { code: "departments", label: "Departments", actions: [V, C, E, T, D] },
+  // The canned reason list offered on the Uncovered Branches report (see
+  // src/types/index.ts's UncoveredReason) - same shape/lifecycle as
+  // Sources/Departments above.
+  { code: "uncovered-reasons", label: "Uncovered Branch Reasons", actions: [V, C, E, T, D] },
   { code: "categories", label: "Classified Categories", actions: [V, C, E, T, D] },
   {
     code: "scoring-rules",

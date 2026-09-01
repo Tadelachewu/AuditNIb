@@ -27,6 +27,7 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: "Register Finding", href: "/findings/new", permission: permissionKey("findings", "create") },
       { label: "Import Findings", href: "/findings/import", permission: permissionKey("findings", "import") },
       { label: "Reports", href: "/reports", permission: permissionKey("reports", "view") },
+      { label: "Report Templates", href: "/reports/templates", permission: permissionKey("report-templates", "view") },
     ],
   },
   {
@@ -38,6 +39,11 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: "Branches", href: "/admin/branches", permission: permissionKey("branches", "view") },
       { label: "Sources", href: "/admin/sources", permission: permissionKey("sources", "view") },
       { label: "Departments", href: "/admin/departments", permission: permissionKey("departments", "view") },
+      {
+        label: "Uncovered Branch Reasons",
+        href: "/admin/uncovered-reasons",
+        permission: permissionKey("uncovered-reasons", "view"),
+      },
       { label: "Classified Categories", href: "/admin/categories", permission: permissionKey("categories", "view") },
       { label: "Scoring Rules", href: "/admin/scoring-rules", permission: permissionKey("scoring-rules", "view") },
       {

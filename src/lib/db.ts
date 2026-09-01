@@ -20,6 +20,7 @@ import type {
   Branch,
   Source,
   Department,
+  UncoveredReason,
   ClassifiedCategory,
   ScoringRule,
   ReportingPeriod,
@@ -44,6 +45,40 @@ import type {
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const DB_FILE = path.join(DATA_DIR, "db.json");
+
+// The 10 named report templates (src/lib/reportTemplates.ts) are every bit
+// HO/District-level oversight reading as the existing Reports page - every
+// one of them ranks or compares *across* districts - so they go to exactly
+// the roles that already get reports.view by default (HO Controller,
+// District Controller, District Director, Executive). Module-level (not
+// local to buildSeedDatabase()) so normalizeDb()'s migration below can
+// reuse the exact same list when backfilling pre-existing installs.
+const reportTemplatePermissions = [
+  permissionKey("report-templates", "view"),
+  permissionKey("report-templates", "uncovered-branches"),
+  permissionKey("report-templates", "category-detail-by-district"),
+  permissionKey("report-templates", "monthly-summary"),
+  permissionKey("report-templates", "monthly-district-history"),
+  permissionKey("report-templates", "monthly-district-detail"),
+  permissionKey("report-templates", "district-ranking-other-cases"),
+  permissionKey("report-templates", "weekly-executive-summary"),
+  permissionKey("report-templates", "district-ranking-all-cases"),
+  permissionKey("report-templates", "category-performance-summary"),
+  permissionKey("report-templates", "mid-month-district-snapshot"),
+];
+
+// Default canned reasons for the Uncovered Branches report - module-level
+// (not local to buildSeedDatabase()) so normalizeDb()'s migration below can
+// seed the same list for pre-existing installs, matching the "add them by
+// default" request rather than leaving older databases with an empty list.
+const defaultUncoveredReasons: Omit<UncoveredReason, "createdAt" | "updatedAt">[] = [
+  { id: "uncov-reason-1", code: "NOT_DISPATCHED", name: "Audit Not Yet Dispatched", active: true },
+  { id: "uncov-reason-2", code: "BRANCH_CLOSED", name: "Branch Temporarily Closed", active: true },
+  { id: "uncov-reason-3", code: "NEWLY_OPENED", name: "Newly Opened Branch", active: true },
+  { id: "uncov-reason-4", code: "NO_IRREGULARITY", name: "No Irregularities Identified", active: true },
+  { id: "uncov-reason-5", code: "DOCS_PENDING", name: "Awaiting Documentation from Branch", active: true },
+  { id: "uncov-reason-6", code: "STAFF_SHORTAGE", name: "Controller/Auditor Shortage", active: true },
+];
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -91,6 +126,8 @@ function buildSeedDatabase(): Database {
     { id: "dept-9", code: "CUSTOMER_SERVICE", name: "Customer Service", active: true, orgScope: "DISTRICT", districtId: "district-1", branchId: null, createdAt: now, updatedAt: now },
     { id: "dept-10", code: "INTERNAL_AUDIT", name: "Internal Audit", active: true, orgScope: "BRANCH", districtId: "district-1", branchId: "branch-1", createdAt: now, updatedAt: now },
   ];
+
+  const uncoveredReasons: UncoveredReason[] = defaultUncoveredReasons.map((r) => ({ ...r, createdAt: now, updatedAt: now }));
 
   // Names match master.txt §25's reference list exactly ("ATM Mismatch;
   // ATM Long Outstanding; IT Case; Dormant Account; Zero Balance; CK Book;
@@ -254,6 +291,7 @@ function buildSeedDatabase(): Database {
     // path just above, both landing in the exact same DRAFT-first workflow.
     permissionKey("findings", "import"),
     permissionKey("reports", "view"),
+    ...reportTemplatePermissions,
     permissionKey("ho-dashboard", "view"),
   ];
   const districtControllerPermissions = [
@@ -282,6 +320,7 @@ function buildSeedDatabase(): Database {
     permissionKey("findings", "transfer"),
     permissionKey("findings", "comment"),
     permissionKey("reports", "view"),
+    ...reportTemplatePermissions,
     permissionKey("district-dashboard", "view"),
   ];
   const districtDirectorPermissions = [
@@ -300,6 +339,7 @@ function buildSeedDatabase(): Database {
     // modifying a finding or its score.
     permissionKey("findings", "comment"),
     permissionKey("reports", "view"),
+    ...reportTemplatePermissions,
     permissionKey("district-dashboard", "view"),
   ];
   const branchControllerPermissions = [
@@ -437,7 +477,12 @@ function buildSeedDatabase(): Database {
       orgScope: "BANK",
       branchSingleton: false,
       isSystem: true,
-      permissions: ALL_VIEW_PERMISSION_KEYS,
+      // ALL_VIEW_PERMISSION_KEYS only ever grabs each page's literal "view"
+      // action - it covers report-templates.view (the hub) automatically,
+      // but not the 10 individually-named template actions, so those need
+      // adding explicitly here (same array every other reporting role uses;
+      // deduped since report-templates.view appears in both).
+      permissions: [...new Set([...ALL_VIEW_PERMISSION_KEYS, ...reportTemplatePermissions])],
       status: "ACTIVE",
       createdAt: now,
       updatedAt: now,
@@ -545,6 +590,7 @@ function buildSeedDatabase(): Database {
     branches,
     sources,
     departments,
+    uncoveredReasons,
     categories,
     scoringRules,
     scoringAdjustments: [],
@@ -566,6 +612,7 @@ function buildSeedDatabase(): Database {
     notifications: [],
     settings,
     auditLogs: [],
+    branchCoverageNotes: [],
   };
 
   seedFindings(db);
@@ -1204,6 +1251,27 @@ function normalizeDb(db: Database): { db: Database; changed: boolean } {
     db.findingCases = [];
     changed = true;
   }
+  if (!db.branchCoverageNotes) {
+    db.branchCoverageNotes = [];
+    changed = true;
+  }
+  if (!db.uncoveredReasons) {
+    // Unlike branchCoverageNotes (genuinely empty until someone records
+    // one), this is reference/config data the admin expects to already be
+    // populated - seed the same defaults a fresh install gets, editable
+    // afterward at /admin/uncovered-reasons like any other reference list.
+    db.uncoveredReasons = defaultUncoveredReasons.map((r) => ({ ...r, createdAt: nowIso(), updatedAt: nowIso() }));
+    changed = true;
+  }
+  for (const n of db.branchCoverageNotes) {
+    if (n.reasonId === undefined) {
+      // Predates the canned-reason list - every existing note was
+      // necessarily free text, so it's treated the same as a fresh
+      // "Other" selection: reasonId null, reason text unchanged.
+      n.reasonId = null;
+      changed = true;
+    }
+  }
   if (db.settings.autoTransferOnLock === undefined) {
     db.settings.autoTransferOnLock = false;
     changed = true;
@@ -1311,6 +1379,21 @@ function normalizeDb(db: Database): { db: Database; changed: boolean } {
     if (r.permissions.includes(permissionKey("findings", "verify-rectification")) && !r.permissions.includes(permissionKey("findings", "return-rectification"))) {
       r.permissions = [...r.permissions, permissionKey("findings", "return-rectification")];
       changed = true;
+    }
+  }
+  // The 10 named report templates are new - any role that already held the
+  // existing Reports page's reports.view (HO Controller, District
+  // Controller, District Director, and Executive via
+  // ALL_VIEW_PERMISSION_KEYS) picks up every template too, matching the
+  // seed's own default grant for those roles - an admin can still narrow
+  // this per-role via /admin/roles afterward.
+  for (const r of db.roles) {
+    if (r.permissions.includes(permissionKey("reports", "view"))) {
+      const missing = reportTemplatePermissions.filter((k) => !r.permissions.includes(k));
+      if (missing.length > 0) {
+        r.permissions = [...r.permissions, ...missing];
+        changed = true;
+      }
     }
   }
   if (syncAdminPermissions(db)) changed = true;

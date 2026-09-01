@@ -604,4 +604,45 @@ export interface Database {
   notifications: Notification[];
   settings: Settings;
   auditLogs: AuditLogEntry[];
+  branchCoverageNotes: BranchCoverageNote[];
+  uncoveredReasons: UncoveredReason[];
+}
+
+// Admin-configurable canned reasons offered on the Uncovered Branches
+// report (see BranchCoverageNote.reasonId below) - same shape/lifecycle as
+// Source/Department (code + name + active), managed at
+// /admin/uncovered-reasons. The reporter can always fall back to a free-
+// text "Other" reason instead of picking one of these (see ReasonPicker).
+export interface UncoveredReason {
+  id: string;
+  code: string;
+  name: string;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// The Uncovered Branches report template's one piece of writable state: why
+// a branch has zero findings for a period (resigned, on leave, no
+// controller assigned, ...) - everything else every report template shows
+// is computed live off existing Finding records, never stored separately.
+// At most one note per branch+period; recording/editing it is gated by the
+// same report-templates.uncovered-branches permission that lets you view
+// the report at all (a low-stakes annotation, not a distinct mutation
+// class), not a separate action.
+export interface BranchCoverageNote {
+  id: string;
+  branchId: string;
+  periodId: string;
+  reason: string;
+  // Which UncoveredReason the reporter picked from the admin-configured
+  // list, or null when they chose "Other" and typed `reason` by hand (or
+  // for a note recorded before this field existed). `reason` itself is
+  // always the display text either way - this is only for traceability
+  // back to the canned list, e.g. to block deleting a reason still in use.
+  reasonId: string | null;
+  recordedBy: string;
+  recordedByName: string;
+  createdAt: string;
+  updatedAt: string;
 }
