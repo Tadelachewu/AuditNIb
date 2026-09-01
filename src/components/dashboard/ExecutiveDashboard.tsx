@@ -95,8 +95,8 @@ export function ExecutiveDashboard({ db, dateRange = {} }: { user: SessionData; 
           value={bankPerformance !== null ? `${bankPerformance.toFixed(1)}%` : "--"}
           hint={activeScoringRule ? `v${activeScoringRule.version} formula` : "No active scoring rule"}
         />
-        <StatCard label="Open Findings" value={openPeriod ? totalFindings : "--"} hint={openPeriod?.code ?? "No open period"} />
-        <StatCard label="Open Cases" value={openPeriod ? totalCases : "--"} hint="Sum of case counts, bank-wide" />
+        <StatCard label="Total Findings" value={openPeriod ? totalFindings : "--"} hint={openPeriod?.code ?? "No open period"} />
+        <StatCard label="Total Cases" value={openPeriod ? totalCases : "--"} hint="Sum of case counts, bank-wide" />
         <StatCard label="Outstanding (all periods)" value={outstanding.length} hint="Findings" />
         <StatCard label="High/Critical Exceptions" value={exceptions.length} hint="Outstanding, high or critical risk" />
         <StatCard label="Rectified Findings" value={openPeriod ? rectifiedFindings : "--"} hint="Fully rectified or closed" />

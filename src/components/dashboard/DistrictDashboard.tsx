@@ -68,9 +68,16 @@ export function DistrictDashboard({
   // ranking table shows - see branchesInScope below.
   const districtFindingsInRange = applyDashboardFilters(districtFindings.filter((f) => inDateRange(dateRange, f.findingDate)), filters);
   const periodFindings = openPeriod ? districtFindingsInRange.filter((f) => f.periodId === openPeriod.id) : [];
-  // "Submitted" excludes DRAFT - a draft hasn't entered the workflow yet,
-  // so it isn't one of this period's submitted findings.
-  const submittedFindings = periodFindings.filter((f) => f.status !== "DRAFT").length;
+  // District's "Total Findings" excludes DRAFT - a draft hasn't entered
+  // the workflow yet, so it isn't one of this district's findings for the
+  // period (unlike Branch's own "Total Findings", which does include its
+  // own drafts - each dashboard's count is its own natural population).
+  // Total Cases below is scoped to this same set (not periodFindings) so
+  // its "Across N finding(s)" hint always agrees with Total Findings right
+  // next to it, instead of silently including branch-level drafts the
+  // district hasn't even received yet.
+  const submittedPeriodFindings = periodFindings.filter((f) => f.status !== "DRAFT");
+  const submittedFindings = submittedPeriodFindings.length;
   const requiringReviewFindings = periodFindings.filter((f) => f.status === "DISTRICT_REVIEW").length;
   // "Approved" = passed district review and hasn't been rejected/returned
   // since - i.e. currently sitting at or past HO_REVIEW.
@@ -80,7 +87,7 @@ export function DistrictDashboard({
   const rejectedFindings = periodFindings.filter((f) => f.status === "REJECTED").length;
   const returnedFindings = periodFindings.filter((f) => f.status === "RETURNED").length;
   const outstandingFindings = periodFindings.filter((f) => !["RECTIFIED", "CLOSED", "REJECTED"].includes(f.status)).length;
-  const { totalFindings, totalCases, rectifiedFindings, rectifiedCases } = findingCaseTotals(periodFindings);
+  const { totalCases, rectifiedFindings, rectifiedCases } = findingCaseTotals(submittedPeriodFindings);
   // A transfer moves periodId forward, so a transferred finding is no
   // longer in periodFindings for its *source* period - counted separately
   // from FindingTransfer records: distinct findings this district
@@ -180,8 +187,8 @@ export function DistrictDashboard({
       <TimeRangeFilter />
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatCard label="Total Submitted" value={openPeriod ? submittedFindings : "--"} hint={openPeriod ? openPeriod.code : "No open period"} />
-        <StatCard label="Total Cases" value={openPeriod ? totalCases : "--"} hint={`Across ${totalFindings} finding(s)`} />
+        <StatCard label="Total Findings" value={openPeriod ? submittedFindings : "--"} hint={openPeriod ? openPeriod.code : "No open period"} />
+        <StatCard label="Total Cases" value={openPeriod ? totalCases : "--"} hint={`Across ${submittedFindings} finding(s)`} />
         <StatCard label="Requiring Review" value={openPeriod ? requiringReviewFindings : "--"} hint="Awaiting district decision" />
         <StatCard label="Approved" value={openPeriod ? approvedFindings : "--"} hint="Passed district review" />
         <StatCard label="Outstanding" value={openPeriod ? outstandingFindings : "--"} hint="Findings" />

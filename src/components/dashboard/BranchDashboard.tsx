@@ -173,9 +173,9 @@ export function BranchDashboard({
         <StatCard label="Outstanding" value={openPeriod ? outstandingFindings : "--"} hint="Findings" />
         <StatCard label="Transferred Findings" value={openPeriod ? transferredFindings : "--"} hint="Out of this period" />
         <StatCard label="Transferred Cases" value={openPeriod ? transferredCases : "--"} hint="Out of this period" />
-        <StatCard label="High Risk" value={openPeriod ? highRiskFindings : "--"} hint="Open, top risk tiers" />
+        <StatCard label="High-Risk Findings" value={openPeriod ? highRiskFindings : "--"} hint="Open, top risk tiers" />
         <StatCard
-          label="Performance"
+          label="Branch Performance"
           value={performance !== null ? `${performance.toFixed(1)}%` : "--"}
           hint={activeScoringRule ? `v${activeScoringRule.version} formula` : "No active scoring rule"}
         />
