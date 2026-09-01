@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiGet, apiSend, ApiError } from "@/lib/api-client";
+import { formatDateTime } from "@/lib/format";
 import type { Notification } from "@/types";
 
 // master.txt §12's in-app notification center: bell + unread badge, polled
@@ -151,7 +152,7 @@ export function NotificationBell() {
                   >
                     <p className="font-medium text-slate-900">{n.title}</p>
                     <p className="text-xs text-slate-500">{n.message}</p>
-                    <p className="mt-0.5 text-[10px] text-slate-400">{new Date(n.createdAt).toLocaleString()}</p>
+                    <p className="mt-0.5 text-[10px] text-slate-400">{formatDateTime(n.createdAt)}</p>
                   </button>
                   {respondingTo === n.id && (
                     <div className="flex flex-col gap-1.5 px-3 pb-2.5">

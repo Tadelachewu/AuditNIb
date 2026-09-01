@@ -15,11 +15,15 @@ import type { FindingClosure } from "@/types";
 //
 // Closing isn't gated to a single "fully RECTIFIED" moment - a controller
 // can verify-and-close whatever's currently rectified-but-unclosed at any
-// time (closedCases/closedAmount can never get ahead of
-// rectifiedCases/rectifiedAmount, since that's exactly what bounds this
-// call). The still-unrectified remainder stays open and keeps going
-// through rectify/transfer as normal; the finding's status only reaches
-// the terminal CLOSED once closing has caught all the way up to
+// time. Bounded by what's actually district-verified, not just rectified -
+// a rectification must clear verify-rectification/route.ts's District gate
+// before it's closable at all, "before it reaches HO" (closedCases/
+// closedAmount can never get ahead of Math.min(rectifiedCases,
+// districtVerifiedCases)/Math.min(rectifiedAmount, districtVerifiedAmount),
+// which is exactly what bounds this call). The still-unrectified/
+// unverified remainder stays open and keeps going through rectify/
+// verify-rectification/transfer as normal; the finding's status only
+// reaches the terminal CLOSED once closing has caught all the way up to
 // caseCount/amount - short of that, status keeps tracking rectify/transfer
 // progress untouched, since a partial close doesn't change what's still
 // owed.
@@ -44,10 +48,17 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
       { status: 409 }
     );
   }
-  const closableCases = existing.rectifiedCases - existing.closedCases;
-  const closableAmount = existing.rectifiedAmount - existing.closedAmount;
+  const verifiedCases = Math.min(existing.rectifiedCases, existing.districtVerifiedCases);
+  const verifiedAmount = Math.min(existing.rectifiedAmount, existing.districtVerifiedAmount);
+  const closableCases = verifiedCases - existing.closedCases;
+  const closableAmount = verifiedAmount - existing.closedAmount;
   if (closableCases <= 0 && closableAmount <= 0) {
-    return NextResponse.json({ error: "Nothing rectified is awaiting closure yet" }, { status: 409 });
+    const awaitingVerification =
+      existing.rectifiedCases > existing.districtVerifiedCases || existing.rectifiedAmount > existing.districtVerifiedAmount;
+    return NextResponse.json(
+      { error: awaitingVerification ? "Awaiting district verification before this can be closed" : "Nothing rectified is awaiting closure yet" },
+      { status: 409 }
+    );
   }
 
   const updated = updateDb((current) => {

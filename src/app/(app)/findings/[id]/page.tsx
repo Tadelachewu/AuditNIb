@@ -110,23 +110,35 @@ export default async function FindingDetailPage({ params }: { params: Promise<{ 
         canRectify:
           has("rectify") &&
           ["SENT_TO_BRANCH_MANAGER", "PARTIALLY_RECTIFIED", "TRANSFERRED", "RECTIFICATION_RETURNED"].includes(finding.status),
-        // Closeable whenever there's a rectified-but-not-yet-closed portion
-        // waiting, regardless of overall status - see close/route.ts. Not
-        // gated to "RECTIFIED" any more so the resolved part of a
-        // partially-rectified finding can be verified and closed while the
-        // unrectified remainder stays open. Excludes RECTIFICATION_RETURNED -
-        // a pending return blocks closing until resubmitted.
+        // Closeable whenever there's a district-verified-but-not-yet-closed
+        // portion waiting, regardless of overall status - see
+        // close/route.ts. Bounded by districtVerifiedCases/Amount, not just
+        // rectifiedCases/Amount: a rectification must clear District's
+        // verify-rectification gate first (the "before it reaches HO"
+        // requirement). Excludes RECTIFICATION_RETURNED - a pending return
+        // blocks closing until resubmitted.
         canClose:
           has("close") &&
           finding.status !== "CLOSED" &&
           finding.status !== "RECTIFICATION_RETURNED" &&
-          (finding.rectifiedCases > finding.closedCases || finding.rectifiedAmount > finding.closedAmount),
+          (Math.min(finding.rectifiedCases, finding.districtVerifiedCases) > finding.closedCases ||
+            Math.min(finding.rectifiedAmount, finding.districtVerifiedAmount) > finding.closedAmount),
         canTransfer: has("transfer") && TRANSFERABLE_STATUSES.includes(finding.status),
-        // Same authority as closing - reviewing a rectification and finding
-        // an issue with it is the other branch of the same verify duty.
+        // District's gate on a recorded rectification, before HO (or
+        // anyone) can close it - approve (verify) whatever's currently
+        // rectified-but-unverified, or return it for correction instead.
+        canVerifyRectification:
+          has("verify-rectification") &&
+          ["PARTIALLY_RECTIFIED", "RECTIFIED", "TRANSFERRED"].includes(finding.status) &&
+          (finding.rectifiedCases > finding.districtVerifiedCases || finding.rectifiedAmount > finding.districtVerifiedAmount),
         canReturnRectification:
-          has("close") && ["PARTIALLY_RECTIFIED", "RECTIFIED", "TRANSFERRED"].includes(finding.status),
+          has("return-rectification") && ["PARTIALLY_RECTIFIED", "RECTIFIED", "TRANSFERRED"].includes(finding.status),
         canResubmitRectification: has("rectify") && finding.status === "RECTIFICATION_RETURNED",
+        // Settings.hoApproval's single approval step for a bank-registered
+        // finding - gated to the specific assigned approver(s), not a
+        // permission (see bank-approval/route.ts).
+        canBankApprove:
+          finding.status === "PENDING_BANK_APPROVAL" && db.settings.hoApproval.approverUserIds.includes(user.userId!),
         canUploadEvidence: has("evidence"),
         canComment: has("comment"),
       }}

@@ -21,6 +21,12 @@ export interface SessionData {
   permissions?: string[];
   districtId?: string | null;
   branchId?: string | null;
+  // Mirrors User.mustChangePassword at login time, same "resolved at login,
+  // carried in the cookie" pattern as `permissions` - src/proxy.ts runs at
+  // the Edge and can't read the JSON db, so this has to travel in the
+  // session like everything else it gates on. Updated in-place (without a
+  // re-login) by POST /api/auth/change-password the moment it succeeds.
+  mustChangePassword?: boolean;
 }
 
 const password = process.env.IRON_SESSION_PASSWORD;

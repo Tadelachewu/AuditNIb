@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiSend, ApiError } from "@/lib/api-client";
+import { formatDate, formatDateTime, formatNumber } from "@/lib/format";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input, Label } from "@/components/ui/Field";
@@ -43,10 +44,12 @@ interface Permissions {
   canDistrictReview: boolean;
   canHoReview: boolean;
   canRectify: boolean;
+  canVerifyRectification: boolean;
   canClose: boolean;
   canTransfer: boolean;
   canReturnRectification: boolean;
   canResubmitRectification: boolean;
+  canBankApprove: boolean;
   canUploadEvidence: boolean;
   canComment: boolean;
 }
@@ -138,8 +141,13 @@ export function FindingDetailClient({
 
   const outstandingCases = finding.caseCount - finding.rectifiedCases;
   const outstandingAmount = finding.amount - finding.rectifiedAmount;
-  const closableCases = finding.rectifiedCases - finding.closedCases;
-  const closableAmount = finding.rectifiedAmount - finding.closedAmount;
+  // Bounded by what's actually district-verified, not just rectified -
+  // mirrors close/route.ts's own calculation (District must verify a
+  // rectification before it's closable at all).
+  const closableCases = Math.min(finding.rectifiedCases, finding.districtVerifiedCases) - finding.closedCases;
+  const closableAmount = Math.min(finding.rectifiedAmount, finding.districtVerifiedAmount) - finding.closedAmount;
+  const verifiableCases = finding.rectifiedCases - finding.districtVerifiedCases;
+  const verifiableAmount = finding.rectifiedAmount - finding.districtVerifiedAmount;
 
   function refresh() {
     router.refresh();
@@ -177,7 +185,10 @@ export function FindingDetailClient({
     }
   }
 
-  async function handleReview(stage: "district-review" | "ho-review", decision: "APPROVE" | "REJECT" | "RETURN") {
+  async function handleReview(
+    stage: "district-review" | "ho-review" | "bank-approval",
+    decision: "APPROVE" | "REJECT" | "RETURN"
+  ) {
     let reason: string | undefined;
     if (decision !== "APPROVE") {
       const result = await confirm({
@@ -211,6 +222,25 @@ export function FindingDetailClient({
       await refresh();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to record decision");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleVerifyRectification() {
+    const result = await confirm({
+      title: "Verify this rectification?",
+      message: `Approves ${verifiableCases} case(s) / ${finding.currency} ${verifiableAmount.toLocaleString()} of the recorded rectification as correct, making it closable.`,
+      confirmLabel: "Verify",
+    });
+    if (result === false) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await apiSend(`/api/findings/${finding.id}/verify-rectification`, "POST");
+      await refresh();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to verify rectification");
     } finally {
       setBusy(false);
     }
@@ -250,8 +280,8 @@ export function FindingDetailClient({
       message: willFullyClose
         ? "This verifies the rectification and is terminal - the finding cannot be reopened."
         : `This verifies and closes ${closableCases} case(s) / ${finding.currency} ${closableAmount.toLocaleString()} that's been rectified so far. The remaining ${outstandingCases} case(s) / ${finding.currency} ${outstandingAmount.toLocaleString()} stays open until it's rectified and closed too.`,
-      confirmLabel: "Close",
-      tone: "danger",
+      confirmLabel: "Accept",
+      tone: "success",
     });
     if (result === false) return;
     setBusy(true);
@@ -272,7 +302,6 @@ export function FindingDetailClient({
       message:
         "Sends this back to the Branch Manager instead of closing/transferring it. They'll need to address the issue and resubmit before it can be closed, partially closed, or transferred.",
       confirmLabel: "Return for Correction",
-      tone: "danger",
       needsReason: true,
     });
     if (result === false) return;
@@ -452,21 +481,28 @@ export function FindingDetailClient({
             <div>
               <dt className="text-xs text-slate-400">Amount involved</dt>
               <dd className="text-slate-900">
-                {finding.currency} {finding.amount.toLocaleString()} ({finding.caseCount} case
+                {finding.currency} {formatNumber(finding.amount)} ({finding.caseCount} case
                 {finding.caseCount === 1 ? "" : "s"})
               </dd>
             </div>
             <div>
               <dt className="text-xs text-slate-400">Outstanding</dt>
               <dd className="text-slate-900">
-                {finding.currency} {outstandingAmount.toLocaleString()} ({outstandingCases} case
+                {finding.currency} {formatNumber(outstandingAmount)} ({outstandingCases} case
                 {outstandingCases === 1 ? "" : "s"})
               </dd>
             </div>
             <div>
-              <dt className="text-xs text-slate-400">Closed (verified)</dt>
+              <dt className="text-xs text-slate-400">District Verified</dt>
               <dd className="text-slate-900">
-                {finding.currency} {finding.closedAmount.toLocaleString()} ({finding.closedCases} case
+                {finding.currency} {formatNumber(finding.districtVerifiedAmount)} ({finding.districtVerifiedCases} case
+                {finding.districtVerifiedCases === 1 ? "" : "s"})
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs text-slate-400">Closed</dt>
+              <dd className="text-slate-900">
+                {finding.currency} {formatNumber(finding.closedAmount)} ({finding.closedCases} case
                 {finding.closedCases === 1 ? "" : "s"})
               </dd>
             </div>
@@ -550,11 +586,31 @@ export function FindingDetailClient({
         </Card>
       )}
 
+      {permissions.canBankApprove && (
+        <Card>
+          <CardHeader
+            title="Approval"
+            description="Bank-registered finding awaiting your approval before it's sent to the branch."
+          />
+          <div className="flex gap-2 p-4">
+            <Button onClick={() => handleReview("bank-approval", "APPROVE")} disabled={busy}>
+              Approve
+            </Button>
+            <Button variant="secondary" onClick={() => handleReview("bank-approval", "RETURN")} disabled={busy}>
+              Return
+            </Button>
+            <Button variant="danger" onClick={() => handleReview("bank-approval", "REJECT")} disabled={busy}>
+              Reject
+            </Button>
+          </div>
+        </Card>
+      )}
+
       {permissions.canRectify && (
         <Card>
           <CardHeader
             title="Record Rectification"
-            description={`Outstanding: ${finding.currency} ${outstandingAmount.toLocaleString()} across ${outstandingCases} case(s)`}
+            description={`Outstanding: ${finding.currency} ${formatNumber(outstandingAmount)} across ${outstandingCases} case(s)`}
           />
           {rectifying ? (
             <div className="flex flex-col gap-3 p-4">
@@ -577,17 +633,18 @@ export function FindingDetailClient({
                           }
                           className="h-4 w-4 rounded border-slate-300"
                         />
-                        Case {fc.seq} — {finding.currency} {fc.amount.toLocaleString()}
+                        Case {fc.seq} — {finding.currency} {formatNumber(fc.amount)}
                       </label>
                     ))}
                   </div>
                   {selectedCaseIds.length > 0 && (
                     <p className="mt-1 text-xs text-slate-500">
                       Selected: {selectedCaseIds.length} case(s) / {finding.currency}{" "}
-                      {outstandingFindingCases
-                        .filter((fc) => selectedCaseIds.includes(fc.id))
-                        .reduce((sum, fc) => sum + fc.amount, 0)
-                        .toLocaleString()}
+                      {formatNumber(
+                        outstandingFindingCases
+                          .filter((fc) => selectedCaseIds.includes(fc.id))
+                          .reduce((sum, fc) => sum + fc.amount, 0)
+                      )}
                     </p>
                   )}
                 </div>
@@ -647,27 +704,37 @@ export function FindingDetailClient({
         </Card>
       )}
 
-      {(permissions.canClose || permissions.canReturnRectification) && (
+      {(permissions.canVerifyRectification || permissions.canReturnRectification) && (
         <Card>
           <CardHeader
-            title="Verify & Close"
-            description={
-              permissions.canClose
-                ? `${closableCases} case(s) / ${finding.currency} ${closableAmount.toLocaleString()} rectified and awaiting verification. ${outstandingCases} case(s) / ${finding.currency} ${outstandingAmount.toLocaleString()} still unrectified and will stay open.`
-                : "Review the recorded rectification before it can be closed."
-            }
+            title="Verify Rectification"
+            description={`${verifiableCases} case(s) / ${finding.currency} ${formatNumber(verifiableAmount)} rectified and awaiting your verification, before it can reach Head Office for final closure. Approve it, or send it back to the Branch Manager for correction.`}
           />
           <div className="flex gap-2 p-4">
-            {permissions.canClose && (
-              <Button variant="danger" onClick={handleClose} disabled={busy}>
-                {outstandingCases > 0 || outstandingAmount > 0 ? "Close Rectified Portion" : "Close"}
+            {permissions.canVerifyRectification && (
+              <Button onClick={handleVerifyRectification} disabled={busy}>
+                Verify
               </Button>
             )}
             {permissions.canReturnRectification && (
-              <Button variant="secondary" onClick={handleReturnRectification} disabled={busy}>
+              <Button onClick={handleReturnRectification} disabled={busy}>
                 Return for Correction
               </Button>
             )}
+          </div>
+        </Card>
+      )}
+
+      {permissions.canClose && (
+        <Card>
+          <CardHeader
+            title="Verify & Close"
+            description={`${closableCases} case(s) / ${finding.currency} ${formatNumber(closableAmount)} district-verified and ready to close. ${outstandingCases} case(s) / ${finding.currency} ${formatNumber(outstandingAmount)} still unrectified and will stay open.`}
+          />
+          <div className="flex gap-2 p-4">
+            <Button variant="success" onClick={handleClose} disabled={busy}>
+              Accept
+            </Button>
           </div>
         </Card>
       )}
@@ -766,7 +833,7 @@ export function FindingDetailClient({
                         {e.fileName}
                       </a>
                       <p className="text-xs text-slate-400">
-                        {formatBytes(e.size)} · {e.uploadedByName} · {new Date(e.createdAt).toLocaleString()}
+                        {formatBytes(e.size)} · {e.uploadedByName} · {formatDateTime(e.createdAt)}
                       </p>
                     </div>
                   </div>
@@ -805,7 +872,7 @@ export function FindingDetailClient({
                             </a>
                           ))}
                           <div className="mt-1 flex items-center gap-2">
-                            <span className="text-xs text-slate-400">{new Date(c.createdAt).toLocaleString()}</span>
+                            <span className="text-xs text-slate-400">{formatDateTime(c.createdAt)}</span>
                             {permissions.canComment && (
                               <button
                                 type="button"
@@ -835,7 +902,7 @@ export function FindingDetailClient({
                                     📎 {e.fileName} ({formatBytes(e.size)})
                                   </a>
                                 ))}
-                                <span className="text-xs text-slate-400">{new Date(r.createdAt).toLocaleString()}</span>
+                                <span className="text-xs text-slate-400">{formatDateTime(r.createdAt)}</span>
                               </div>
                             );
                           })}
@@ -897,12 +964,12 @@ export function FindingDetailClient({
                 <div key={fc.id} className="flex items-center justify-between px-4 py-2 text-sm">
                   <span className="text-slate-600">
                     <span className="font-medium text-slate-900">Case {fc.seq}</span> — {finding.currency}{" "}
-                    {fc.amount.toLocaleString()}
+                    {formatNumber(fc.amount)}
                     {fc.status === "RECTIFIED" && fc.rectifiedByName && (
                       <span className="text-slate-400">
                         {" "}
                         — rectified by {fc.rectifiedByName}
-                        {fc.rectifiedAt && ` on ${new Date(fc.rectifiedAt).toLocaleDateString()}`}
+                        {fc.rectifiedAt && ` on ${formatDate(fc.rectifiedAt)}`}
                       </span>
                     )}
                   </span>
@@ -923,13 +990,13 @@ export function FindingDetailClient({
                   <span className="text-slate-600">
                     <Badge tone={t.method === "AUTOMATIC" ? "blue" : "gray"}>{t.method === "AUTOMATIC" ? "Automatic" : "Manual"}</Badge>{" "}
                     <span className="font-medium text-slate-900">{t.createdByName}</span> transferred {t.casesTransferred}{" "}
-                    case(s) / {finding.currency} {t.amountTransferred.toLocaleString()}
+                    case(s) / {finding.currency} {formatNumber(t.amountTransferred)}
                     <span className="text-slate-400"> — {t.reason}</span>
                   </span>
-                  <span className="text-xs text-slate-400">{new Date(t.createdAt).toLocaleString()}</span>
+                  <span className="text-xs text-slate-400">{formatDateTime(t.createdAt)}</span>
                 </div>
                 <p className="pl-1 text-xs text-slate-400">
-                  Original: {t.originalCaseCount} case(s) / {finding.currency} {t.originalAmount.toLocaleString()} · Case age at
+                  Original: {t.originalCaseCount} case(s) / {finding.currency} {formatNumber(t.originalAmount)} · Case age at
                   transfer: {t.caseAgeAtTransferDays} day{t.caseAgeAtTransferDays === 1 ? "" : "s"}
                 </p>
               </div>
@@ -946,10 +1013,10 @@ export function FindingDetailClient({
               <div key={r.id} className="flex items-center justify-between px-4 py-2 text-sm">
                 <span className="text-slate-600">
                   <span className="font-medium text-slate-900">{r.submittedByName}</span> recorded {r.rectifiedCases}{" "}
-                  case(s) / {finding.currency} {r.rectifiedAmount.toLocaleString()}
+                  case(s) / {finding.currency} {formatNumber(r.rectifiedAmount)}
                   {r.note && <span className="text-slate-400"> — {r.note}</span>}
                 </span>
-                <span className="text-xs text-slate-400">{new Date(r.createdAt).toLocaleString()}</span>
+                <span className="text-xs text-slate-400">{formatDateTime(r.createdAt)}</span>
               </div>
             ))}
           </div>
@@ -964,9 +1031,9 @@ export function FindingDetailClient({
               <div key={c.id} className="flex items-center justify-between px-4 py-2 text-sm">
                 <span className="text-slate-600">
                   <span className="font-medium text-slate-900">{c.submittedByName}</span> verified and closed{" "}
-                  {c.closedCases} case(s) / {finding.currency} {c.closedAmount.toLocaleString()}
+                  {c.closedCases} case(s) / {finding.currency} {formatNumber(c.closedAmount)}
                 </span>
-                <span className="text-xs text-slate-400">{new Date(c.createdAt).toLocaleString()}</span>
+                <span className="text-xs text-slate-400">{formatDateTime(c.createdAt)}</span>
               </div>
             ))}
           </div>
@@ -985,7 +1052,7 @@ export function FindingDetailClient({
                 </span>
                 {t.reason && <span className="text-slate-500"> — {t.reason}</span>}
               </span>
-              <span className="text-xs text-slate-400">{new Date(t.createdAt).toLocaleString()}</span>
+              <span className="text-xs text-slate-400">{formatDateTime(t.createdAt)}</span>
             </div>
           ))}
         </div>

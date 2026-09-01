@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { apiGet, apiSend, ApiError } from "@/lib/api-client";
+import { formatDateTime } from "@/lib/format";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input, Select, Label } from "@/components/ui/Field";
@@ -173,7 +174,7 @@ export default function ScoringAdjustmentsPage() {
                     <td className="px-4 py-2 text-slate-600">{periodCode(a.periodId)}</td>
                     <td className="px-4 py-2 font-medium text-slate-900">{a.value}%</td>
                     <td className="px-4 py-2 text-slate-600">{a.reason}</td>
-                    <td className="px-4 py-2 text-xs text-slate-400">{new Date(a.createdAt).toLocaleString()}</td>
+                    <td className="px-4 py-2 text-xs text-slate-400">{formatDateTime(a.createdAt)}</td>
                   </tr>
                 ))}
             </tbody>

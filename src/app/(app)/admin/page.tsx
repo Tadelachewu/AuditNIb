@@ -4,6 +4,7 @@ import { readDb } from "@/lib/db";
 import { findBranchManager, findBranchController } from "@/lib/org";
 import { getCurrentUser } from "@/lib/session";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
+import { formatDateTime } from "@/lib/format";
 import { StatCard, Card, CardHeader } from "@/components/ui/Card";
 
 const QUICK_LINKS: { label: string; href: string; pageCode: string }[] = [
@@ -114,7 +115,7 @@ export default async function AdminDashboardPage() {
                 <span className="font-medium text-slate-900">{entry.userName}</span> {entry.action.toLowerCase()}{" "}
                 {entry.entityType.toLowerCase()}
               </span>
-              <span className="text-xs text-slate-400">{new Date(entry.timestamp).toLocaleString()}</span>
+              <span className="text-xs text-slate-400">{formatDateTime(entry.timestamp)}</span>
             </div>
           ))}
         </div>

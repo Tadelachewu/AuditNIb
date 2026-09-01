@@ -3,22 +3,47 @@ import type { Database } from "@/types";
 import type { SessionData } from "@/lib/session";
 import { computePerformance, queueStatusesForSession, findingCaseTotals, transferTotals } from "@/lib/findings";
 import { sumAmountByCurrency, sumOutstandingByCurrency } from "@/lib/currency";
+import { formatDateTime } from "@/lib/format";
+import { inDateRange, type DateRange } from "@/lib/dateRange";
+import { applyDashboardFilters, EMPTY_DASHBOARD_FILTERS, type DashboardFilters } from "@/lib/dashboardFilters";
 import { Card, CardHeader, StatCard } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { FilterBar } from "@/components/dashboard/FilterBar";
+import { TimeRangeFilter } from "@/components/reports/TimeRangeFilter";
 import { RiskDistribution } from "@/components/dashboard/RiskDistribution";
 import { FindingStatusDistribution } from "@/components/dashboard/FindingStatusDistribution";
 import { MonthlyTrend } from "@/components/dashboard/MonthlyTrend";
 import { RankedBarChart } from "@/components/dashboard/charts/RankedBarChart";
+import { ColumnChart } from "@/components/dashboard/charts/ColumnChart";
 import { FindingStatusBadge } from "@/components/findings/FindingStatusBadge";
+import { BranchPerformanceTable } from "@/components/dashboard/BranchPerformanceTable";
+import { DistrictRankingTable } from "@/components/dashboard/DistrictRankingTable";
+import { SourcePerformanceSummary } from "@/components/dashboard/SourcePerformanceSummary";
+import { CaseBasedPerformance } from "@/components/dashboard/CaseBasedPerformance";
+import { FindingsByCategoryChart } from "@/components/dashboard/FindingsByCategoryChart";
 
 // master.txt §10: district-level aggregate, branch-by-branch ranking,
 // category totals, risk distribution, recent activity, work queue -
 // the same widget set as BranchDashboard.tsx, one org level up.
-export function DistrictDashboard({ user, db }: { user: SessionData; db: Database }) {
+export function DistrictDashboard({
+  user,
+  db,
+  dateRange = {},
+  filters = EMPTY_DASHBOARD_FILTERS,
+}: {
+  user: SessionData;
+  db: Database;
+  dateRange?: DateRange;
+  filters?: DashboardFilters;
+}) {
   const district = db.districts.find((d) => d.id === user.districtId);
   const branches = district ? db.branches.filter((b) => b.districtId === district.id) : [];
-  const openPeriod = db.reportingPeriods.find((p) => p.status === "OPEN");
+  // FilterBar's own period picker takes priority over "whichever period is
+  // currently OPEN" - picking a locked/past period is exactly how you'd
+  // review dashboard history, not just the live one.
+  const openPeriod = filters.periodId
+    ? db.reportingPeriods.find((p) => p.id === filters.periodId)
+    : db.reportingPeriods.find((p) => p.status === "OPEN");
   const activeCategories = db.categories.filter((c) => c.active);
   const activeScoringRule = db.scoringRules.find((r) => r.active);
 
@@ -33,7 +58,16 @@ export function DistrictDashboard({ user, db }: { user: SessionData; db: Databas
   }
 
   const districtFindings = db.findings.filter((f) => f.districtId === district.id);
-  const periodFindings = openPeriod ? districtFindings.filter((f) => f.periodId === openPeriod.id) : [];
+  // Optional Today/Week/Month/Custom filter (TimeRangeFilter) plus
+  // FilterBar's branch/source/category/risk/status fields (districtId is
+  // already fixed to this district, so that field is a no-op here), by
+  // each finding's own attributes - never computePerformance()'s scoring
+  // formula itself (District/Branch Performance and both rankings stay
+  // keyed to the full BRD-defined eligible-case set, not narrowed by an
+  // ad-hoc filter). A branch filter does narrow which rows the branch
+  // ranking table shows - see branchesInScope below.
+  const districtFindingsInRange = applyDashboardFilters(districtFindings.filter((f) => inDateRange(dateRange, f.findingDate)), filters);
+  const periodFindings = openPeriod ? districtFindingsInRange.filter((f) => f.periodId === openPeriod.id) : [];
   // "Submitted" excludes DRAFT - a draft hasn't entered the workflow yet,
   // so it isn't one of this period's submitted findings.
   const submittedFindings = periodFindings.filter((f) => f.status !== "DRAFT").length;
@@ -71,7 +105,19 @@ export function DistrictDashboard({ user, db }: { user: SessionData; db: Databas
     .map((d) => ({ district: d, performance: openPeriod ? computePerformance(db, { districtId: d.id, periodId: openPeriod.id }) : null }))
     .sort((a, b) => (b.performance ?? -1) - (a.performance ?? -1));
 
-  const branchRanking = branches
+  // A branch/source/category filter narrows which rows the ranking tables
+  // and per-source/per-category widgets even list - a real narrowing of
+  // "what am I looking at," not a redefinition of the performance formula
+  // (computePerformance() itself is untouched).
+  const branchesInScope = filters.branchId ? branches.filter((b) => b.id === filters.branchId) : branches;
+  const sourcesInScope = filters.sourceId
+    ? db.sources.filter((s) => s.active && s.id === filters.sourceId)
+    : db.sources.filter((s) => s.active);
+  const categoriesInScope = filters.categoryId
+    ? activeCategories.filter((c) => c.id === filters.categoryId)
+    : activeCategories;
+
+  const branchRanking = branchesInScope
     .map((b) => {
       const perf = openPeriod ? computePerformance(db, { branchId: b.id, periodId: openPeriod.id }) : null;
       const findings = periodFindings.filter((f) => f.branchId === b.id);
@@ -79,14 +125,20 @@ export function DistrictDashboard({ user, db }: { user: SessionData; db: Databas
     })
     .sort((a, b) => (b.performance ?? -1) - (a.performance ?? -1));
   const rankedBranches = branchRanking.filter((r) => r.performance !== null);
-  const topBranches = rankedBranches.slice(0, 5);
+  const { topPercent, bottomPercent } = db.settings.performanceThresholds;
   // Document_3 §25: "Top performers" and "Bottom performers" as separate
-  // callouts - worst-first, capped at 5 the same way topBranches is, and
-  // never overlapping with it unless there are 5 or fewer ranked branches
-  // total (in which case top and bottom are necessarily the same set).
-  const bottomBranches = [...rankedBranches].reverse().slice(0, 5);
+  // callouts - threshold-based (Settings.performanceThresholds), not a
+  // fixed top-5/bottom-5-by-rank cut, so every branch that clears the bar
+  // shows, and the list is legitimately empty when nobody does yet.
+  const topBranches = rankedBranches.filter((r) => r.performance! >= topPercent);
+  const bottomBranches = [...rankedBranches].reverse().filter((r) => r.performance! <= bottomPercent);
 
-  const categoryTotals = activeCategories.map((c) => {
+  // "Findings by Branch" - a plain volume count (how many findings came
+  // from each branch this period), a different question from the
+  // performance-ranked table above, sorted by count rather than %.
+  const findingsByBranch = [...branchRanking].sort((a, b) => b.total - a.total).slice(0, 10);
+
+  const categoryTotals = categoriesInScope.map((c) => {
     const findings = periodFindings.filter((f) => f.categoryId === c.id);
     const total = findings.reduce((sum, f) => sum + f.caseCount, 0);
     const rectified = findings.reduce((sum, f) => sum + f.rectifiedCases, 0);
@@ -120,10 +172,12 @@ export function DistrictDashboard({ user, db }: { user: SessionData; db: Databas
         sources={db.sources.filter((s) => s.active)}
         categories={activeCategories}
         riskLevels={db.settings.riskLevels}
-        defaultPeriodId={openPeriod?.id}
+        defaultPeriodId={db.reportingPeriods.find((p) => p.status === "OPEN")?.id}
         fixedDistrict={{ id: district.id, name: district.name }}
-        hint="Full Findings list with live filtering is at Findings in the sidebar; this dashboard summarizes the currently open period."
+        hint="Filters apply immediately. Performance % always reflects the full scoring formula, not narrowed by source/category/risk/status."
       />
+
+      <TimeRangeFilter />
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatCard label="Total Submitted" value={openPeriod ? submittedFindings : "--"} hint={openPeriod ? openPeriod.code : "No open period"} />
@@ -147,103 +201,12 @@ export function DistrictDashboard({ user, db }: { user: SessionData; db: Databas
         <StatCard label="Outstanding Amount" value={openPeriod ? outstandingAmount : "--"} hint="Still owed" />
       </div>
 
-      {db.settings.rankingVisibility.districts ? (
-        <Card>
-          <CardHeader title="District Ranking" description="Every district bank-wide, performance this period" />
-          <div className="p-4">
-            <RankedBarChart
-              items={districtRanking.map((r) => ({
-                id: r.district.id,
-                label: r.district.name,
-                value: r.performance,
-                href: `/findings?districtId=${r.district.id}`,
-              }))}
-              emptyText="No districts configured yet."
-            />
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="border-b border-slate-100 text-xs uppercase text-slate-400">
-                <tr>
-                  <th className="px-4 py-2 font-medium">Rank</th>
-                  <th className="px-4 py-2 font-medium">District</th>
-                  <th className="px-4 py-2 font-medium">Performance</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {districtRanking.map((row, i) => (
-                  <tr key={row.district.id} className={row.district.id === district.id ? "bg-blue-50" : undefined}>
-                    <td className="px-4 py-2 text-slate-400">{i + 1}</td>
-                    <td className="px-4 py-2 text-slate-900">
-                      <span className="flex items-center gap-2">
-                        {row.district.name}
-                        {row.district.id === district.id && <Badge tone="blue">Your District</Badge>}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2 text-slate-700">{row.performance !== null ? `${row.performance.toFixed(1)}%` : "--"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      ) : (
-        <Card>
-          <CardHeader title="District Ranking" />
-          <p className="p-4 text-sm text-slate-400">District ranking visibility is disabled by your administrator.</p>
-        </Card>
-      )}
-
-      {db.settings.rankingVisibility.branches ? (
-        <Card>
-          <CardHeader title="Branch Ranking" description="Performance by branch, current period" />
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="border-b border-slate-100 text-xs uppercase text-slate-400">
-                <tr>
-                  <th className="px-4 py-2 font-medium">Rank</th>
-                  <th className="px-4 py-2 font-medium">Branch</th>
-                  <th className="px-4 py-2 font-medium">Findings</th>
-                  <th className="px-4 py-2 font-medium">Performance</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {branchRanking.length === 0 && (
-                  <tr>
-                    <td colSpan={4} className="px-4 py-6 text-center text-slate-400">
-                      No branches in this district yet.
-                    </td>
-                  </tr>
-                )}
-                {branchRanking.map((row, i) => (
-                  <tr key={row.branch.id}>
-                    <td className="px-4 py-2 text-slate-400">{i + 1}</td>
-                    <td className="px-4 py-2">
-                      <Link href={`/findings?branchId=${row.branch.id}`} className="text-blue-800 hover:underline">
-                        {row.branch.name}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-2 text-slate-700">{openPeriod ? row.total : "--"}</td>
-                    <td className="px-4 py-2 text-slate-700">
-                      {row.performance !== null ? `${row.performance.toFixed(1)}%` : "--"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      ) : (
-        <Card>
-          <CardHeader title="Branch Ranking" />
-          <p className="p-4 text-sm text-slate-400">Branch ranking visibility is disabled by your administrator.</p>
-        </Card>
-      )}
+      <CaseBasedPerformance db={db} periodFindings={periodFindings} openPeriod={openPeriod} />
 
       {db.settings.rankingVisibility.branches && (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <Card>
-            <CardHeader title="Top Performers" description="Highest performance this period" />
+            <CardHeader title="Top Performers" description={`Branches at or above ${topPercent}% this period`} />
             <div className="divide-y divide-slate-100">
               {topBranches.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-400">No performance data yet.</p>}
               {topBranches.map((row, i) => (
@@ -263,7 +226,7 @@ export function DistrictDashboard({ user, db }: { user: SessionData; db: Databas
           </Card>
 
           <Card>
-            <CardHeader title="Bottom Performers" description="Lowest performance this period" />
+            <CardHeader title="Bottom Performers" description={`Branches at or below ${bottomPercent}% this period`} />
             <div className="divide-y divide-slate-100">
               {bottomBranches.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-400">No performance data yet.</p>}
               {bottomBranches.map((row) => (
@@ -283,6 +246,66 @@ export function DistrictDashboard({ user, db }: { user: SessionData; db: Databas
           </Card>
         </div>
       )}
+
+      {db.settings.rankingVisibility.districts ? (
+        <>
+          <Card>
+            <CardHeader title="District Ranking" description="Every district bank-wide, performance this period" />
+            <div className="p-4">
+              <RankedBarChart
+                items={districtRanking.map((r) => ({
+                  id: r.district.id,
+                  label: r.district.name,
+                  value: r.performance,
+                  href: `/findings?districtId=${r.district.id}`,
+                }))}
+                emptyText="No districts configured yet."
+              />
+            </div>
+          </Card>
+          <DistrictRankingTable
+            db={db}
+            districts={db.districts}
+            openPeriod={openPeriod}
+            description="Every district bank-wide - branch counts are dynamic per district"
+          />
+        </>
+      ) : (
+        <Card>
+          <CardHeader title="District Ranking" />
+          <p className="p-4 text-sm text-slate-400">District ranking visibility is disabled by your administrator.</p>
+        </Card>
+      )}
+
+      {db.settings.rankingVisibility.branches ? (
+        <BranchPerformanceTable
+          db={db}
+          branches={branchesInScope}
+          openPeriod={openPeriod}
+          title="Branch Performance"
+          description="Every branch in this district, ranked by performance this period"
+        />
+      ) : (
+        <Card>
+          <CardHeader title="Branch Ranking" />
+          <p className="p-4 text-sm text-slate-400">Branch ranking visibility is disabled by your administrator.</p>
+        </Card>
+      )}
+
+      <SourcePerformanceSummary
+        db={db}
+        sources={sourcesInScope}
+        periodFindings={periodFindings}
+        scope={{ districtId: district.id }}
+        openPeriod={openPeriod}
+      />
+
+      <Card>
+        <CardHeader title="Findings by Branch" description="Top branches by finding count, current period" />
+        <div className="p-4">
+          <ColumnChart items={findingsByBranch.map((r) => ({ id: r.branch.id, label: r.branch.name, value: r.total }))} />
+        </div>
+      </Card>
 
       <Card>
         <CardHeader title="Category Totals" description="Every active classified case category for this district, current period" />
@@ -310,10 +333,13 @@ export function DistrictDashboard({ user, db }: { user: SessionData; db: Databas
         </div>
       </Card>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <MonthlyTrend db={db} scope={{ districtId: district.id }} />
-        <FindingStatusDistribution findings={districtFindings} />
-        <RiskDistribution findings={districtFindings} riskLevels={db.settings.riskLevels} />
+      <FindingsByCategoryChart findings={periodFindings} categories={categoriesInScope} openPeriod={openPeriod} />
+
+      <MonthlyTrend db={db} scope={{ districtId: district.id }} />
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <FindingStatusDistribution findings={districtFindingsInRange} />
+        <RiskDistribution findings={districtFindingsInRange} riskLevels={db.settings.riskLevels} />
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -339,7 +365,7 @@ export function DistrictDashboard({ user, db }: { user: SessionData; db: Databas
                 <span className="text-slate-600">
                   <span className="font-medium text-slate-900">{t.userName}</span> {t.action.replaceAll("_", " ").toLowerCase()}
                 </span>
-                <span className="text-xs text-slate-400">{new Date(t.createdAt).toLocaleString()}</span>
+                <span className="text-xs text-slate-400">{formatDateTime(t.createdAt)}</span>
               </div>
             ))}
           </div>

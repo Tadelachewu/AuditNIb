@@ -3,25 +3,63 @@ import type { Database } from "@/types";
 import type { SessionData } from "@/lib/session";
 import { computePerformance, queueStatusesForSession, findingCaseTotals, transferTotals, averageCaseAgeDays } from "@/lib/findings";
 import { sumAmountByCurrency, sumOutstandingByCurrency } from "@/lib/currency";
+import { formatDateTime, formatNumber } from "@/lib/format";
+import { inDateRange, type DateRange } from "@/lib/dateRange";
+import { applyDashboardFilters, EMPTY_DASHBOARD_FILTERS, type DashboardFilters } from "@/lib/dashboardFilters";
 import { Card, CardHeader, StatCard } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { FilterBar } from "@/components/dashboard/FilterBar";
+import { TimeRangeFilter } from "@/components/reports/TimeRangeFilter";
 import { RiskDistribution } from "@/components/dashboard/RiskDistribution";
 import { FindingStatusDistribution } from "@/components/dashboard/FindingStatusDistribution";
 import { MonthlyTrend } from "@/components/dashboard/MonthlyTrend";
 import { RankedBarChart } from "@/components/dashboard/charts/RankedBarChart";
+import { ColumnChart } from "@/components/dashboard/charts/ColumnChart";
 import { StackedBarChart } from "@/components/dashboard/charts/StackedBarChart";
 import { FindingStatusBadge } from "@/components/findings/FindingStatusBadge";
+import { BranchPerformanceTable } from "@/components/dashboard/BranchPerformanceTable";
+import { DistrictRankingTable } from "@/components/dashboard/DistrictRankingTable";
+import { SourcePerformanceSummary } from "@/components/dashboard/SourcePerformanceSummary";
+import { CaseBasedPerformance } from "@/components/dashboard/CaseBasedPerformance";
+import { FindingsByCategoryChart } from "@/components/dashboard/FindingsByCategoryChart";
 
 // master.txt §10: bank + district aggregates, district ranking, IC-vs-IA
 // source comparison, reporting-period status, work queue - the Head
 // Office Internal Controller's bank-wide view.
-export function HODashboard({ user, db }: { user: SessionData; db: Database }) {
-  const openPeriod = db.reportingPeriods.find((p) => p.status === "OPEN");
+export function HODashboard({
+  user,
+  db,
+  dateRange = {},
+  filters = EMPTY_DASHBOARD_FILTERS,
+}: {
+  user: SessionData;
+  db: Database;
+  dateRange?: DateRange;
+  filters?: DashboardFilters;
+}) {
+  // FilterBar's own period picker takes priority over "whichever period is
+  // currently OPEN" - picking a locked/past period is exactly how you'd
+  // review dashboard history, not just the live one.
+  const openPeriod = filters.periodId
+    ? db.reportingPeriods.find((p) => p.id === filters.periodId)
+    : db.reportingPeriods.find((p) => p.status === "OPEN");
   const activeSources = db.sources.filter((s) => s.active);
   const activeScoringRule = db.scoringRules.find((r) => r.active);
 
-  const periodFindings = openPeriod ? db.findings.filter((f) => f.periodId === openPeriod.id) : [];
+  // Optional Today/Week/Month/Custom filter (TimeRangeFilter) plus
+  // FilterBar's district/branch/source/category/risk/status fields, by
+  // each finding's own attributes - never computePerformance()'s scoring
+  // formula itself (Bank-wide/District/Branch Performance and every
+  // ranking below stay keyed to the full BRD-defined eligible-case set,
+  // not narrowed by an ad-hoc filter, so "80% performance" always means
+  // what Settings/the active ScoringRule says it means). District/branch
+  // selection does narrow which rows the ranking tables even show,
+  // though - see districtsInScope/branchesInScope below.
+  const allFindingsInRange = applyDashboardFilters(
+    db.findings.filter((f) => inDateRange(dateRange, f.findingDate)),
+    filters
+  );
+  const periodFindings = openPeriod ? allFindingsInRange.filter((f) => f.periodId === openPeriod.id) : [];
   const { totalFindings, totalCases, rectifiedFindings, rectifiedCases } = findingCaseTotals(periodFindings);
   const outstandingFindings = periodFindings.filter((f) => !["RECTIFIED", "CLOSED", "REJECTED"].includes(f.status)).length;
   const bankPerformance = openPeriod ? computePerformance(db, { periodId: openPeriod.id }) : null;
@@ -33,7 +71,21 @@ export function HODashboard({ user, db }: { user: SessionData; db: Database }) {
   // of the same outstanding backlog HO needs visibility into.
   const avgOutstandingAgeDays = averageCaseAgeDays(db.findings.filter((f) => !["RECTIFIED", "CLOSED", "REJECTED"].includes(f.status)));
 
-  const districtRanking = db.districts
+  // A district/branch filter narrows which rows the ranking tables even
+  // list - a real narrowing of "what am I looking at," not a redefinition
+  // of the performance formula (computePerformance() itself is untouched).
+  const districtsInScope = filters.districtId ? db.districts.filter((d) => d.id === filters.districtId) : db.districts;
+  const branchesInScope = filters.branchId
+    ? db.branches.filter((b) => b.id === filters.branchId)
+    : filters.districtId
+      ? db.branches.filter((b) => b.districtId === filters.districtId)
+      : db.branches;
+  const sourcesInScope = filters.sourceId ? activeSources.filter((s) => s.id === filters.sourceId) : activeSources;
+  const categoriesInScope = filters.categoryId
+    ? db.categories.filter((c) => c.active && c.id === filters.categoryId)
+    : db.categories.filter((c) => c.active);
+
+  const districtRanking = districtsInScope
     .map((d) => {
       const perf = openPeriod ? computePerformance(db, { districtId: d.id, periodId: openPeriod.id }) : null;
       const findings = periodFindings.filter((f) => f.districtId === d.id);
@@ -41,14 +93,18 @@ export function HODashboard({ user, db }: { user: SessionData; db: Database }) {
     })
     .sort((a, b) => (b.performance ?? -1) - (a.performance ?? -1));
   const rankedDistricts = districtRanking.filter((r) => r.performance !== null);
-  const topDistricts = rankedDistricts.slice(0, 5);
-  const bottomDistricts = [...rankedDistricts].reverse().slice(0, 5);
+  const { topPercent, bottomPercent } = db.settings.performanceThresholds;
+  // "Findings by District" - a plain volume count, a different question
+  // from the performance-ranked table above, sorted by count rather than %.
+  const findingsByDistrict = [...districtRanking].sort((a, b) => b.total - a.total).slice(0, 10);
+  const topDistricts = rankedDistricts.filter((r) => r.performance! >= topPercent);
+  const bottomDistricts = [...rankedDistricts].reverse().filter((r) => r.performance! <= bottomPercent);
 
   // Bank-wide, every branch across every district - the district ranking
   // above is one level up; this is the branch-level comparison master.txt
   // §10/§26 asks for separately ("branch comparison" / "top-performing
   // branches"), not just rolled up into its district's number.
-  const branchRanking = db.branches
+  const branchRanking = branchesInScope
     .map((b) => {
       const perf = openPeriod ? computePerformance(db, { branchId: b.id, periodId: openPeriod.id }) : null;
       const findings = periodFindings.filter((f) => f.branchId === b.id);
@@ -56,10 +112,12 @@ export function HODashboard({ user, db }: { user: SessionData; db: Database }) {
     })
     .sort((a, b) => (b.performance ?? -1) - (a.performance ?? -1));
   const rankedBranches = branchRanking.filter((r) => r.performance !== null);
-  const topBranches = rankedBranches.slice(0, 5);
-  // Document_3 §25's "Top performers"/"Bottom performers" pairing, applied
-  // here too for consistency with the equivalent HO-level widget.
-  const bottomBranches = [...rankedBranches].reverse().slice(0, 5);
+  // Document_3 §25's "Top performers"/"Bottom performers" pairing -
+  // threshold-based (Settings.performanceThresholds), not a fixed
+  // top-5/bottom-5-by-rank cut, so every branch that clears the bar shows,
+  // and the list is legitimately empty when nobody does yet.
+  const topBranches = rankedBranches.filter((r) => r.performance! >= topPercent);
+  const bottomBranches = [...rankedBranches].reverse().filter((r) => r.performance! <= bottomPercent);
 
   // Document_3 §18's IC vs IA table: Total Cases / Other Cases / Rectified
   // / Outstanding / Amount / Rectified Amount, per source. "Other Cases"
@@ -68,7 +126,7 @@ export function HODashboard({ user, db }: { user: SessionData; db: Database }) {
   // hard-coding "Other Case" as a category name (master.txt §9: "do not
   // hard-code these policy decisions").
   const scoredCategoryIds = new Set(activeScoringRule?.categories ?? []);
-  const sourceComparison = activeSources.map((s) => {
+  const sourceComparison = sourcesInScope.map((s) => {
     const findings = periodFindings.filter((f) => f.sourceId === s.id);
     const total = findings.reduce((sum, f) => sum + f.caseCount, 0);
     const rectified = findings.reduce((sum, f) => sum + f.rectifiedCases, 0);
@@ -130,9 +188,11 @@ export function HODashboard({ user, db }: { user: SessionData; db: Database }) {
         sources={activeSources}
         categories={db.categories.filter((c) => c.active)}
         riskLevels={db.settings.riskLevels}
-        defaultPeriodId={openPeriod?.id}
-        hint="Full Findings list with live filtering is at Findings in the sidebar; this dashboard summarizes the currently open period."
+        defaultPeriodId={db.reportingPeriods.find((p) => p.status === "OPEN")?.id}
+        hint="Filters apply immediately. Performance % always reflects the full scoring formula, not narrowed by source/category/risk/status."
       />
+
+      <TimeRangeFilter />
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatCard label="Total Findings" value={openPeriod ? totalFindings : "--"} hint={openPeriod ? openPeriod.code : "No open period"} />
@@ -158,10 +218,12 @@ export function HODashboard({ user, db }: { user: SessionData; db: Database }) {
         />
       </div>
 
+      <CaseBasedPerformance db={db} periodFindings={periodFindings} openPeriod={openPeriod} />
+
       {db.settings.rankingVisibility.districts && (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <Card>
-            <CardHeader title="Top-Performing Districts" description="Highest performance this period, bank-wide" />
+            <CardHeader title="Top-Performing Districts" description={`Performance at or above ${topPercent}% this period, bank-wide`} />
             <div className="divide-y divide-slate-100">
               {topDistricts.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-400">No performance data yet.</p>}
               {topDistricts.map((row, i) => (
@@ -181,7 +243,7 @@ export function HODashboard({ user, db }: { user: SessionData; db: Database }) {
           </Card>
 
           <Card>
-            <CardHeader title="Bottom-Performing Districts" description="Lowest performance this period, bank-wide" />
+            <CardHeader title="Bottom-Performing Districts" description={`Performance at or below ${bottomPercent}% this period, bank-wide`} />
             <div className="divide-y divide-slate-100">
               {bottomDistricts.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-400">No performance data yet.</p>}
               {bottomDistricts.map((row) => (
@@ -203,51 +265,28 @@ export function HODashboard({ user, db }: { user: SessionData; db: Database }) {
       )}
 
       {db.settings.rankingVisibility.districts ? (
-        <Card>
-          <CardHeader title="District Ranking" description="Performance by district, current period" />
-          <div className="p-4">
-            <RankedBarChart
-              items={districtRanking.map((r) => ({
-                id: r.district.id,
-                label: r.district.name,
-                value: r.performance,
-                href: `/findings?districtId=${r.district.id}`,
-              }))}
-              emptyText="No districts configured yet."
-            />
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="border-b border-slate-100 text-xs uppercase text-slate-400">
-                <tr>
-                  <th className="px-4 py-2 font-medium">Rank</th>
-                  <th className="px-4 py-2 font-medium">District</th>
-                  <th className="px-4 py-2 font-medium">Findings</th>
-                  <th className="px-4 py-2 font-medium">Performance</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {districtRanking.length === 0 && (
-                  <tr>
-                    <td colSpan={4} className="px-4 py-6 text-center text-slate-400">
-                      No districts configured yet.
-                    </td>
-                  </tr>
-                )}
-                {districtRanking.map((row, i) => (
-                  <tr key={row.district.id}>
-                    <td className="px-4 py-2 text-slate-400">{i + 1}</td>
-                    <td className="px-4 py-2 text-slate-900">{row.district.name}</td>
-                    <td className="px-4 py-2 text-slate-700">{openPeriod ? row.total : "--"}</td>
-                    <td className="px-4 py-2 text-slate-700">
-                      {row.performance !== null ? `${row.performance.toFixed(1)}%` : "--"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
+        <>
+          <Card>
+            <CardHeader title="District Ranking" description="Performance by district, current period" />
+            <div className="p-4">
+              <RankedBarChart
+                items={districtRanking.map((r) => ({
+                  id: r.district.id,
+                  label: r.district.name,
+                  value: r.performance,
+                  href: `/findings?districtId=${r.district.id}`,
+                }))}
+                emptyText="No districts configured yet."
+              />
+            </div>
+          </Card>
+          <DistrictRankingTable
+            db={db}
+            districts={districtsInScope}
+            openPeriod={openPeriod}
+            description="All districts, ranked by performance - branch counts are dynamic per district"
+          />
+        </>
       ) : (
         <Card>
           <CardHeader title="District Ranking" />
@@ -257,24 +296,9 @@ export function HODashboard({ user, db }: { user: SessionData; db: Database }) {
 
       {db.settings.rankingVisibility.branches && (
         <>
-          <Card>
-            <CardHeader title="Branch Comparison" description="Every branch bank-wide, performance this period" />
-            <div className="p-4">
-              <RankedBarChart
-                items={branchRanking.map((r) => ({
-                  id: r.branch.id,
-                  label: r.branch.name,
-                  value: r.performance,
-                  href: `/findings?branchId=${r.branch.id}`,
-                }))}
-                emptyText="No branches configured yet."
-              />
-            </div>
-          </Card>
-
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <Card>
-              <CardHeader title="Top-Performing Branches" description="Highest performance this period, bank-wide" />
+              <CardHeader title="Top-Performing Branches" description={`Performance at or above ${topPercent}% this period, bank-wide`} />
               <div className="divide-y divide-slate-100">
                 {topBranches.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-400">No performance data yet.</p>}
                 {topBranches.map((row, i) => (
@@ -294,7 +318,7 @@ export function HODashboard({ user, db }: { user: SessionData; db: Database }) {
             </Card>
 
             <Card>
-              <CardHeader title="Bottom-Performing Branches" description="Lowest performance this period, bank-wide" />
+              <CardHeader title="Bottom-Performing Branches" description={`Performance at or below ${bottomPercent}% this period, bank-wide`} />
               <div className="divide-y divide-slate-100">
                 {bottomBranches.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-400">No performance data yet.</p>}
                 {bottomBranches.map((row) => (
@@ -313,8 +337,25 @@ export function HODashboard({ user, db }: { user: SessionData; db: Database }) {
               </div>
             </Card>
           </div>
+
+          <BranchPerformanceTable
+            db={db}
+            branches={branchesInScope}
+            openPeriod={openPeriod}
+            title="Branch Performance"
+            description="Every branch bank-wide, ranked by performance this period"
+          />
         </>
       )}
+
+      <SourcePerformanceSummary db={db} sources={sourcesInScope} periodFindings={periodFindings} scope={{}} openPeriod={openPeriod} />
+
+      <Card>
+        <CardHeader title="Findings by District" description="Top districts by finding count, current period" />
+        <div className="p-4">
+          <ColumnChart items={findingsByDistrict.map((r) => ({ id: r.district.id, label: r.district.name, value: r.total }))} />
+        </div>
+      </Card>
 
       <Card>
         <CardHeader
@@ -376,9 +417,9 @@ export function HODashboard({ user, db }: { user: SessionData; db: Database }) {
                     <td className="px-4 py-2 text-slate-700">{openPeriod ? eligibleCases : "--"}</td>
                     <td className="px-4 py-2 text-slate-700">{openPeriod ? rectified : "--"}</td>
                     <td className="px-4 py-2 text-slate-700">{openPeriod ? outstanding : "--"}</td>
-                    <td className="px-4 py-2 text-slate-700">{openPeriod ? amount.toLocaleString() : "--"}</td>
-                    <td className="px-4 py-2 text-slate-700">{openPeriod ? rectifiedAmount.toLocaleString() : "--"}</td>
-                    <td className="px-4 py-2 text-slate-700">{openPeriod ? outstandingAmount.toLocaleString() : "--"}</td>
+                    <td className="px-4 py-2 text-slate-700">{openPeriod ? formatNumber(amount) : "--"}</td>
+                    <td className="px-4 py-2 text-slate-700">{openPeriod ? formatNumber(rectifiedAmount) : "--"}</td>
+                    <td className="px-4 py-2 text-slate-700">{openPeriod ? formatNumber(outstandingAmount) : "--"}</td>
                   </tr>
                 )
               )}
@@ -387,10 +428,13 @@ export function HODashboard({ user, db }: { user: SessionData; db: Database }) {
         </div>
       </Card>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <MonthlyTrend db={db} scope={{}} />
-        <FindingStatusDistribution findings={db.findings} />
-        <RiskDistribution findings={db.findings} riskLevels={db.settings.riskLevels} />
+      <FindingsByCategoryChart findings={periodFindings} categories={categoriesInScope} openPeriod={openPeriod} />
+
+      <MonthlyTrend db={db} scope={{}} />
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <FindingStatusDistribution findings={allFindingsInRange} />
+        <RiskDistribution findings={allFindingsInRange} riskLevels={db.settings.riskLevels} />
       </div>
 
       <Card>
@@ -428,7 +472,7 @@ export function HODashboard({ user, db }: { user: SessionData; db: Database }) {
                 <span className="text-slate-600">
                   <span className="font-medium text-slate-900">{t.userName}</span> {t.action.replaceAll("_", " ").toLowerCase()}
                 </span>
-                <span className="text-xs text-slate-400">{new Date(t.createdAt).toLocaleString()}</span>
+                <span className="text-xs text-slate-400">{formatDateTime(t.createdAt)}</span>
               </div>
             ))}
           </div>

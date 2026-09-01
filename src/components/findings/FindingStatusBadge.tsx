@@ -18,6 +18,7 @@ const TONES: Record<FindingStatus, "green" | "gray" | "amber" | "red" | "blue"> 
   DISTRICT_APPROVED: "blue",
   HO_REVIEW: "blue",
   HO_APPROVED: "blue",
+  PENDING_BANK_APPROVAL: "blue",
   SENT_TO_BRANCH_MANAGER: "amber",
   PARTIALLY_RECTIFIED: "amber",
   RECTIFIED: "green",

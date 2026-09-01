@@ -26,6 +26,8 @@ export type PermissionAction =
   | "district-review"
   | "ho-review"
   | "rectify"
+  | "verify-rectification"
+  | "return-rectification"
   | "close"
   | "transfer"
   | "evidence"
@@ -74,6 +76,16 @@ export const PAGE_REGISTRY: PageDefinition[] = [
       { action: "district-review", label: "District Approve / Reject / Return" },
       { action: "ho-review", label: "HO Approve / Reject / Return" },
       { action: "rectify", label: "Record Rectification" },
+      // The District Controller's gate on a recorded rectification, before
+      // it's closable by anyone (including HO) - approve it as correct.
+      // Distinct from "close" itself, which is the (now downstream) final
+      // verification/closure action.
+      { action: "verify-rectification", label: "Verify Rectification" },
+      // Send a recorded rectification back to the Branch Manager for
+      // correction - split out from "verify-rectification" so a role can
+      // hold one without the other (e.g. a reviewer who can only approve,
+      // never bounce work back, or vice versa).
+      { action: "return-rectification", label: "Return Rectification for Correction" },
       { action: "close", label: "Close (Verify)" },
       { action: "transfer", label: "Transfer to Next Period" },
       { action: "evidence", label: "Upload Evidence" },

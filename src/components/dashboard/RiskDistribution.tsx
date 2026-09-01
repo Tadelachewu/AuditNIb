@@ -1,5 +1,5 @@
 import { Card, CardHeader } from "@/components/ui/Card";
-import { StackedBarChart, type StackedBarSegment } from "@/components/dashboard/charts/StackedBarChart";
+import { DonutChart } from "@/components/dashboard/charts/DonutChart";
 import type { Finding } from "@/types";
 
 // Fixed status palette (never themed) - a risk tier is a severity state,
@@ -18,44 +18,28 @@ const FALLBACK_COLOR = "#898781";
 
 /**
  * master.txt §10's "risk distribution" widget - a real per-riskLevel
- * breakdown of open findings (not RECTIFIED/CLOSED/REJECTED). Rendered as
- * a part-to-whole stacked bar (dataviz skill: donut stays deprioritized in
- * favor of the stacked bar for this job) plus the numeric count/percentage
- * per level, so the graphical and numeric views sit side by side rather
- * than one replacing the other.
+ * breakdown of open findings (not RECTIFIED/CLOSED/REJECTED), rendered as
+ * a donut (part-to-whole, few categories - chart-selection rule #4).
+ * Clicking a segment (arc or legend row) filters the Findings list to
+ * that risk level - /findings already re-scopes server-side to whoever's
+ * viewing, so no extra district/branch param is needed here.
  */
 export function RiskDistribution({ findings, riskLevels }: { findings: Finding[]; riskLevels: string[] }) {
   const open = findings.filter((f) => !["RECTIFIED", "CLOSED", "REJECTED"].includes(f.status));
-  const total = open.length;
 
-  const segments: StackedBarSegment[] = riskLevels.map((level) => ({
+  const segments = riskLevels.map((level) => ({
     key: level,
     label: level,
+    value: open.filter((f) => f.riskLevel === level).length,
     color: STATUS_COLORS[level.trim().toLowerCase()] ?? FALLBACK_COLOR,
+    href: `/findings?risk=${encodeURIComponent(level)}`,
   }));
-  const counts = Object.fromEntries(riskLevels.map((level) => [level, open.filter((f) => f.riskLevel === level).length]));
 
   return (
     <Card>
-      <CardHeader title="Risk Distribution" description="Open findings by risk level" />
-      <div className="flex flex-col gap-4 p-4">
-        <StackedBarChart
-          segments={segments}
-          rows={[{ id: "open", label: "Open findings", values: counts }]}
-          emptyText="No open findings yet."
-        />
-        {total > 0 && (
-          <div className="grid grid-cols-2 gap-x-4 gap-y-1 border-t border-slate-100 pt-3 sm:grid-cols-4">
-            {riskLevels.map((level) => (
-              <div key={level} className="text-xs">
-                <span className="text-slate-500">{level}</span>{" "}
-                <span className="font-medium text-slate-900">
-                  {counts[level]} ({total > 0 ? ((counts[level] / total) * 100).toFixed(0) : 0}%)
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
+      <CardHeader title="Risk Distribution" description="Open findings by risk level - click a segment to filter" />
+      <div className="p-4">
+        <DonutChart segments={segments} emptyText="No open findings yet." ariaLabel="Risk distribution" />
       </div>
     </Card>
   );

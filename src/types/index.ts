@@ -48,6 +48,14 @@ export interface User {
   createdAt: string;
   updatedAt: string;
   lastLoginAt?: string | null;
+  // Set true whenever someone other than the user themself sets their
+  // password - initial account creation, or an admin's password reset via
+  // PATCH /api/admin/users/[id] - since in both cases the user didn't
+  // choose that password and it may be known to whoever set it. Cleared
+  // the moment the user successfully changes their own password from
+  // their profile (POST /api/auth/change-password). src/proxy.ts redirects
+  // every page but /profile until this clears.
+  mustChangePassword?: boolean;
 }
 
 export type SafeUser = Omit<User, "passwordHash">;
@@ -198,6 +206,30 @@ export interface Settings {
     branches: boolean;
     districts: boolean;
   };
+  // Drives the Top/Bottom Performers widgets on HO/District/Executive
+  // dashboards: a district/branch qualifies as a "top performer" at or
+  // above topPercent, a "bottom performer" at or below bottomPercent -
+  // admin-configurable rather than a fixed top-5/bottom-5-by-rank cut, so
+  // the list can legitimately be empty (nobody qualifies yet) or include
+  // everyone that clears the bar, not just a fixed count.
+  performanceThresholds: {
+    topPercent: number;
+    bottomPercent: number;
+  };
+  // A finding registered by a BANK-scoped user (HO Controller, Admin) can
+  // optionally skip the normal District->HO review chain (there's no
+  // natural "district" to review an HO-originated finding) and instead go
+  // through this single, admin-configured approval step - or none at all,
+  // if `required` is off, in which case it's queued straight to the
+  // Branch Manager the moment it's submitted. `approverUserIds` is a
+  // specific, admin-picked list of individual users (not a role/
+  // permission grant), always drawn from BANK-scoped users only (enforced
+  // in the settings PATCH route) - see PENDING_BANK_APPROVAL in
+  // FINDING_STATUSES and bank-approval/route.ts.
+  hoApproval: {
+    required: boolean;
+    approverUserIds: string[];
+  };
   // Document_3 §30's "Rectification Reminder - System -> Branch Manager":
   // there's no cron/scheduler in this app, so this is checked lazily
   // (see checkRectificationReminders() in src/lib/notifications.ts) off
@@ -223,6 +255,14 @@ export const FINDING_STATUSES = [
   "DISTRICT_APPROVED",
   "HO_REVIEW",
   "HO_APPROVED",
+  // A bank-wide (HO/Admin)-registered finding's optional single approval
+  // step, when Settings.hoApproval.required is on - see submitFinding()'s
+  // branch in src/lib/findings.ts and bank-approval/route.ts. Skipped
+  // entirely (straight from SUBMITTED to SENT_TO_BRANCH_MANAGER) when the
+  // setting is off, and never reached at all for a branch/district-
+  // originated finding, which still always goes through
+  // DISTRICT_REVIEW/HO_REVIEW as before.
+  "PENDING_BANK_APPROVAL",
   "SENT_TO_BRANCH_MANAGER",
   "PARTIALLY_RECTIFIED",
   "RECTIFIED",
@@ -290,6 +330,17 @@ export interface Finding {
   // finding's status keeps tracking rectify/transfer progress as before.
   closedCases: number;
   closedAmount: number;
+  // Cumulative across every DISTRICT_VERIFY_RECTIFICATION action for this
+  // finding, same lagging-progress pattern as closedCases/closedAmount:
+  // the District Controller's approval of a recorded rectification, a
+  // required gate before any of it becomes closable (see close/route.ts's
+  // closable-amount bound and verify-rectification/route.ts). Always
+  // <= rectifiedCases/rectifiedAmount, and closedCases/closedAmount can
+  // never get ahead of *this*, in turn - a District Controller must
+  // approve a rectification before HO (or District itself) can close it,
+  // "before it reaches HO" per the workflow gap this closes.
+  districtVerifiedCases: number;
+  districtVerifiedAmount: number;
   // master.txt §22: "Preserve historical source and identifiers where
   // available" - the source system's own id/reference for this finding
   // (e.g. a legacy Internal Audit tracking number), distinct from

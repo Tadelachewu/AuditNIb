@@ -180,18 +180,20 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       });
     }
 
-    if (fullyRectified) {
-      // master.txt §12: notify on "rectification" - specifically once
-      // there's nothing left outstanding, since that's the moment a
-      // district/HO controller actually has something to verify and close.
-      notifyFindingsPermissionHolders(current, "close", { districtId: f.districtId }, {
-        type: "RECTIFIED",
-        title: `${f.reference} fully rectified`,
-        message: `${auth.session.name} recorded the final rectification. Ready to verify and close.`,
-        entityType: "Finding",
-        entityId: f.id,
-      });
-    }
+    // master.txt §12: notify on "rectification" - the District Controller
+    // is the one with something to act on next (verify or return for
+    // correction), whether this entry finished the job or was only
+    // partial - not just once fully rectified, since a partial entry still
+    // has verifiable progress waiting.
+    notifyFindingsPermissionHolders(current, ["verify-rectification", "return-rectification"], { districtId: f.districtId }, {
+      type: "RECTIFIED",
+      title: fullyRectified ? `${f.reference} fully rectified` : `${f.reference} partially rectified`,
+      message: fullyRectified
+        ? `${auth.session.name} recorded the final rectification. Ready for district verification.`
+        : `${auth.session.name} recorded ${rectifiedCases} case(s) / ${f.currency} ${rectifiedAmount.toLocaleString()} rectified. Ready for district verification.`,
+      entityType: "Finding",
+      entityId: f.id,
+    });
 
     return f;
   });

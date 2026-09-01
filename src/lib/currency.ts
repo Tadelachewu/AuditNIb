@@ -1,3 +1,4 @@
+import { formatNumber } from "@/lib/format";
 import type { Finding } from "@/types";
 
 /**
@@ -14,8 +15,8 @@ export function sumAmountByCurrency(findings: Finding[], field: "amount" | "rect
   }
   if (totals.size === 0) return "--";
   return [...totals.entries()]
-    .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([currency, total]) => `${currency} ${total.toLocaleString()}`)
+    .sort((a, b) => a[0].localeCompare(b[0], "en-US"))
+    .map(([currency, total]) => `${currency} ${formatNumber(total)}`)
     .join(" · ");
 }
 
@@ -27,7 +28,7 @@ export function sumOutstandingByCurrency(findings: Finding[]): string {
   }
   if (totals.size === 0) return "--";
   return [...totals.entries()]
-    .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([currency, total]) => `${currency} ${total.toLocaleString()}`)
+    .sort((a, b) => a[0].localeCompare(b[0], "en-US"))
+    .map(([currency, total]) => `${currency} ${formatNumber(total)}`)
     .join(" · ");
 }

@@ -1,8 +1,16 @@
+import { formatNumber } from "@/lib/format";
+
 export interface DonutSegment {
   key: string;
   label: string;
   value: number;
   color: string;
+  // When set, the arc (an SVG <a>, not a Next Link - a full navigation to
+  // a server-rendered page is exactly what "filter to this segment's
+  // findings" needs) and its legend row both become clickable, filtering
+  // to that segment (e.g. Risk Distribution -> /findings?risk=High).
+  // Omitted entirely, this stays the plain read-only chart it always was.
+  href?: string;
 }
 
 /**
@@ -16,7 +24,15 @@ export interface DonutSegment {
  * color-only: every segment gets a swatch + text label + count +
  * percentage in the legend, not just a colored wedge.
  */
-export function DonutChart({ segments, emptyText = "No data yet." }: { segments: DonutSegment[]; emptyText?: string }) {
+export function DonutChart({
+  segments,
+  emptyText = "No data yet.",
+  ariaLabel = "Status distribution",
+}: {
+  segments: DonutSegment[];
+  emptyText?: string;
+  ariaLabel?: string;
+}) {
   const total = segments.reduce((sum, s) => sum + s.value, 0);
   if (total === 0) {
     return <p className="py-10 text-center text-sm text-slate-400">{emptyText}</p>;
@@ -55,31 +71,57 @@ export function DonutChart({ segments, emptyText = "No data yet." }: { segments:
 
   return (
     <div className="flex items-center gap-5">
-      <svg viewBox={`0 0 ${size} ${size}`} className="h-32 w-32 shrink-0" role="img" aria-label="Status distribution">
-        {arcs.map((a) => (
-          <path key={a.key} d={a.path} fill={a.color} stroke="#fcfcfb" strokeWidth={2}>
-            <title>
-              {a.label}: {a.value.toLocaleString()} ({((a.value / total) * 100).toFixed(0)}%)
-            </title>
-          </path>
-        ))}
+      <svg viewBox={`0 0 ${size} ${size}`} className="h-32 w-32 shrink-0" role="img" aria-label={ariaLabel}>
+        {arcs.map((a) => {
+          const arc = (
+            <path
+              d={a.path}
+              fill={a.color}
+              stroke="#fcfcfb"
+              strokeWidth={2}
+              className={a.href ? "cursor-pointer transition-opacity hover:opacity-80" : undefined}
+            >
+              <title>
+                {a.label}: {formatNumber(a.value)} ({((a.value / total) * 100).toFixed(0)}%)
+              </title>
+            </path>
+          );
+          return a.href ? (
+            <a key={a.key} href={a.href}>
+              {arc}
+            </a>
+          ) : (
+            <g key={a.key}>{arc}</g>
+          );
+        })}
         <text x={cx} y={cy - 4} textAnchor="middle" fontSize={16} fontWeight={600} fill="#0b0b0b">
-          {total.toLocaleString()}
+          {formatNumber(total)}
         </text>
         <text x={cx} y={cy + 12} textAnchor="middle" fontSize={8} fill="#898781">
           total
         </text>
       </svg>
       <div className="flex flex-col gap-1.5">
-        {segments.map((s) => (
-          <div key={s.key} className="flex items-center gap-2 text-xs">
-            <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ backgroundColor: s.color }} />
-            <span className="text-slate-600">{s.label}</span>
-            <span className="font-medium text-slate-900">
-              {s.value.toLocaleString()} ({total > 0 ? ((s.value / total) * 100).toFixed(0) : 0}%)
-            </span>
-          </div>
-        ))}
+        {segments.map((s) => {
+          const row = (
+            <>
+              <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ backgroundColor: s.color }} />
+              <span className="text-slate-600">{s.label}</span>
+              <span className="font-medium text-slate-900">
+                {formatNumber(s.value)} ({total > 0 ? ((s.value / total) * 100).toFixed(0) : 0}%)
+              </span>
+            </>
+          );
+          return s.href ? (
+            <a key={s.key} href={s.href} className="flex items-center gap-2 text-xs hover:underline">
+              {row}
+            </a>
+          ) : (
+            <div key={s.key} className="flex items-center gap-2 text-xs">
+              {row}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

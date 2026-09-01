@@ -96,6 +96,19 @@ export function autoTransferOnLock(
   return { transferredCount: outstanding.length, skippedNoDestination: false };
 }
 
+/**
+ * The reporting period immediately before the given one (by year/month),
+ * regardless of its OPEN/LOCKED status - used for period-over-period
+ * comparison (e.g. a branch's "Highest Improvement" callout on the Branch
+ * Performance table: this period's performance minus the previous
+ * period's). Returns undefined if this is the earliest period on record.
+ */
+export function findPreviousPeriod(db: Database, period: ReportingPeriod): ReportingPeriod | undefined {
+  return [...db.reportingPeriods]
+    .filter((p) => p.year < period.year || (p.year === period.year && p.month < period.month))
+    .sort((a, b) => b.year - a.year || b.month - a.month)[0];
+}
+
 /** Days since the finding was originally registered - unaffected by any transfer, since transferFinding() never touches createdAt (master.txt §8: "track case age from original finding date"). */
 export function caseAgeDays(finding: Finding): number {
   return Math.floor((Date.now() - new Date(finding.createdAt).getTime()) / 86_400_000);
@@ -209,8 +222,36 @@ export function transitionFinding(
 // call, both within the same request/updateDb(), so the history stays
 // complete without requiring a separate "claim" action nowhere described
 // in the BRD.
-export function submitFinding(db: Database, finding: Finding, userId: string, userName: string): void {
+/**
+ * `registeredByBankScope` (the *submitting* user's current session.orgScope
+ * === "BANK", not who originally created the finding - a returned finding
+ * resubmitted later by a branch-scoped user correctly falls back to the
+ * normal chain) routes a bank-wide (HO/Admin)-registered finding past
+ * DISTRICT_REVIEW/HO_REVIEW entirely - there's no natural "district" to
+ * review a finding HO itself registered. Instead: Settings.hoApproval.required
+ * decides whether it needs the single admin-configured approval step
+ * (PENDING_BANK_APPROVAL - see bank-approval/route.ts) or goes straight to
+ * the Branch Manager, same destination the normal chain would eventually
+ * reach anyway.
+ */
+export function submitFinding(
+  db: Database,
+  finding: Finding,
+  userId: string,
+  userName: string,
+  opts?: { registeredByBankScope?: boolean }
+): void {
   transitionFinding(db, finding, { toStatus: "SUBMITTED", action: "SUBMIT", userId, userName });
+
+  if (opts?.registeredByBankScope) {
+    if (db.settings.hoApproval.required) {
+      transitionFinding(db, finding, { toStatus: "PENDING_BANK_APPROVAL", action: "QUEUE_BANK_APPROVAL", userId, userName });
+    } else {
+      transitionFinding(db, finding, { toStatus: "SENT_TO_BRANCH_MANAGER", action: "QUEUE_BRANCH_MANAGER", userId, userName });
+    }
+    return;
+  }
+
   transitionFinding(db, finding, { toStatus: "DISTRICT_REVIEW", action: "QUEUE_DISTRICT_REVIEW", userId, userName });
 }
 
@@ -276,10 +317,26 @@ export function queueStatusesForSession(session: SessionData): (finding: Finding
       (f) =>
         f.status === "SENT_TO_BRANCH_MANAGER" || f.status === "PARTIALLY_RECTIFIED" || f.status === "RECTIFICATION_RETURNED"
     );
-  if (has("close"))
+  // District's gate on a recorded rectification, before it's HO's turn -
+  // "has something rectified that hasn't been district-verified yet." Either
+  // permission alone still means there's a decision this session can make
+  // on it (approve, or send back), so both queue the same findings.
+  if (has("verify-rectification") || has("return-rectification"))
     matchers.push(
-      (f) => f.status !== "CLOSED" && (f.rectifiedCases > f.closedCases || f.rectifiedAmount > f.closedAmount)
+      (f) =>
+        f.status !== "RECTIFICATION_RETURNED" &&
+        f.status !== "CLOSED" &&
+        (f.rectifiedCases > f.districtVerifiedCases || f.rectifiedAmount > f.districtVerifiedAmount)
     );
+  if (has("close"))
+    matchers.push((f) => {
+      // Bounded by what's actually district-verified, not just rectified -
+      // mirrors close/route.ts's own closable-amount calculation, so this
+      // queue never promises something close/route.ts would then reject.
+      const verifiedCases = Math.min(f.rectifiedCases, f.districtVerifiedCases);
+      const verifiedAmount = Math.min(f.rectifiedAmount, f.districtVerifiedAmount);
+      return f.status !== "CLOSED" && (verifiedCases > f.closedCases || verifiedAmount > f.closedAmount);
+    });
   return (f) => matchers.some((matches) => matches(f));
 }
 

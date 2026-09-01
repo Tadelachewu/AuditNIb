@@ -2,6 +2,8 @@ import Link from "next/link";
 import { getCurrentUser } from "@/lib/session";
 import { readDb } from "@/lib/db";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
+import { parseDateRange } from "@/lib/dateRange";
+import { parseDashboardFilters } from "@/lib/dashboardFilters";
 import { Card } from "@/components/ui/Card";
 import { BranchDashboard } from "@/components/dashboard/BranchDashboard";
 import { DistrictDashboard } from "@/components/dashboard/DistrictDashboard";
@@ -19,9 +21,16 @@ function noAccessCard(pageLabel: string) {
   );
 }
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const user = (await getCurrentUser())!;
   const db = readDb();
+  const params = await searchParams;
+  const dateRange = parseDateRange(params);
+  const filters = parseDashboardFilters(params);
 
   // Which dashboard to render is decided from the role's orgScope, not its
   // code, so a custom branch/district-scoped role gets the right dashboard
@@ -37,19 +46,35 @@ export default async function DashboardPage() {
   const has = (code: string) => hasPermission(user.permissions, permissionKey(code, "view"));
 
   if (user.role === "EXECUTIVE_READONLY") {
-    return has("executive-dashboard") ? <ExecutiveDashboard user={user} db={db} /> : noAccessCard("Executive Dashboard");
+    return has("executive-dashboard") ? (
+      <ExecutiveDashboard user={user} db={db} dateRange={dateRange} />
+    ) : (
+      noAccessCard("Executive Dashboard")
+    );
   }
 
   if (user.orgScope === "BRANCH" && user.role !== "ADMIN") {
-    return has("branch-dashboard") ? <BranchDashboard user={user} db={db} /> : noAccessCard("Branch Dashboard");
+    return has("branch-dashboard") ? (
+      <BranchDashboard user={user} db={db} dateRange={dateRange} filters={filters} />
+    ) : (
+      noAccessCard("Branch Dashboard")
+    );
   }
 
   if (user.orgScope === "DISTRICT" && user.role !== "ADMIN") {
-    return has("district-dashboard") ? <DistrictDashboard user={user} db={db} /> : noAccessCard("District Dashboard");
+    return has("district-dashboard") ? (
+      <DistrictDashboard user={user} db={db} dateRange={dateRange} filters={filters} />
+    ) : (
+      noAccessCard("District Dashboard")
+    );
   }
 
   if (user.orgScope === "BANK" && user.role !== "ADMIN") {
-    return has("ho-dashboard") ? <HODashboard user={user} db={db} /> : noAccessCard("HO Dashboard");
+    return has("ho-dashboard") ? (
+      <HODashboard user={user} db={db} dateRange={dateRange} filters={filters} />
+    ) : (
+      noAccessCard("HO Dashboard")
+    );
   }
 
   const openPeriod = db.reportingPeriods.find((p) => p.status === "OPEN");

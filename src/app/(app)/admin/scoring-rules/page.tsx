@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { apiGet, apiSend, ApiError } from "@/lib/api-client";
+import { formatDate } from "@/lib/format";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input, Label } from "@/components/ui/Field";
@@ -427,7 +428,7 @@ export default function ScoringRulesPage() {
                   <>
                     <p className="mt-1 text-xs text-slate-500">{r.basis}</p>
                     <p className="mt-1 text-xs text-slate-400">
-                      Effective {new Date(r.effectiveFrom).toLocaleDateString()} · Categories:{" "}
+                      Effective {formatDate(r.effectiveFrom)} · Categories:{" "}
                       {r.categories.map((id) => nameFor(categories, id)).join(", ") || "—"} · Sources:{" "}
                       {r.sources.map((id) => nameFor(sources, id)).join(", ") || "—"}
                     </p>

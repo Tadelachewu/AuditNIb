@@ -2,12 +2,17 @@ import type { Database } from "@/types";
 import type { SessionData } from "@/lib/session";
 import { computePerformance, findingCaseTotals, transferTotals, averageCaseAgeDays } from "@/lib/findings";
 import { sumAmountByCurrency, sumOutstandingByCurrency } from "@/lib/currency";
+import { inDateRange, type DateRange } from "@/lib/dateRange";
 import { Card, CardHeader, StatCard } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
+import { TimeRangeFilter } from "@/components/reports/TimeRangeFilter";
 import { RiskDistribution } from "@/components/dashboard/RiskDistribution";
 import { FindingStatusDistribution } from "@/components/dashboard/FindingStatusDistribution";
 import { MonthlyTrend } from "@/components/dashboard/MonthlyTrend";
 import { StackedBarChart } from "@/components/dashboard/charts/StackedBarChart";
+import { SourcePerformanceSummary } from "@/components/dashboard/SourcePerformanceSummary";
+import { CaseBasedPerformance } from "@/components/dashboard/CaseBasedPerformance";
+import { FindingsByCategoryChart } from "@/components/dashboard/FindingsByCategoryChart";
 
 // master.txt §10: a concise, read-only bank-wide summary for Executive
 // Management - KPIs, top-performer rankings, and an exceptions count
@@ -17,9 +22,16 @@ import { StackedBarChart } from "@/components/dashboard/charts/StackedBarChart";
 // means fewer *operational* widgets (no work queue, no per-branch edit
 // links) - it doesn't mean less bank-wide financial/comparative context,
 // which is exactly what leadership needs and the widgets below add.
-export function ExecutiveDashboard({ db }: { user: SessionData; db: Database }) {
+export function ExecutiveDashboard({ db, dateRange = {} }: { user: SessionData; db: Database; dateRange?: DateRange }) {
   const openPeriod = db.reportingPeriods.find((p) => p.status === "OPEN");
-  const periodFindings = openPeriod ? db.findings.filter((f) => f.periodId === openPeriod.id) : [];
+  // Optional Today/Week/Month/Custom filter (TimeRangeFilter), by each
+  // finding's own findingDate - never computePerformance()'s scoring
+  // (Bank-wide/District/Branch Performance and every ranking below stay
+  // period-scored regardless) or the all-time backlog/exceptions status
+  // metrics (those describe the current backlog as it stands today, not a
+  // reporting window), same split the Reports page's own time filter uses.
+  const allFindingsInRange = db.findings.filter((f) => inDateRange(dateRange, f.findingDate));
+  const periodFindings = openPeriod ? allFindingsInRange.filter((f) => f.periodId === openPeriod.id) : [];
   const bankPerformance = openPeriod ? computePerformance(db, { periodId: openPeriod.id }) : null;
   const activeScoringRule = db.scoringRules.find((r) => r.active);
   const activeSources = db.sources.filter((s) => s.active);
@@ -40,19 +52,21 @@ export function ExecutiveDashboard({ db }: { user: SessionData; db: Database }) 
   const highRiskTiers = new Set(db.settings.riskLevels.slice(-2).map((l) => l.toLowerCase()));
   const exceptions = outstanding.filter((f) => highRiskTiers.has(f.riskLevel.toLowerCase()));
 
+  const { topPercent, bottomPercent } = db.settings.performanceThresholds;
+
   const districtRanking = db.districts
     .map((d) => ({ district: d, performance: openPeriod ? computePerformance(db, { districtId: d.id, periodId: openPeriod.id }) : null }))
     .filter((r) => r.performance !== null)
     .sort((a, b) => (b.performance ?? 0) - (a.performance ?? 0));
-  const topDistricts = districtRanking.slice(0, 5);
-  const bottomDistricts = [...districtRanking].reverse().slice(0, 5);
+  const topDistricts = districtRanking.filter((r) => r.performance! >= topPercent);
+  const bottomDistricts = [...districtRanking].reverse().filter((r) => r.performance! <= bottomPercent);
 
   const branchRanking = db.branches
     .map((b) => ({ branch: b, performance: openPeriod ? computePerformance(db, { branchId: b.id, periodId: openPeriod.id }) : null }))
     .filter((r) => r.performance !== null)
     .sort((a, b) => (b.performance ?? 0) - (a.performance ?? 0));
-  const topBranches = branchRanking.slice(0, 5);
-  const bottomBranches = [...branchRanking].reverse().slice(0, 5);
+  const topBranches = branchRanking.filter((r) => r.performance! >= topPercent);
+  const bottomBranches = [...branchRanking].reverse().filter((r) => r.performance! <= bottomPercent);
 
   // Document_3 §18's IC vs IA comparison, same computation HODashboard
   // uses - Executive Management is exactly the audience for "how do our
@@ -72,6 +86,8 @@ export function ExecutiveDashboard({ db }: { user: SessionData; db: Database }) 
         <h1 className="text-lg font-semibold text-slate-900">Executive Dashboard</h1>
         <p className="mt-1 text-sm text-slate-500">Bank-wide summary, view-only</p>
       </div>
+
+      <TimeRangeFilter />
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatCard
@@ -97,10 +113,12 @@ export function ExecutiveDashboard({ db }: { user: SessionData; db: Database }) 
         />
       </div>
 
+      <CaseBasedPerformance db={db} periodFindings={periodFindings} openPeriod={openPeriod} />
+
       {db.settings.rankingVisibility.districts ? (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <Card>
-            <CardHeader title="Top Districts" description="By performance, current period" />
+            <CardHeader title="Top Districts" description={`At or above ${topPercent}%, current period`} />
             <div className="divide-y divide-slate-100">
               {topDistricts.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-400">No data yet.</p>}
               {topDistricts.map((row, i) => (
@@ -116,7 +134,7 @@ export function ExecutiveDashboard({ db }: { user: SessionData; db: Database }) 
           </Card>
 
           <Card>
-            <CardHeader title="Bottom Districts" description="By performance, current period" />
+            <CardHeader title="Bottom Districts" description={`At or below ${bottomPercent}%, current period`} />
             <div className="divide-y divide-slate-100">
               {bottomDistricts.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-400">No data yet.</p>}
               {bottomDistricts.map((row) => (
@@ -141,7 +159,7 @@ export function ExecutiveDashboard({ db }: { user: SessionData; db: Database }) 
       {db.settings.rankingVisibility.branches ? (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <Card>
-            <CardHeader title="Top Branches" description="By performance, current period" />
+            <CardHeader title="Top Branches" description={`At or above ${topPercent}%, current period`} />
             <div className="divide-y divide-slate-100">
               {topBranches.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-400">No data yet.</p>}
               {topBranches.map((row, i) => (
@@ -157,7 +175,7 @@ export function ExecutiveDashboard({ db }: { user: SessionData; db: Database }) 
           </Card>
 
           <Card>
-            <CardHeader title="Bottom Branches" description="By performance, current period" />
+            <CardHeader title="Bottom Branches" description={`At or below ${bottomPercent}%, current period`} />
             <div className="divide-y divide-slate-100">
               {bottomBranches.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-400">No data yet.</p>}
               {bottomBranches.map((row) => (
@@ -178,6 +196,8 @@ export function ExecutiveDashboard({ db }: { user: SessionData; db: Database }) 
           <p className="p-4 text-sm text-slate-400">Branch ranking visibility is disabled by your administrator.</p>
         </Card>
       )}
+
+      <SourcePerformanceSummary db={db} sources={activeSources} periodFindings={periodFindings} scope={{}} openPeriod={openPeriod} />
 
       <Card>
         <CardHeader
@@ -225,10 +245,13 @@ export function ExecutiveDashboard({ db }: { user: SessionData; db: Database }) 
         </div>
       </Card>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <MonthlyTrend db={db} scope={{}} />
-        <FindingStatusDistribution findings={db.findings} />
-        <RiskDistribution findings={db.findings} riskLevels={db.settings.riskLevels} />
+      <FindingsByCategoryChart findings={periodFindings} categories={db.categories.filter((c) => c.active)} openPeriod={openPeriod} />
+
+      <MonthlyTrend db={db} scope={{}} />
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <FindingStatusDistribution findings={allFindingsInRange} />
+        <RiskDistribution findings={allFindingsInRange} riskLevels={db.settings.riskLevels} />
       </div>
 
       <Card>

@@ -3,7 +3,7 @@ import { requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { assertFindingInScope } from "@/lib/findings-scope";
 import { submitFinding, assertPeriodWritable } from "@/lib/findings";
-import { notifyFindingsPermissionHolders } from "@/lib/notifications";
+import { notifyFindingsPermissionHolders, notifyUsers } from "@/lib/notifications";
 
 const SUBMITTABLE_STATUSES = ["DRAFT", "RETURNED"];
 
@@ -28,14 +28,36 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
 
   const updated = updateDb((current) => {
     const f = current.findings.find((x) => x.id === id)!;
-    submitFinding(current, f, auth.session.userId!, auth.session.name!);
-    notifyFindingsPermissionHolders(current, "district-review", { districtId: f.districtId }, {
-      type: "SUBMITTED",
-      title: `${f.reference} awaiting district review`,
-      message: `${auth.session.name} submitted this finding for district review.`,
-      entityType: "Finding",
-      entityId: f.id,
-    });
+    const registeredByBankScope = auth.session.orgScope === "BANK";
+    submitFinding(current, f, auth.session.userId!, auth.session.name!, { registeredByBankScope });
+
+    if (registeredByBankScope) {
+      if (current.settings.hoApproval.required) {
+        notifyUsers(current, current.settings.hoApproval.approverUserIds, {
+          type: "SUBMITTED",
+          title: `${f.reference} awaiting approval`,
+          message: `${auth.session.name} submitted this finding for approval.`,
+          entityType: "Finding",
+          entityId: f.id,
+        });
+      } else {
+        notifyFindingsPermissionHolders(current, "rectify", { branchId: f.branchId }, {
+          type: "SUBMITTED",
+          title: `${f.reference} awaiting rectification`,
+          message: `${auth.session.name} submitted this finding, sent straight to the branch (no approval required).`,
+          entityType: "Finding",
+          entityId: f.id,
+        });
+      }
+    } else {
+      notifyFindingsPermissionHolders(current, "district-review", { districtId: f.districtId }, {
+        type: "SUBMITTED",
+        title: `${f.reference} awaiting district review`,
+        message: `${auth.session.name} submitted this finding for district review.`,
+        entityType: "Finding",
+        entityId: f.id,
+      });
+    }
     return f;
   });
 

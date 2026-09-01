@@ -1,3 +1,5 @@
+import { formatNumber } from "@/lib/format";
+
 export interface StackedBarSegment {
   key: string;
   label: string;
@@ -62,13 +64,13 @@ export function StackedBarChart({
                             key={s.key}
                             className="h-full first:rounded-l-full last:rounded-r-full"
                             style={{ width: `${pct}%`, backgroundColor: s.color }}
-                            title={`${row.label} — ${s.label}: ${value.toLocaleString()}`}
+                            title={`${row.label} — ${s.label}: ${formatNumber(value)}`}
                           />
                         );
                       })}
                 </div>
                 <span className="w-16 shrink-0 text-right text-xs font-medium text-slate-700">
-                  {total.toLocaleString()}
+                  {formatNumber(total)}
                 </span>
               </div>
             );

@@ -8,7 +8,7 @@ interface ConfirmOptions {
   title: string;
   message: string;
   confirmLabel?: string;
-  tone?: "danger" | "default";
+  tone?: "danger" | "default" | "success";
   /** When true, the dialog collects a short text reason and returns it instead of "". */
   needsReason?: boolean;
 }
@@ -69,7 +69,11 @@ export function useConfirm() {
           <Button variant="secondary" onClick={handleCancel}>
             Cancel
           </Button>
-          <Button variant={state.tone === "danger" ? "danger" : "primary"} disabled={reasonTooShort} onClick={handleConfirm}>
+          <Button
+            variant={state.tone === "danger" ? "danger" : state.tone === "success" ? "success" : "primary"}
+            disabled={reasonTooShort}
+            onClick={handleConfirm}
+          >
             {state.confirmLabel ?? "Confirm"}
           </Button>
         </div>

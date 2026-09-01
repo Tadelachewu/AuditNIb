@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { apiGet, apiSend, ApiError } from "@/lib/api-client";
+import { formatDateTime } from "@/lib/format";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input, Label } from "@/components/ui/Field";
@@ -144,13 +145,13 @@ export default function ReportingPeriodsPage() {
                   <tr key={p.id}>
                     <td className="px-4 py-2 font-medium text-slate-900">{p.code}</td>
                     <td className="px-4 py-2 text-xs text-slate-500">
-                      {new Date(p.startsAt).toLocaleString()} — {new Date(p.endsAt).toLocaleString()}
+                      {formatDateTime(p.startsAt)} — {formatDateTime(p.endsAt)}
                     </td>
                     <td className="px-4 py-2">
                       <Badge tone={p.status === "OPEN" ? "green" : "red"}>{p.status}</Badge>
                     </td>
                     <td className="px-4 py-2 text-xs text-slate-400">
-                      {p.lockReason ? `${p.lockReason} · ${new Date(p.updatedAt).toLocaleString()}` : "—"}
+                      {p.lockReason ? `${p.lockReason} · ${formatDateTime(p.updatedAt)}` : "—"}
                     </td>
                     <td className="px-4 py-2 text-right">
                       <Button variant="secondary" disabled={rowBusy === p.id} onClick={() => toggleLock(p)}>

@@ -1,28 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { Select, Label } from "@/components/ui/Field";
 import { FINDING_STATUSES, type ReportingPeriod, type District, type Branch, type Source, type ClassifiedCategory } from "@/types";
-
-export interface DashboardFilters {
-  periodId: string;
-  districtId: string;
-  branchId: string;
-  sourceId: string;
-  categoryId: string;
-  risk: string;
-  status: string;
-}
-
-export const EMPTY_FILTERS: DashboardFilters = {
-  periodId: "",
-  districtId: "",
-  branchId: "",
-  sourceId: "",
-  categoryId: "",
-  risk: "",
-  status: "",
-};
+import { type DashboardFilters } from "@/lib/dashboardFilters";
 
 export interface FilterBarProps {
   periods: ReportingPeriod[];
@@ -35,8 +16,7 @@ export interface FilterBarProps {
   /** Org fields the caller's role may not widen past their own scope - shown fixed, not editable. */
   fixedDistrict?: { id: string; name: string };
   fixedBranch?: { id: string; name: string };
-  onChange?: (filters: DashboardFilters) => void;
-  /** Small caption under the bar, e.g. explaining what these filters do (or don't yet) drive. */
+  /** Small caption under the bar, e.g. explaining what these filters do. */
   hint?: string;
 }
 
@@ -45,9 +25,12 @@ export interface FilterBarProps {
  * Source, Classified Case, Risk, Status"). Org fields are locked to the
  * caller's own scope when provided - "Filters must never bypass
  * organizational scope" - so a Branch user cannot pick a different branch
- * even in the UI. State is local only for now: there is no Finding query
- * yet for these to drive, so this establishes the correct control set
- * ahead of that (see PHASE4.md).
+ * even in the UI. URL-driven, same convention as TimeRangeFilter's own
+ * dateFrom/dateTo: every change pushes onto the query string, and the
+ * server-component dashboard that renders this bar reads the same
+ * searchParams (via parseDashboardFilters) to actually filter what it
+ * shows - so a picked filter genuinely changes the page, not just this
+ * control's own local state.
  */
 export function FilterBar({
   periods,
@@ -59,20 +42,35 @@ export function FilterBar({
   defaultPeriodId,
   fixedDistrict,
   fixedBranch,
-  onChange,
   hint,
 }: FilterBarProps) {
-  const [filters, setFilters] = useState<DashboardFilters>({
-    ...EMPTY_FILTERS,
-    periodId: defaultPeriodId ?? "",
-    districtId: fixedDistrict?.id ?? "",
-    branchId: fixedBranch?.id ?? "",
-  });
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  const filters: DashboardFilters = {
+    periodId: searchParams.get("periodId") ?? defaultPeriodId ?? "",
+    districtId: fixedDistrict?.id ?? searchParams.get("districtId") ?? "",
+    branchId: fixedBranch?.id ?? searchParams.get("branchId") ?? "",
+    sourceId: searchParams.get("sourceId") ?? "",
+    categoryId: searchParams.get("categoryId") ?? "",
+    risk: searchParams.get("risk") ?? "",
+    status: searchParams.get("status") ?? "",
+  };
 
   function update(patch: Partial<DashboardFilters>) {
     const next = { ...filters, ...patch };
-    setFilters(next);
-    onChange?.(next);
+    const params = new URLSearchParams(searchParams.toString());
+    (Object.keys(next) as (keyof DashboardFilters)[]).forEach((key) => {
+      // Never write a field the caller's org scope already locks - the
+      // Select for it isn't even rendered, so there's nothing to reflect.
+      if (key === "districtId" && fixedDistrict) return;
+      if (key === "branchId" && fixedBranch) return;
+      if (next[key]) params.set(key, next[key]);
+      else params.delete(key);
+    });
+    const query = params.toString();
+    router.push(query ? `${pathname}?${query}` : pathname);
   }
 
   const branchOptions = filters.districtId ? branches.filter((b) => b.districtId === filters.districtId) : branches;
@@ -179,6 +177,32 @@ export function FilterBar({
             ))}
           </Select>
         </div>
+
+        {(filters.periodId !== (defaultPeriodId ?? "") ||
+          filters.districtId !== (fixedDistrict?.id ?? "") ||
+          filters.branchId !== (fixedBranch?.id ?? "") ||
+          filters.sourceId ||
+          filters.categoryId ||
+          filters.risk ||
+          filters.status) && (
+          <button
+            type="button"
+            onClick={() =>
+              update({
+                periodId: defaultPeriodId ?? "",
+                districtId: fixedDistrict?.id ?? "",
+                branchId: fixedBranch?.id ?? "",
+                sourceId: "",
+                categoryId: "",
+                risk: "",
+                status: "",
+              })
+            }
+            className="text-xs text-slate-500 hover:underline"
+          >
+            Reset filters
+          </button>
+        )}
       </div>
       {hint && <p className="mt-2 text-xs text-slate-400">{hint}</p>}
     </div>

@@ -1,5 +1,5 @@
 import { v4 as uuid } from "uuid";
-import { hasPermission, permissionKey } from "@/lib/permissions/registry";
+import { permissionKey } from "@/lib/permissions/registry";
 import type { Database } from "@/types";
 
 export interface NotifyOptions {
@@ -43,12 +43,16 @@ export function notifyUsers(db: Database, recipientUserIds: string[], opts: Noti
  */
 export function usersWithFindingsPermission(
   db: Database,
-  action: string,
+  action: string | string[],
   scope: { districtId?: string; branchId?: string } = {}
 ): string[] {
-  const key = permissionKey("findings", action);
+  // Accepts several actions so a caller can notify "whoever can act on
+  // this next" without double-notifying someone who holds more than one
+  // of them (e.g. verify-rectification split from return-rectification -
+  // a role holding both should still get exactly one notification).
+  const keys = new Set((Array.isArray(action) ? action : [action]).map((a) => permissionKey("findings", a)));
   const eligibleRoles = new Map(
-    db.roles.filter((r) => r.status === "ACTIVE" && hasPermission(r.permissions, key)).map((r) => [r.code, r])
+    db.roles.filter((r) => r.status === "ACTIVE" && r.permissions.some((p) => keys.has(p))).map((r) => [r.code, r])
   );
 
   return db.users
@@ -64,7 +68,7 @@ export function usersWithFindingsPermission(
 
 export function notifyFindingsPermissionHolders(
   db: Database,
-  action: string,
+  action: string | string[],
   scope: { districtId?: string; branchId?: string },
   opts: NotifyOptions
 ): void {

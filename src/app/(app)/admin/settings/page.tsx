@@ -6,16 +6,21 @@ import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input, Select, Label } from "@/components/ui/Field";
 import { SettingsListEditor } from "@/components/admin/SettingsListEditor";
-import type { Settings } from "@/types";
+import type { Settings, SafeUser } from "@/types";
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<Settings | null>(null);
+  const [bankUsers, setBankUsers] = useState<SafeUser[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
     apiGet<{ settings: Settings }>("/api/admin/settings").then(({ settings }) => setSettings(settings));
+    // Every active BANK-scoped user (ADMIN/HO Controller/Executive holders)
+    // - the only pool a hoApproval approver can be picked from, enforced
+    // again server-side in the PATCH route.
+    apiGet<{ users: SafeUser[] }>("/api/admin/users?orgScope=BANK").then(({ users }) => setBankUsers(users));
   }, []);
 
   function updateList(key: keyof Pick<Settings, "currencies" | "riskLevels" | "operationAreas" | "priorityLevels" | "irregularityTypes">, items: string[]) {
@@ -38,6 +43,8 @@ export default function SettingsPage() {
         autoTransferOnLock: settings.autoTransferOnLock,
         rankingVisibility: settings.rankingVisibility,
         rectificationReminders: settings.rectificationReminders,
+        performanceThresholds: settings.performanceThresholds,
+        hoApproval: settings.hoApproval,
       };
       const res = await apiSend<{ settings: Settings }>("/api/admin/settings", "PATCH", payload);
       setSettings(res.settings);
@@ -252,6 +259,102 @@ export default function SettingsPage() {
             progress. Checked lazily off the existing notification poll (no scheduler in this app), so it may take a
             few minutes past the exact threshold to fire, never less.
           </p>
+        </div>
+      </Card>
+
+      <Card className="mt-4">
+        <CardHeader
+          title="Top / Bottom Performers"
+          description="Thresholds driving the Top/Bottom Performers widgets on HO/District/Executive dashboards."
+        />
+        <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2">
+          <div>
+            <Label htmlFor="topPercent">Top performer: at or above (%)</Label>
+            <Input
+              id="topPercent"
+              type="number"
+              min="0"
+              max="100"
+              value={settings.performanceThresholds.topPercent}
+              onChange={(e) =>
+                setSettings({
+                  ...settings,
+                  performanceThresholds: { ...settings.performanceThresholds, topPercent: Number(e.target.value) || 0 },
+                })
+              }
+            />
+          </div>
+          <div>
+            <Label htmlFor="bottomPercent">Bottom performer: at or below (%)</Label>
+            <Input
+              id="bottomPercent"
+              type="number"
+              min="0"
+              max="100"
+              value={settings.performanceThresholds.bottomPercent}
+              onChange={(e) =>
+                setSettings({
+                  ...settings,
+                  performanceThresholds: { ...settings.performanceThresholds, bottomPercent: Number(e.target.value) || 0 },
+                })
+              }
+            />
+          </div>
+          <p className="text-xs text-slate-400 sm:col-span-2">
+            A district/branch qualifies as a &quot;Top Performer&quot; once its performance for the current period
+            reaches the first value, and a &quot;Bottom Performer&quot; at or below the second. Every district/branch
+            that clears the bar is shown - not a fixed top-5/bottom-5.
+          </p>
+        </div>
+      </Card>
+
+      <Card className="mt-4">
+        <CardHeader
+          title="Bank-Wide Approval"
+          description="Optional approval step for findings registered by a bank-wide (HO/Admin) user."
+        />
+        <div className="flex flex-col gap-3 p-4">
+          <label className="flex items-center gap-2 text-sm text-slate-700">
+            <input
+              type="checkbox"
+              checked={settings.hoApproval.required}
+              onChange={(e) => setSettings({ ...settings, hoApproval: { ...settings.hoApproval, required: e.target.checked } })}
+              className="h-4 w-4 rounded border-slate-300"
+            />
+            Require approval before a bank-registered finding is sent to the branch
+          </label>
+          <p className="text-xs text-slate-400">
+            A finding an HO Controller or Admin registers has no natural district to review it, so it never goes
+            through District/HO Review. When this is off, it&apos;s sent straight to the Branch Manager on submit. When
+            on, it waits for one of the approver(s) below instead.
+          </p>
+          <div>
+            <Label>Approver(s) - bank-wide users only</Label>
+            <div className="mt-1 flex max-h-48 flex-col gap-1 overflow-y-auto rounded-md border border-slate-200 p-2">
+              {bankUsers.length === 0 && <p className="p-2 text-sm text-slate-400">No bank-wide users found.</p>}
+              {bankUsers.map((u) => (
+                <label key={u.id} className="flex items-center gap-2 rounded px-2 py-1 text-sm hover:bg-slate-50">
+                  <input
+                    type="checkbox"
+                    checked={settings.hoApproval.approverUserIds.includes(u.id)}
+                    onChange={(e) =>
+                      setSettings({
+                        ...settings,
+                        hoApproval: {
+                          ...settings.hoApproval,
+                          approverUserIds: e.target.checked
+                            ? [...settings.hoApproval.approverUserIds, u.id]
+                            : settings.hoApproval.approverUserIds.filter((id) => id !== u.id),
+                        },
+                      })
+                    }
+                    className="h-4 w-4 rounded border-slate-300"
+                  />
+                  {u.name} <span className="text-xs text-slate-400">({u.username})</span>
+                </label>
+              ))}
+            </div>
+          </div>
         </div>
       </Card>
 

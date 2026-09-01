@@ -54,6 +54,14 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 
+  // An admin-set password (initial creation or a reset) forces every page
+  // but /profile until the user changes it themself - see
+  // User.mustChangePassword's doc comment. Never gates /api routes (they
+  // already bail out above); this only blocks navigating the UI.
+  if (isLoggedIn && session.mustChangePassword && pathname !== "/profile") {
+    return NextResponse.redirect(new URL("/profile", request.url));
+  }
+
   const pageCode = pageCodeFor(pathname);
   if (isLoggedIn && pageCode && !hasPermission(session.permissions, permissionKey(pageCode, "view"))) {
     return NextResponse.redirect(new URL("/dashboard", request.url));

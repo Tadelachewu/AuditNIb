@@ -12,17 +12,17 @@ const returnSchema = z.object({
   reason: z.string().trim().min(5, "A reason of at least 5 characters is required"),
 });
 
-// The District/HO Controller's verification step can go two ways, not
-// just "close it": if the recorded rectification itself has a problem
-// (wrong amount, insufficient evidence, wrong case), they send it back to
-// the Branch Manager instead - gated by the same `findings.close`
-// authority as closing itself, since this is the other half of the same
-// "verify" duty. Blocks close/partial-close/transfer until the Branch
-// Manager addresses it (rectify again, or the explicit
-// resubmit-rectification action) and it's re-verified - see
-// RECTIFICATION_RETURNED in src/types/index.ts.
+// The District Controller's verification step can go two ways, not just
+// "approve it": if the recorded rectification itself has a problem (wrong
+// amount, insufficient evidence, wrong case), they send it back to the
+// Branch Manager instead - gated by its own `findings.return-rectification`
+// permission, split from `findings.verify-rectification` (verify-
+// rectification/route.ts) so a role can hold one without the other. Blocks
+// close/partial-close/transfer until the Branch Manager addresses it
+// (rectify again, or the explicit resubmit-rectification action) and it's
+// re-verified - see RECTIFICATION_RETURNED in src/types/index.ts.
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requirePermission("findings.close");
+  const auth = await requirePermission("findings.return-rectification");
   if (!auth.ok) return auth.response;
   const { id } = await params;
 

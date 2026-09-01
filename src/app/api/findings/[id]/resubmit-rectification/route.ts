@@ -45,7 +45,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
       userName: auth.session.name!,
     });
 
-    notifyFindingsPermissionHolders(current, "close", { districtId: f.districtId }, {
+    notifyFindingsPermissionHolders(current, ["verify-rectification", "return-rectification"], { districtId: f.districtId }, {
       type: "RECTIFICATION_RESUBMITTED",
       title: `${f.reference} resubmitted for verification`,
       message: `${auth.session.name} addressed the return reason and resubmitted this finding.`,

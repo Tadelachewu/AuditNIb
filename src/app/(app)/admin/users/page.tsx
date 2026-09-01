@@ -2,6 +2,7 @@
 
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { apiGet, apiSend, ApiError } from "@/lib/api-client";
+import { formatDateTime } from "@/lib/format";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input, Select, Label } from "@/components/ui/Field";
@@ -368,7 +369,7 @@ export default function UsersPage() {
                           <StatusBadge status={u.status} />
                         </td>
                         <td className="px-4 py-2 text-xs text-slate-400">
-                          {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString() : "Never"}
+                          {u.lastLoginAt ? formatDateTime(u.lastLoginAt) : "Never"}
                         </td>
                         <td className="px-4 py-2 text-right">
                           <div className="flex justify-end gap-2">

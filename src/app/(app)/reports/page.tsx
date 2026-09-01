@@ -6,10 +6,11 @@ import { findingsInScope } from "@/lib/findings-scope";
 import { computePerformance } from "@/lib/findings";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
 import { paginate, parsePage } from "@/lib/pagination";
+import { formatDateTime, formatNumber } from "@/lib/format";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Pagination } from "@/components/ui/Pagination";
 import { FindingStatusBadge } from "@/components/findings/FindingStatusBadge";
-import { FindingsFilterBar } from "@/components/findings/FindingsFilterBar";
+import { FilterBar } from "@/components/dashboard/FilterBar";
 import { TimeRangeFilter } from "@/components/reports/TimeRangeFilter";
 import { PrintButton } from "@/components/reports/PrintButton";
 import type { Finding } from "@/types";
@@ -153,7 +154,7 @@ export default async function ReportsPage({
       </div>
 
       <div className="no-print">
-        <FindingsFilterBar
+        <FilterBar
           periods={db.reportingPeriods}
           districts={user.orgScope === "BRANCH" || user.orgScope === "DISTRICT" ? (district ? [district] : []) : db.districts}
           branches={user.orgScope === "BRANCH" ? (branch ? [branch] : []) : db.branches}
@@ -162,6 +163,7 @@ export default async function ReportsPage({
           riskLevels={db.settings.riskLevels}
           fixedDistrict={user.orgScope !== "BANK" && district ? { id: district.id, name: district.name } : undefined}
           fixedBranch={user.orgScope === "BRANCH" && branch ? { id: branch.id, name: branch.name } : undefined}
+          hint="Filters apply immediately."
         />
       </div>
 
@@ -199,10 +201,10 @@ export default async function ReportsPage({
                   <td className="px-4 py-2 text-slate-600">{categoryName(f.categoryId)}</td>
                   <td className="px-4 py-2 text-slate-600">{sourceName(f.sourceId)}</td>
                   <td className="px-4 py-2 text-slate-900">
-                    {f.currency} {f.amount.toLocaleString()}
+                    {f.currency} {formatNumber(f.amount)}
                   </td>
                   <td className="px-4 py-2 text-slate-900">
-                    {f.currency} {(f.amount - f.rectifiedAmount).toLocaleString()}
+                    {f.currency} {formatNumber(f.amount - f.rectifiedAmount)}
                   </td>
                   <td className="px-4 py-2">
                     <FindingStatusBadge status={f.status} />
@@ -308,9 +310,9 @@ export default async function ReportsPage({
                     {finding?.reference ?? t.findingId}
                   </Link>{" "}
                   — <span className="font-medium text-slate-900">{t.createdByName}</span> transferred {t.casesTransferred}{" "}
-                  case(s) / {finding?.currency ?? ""} {t.amountTransferred.toLocaleString()}
+                  case(s) / {finding?.currency ?? ""} {formatNumber(t.amountTransferred)}
                 </span>
-                <span className="text-xs text-slate-400">{new Date(t.createdAt).toLocaleString()}</span>
+                <span className="text-xs text-slate-400">{formatDateTime(t.createdAt)}</span>
               </div>
             );
           })}

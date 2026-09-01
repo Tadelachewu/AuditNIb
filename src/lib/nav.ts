@@ -15,7 +15,10 @@ export interface NavSection {
 export const NAV_SECTIONS: NavSection[] = [
   {
     label: "Overview",
-    items: [{ label: "Dashboard", href: "/dashboard" }],
+    items: [
+      { label: "Dashboard", href: "/dashboard" },
+      { label: "My Profile", href: "/profile" },
+    ],
   },
   {
     label: "Findings",

@@ -12,6 +12,12 @@ import { paginate, parsePage } from "@/lib/pagination";
 // A real bank deployment can have hundreds of users (several per branch,
 // across every branch bank-wide) - paginated the same way Branches/Audit
 // Log are, rather than shipping every user row on every page load.
+//
+// `?orgScope=BANK` bypasses pagination and returns every ACTIVE user whose
+// role holds that org scope - for pickers like Settings' HO-approval
+// assignment, where "every active bank-wide user" is a genuinely small,
+// bounded set (ADMIN/HO Controller/Executive holders) that needs to be
+// fully visible to choose from, not paged.
 export async function GET(request: Request) {
   const auth = await requirePermission("users.view");
   if (!auth.ok) return auth.response;
@@ -19,6 +25,14 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const db = readDb();
   const sorted = [...db.users].sort((a, b) => a.name.localeCompare(b.name));
+
+  const orgScopeFilter = searchParams.get("orgScope");
+  if (orgScopeFilter) {
+    const rolesByCode = new Map(db.roles.map((r) => [r.code, r]));
+    const filtered = sorted.filter((u) => u.status === "ACTIVE" && rolesByCode.get(u.role)?.orgScope === orgScopeFilter);
+    return NextResponse.json({ users: filtered.map(toSafeUser), total: filtered.length, page: 1, pageSize: filtered.length, totalPages: 1 });
+  }
+
   const result = paginate(sorted.map(toSafeUser), parsePage(searchParams.get("page") ?? undefined), 25);
   return NextResponse.json({ users: result.items, total: result.total, page: result.page, pageSize: result.pageSize, totalPages: result.totalPages });
 }
@@ -86,6 +100,9 @@ export async function POST(request: Request) {
     createdAt: now,
     updatedAt: now,
     lastLoginAt: null,
+    // The admin chose this password, not the user - forced to their
+    // profile to set their own on first login (src/proxy.ts).
+    mustChangePassword: true,
   };
 
   updateDb((current) => {

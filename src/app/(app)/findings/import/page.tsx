@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { apiGet, ApiError } from "@/lib/api-client";
+import { formatDateTime } from "@/lib/format";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -176,7 +177,7 @@ export default function ImportFindingsPage() {
                   <div className="text-sm">
                     <span className="font-medium text-slate-900">{b.fileName}</span>{" "}
                     <span className="text-xs text-slate-400">
-                      by {b.importedByName} · {new Date(b.createdAt).toLocaleString()}
+                      by {b.importedByName} · {formatDateTime(b.createdAt)}
                     </span>
                   </div>
                   <div className="flex items-center gap-2 text-xs">

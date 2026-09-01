@@ -32,6 +32,14 @@ const updateSchema = z.object({
     thresholdDays: z.number().int().min(1).max(365),
     lastCheckedAt: z.string().optional(),
   }),
+  performanceThresholds: z.object({
+    topPercent: z.number().min(0).max(100),
+    bottomPercent: z.number().min(0).max(100),
+  }),
+  hoApproval: z.object({
+    required: z.boolean(),
+    approverUserIds: z.array(z.string()),
+  }),
 });
 
 export async function PATCH(request: Request) {
@@ -45,6 +53,22 @@ export async function PATCH(request: Request) {
 
   const db = readDb();
   const before = db.settings;
+
+  // "if there is approval it should be the bank wide user" - every
+  // assigned approver must actually hold a BANK-scoped role, not just any
+  // active user, since this bypasses the normal district/HO review chain
+  // entirely.
+  if (parsed.data.hoApproval.approverUserIds.length > 0) {
+    const rolesByCode = new Map(db.roles.map((r) => [r.code, r]));
+    const invalid = parsed.data.hoApproval.approverUserIds.filter((userId) => {
+      const user = db.users.find((u) => u.id === userId);
+      const role = user ? rolesByCode.get(user.role) : undefined;
+      return !user || user.status !== "ACTIVE" || role?.orgScope !== "BANK";
+    });
+    if (invalid.length > 0) {
+      return NextResponse.json({ error: "Every approver must be an active, bank-wide-scoped user" }, { status: 400 });
+    }
+  }
 
   const updated = updateDb((current) => {
     current.settings = {

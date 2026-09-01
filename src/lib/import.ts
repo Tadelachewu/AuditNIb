@@ -354,6 +354,8 @@ export function validateImportRow(
     rectifiedAmount: 0,
     closedCases: 0,
     closedAmount: 0,
+    districtVerifiedCases: 0,
+    districtVerifiedAmount: 0,
     createdBy: opts.userId,
     createdAt: now,
     updatedAt: now,

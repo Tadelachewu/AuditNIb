@@ -178,6 +178,8 @@ export async function POST(request: Request) {
     rectifiedAmount: 0,
     closedCases: 0,
     closedAmount: 0,
+    districtVerifiedCases: 0,
+    districtVerifiedAmount: 0,
     createdBy: session.userId!,
     createdAt: now,
     updatedAt: now,
@@ -201,7 +203,7 @@ export async function POST(request: Request) {
       // `finding` closure) so submitFinding mutates the copy that's
       // actually persisted by updateDb().
       const persisted = current.findings.find((f) => f.id === finding.id)!;
-      submitFinding(current, persisted, session.userId!, session.name!);
+      submitFinding(current, persisted, session.userId!, session.name!, { registeredByBankScope: session.orgScope === "BANK" });
     }
   });
 

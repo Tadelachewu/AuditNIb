@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiSend, ApiError } from "@/lib/api-client";
+import { formatNumber } from "@/lib/format";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input, Select, Label, Textarea } from "@/components/ui/Field";
@@ -462,7 +463,7 @@ export function NewFindingForm({
                   </div>
                 ))}
                 <p className={`text-xs ${caseAmountsMatch ? "text-slate-500" : "text-red-600"}`}>
-                  Case total: {caseAmountsSum.toLocaleString()} / Amount involved: {(Number(form.amount) || 0).toLocaleString()}
+                  Case total: {formatNumber(caseAmountsSum)} / Amount involved: {formatNumber(Number(form.amount) || 0)}
                   {!caseAmountsMatch && " — these must match"}
                 </p>
               </div>

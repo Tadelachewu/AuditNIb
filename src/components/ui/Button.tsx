@@ -1,6 +1,6 @@
 import { type ButtonHTMLAttributes } from "react";
 
-type Variant = "primary" | "secondary" | "danger" | "ghost";
+type Variant = "primary" | "secondary" | "danger" | "success" | "ghost";
 
 // Action buttons (Sign In, Create User, Sign Out, New Finding, and
 // similar) show the brand gold sampled from the NIB logo's lower half
@@ -26,6 +26,12 @@ const VARIANT_CLASSES: Record<Variant, string> = {
   secondary:
     "bg-white text-slate-700 border border-slate-300 hover:bg-slate-50 hover:border-slate-400 disabled:bg-slate-50 disabled:text-slate-300 disabled:border-slate-200",
   danger: "bg-red-600 text-white hover:bg-red-700 disabled:bg-red-300",
+  // For an affirmative/approve action that shouldn't read as destructive
+  // (e.g. accepting a rectification as closed) - deliberately not `danger`
+  // (that red cue means "this is risky"), and distinct from `primary`'s
+  // gold since gold is the app's generic "do the one thing here" color,
+  // not specifically "approve." Matches Badge tone="green"'s emerald hue.
+  success: "bg-emerald-600 text-white hover:bg-emerald-700 disabled:bg-emerald-300",
   ghost: "text-slate-600 hover:bg-brand-gold hover:text-slate-900 disabled:text-slate-300",
 };
 

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { apiGet } from "@/lib/api-client";
+import { formatDateTime } from "@/lib/format";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Pagination } from "@/components/ui/Pagination";
@@ -53,7 +54,7 @@ export default function AuditLogPage() {
               {!loading &&
                 logs.map((l) => (
                   <tr key={l.id}>
-                    <td className="px-4 py-2 text-xs text-slate-400 whitespace-nowrap">{new Date(l.timestamp).toLocaleString()}</td>
+                    <td className="px-4 py-2 text-xs text-slate-400 whitespace-nowrap">{formatDateTime(l.timestamp)}</td>
                     <td className="px-4 py-2 text-slate-900">{l.userName}</td>
                     <td className="px-4 py-2">
                       <Badge tone="blue">{l.action}</Badge>

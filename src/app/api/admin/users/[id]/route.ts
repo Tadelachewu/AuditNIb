@@ -92,7 +92,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const u = current.users.find((x) => x.id === id)!;
     if (input.name !== undefined) u.name = input.name;
     if (input.status !== undefined) u.status = input.status;
-    if (input.password) u.passwordHash = hashPassword(input.password);
+    if (input.password) {
+      u.passwordHash = hashPassword(input.password);
+      // Same reasoning as account creation - the admin chose this
+      // password, not the user, so it's forced through /profile again.
+      u.mustChangePassword = true;
+    }
     u.role = nextRole;
     u.districtId = districtId;
     u.branchId = branchId;

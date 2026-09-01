@@ -4,22 +4,43 @@ import type { SessionData } from "@/lib/session";
 import { findBranchManager, findBranchSubManager, findBranchController } from "@/lib/org";
 import { computePerformance, queueStatusesForSession, findingCaseTotals, transferTotals } from "@/lib/findings";
 import { sumAmountByCurrency, sumOutstandingByCurrency } from "@/lib/currency";
+import { formatDateTime, formatNumber } from "@/lib/format";
+import { inDateRange, type DateRange } from "@/lib/dateRange";
+import { applyDashboardFilters, EMPTY_DASHBOARD_FILTERS, type DashboardFilters } from "@/lib/dashboardFilters";
 import { Card, CardHeader, StatCard } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { FilterBar } from "@/components/dashboard/FilterBar";
+import { TimeRangeFilter } from "@/components/reports/TimeRangeFilter";
 import { RiskDistribution } from "@/components/dashboard/RiskDistribution";
 import { FindingStatusDistribution } from "@/components/dashboard/FindingStatusDistribution";
 import { CategoryDistribution } from "@/components/dashboard/CategoryDistribution";
 import { MonthlyTrend } from "@/components/dashboard/MonthlyTrend";
 import { FindingStatusBadge } from "@/components/findings/FindingStatusBadge";
+import { CaseBasedPerformance } from "@/components/dashboard/CaseBasedPerformance";
+import { FindingsByCategoryChart } from "@/components/dashboard/FindingsByCategoryChart";
 
 // Per master.txt §10: "Selected month; category totals; total/rectified/
 // outstanding; Other Case summary; performance; monthly trend; risk
 // distribution; recent activity; relevant work queues."
-export function BranchDashboard({ user, db }: { user: SessionData; db: Database }) {
+export function BranchDashboard({
+  user,
+  db,
+  dateRange = {},
+  filters = EMPTY_DASHBOARD_FILTERS,
+}: {
+  user: SessionData;
+  db: Database;
+  dateRange?: DateRange;
+  filters?: DashboardFilters;
+}) {
   const branch = db.branches.find((b) => b.id === user.branchId);
   const district = db.districts.find((d) => d.id === user.districtId);
-  const openPeriod = db.reportingPeriods.find((p) => p.status === "OPEN");
+  // FilterBar's own period picker takes priority over "whichever period is
+  // currently OPEN" - picking a locked/past period is exactly how you'd
+  // review dashboard history, not just the live one.
+  const openPeriod = filters.periodId
+    ? db.reportingPeriods.find((p) => p.id === filters.periodId)
+    : db.reportingPeriods.find((p) => p.status === "OPEN");
   const activeCategories = db.categories.filter((c) => c.active);
   const otherCase = db.categories.find((c) => c.code === "OTHER_CASE");
   const activeScoringRule = db.scoringRules.find((r) => r.active);
@@ -37,10 +58,18 @@ export function BranchDashboard({ user, db }: { user: SessionData; db: Database 
     );
   }
 
-  // "Selected month" - this page doesn't wire the FilterBar's period picker
-  // to a real query yet (see PHASE6.md), so the currently open period
-  // stands in as the implicit default.
-  const periodFindings = openPeriod ? db.findings.filter((f) => f.branchId === branch.id && f.periodId === openPeriod.id) : [];
+  // Optional Today/Week/Month/Custom filter (TimeRangeFilter) plus
+  // FilterBar's source/category/risk/status fields (district/branch are
+  // already fixed to this branch, so those two fields are a no-op here),
+  // by each finding's own attributes - never computePerformance()'s
+  // scoring formula itself (Performance %, Branch Ranking below stay
+  // keyed to the full BRD-defined eligible-case set, not narrowed by an
+  // ad-hoc filter).
+  const branchAllFindings = applyDashboardFilters(
+    db.findings.filter((f) => f.branchId === branch.id && inDateRange(dateRange, f.findingDate)),
+    filters
+  );
+  const periodFindings = openPeriod ? branchAllFindings.filter((f) => f.periodId === openPeriod.id) : [];
   const { totalFindings, totalCases, rectifiedFindings, rectifiedCases } = findingCaseTotals(periodFindings);
   const outstandingFindings = periodFindings.filter((f) => !["RECTIFIED", "CLOSED", "REJECTED"].includes(f.status)).length;
   const performance = openPeriod ? computePerformance(db, { branchId: branch.id, periodId: openPeriod.id }) : null;
@@ -52,7 +81,12 @@ export function BranchDashboard({ user, db }: { user: SessionData; db: Database 
   const otherCaseTotal = otherCaseFindings.reduce((sum, f) => sum + f.caseCount, 0);
   const otherCaseRectified = otherCaseFindings.reduce((sum, f) => sum + f.rectifiedCases, 0);
 
-  const categoryTotals = activeCategories.map((c) => {
+  // A category filter narrows which rows the category widgets even list -
+  // a real narrowing of "what am I looking at," not a redefinition of the
+  // performance formula (computePerformance() itself is untouched).
+  const categoriesInScope = filters.categoryId ? activeCategories.filter((c) => c.id === filters.categoryId) : activeCategories;
+
+  const categoryTotals = categoriesInScope.map((c) => {
     const findings = periodFindings.filter((f) => f.categoryId === c.id);
     const total = findings.reduce((sum, f) => sum + f.caseCount, 0);
     const rectified = findings.reduce((sum, f) => sum + f.rectifiedCases, 0);
@@ -123,11 +157,13 @@ export function BranchDashboard({ user, db }: { user: SessionData; db: Database 
         sources={db.sources.filter((s) => s.active)}
         categories={activeCategories}
         riskLevels={db.settings.riskLevels}
-        defaultPeriodId={openPeriod?.id}
+        defaultPeriodId={db.reportingPeriods.find((p) => p.status === "OPEN")?.id}
         fixedDistrict={district ? { id: district.id, name: district.name } : undefined}
         fixedBranch={{ id: branch.id, name: branch.name }}
-        hint="Full Findings list with live filtering is at Findings in the sidebar; this dashboard summarizes the currently open period."
+        hint="Filters apply immediately. Performance % always reflects the full scoring formula, not narrowed by source/category/risk/status."
       />
+
+      <TimeRangeFilter />
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatCard label="Total Findings" value={openPeriod ? totalFindings : "--"} hint={openPeriod ? openPeriod.code : "No open period"} />
@@ -147,6 +183,8 @@ export function BranchDashboard({ user, db }: { user: SessionData; db: Database 
         <StatCard label="Resolved Amount" value={openPeriod ? resolvedAmount : "--"} hint="Cumulative rectified" />
         <StatCard label="Outstanding Amount" value={openPeriod ? outstandingAmount : "--"} hint="Still owed" />
       </div>
+
+      <CaseBasedPerformance db={db} periodFindings={periodFindings} openPeriod={openPeriod} />
 
       {db.settings.rankingVisibility.branches ? (
         <Card>
@@ -240,9 +278,9 @@ export function BranchDashboard({ user, db }: { user: SessionData; db: Database 
                   <td className="px-4 py-2 text-slate-700">{openPeriod ? total : "--"}</td>
                   <td className="px-4 py-2 text-slate-700">{openPeriod ? rectified : "--"}</td>
                   <td className="px-4 py-2 text-slate-700">{openPeriod ? outstanding : "--"}</td>
-                  <td className="px-4 py-2 text-slate-700">{openPeriod ? amount.toLocaleString() : "--"}</td>
-                  <td className="px-4 py-2 text-slate-700">{openPeriod ? rectifiedAmount.toLocaleString() : "--"}</td>
-                  <td className="px-4 py-2 text-slate-700">{openPeriod ? catOutstandingAmount.toLocaleString() : "--"}</td>
+                  <td className="px-4 py-2 text-slate-700">{openPeriod ? formatNumber(amount) : "--"}</td>
+                  <td className="px-4 py-2 text-slate-700">{openPeriod ? formatNumber(rectifiedAmount) : "--"}</td>
+                  <td className="px-4 py-2 text-slate-700">{openPeriod ? formatNumber(catOutstandingAmount) : "--"}</td>
                 </tr>
               ))}
             </tbody>
@@ -250,13 +288,16 @@ export function BranchDashboard({ user, db }: { user: SessionData; db: Database 
         </div>
       </Card>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <MonthlyTrend db={db} scope={{ branchId: branch.id }} />
-        <FindingStatusDistribution findings={db.findings.filter((f) => f.branchId === branch.id)} />
-        <RiskDistribution findings={db.findings.filter((f) => f.branchId === branch.id)} riskLevels={db.settings.riskLevels} />
+      <FindingsByCategoryChart findings={periodFindings} categories={categoriesInScope} openPeriod={openPeriod} />
+
+      <MonthlyTrend db={db} scope={{ branchId: branch.id }} />
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <FindingStatusDistribution findings={branchAllFindings} />
+        <RiskDistribution findings={branchAllFindings} riskLevels={db.settings.riskLevels} />
       </div>
 
-      <CategoryDistribution findings={db.findings.filter((f) => f.branchId === branch.id)} categories={activeCategories} />
+      <CategoryDistribution findings={branchAllFindings} categories={categoriesInScope} />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
@@ -281,7 +322,7 @@ export function BranchDashboard({ user, db }: { user: SessionData; db: Database 
                 <span className="text-slate-600">
                   <span className="font-medium text-slate-900">{t.userName}</span> {t.action.replaceAll("_", " ").toLowerCase()}
                 </span>
-                <span className="text-xs text-slate-400">{new Date(t.createdAt).toLocaleString()}</span>
+                <span className="text-xs text-slate-400">{formatDateTime(t.createdAt)}</span>
               </div>
             ))}
           </div>

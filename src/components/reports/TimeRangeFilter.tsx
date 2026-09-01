@@ -31,9 +31,9 @@ function presetRange(preset: Exclude<Preset, "custom">): { from: string; to: str
 
 /**
  * Reporting time filter (distinct from the reporting-*period* dropdown in
- * FindingsFilterBar) - filters the Reports page by each finding's own
+ * FilterBar) - filters the Reports page by each finding's own
  * `findingDate`, quick-preset style. Pushes `dateFrom`/`dateTo` onto the
- * URL query string, same convention as FindingsFilterBar, so the server
+ * URL query string, same convention as FilterBar, so the server
  * component re-queries with no client-side fetch duplication.
  */
 export function TimeRangeFilter() {

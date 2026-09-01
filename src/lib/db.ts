@@ -1,7 +1,17 @@
 import fs from "node:fs";
 import path from "node:path";
+import { v4 as uuid } from "uuid";
 import { hashPassword } from "@/lib/auth";
 import { ALL_PERMISSION_KEYS, ALL_VIEW_PERMISSION_KEYS, permissionKey } from "@/lib/permissions/registry";
+import { appendAuditLog } from "@/lib/audit";
+import {
+  transitionFinding,
+  submitFinding,
+  districtApproveFinding,
+  hoApproveFinding,
+  transferFinding,
+  nextFindingReference,
+} from "@/lib/findings";
 import type {
   Database,
   User,
@@ -14,6 +24,11 @@ import type {
   ScoringRule,
   ReportingPeriod,
   Settings,
+  Finding,
+  FindingCase,
+  RectificationEntry,
+  FindingClosure,
+  Comment,
 } from "@/types";
 
 // ---------------------------------------------------------------------------
@@ -47,6 +62,11 @@ function buildSeedDatabase(): Database {
     { id: "branch-1", code: "B001", name: "Bole Branch", districtId: "district-1", status: "ACTIVE", createdAt: now, updatedAt: now },
     { id: "branch-2", code: "B002", name: "Piassa Branch", districtId: "district-1", status: "ACTIVE", createdAt: now, updatedAt: now },
     { id: "branch-3", code: "B003", name: "Adama Main Branch", districtId: "district-2", status: "ACTIVE", createdAt: now, updatedAt: now },
+    // A second branch in district-2, so District Ranking's "branches are
+    // dynamic per district" claim has more than one district actually
+    // demonstrating it (district-3 stays at zero branches on purpose -
+    // that's its own useful edge case, an org unit with nothing under it yet).
+    { id: "branch-4", code: "B004", name: "Adama Kality Branch", districtId: "district-2", status: "ACTIVE", createdAt: now, updatedAt: now },
   ];
 
   const sources: Source[] = [
@@ -105,7 +125,29 @@ function buildSeedDatabase(): Database {
   const today = new Date();
   const seedPeriodStart = new Date(today.getFullYear(), today.getMonth(), 1, 0, 0);
   const seedPeriodEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59);
+  // A prior, already-LOCKED period behind the current OPEN one - without
+  // one, there's nowhere for a genuine Transfer Engine example to move a
+  // finding *from* (transferFinding() moves periodId forward into an
+  // OPEN destination), and Monthly Trend/period-over-period "Highest
+  // Improvement" have only a single point to draw with just one period.
+  const prevPeriodDate = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+  const prevPeriodStart = new Date(prevPeriodDate.getFullYear(), prevPeriodDate.getMonth(), 1, 0, 0);
+  const prevPeriodEnd = new Date(prevPeriodDate.getFullYear(), prevPeriodDate.getMonth() + 1, 0, 23, 59);
   const reportingPeriods: ReportingPeriod[] = [
+    {
+      id: "period-0",
+      year: prevPeriodDate.getFullYear(),
+      month: prevPeriodDate.getMonth() + 1,
+      code: `${prevPeriodDate.getFullYear()}-${String(prevPeriodDate.getMonth() + 1).padStart(2, "0")}`,
+      startsAt: prevPeriodStart.toISOString(),
+      endsAt: prevPeriodEnd.toISOString(),
+      status: "LOCKED",
+      lockedBy: "user-admin",
+      lockedAt: seedPeriodStart.toISOString(),
+      lockReason: "Prior period closed at seed time.",
+      createdAt: now,
+      updatedAt: now,
+    },
     {
       id: "period-1",
       year: today.getFullYear(),
@@ -156,6 +198,13 @@ function buildSeedDatabase(): Database {
     notification: { provider: "NONE", fromAddress: "" },
     autoTransferOnLock: false,
     rankingVisibility: { branches: true, districts: true },
+    performanceThresholds: { topPercent: 80, bottomPercent: 50 },
+    // Left off by default (see the field's own doc comment), but with a
+    // real approver already assigned - so the one seeded
+    // PENDING_BANK_APPROVAL example finding below has someone who can
+    // actually action it the moment an admin turns `required` on, rather
+    // than an empty approver list nobody could ever use.
+    hoApproval: { required: false, approverUserIds: ["user-ho-controller"] },
     rectificationReminders: { enabled: false, thresholdDays: 7 },
     updatedAt: now,
   };
@@ -221,6 +270,13 @@ function buildSeedDatabase(): Database {
     // closure is their verification duty per master.txt §"Verification".
     permissionKey("findings", "view"),
     permissionKey("findings", "district-review"),
+    // The gate on a Branch Manager's recorded rectification, before it
+    // reaches HO (or is closable at all): approve it, or return it for
+    // correction - two separate permissions (see verify-rectification/
+    // route.ts and return-rectification/route.ts) so a role can be granted
+    // one without the other; District Controller gets both by default.
+    permissionKey("findings", "verify-rectification"),
+    permissionKey("findings", "return-rectification"),
     permissionKey("findings", "close"),
     // "Transfer outstanding cases" (icfms.txt).
     permissionKey("findings", "transfer"),
@@ -482,7 +538,7 @@ function buildSeedDatabase(): Database {
     },
   ];
 
-  return {
+  const db: Database = {
     users,
     roles,
     districts,
@@ -511,6 +567,582 @@ function buildSeedDatabase(): Database {
     settings,
     auditLogs: [],
   };
+
+  seedFindings(db);
+  return db;
+}
+
+// Every seeded Finding is driven through the exact same domain functions
+// the real API routes call (submitFinding/districtApproveFinding/
+// hoApproveFinding/transferFinding/transitionFinding from
+// src/lib/findings.ts, plus the same field-mutation logic
+// rectify/verify-rectification/close/route.ts each use) rather than
+// hand-assembled with a status string and hoped-for field values - so
+// every seeded finding's rectifiedCases/districtVerifiedCases/
+// closedCases bounds, FindingTransition history, and RectificationEntry/
+// FindingClosure ledger rows are exactly as internally consistent as a
+// finding that went through the real workflow, and a fresh install's
+// dashboards/charts/rankings have real, varied data instead of being
+// empty until someone manually creates test records.
+function seedFindings(db: Database): void {
+  const [prevPeriod, openPeriod] = db.reportingPeriods;
+  const branch1 = db.branches.find((b) => b.id === "branch-1")!; // district-1
+  const branch2 = db.branches.find((b) => b.id === "branch-2")!; // district-1
+  const branch3 = db.branches.find((b) => b.id === "branch-3")!; // district-2
+  const branch4 = db.branches.find((b) => b.id === "branch-4")!; // district-2
+
+  const ADMIN = { id: "user-admin", name: "System Administrator" };
+  const HO = { id: "user-ho-controller", name: "Selam Tesfaye" };
+  const DC = { id: "user-district-controller", name: "Dawit Bekele" };
+  const BC = { id: "user-branch-controller", name: "Mekdes Alemu" };
+  const BM = { id: "user-branch-manager", name: "Yonas Kebede" };
+
+  function makeFinding(opts: {
+    branch: Branch;
+    period: ReportingPeriod;
+    sourceId: string;
+    categoryId: string;
+    departmentId?: string;
+    title: string;
+    description: string;
+    riskLevel: string;
+    priority?: string;
+    caseCount: number;
+    amount: number;
+    findingDate: string;
+    operationArea: string;
+    irregularityType: string;
+    createdBy: string;
+  }): Finding {
+    const nowIso2 = nowIso();
+    const finding: Finding = {
+      id: uuid(),
+      reference: nextFindingReference(db, opts.branch, opts.period),
+      title: opts.title,
+      sourceId: opts.sourceId,
+      departmentId: opts.departmentId ?? "dept-1",
+      periodId: opts.period.id,
+      districtId: opts.branch.districtId,
+      branchId: opts.branch.id,
+      findingDate: opts.findingDate,
+      operationArea: opts.operationArea,
+      irregularityType: opts.irregularityType,
+      categoryId: opts.categoryId,
+      amount: opts.amount,
+      currency: "ETB",
+      caseCount: opts.caseCount,
+      riskLevel: opts.riskLevel,
+      priority: opts.priority ?? "Medium",
+      description: opts.description,
+      status: "DRAFT",
+      rectifiedCases: 0,
+      rectifiedAmount: 0,
+      closedCases: 0,
+      closedAmount: 0,
+      districtVerifiedCases: 0,
+      districtVerifiedAmount: 0,
+      createdBy: opts.createdBy,
+      createdAt: nowIso2,
+      updatedAt: nowIso2,
+    };
+    db.findings.push(finding);
+    return finding;
+  }
+
+  // Mirrors rectify/route.ts's own field mutation (minus the notification
+  // side effects, which only make sense fired from a real request).
+  function recordRectification(
+    f: Finding,
+    opts: { rectifiedCases: number; rectifiedAmount: number; note?: string; userId: string; userName: string; caseIds?: string[] }
+  ): void {
+    const ts = nowIso();
+    const entry: RectificationEntry = {
+      id: uuid(),
+      findingId: f.id,
+      periodId: f.periodId,
+      rectifiedCases: opts.rectifiedCases,
+      rectifiedAmount: opts.rectifiedAmount,
+      note: opts.note,
+      submittedBy: opts.userId,
+      submittedByName: opts.userName,
+      createdAt: ts,
+      caseIds: opts.caseIds,
+    };
+    db.rectifications.push(entry);
+    if (opts.caseIds) {
+      for (const fc of db.findingCases) {
+        if (opts.caseIds.includes(fc.id)) {
+          fc.status = "RECTIFIED";
+          fc.rectificationId = entry.id;
+          fc.rectifiedAt = ts;
+          fc.rectifiedBy = opts.userId;
+          fc.rectifiedByName = opts.userName;
+        }
+      }
+    }
+    f.rectifiedCases += opts.rectifiedCases;
+    f.rectifiedAmount += opts.rectifiedAmount;
+    const fullyRectified = f.rectifiedCases >= f.caseCount && f.rectifiedAmount >= f.amount;
+    transitionFinding(db, f, {
+      toStatus: fullyRectified ? "RECTIFIED" : "PARTIALLY_RECTIFIED",
+      action: "RECTIFY",
+      userId: opts.userId,
+      userName: opts.userName,
+    });
+  }
+
+  // Mirrors verify-rectification/route.ts: catches districtVerifiedCases/
+  // Amount up to whatever's currently rectified - no status change of its
+  // own, same as the real route.
+  function verifyRectification(f: Finding, actor: { id: string; name: string }): void {
+    const verifiableCases = f.rectifiedCases - f.districtVerifiedCases;
+    const verifiableAmount = f.rectifiedAmount - f.districtVerifiedAmount;
+    f.districtVerifiedCases += verifiableCases;
+    f.districtVerifiedAmount += verifiableAmount;
+    f.updatedAt = nowIso();
+    appendAuditLog(db, {
+      userId: actor.id,
+      userName: actor.name,
+      action: "DISTRICT_VERIFY_RECTIFICATION",
+      entityType: "Finding",
+      entityId: f.id,
+      newValue: { districtVerifiedCases: f.districtVerifiedCases, districtVerifiedAmount: f.districtVerifiedAmount },
+    });
+  }
+
+  // Mirrors close/route.ts: bounded by min(rectified, districtVerified),
+  // only reaches CLOSED once closedCases/Amount catch all the way up to
+  // caseCount/amount.
+  function closeFinding(f: Finding, actor: { id: string; name: string }): void {
+    const verifiedCases = Math.min(f.rectifiedCases, f.districtVerifiedCases);
+    const verifiedAmount = Math.min(f.rectifiedAmount, f.districtVerifiedAmount);
+    const closableCases = verifiedCases - f.closedCases;
+    const closableAmount = verifiedAmount - f.closedAmount;
+    const ts = nowIso();
+    const closure: FindingClosure = {
+      id: uuid(),
+      findingId: f.id,
+      periodId: f.periodId,
+      closedCases: closableCases,
+      closedAmount: closableAmount,
+      submittedBy: actor.id,
+      submittedByName: actor.name,
+      createdAt: ts,
+    };
+    db.findingClosures.push(closure);
+    f.closedCases += closableCases;
+    f.closedAmount += closableAmount;
+    const fullyClosed = f.closedCases >= f.caseCount && f.closedAmount >= f.amount;
+    if (fullyClosed) {
+      transitionFinding(db, f, { toStatus: "CLOSED", action: "CLOSE", userId: actor.id, userName: actor.name });
+    } else {
+      f.updatedAt = ts;
+      appendAuditLog(db, {
+        userId: actor.id,
+        userName: actor.name,
+        action: "PARTIAL_CLOSE",
+        entityType: "Finding",
+        entityId: f.id,
+        newValue: { closedCases: f.closedCases, closedAmount: f.closedAmount },
+      });
+    }
+  }
+
+  // 1. DRAFT - registered, never submitted.
+  makeFinding({
+    branch: branch1,
+    period: openPeriod,
+    sourceId: "source-1",
+    categoryId: "cat-1",
+    title: "ATM cash reconciliation mismatch - Bole Branch ATM #2",
+    description: "End-of-day ATM cash count did not match the system-reported dispensed total for three consecutive days.",
+    riskLevel: "Medium",
+    caseCount: 4,
+    amount: 40_000,
+    findingDate: openPeriod.startsAt.slice(0, 10),
+    operationArea: "ATM Operations",
+    irregularityType: "Reconciliation Discrepancy",
+    createdBy: BC.id,
+  });
+
+  // 2. DISTRICT_REVIEW - submitted, awaiting the District Controller.
+  const f2 = makeFinding({
+    branch: branch1,
+    period: openPeriod,
+    sourceId: "source-1",
+    categoryId: "cat-3",
+    departmentId: "dept-10",
+    title: "Unauthorized access attempt on core banking terminal",
+    description: "A teller workstation logged three failed privileged-account login attempts outside business hours.",
+    riskLevel: "High",
+    caseCount: 2,
+    amount: 25_000,
+    findingDate: openPeriod.startsAt.slice(0, 10),
+    operationArea: "Cybersecurity",
+    irregularityType: "Access Control Violation",
+    createdBy: BC.id,
+  });
+  submitFinding(db, f2, BC.id, BC.name);
+
+  // 3. HO_REVIEW - district-approved, awaiting Head Office.
+  const f3 = makeFinding({
+    branch: branch1,
+    period: openPeriod,
+    sourceId: "source-2",
+    categoryId: "cat-7",
+    title: "Loan documentation gaps identified during audit",
+    description: "Six active loan files are missing collateral valuation reports required before disbursement.",
+    riskLevel: "Medium",
+    caseCount: 6,
+    amount: 90_000,
+    findingDate: openPeriod.startsAt.slice(0, 10),
+    operationArea: "Loan Processing",
+    irregularityType: "Documentation Deficiency",
+    createdBy: BC.id,
+  });
+  submitFinding(db, f3, BC.id, BC.name);
+  districtApproveFinding(db, f3, DC.id, DC.name);
+
+  // 4. PENDING_BANK_APPROVAL - HO-registered (bank scope), awaiting the
+  // assigned bank-wide approver (Settings.hoApproval.approverUserIds).
+  const f4 = makeFinding({
+    branch: branch3,
+    period: openPeriod,
+    sourceId: "source-2",
+    categoryId: "cat-7",
+    title: "Internal Audit finding - suspense account aging",
+    description: "A bank-wide suspense account carries unreconciled entries older than 90 days.",
+    riskLevel: "High",
+    caseCount: 3,
+    amount: 150_000,
+    findingDate: openPeriod.startsAt.slice(0, 10),
+    operationArea: "Reconciliation",
+    irregularityType: "Reconciliation Discrepancy",
+    createdBy: HO.id,
+  });
+  transitionFinding(db, f4, { toStatus: "SUBMITTED", action: "SUBMIT", userId: HO.id, userName: HO.name });
+  transitionFinding(db, f4, { toStatus: "PENDING_BANK_APPROVAL", action: "QUEUE_BANK_APPROVAL", userId: HO.id, userName: HO.name });
+
+  // 5. SENT_TO_BRANCH_MANAGER - full district+HO chain, now with the
+  // Branch Manager for corrective action.
+  const f5 = makeFinding({
+    branch: branch1,
+    period: openPeriod,
+    sourceId: "source-1",
+    categoryId: "cat-4",
+    title: "Dormant account reactivated without proper authorization",
+    description: "A dormant account was reactivated and funds withdrawn without the required dual-signatory approval.",
+    riskLevel: "Low",
+    caseCount: 5,
+    amount: 60_000,
+    findingDate: openPeriod.startsAt.slice(0, 10),
+    operationArea: "Account Opening",
+    irregularityType: "Policy Violation",
+    createdBy: BC.id,
+  });
+  submitFinding(db, f5, BC.id, BC.name);
+  districtApproveFinding(db, f5, DC.id, DC.name);
+  hoApproveFinding(db, f5, HO.id, HO.name);
+
+  // 6. SENT_TO_BRANCH_MANAGER (bank-registered path) - HO/Admin-registered
+  // findings skip District/HO review entirely (no natural "district" to
+  // review a bank-originated finding) and queue straight to the branch.
+  const f6 = makeFinding({
+    branch: branch4,
+    period: openPeriod,
+    sourceId: "source-2",
+    categoryId: "cat-7",
+    title: "Suspected fraudulent fund transfer - Adama Kality",
+    description: "A same-day outbound transfer was flagged by Internal Audit as inconsistent with the account's normal activity.",
+    riskLevel: "Critical",
+    caseCount: 2,
+    amount: 200_000,
+    findingDate: openPeriod.startsAt.slice(0, 10),
+    operationArea: "Fund Transfer",
+    irregularityType: "Fraud",
+    createdBy: ADMIN.id,
+  });
+  submitFinding(db, f6, ADMIN.id, ADMIN.name, { registeredByBankScope: true });
+
+  // 7. PARTIALLY_RECTIFIED.
+  const f7 = makeFinding({
+    branch: branch1,
+    period: openPeriod,
+    sourceId: "source-1",
+    categoryId: "cat-1",
+    title: "ATM long-outstanding cash variance - Bole Branch",
+    description: "A cash variance from a prior ATM replenishment run remains unresolved across multiple reconciliations.",
+    riskLevel: "Medium",
+    caseCount: 8,
+    amount: 80_000,
+    findingDate: openPeriod.startsAt.slice(0, 10),
+    operationArea: "ATM Operations",
+    irregularityType: "Reconciliation Discrepancy",
+    createdBy: BC.id,
+  });
+  submitFinding(db, f7, BC.id, BC.name);
+  districtApproveFinding(db, f7, DC.id, DC.name);
+  hoApproveFinding(db, f7, HO.id, HO.name);
+  recordRectification(f7, { rectifiedCases: 3, rectifiedAmount: 30_000, note: "3 cases traced and corrected; remainder pending vault audit.", userId: BM.id, userName: BM.name });
+
+  // 8. RECTIFIED - fully rectified, not yet district-verified.
+  const f8 = makeFinding({
+    branch: branch1,
+    period: openPeriod,
+    sourceId: "source-1",
+    categoryId: "cat-7",
+    title: "Other Case - teller till overage unresolved",
+    description: "A recurring till overage was traced to a miscounted cash bundle.",
+    riskLevel: "High",
+    caseCount: 4,
+    amount: 48_000,
+    findingDate: openPeriod.startsAt.slice(0, 10),
+    operationArea: "Teller Counter",
+    irregularityType: "Cash Excess",
+    createdBy: BC.id,
+  });
+  submitFinding(db, f8, BC.id, BC.name);
+  districtApproveFinding(db, f8, DC.id, DC.name);
+  hoApproveFinding(db, f8, HO.id, HO.name);
+  recordRectification(f8, { rectifiedCases: 4, rectifiedAmount: 48_000, note: "Cash bundle re-counted and corrected same day.", userId: BM.id, userName: BM.name });
+
+  // 9. RECTIFIED - fully rectified AND district-verified, ready for HO to close.
+  const f9 = makeFinding({
+    branch: branch1,
+    period: openPeriod,
+    sourceId: "source-2",
+    categoryId: "cat-7",
+    title: "Other Case - loan file collateral update completed",
+    description: "Collateral valuation reports were obtained and filed for the previously flagged loan accounts.",
+    riskLevel: "Medium",
+    caseCount: 5,
+    amount: 55_000,
+    findingDate: openPeriod.startsAt.slice(0, 10),
+    operationArea: "Loan Processing",
+    irregularityType: "Documentation Deficiency",
+    createdBy: BC.id,
+  });
+  submitFinding(db, f9, BC.id, BC.name);
+  districtApproveFinding(db, f9, DC.id, DC.name);
+  hoApproveFinding(db, f9, HO.id, HO.name);
+  recordRectification(f9, { rectifiedCases: 5, rectifiedAmount: 55_000, note: "All five loan files updated with valuation reports.", userId: BM.id, userName: BM.name });
+  verifyRectification(f9, DC);
+
+  // 10. CLOSED.
+  const f10 = makeFinding({
+    branch: branch1,
+    period: openPeriod,
+    sourceId: "source-1",
+    categoryId: "cat-7",
+    title: "Other Case - vault dual-control lapse corrected",
+    description: "A single-officer vault access event was addressed with revised dual-control scheduling.",
+    riskLevel: "Low",
+    caseCount: 3,
+    amount: 33_000,
+    findingDate: openPeriod.startsAt.slice(0, 10),
+    operationArea: "Vault",
+    irregularityType: "Policy Violation",
+    createdBy: BC.id,
+  });
+  submitFinding(db, f10, BC.id, BC.name);
+  districtApproveFinding(db, f10, DC.id, DC.name);
+  hoApproveFinding(db, f10, HO.id, HO.name);
+  recordRectification(f10, { rectifiedCases: 3, rectifiedAmount: 33_000, note: "Revised access roster in effect; confirmed with branch security.", userId: BM.id, userName: BM.name });
+  verifyRectification(f10, DC);
+  closeFinding(f10, DC);
+
+  // 11. RECTIFICATION_RETURNED - District sent the recorded rectification
+  // back for correction, with a thread of comments about it.
+  const f11 = makeFinding({
+    branch: branch1,
+    period: openPeriod,
+    sourceId: "source-1",
+    categoryId: "cat-3",
+    departmentId: "dept-10",
+    title: "IT Case - unpatched branch workstation",
+    description: "A branch workstation was found running an operating system version past its security patch window.",
+    riskLevel: "High",
+    caseCount: 4,
+    amount: 44_000,
+    findingDate: openPeriod.startsAt.slice(0, 10),
+    operationArea: "Cybersecurity",
+    irregularityType: "System Error",
+    createdBy: BC.id,
+  });
+  submitFinding(db, f11, BC.id, BC.name);
+  districtApproveFinding(db, f11, DC.id, DC.name);
+  hoApproveFinding(db, f11, HO.id, HO.name);
+  recordRectification(f11, { rectifiedCases: 2, rectifiedAmount: 22_000, note: "2 of 4 workstations patched so far.", userId: BM.id, userName: BM.name });
+  transitionFinding(db, f11, {
+    toStatus: "RECTIFICATION_RETURNED",
+    action: "RETURN_RECTIFICATION",
+    userId: DC.id,
+    userName: DC.name,
+    reason: "Patch confirmation screenshots are missing for the 2 cases marked rectified - please attach evidence and resubmit.",
+  });
+  const f11Comment: Comment = {
+    id: uuid(),
+    findingId: f11.id,
+    parentCommentId: null,
+    authorId: BM.id,
+    authorName: BM.name,
+    text: "Uploading the patch confirmation screenshots by Friday.",
+    createdAt: nowIso(),
+  };
+  db.comments.push(f11Comment);
+  db.comments.push({
+    id: uuid(),
+    findingId: f11.id,
+    parentCommentId: f11Comment.id,
+    authorId: DC.id,
+    authorName: DC.name,
+    text: "Thanks - I'll re-verify as soon as they're attached.",
+    createdAt: nowIso(),
+  });
+
+  // 12. REJECTED - District-level rejection.
+  const f12 = makeFinding({
+    branch: branch2,
+    period: openPeriod,
+    sourceId: "source-2",
+    categoryId: "cat-1",
+    title: "ATM mismatch - duplicate entry, no actual variance",
+    description: "Reported ATM mismatch was traced to a duplicate journal entry, not a real cash variance.",
+    riskLevel: "Low",
+    caseCount: 2,
+    amount: 15_000,
+    findingDate: openPeriod.startsAt.slice(0, 10),
+    operationArea: "ATM Operations",
+    irregularityType: "Reconciliation Discrepancy",
+    createdBy: BC.id,
+  });
+  submitFinding(db, f12, BC.id, BC.name);
+  transitionFinding(db, f12, {
+    toStatus: "REJECTED",
+    action: "DISTRICT_REJECT",
+    userId: DC.id,
+    userName: DC.name,
+    reason: "Confirmed duplicate journal entry - no underlying irregularity. Closing without further action.",
+  });
+
+  // 13. RETURNED - District-level return-to-branch (before rectification
+  // even starts - distinct from RECTIFICATION_RETURNED at #11).
+  const f13 = makeFinding({
+    branch: branch2,
+    period: openPeriod,
+    sourceId: "source-1",
+    categoryId: "cat-3",
+    title: "IT Case - printer access log anomaly",
+    description: "An unusual pattern of after-hours print jobs was flagged for review.",
+    riskLevel: "Medium",
+    caseCount: 3,
+    amount: 36_000,
+    findingDate: openPeriod.startsAt.slice(0, 10),
+    operationArea: "Cybersecurity",
+    irregularityType: "Access Control Violation",
+    createdBy: BC.id,
+  });
+  submitFinding(db, f13, BC.id, BC.name);
+  transitionFinding(db, f13, {
+    toStatus: "RETURNED",
+    action: "DISTRICT_RETURN",
+    userId: DC.id,
+    userName: DC.name,
+    reason: "Please attach the print log export referenced in the description before this can be reviewed.",
+  });
+
+  // 14. REJECTED - HO-level rejection (second-stage reject, distinct from
+  // the district-level one at #12).
+  const f14 = makeFinding({
+    branch: branch1,
+    period: openPeriod,
+    sourceId: "source-2",
+    categoryId: "cat-1",
+    title: "ATM mismatch - resolved at district level, HO disagrees with classification",
+    description: "District approved this as an ATM mismatch; HO review determined it was miscategorized.",
+    riskLevel: "Critical",
+    caseCount: 2,
+    amount: 28_000,
+    findingDate: openPeriod.startsAt.slice(0, 10),
+    operationArea: "ATM Operations",
+    irregularityType: "Reconciliation Discrepancy",
+    createdBy: BC.id,
+  });
+  submitFinding(db, f14, BC.id, BC.name);
+  districtApproveFinding(db, f14, DC.id, DC.name);
+  transitionFinding(db, f14, {
+    toStatus: "REJECTED",
+    action: "HO_REJECT",
+    userId: HO.id,
+    userName: HO.name,
+    reason: "This matches an IT system error pattern, not a genuine ATM mismatch - please reclassify and resubmit as a new finding.",
+  });
+
+  // 15. TRANSFERRED - registered and partially rectified in the prior
+  // (now LOCKED) period, its outstanding balance carried into the
+  // current OPEN period by the Transfer Engine.
+  const f15 = makeFinding({
+    branch: branch1,
+    period: prevPeriod,
+    sourceId: "source-1",
+    categoryId: "cat-7",
+    title: "Other Case - foreign currency till shortage",
+    description: "A foreign-currency till count came up short against the recorded opening balance.",
+    riskLevel: "High",
+    caseCount: 6,
+    amount: 72_000,
+    findingDate: prevPeriod.startsAt.slice(0, 10),
+    operationArea: "Teller Counter",
+    irregularityType: "Cash Shortage",
+    createdBy: BC.id,
+  });
+  submitFinding(db, f15, BC.id, BC.name);
+  districtApproveFinding(db, f15, DC.id, DC.name);
+  hoApproveFinding(db, f15, HO.id, HO.name);
+  recordRectification(f15, { rectifiedCases: 2, rectifiedAmount: 24_000, note: "2 of 6 cases traced to a till-swap error and corrected.", userId: BM.id, userName: BM.name });
+  transferFinding(db, f15, {
+    toPeriodId: openPeriod.id,
+    reason: `${prevPeriod.code} locked with this finding still outstanding.`,
+    userId: ADMIN.id,
+    userName: ADMIN.name,
+  });
+
+  // 16. Itemized cases (Document_3 §12/§34) - one case rectified by
+  // specific selection rather than a typed count, the other two still
+  // outstanding. PARTIALLY_RECTIFIED, same as #7/#11, but exercising the
+  // per-case breakdown path instead of the plain-number one.
+  const f16 = makeFinding({
+    branch: branch1,
+    period: openPeriod,
+    sourceId: "source-2",
+    categoryId: "cat-7",
+    title: "Other Case - three unrelated suspense postings",
+    description: "Three unrelated suspense postings were bundled under one finding, itemized per Document_3 §12/§34.",
+    riskLevel: "Medium",
+    caseCount: 3,
+    amount: 45_000,
+    findingDate: openPeriod.startsAt.slice(0, 10),
+    operationArea: "Reconciliation",
+    irregularityType: "Reconciliation Discrepancy",
+    createdBy: BC.id,
+  });
+  submitFinding(db, f16, BC.id, BC.name);
+  districtApproveFinding(db, f16, DC.id, DC.name);
+  hoApproveFinding(db, f16, HO.id, HO.name);
+  const f16Cases: FindingCase[] = [
+    { id: uuid(), findingId: f16.id, seq: 1, amount: 15_000, status: "OUTSTANDING", createdAt: nowIso() },
+    { id: uuid(), findingId: f16.id, seq: 2, amount: 20_000, status: "OUTSTANDING", createdAt: nowIso() },
+    { id: uuid(), findingId: f16.id, seq: 3, amount: 10_000, status: "OUTSTANDING", createdAt: nowIso() },
+  ];
+  db.findingCases.push(...f16Cases);
+  recordRectification(f16, {
+    rectifiedCases: 1,
+    rectifiedAmount: f16Cases[0].amount,
+    note: "Case 1 traced to a same-day duplicate posting and reversed.",
+    userId: BM.id,
+    userName: BM.name,
+    caseIds: [f16Cases[0].id],
+  });
 }
 
 function ensureDataFile(): void {
@@ -587,6 +1219,18 @@ function normalizeDb(db: Database): { db: Database; changed: boolean } {
     db.settings.rectificationReminders = { enabled: false, thresholdDays: 7 };
     changed = true;
   }
+  if (!db.settings.performanceThresholds) {
+    db.settings.performanceThresholds = { topPercent: 80, bottomPercent: 50 };
+    changed = true;
+  }
+  if (!db.settings.hoApproval) {
+    // Off by default for pre-existing installs, same reasoning as
+    // rectificationReminders above - a bank-registered finding keeps
+    // routing straight to the branch (no approval step) until an Admin
+    // deliberately turns this on and assigns approver(s).
+    db.settings.hoApproval = { required: false, approverUserIds: [] };
+    changed = true;
+  }
   for (const p of db.reportingPeriods) {
     if (!p.startsAt || !p.endsAt) {
       // Predates the date-range field: default to the calendar month
@@ -629,6 +1273,14 @@ function normalizeDb(db: Database): { db: Database; changed: boolean } {
       f.closedAmount = 0;
       changed = true;
     }
+    if (f.districtVerifiedCases === undefined) {
+      f.districtVerifiedCases = 0;
+      changed = true;
+    }
+    if (f.districtVerifiedAmount === undefined) {
+      f.districtVerifiedAmount = 0;
+      changed = true;
+    }
   }
   // A rule predating this field: default to "has gone live at least once"
   // since that history is genuinely unknown - the safe assumption, since
@@ -637,6 +1289,27 @@ function normalizeDb(db: Database): { db: Database; changed: boolean } {
   for (const r of db.scoringRules) {
     if (r.everActivated === undefined) {
       r.everActivated = true;
+      changed = true;
+    }
+  }
+  for (const u of db.users) {
+    if (u.mustChangePassword === undefined) {
+      // Pre-existing users have already been using whatever password they
+      // have - only newly-created users and admin password resets should
+      // ever start out true.
+      u.mustChangePassword = false;
+      changed = true;
+    }
+  }
+  // "verify-rectification" and "return-rectification" used to be one
+  // combined permission (findings.verify-rectification gated both the
+  // approve and the return-for-correction action). Any role already
+  // holding the combined permission keeps returning for correction too,
+  // exactly as it could before the split - only a deliberate edit through
+  // /admin/roles should ever separate them from here on.
+  for (const r of db.roles) {
+    if (r.permissions.includes(permissionKey("findings", "verify-rectification")) && !r.permissions.includes(permissionKey("findings", "return-rectification"))) {
+      r.permissions = [...r.permissions, permissionKey("findings", "return-rectification")];
       changed = true;
     }
   }

@@ -65,6 +65,7 @@ export async function POST(request: Request) {
   session.permissions = role.permissions;
   session.districtId = user.districtId ?? null;
   session.branchId = user.branchId ?? null;
+  session.mustChangePassword = user.mustChangePassword ?? false;
   await session.save();
 
   return NextResponse.json({ user: toSafeUser({ ...user, lastLoginAt: loginTime }) });
