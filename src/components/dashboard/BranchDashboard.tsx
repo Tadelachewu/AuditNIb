@@ -3,10 +3,11 @@ import type { Database } from "@/types";
 import type { SessionData } from "@/lib/session";
 import { findBranchManager, findBranchSubManager, findBranchController } from "@/lib/org";
 import { computePerformance, queueStatusesForSession, findingCaseTotals, transferTotals, isHoApproved } from "@/lib/findings";
+import { hasPermission, permissionKey } from "@/lib/permissions/registry";
 import { sumAmountByCurrency, sumOutstandingByCurrency } from "@/lib/currency";
 import { formatDateTime, formatNumber } from "@/lib/format";
 import { inDateRange, type DateRange } from "@/lib/dateRange";
-import { applyDashboardFilters, EMPTY_DASHBOARD_FILTERS, type DashboardFilters } from "@/lib/dashboardFilters";
+import { applyDashboardFilters, EMPTY_DASHBOARD_FILTERS, ALL_PERIODS_VALUE, type DashboardFilters } from "@/lib/dashboardFilters";
 import { Card, CardHeader, StatCard } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { FilterBar } from "@/components/dashboard/FilterBar";
@@ -38,10 +39,26 @@ export function BranchDashboard({
   const district = db.districts.find((d) => d.id === user.districtId);
   // FilterBar's own period picker takes priority over "whichever period is
   // currently OPEN" - picking a locked/past period is exactly how you'd
-  // review dashboard history, not just the live one.
-  const openPeriod = filters.periodId
-    ? db.reportingPeriods.find((p) => p.id === filters.periodId)
-    : db.reportingPeriods.find((p) => p.status === "OPEN");
+  // review dashboard history, not just the live one. "All periods" is its
+  // own explicit choice (ALL_PERIODS_VALUE), distinct from an unset filter -
+  // an unset filter still defaults to the current OPEN period, "All
+  // periods" genuinely aggregates across every period instead.
+  const allPeriodsSelected = filters.periodId === ALL_PERIODS_VALUE;
+  const openPeriod = allPeriodsSelected
+    ? undefined
+    : filters.periodId
+      ? db.reportingPeriods.find((p) => p.id === filters.periodId)
+      : db.reportingPeriods.find((p) => p.status === "OPEN");
+  // True whenever there's real data to show - either a specific period was
+  // resolved, or "All periods" was explicitly chosen. Only false in the
+  // genuine "nothing to show" case (no period exists/selected at all) -
+  // every `openPeriod ? X : "--"` StatCard below reads this instead, so
+  // "All periods" renders real aggregated numbers rather than "--".
+  const hasPeriodScope = allPeriodsSelected || Boolean(openPeriod);
+  // For child components that only need a truthy {id}-shaped signal to
+  // decide "is there a period scope to show real numbers for" (they never
+  // read .id for filtering) - FindingsByCategoryChart, SourcePerformanceSummary.
+  const periodDisplayMarker = hasPeriodScope ? (openPeriod ?? { id: ALL_PERIODS_VALUE }) : undefined;
   const activeCategories = db.categories.filter((c) => c.active);
   const otherCase = db.categories.find((c) => c.code === "OTHER_CASE");
   const activeScoringRule = db.scoringRules.find((r) => r.active);
@@ -70,7 +87,11 @@ export function BranchDashboard({
     db.findings.filter((f) => f.branchId === branch.id && inDateRange(dateRange, f.findingDate)),
     filters
   );
-  const periodFindings = openPeriod ? branchAllFindings.filter((f) => f.periodId === openPeriod.id) : [];
+  const periodFindings = allPeriodsSelected
+    ? branchAllFindings
+    : openPeriod
+      ? branchAllFindings.filter((f) => f.periodId === openPeriod.id)
+      : [];
   const { totalFindings, totalCases, rectifiedFindings, rectifiedCases } = findingCaseTotals(periodFindings);
   // Every StatCard/table below that reports an "official" figure (as
   // opposed to RiskDistribution/FindingStatusDistribution's deliberately
@@ -81,7 +102,11 @@ export function BranchDashboard({
   // etc. before anyone's actually approved it.
   const approvedPeriodFindings = periodFindings.filter(isHoApproved);
   const outstandingFindings = approvedPeriodFindings.filter((f) => !["RECTIFIED", "CLOSED", "REJECTED"].includes(f.status)).length;
-  const performance = openPeriod ? computePerformance(db, { branchId: branch.id, periodId: openPeriod.id }) : null;
+  // periodId: undefined (allPeriodsSelected) is computePerformance()'s own
+  // "lifetime, no period filter" mode - exactly what "All periods" means.
+  const performance = hasPeriodScope
+    ? computePerformance(db, { branchId: branch.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id })
+    : null;
   const totalAmount = sumAmountByCurrency(approvedPeriodFindings, "amount");
   const outstandingAmount = sumOutstandingByCurrency(approvedPeriodFindings);
   const resolvedAmount = sumAmountByCurrency(approvedPeriodFindings, "rectifiedAmount");
@@ -120,12 +145,35 @@ export function BranchDashboard({
   // periodId forward, so a transferred finding is no longer in
   // periodFindings for its *source* period - counted from FindingTransfer
   // records instead, scoped to this branch.
-  const branchTransfers = openPeriod
+  const branchTransfers = hasPeriodScope
     ? db.findingTransfers.filter(
-        (t) => t.fromPeriodId === openPeriod.id && db.findings.some((f) => f.id === t.findingId && f.branchId === branch.id)
+        (t) =>
+          (allPeriodsSelected || t.fromPeriodId === openPeriod!.id) &&
+          db.findings.some((f) => f.id === t.findingId && f.branchId === branch.id)
       )
     : [];
   const { transferredFindings, transferredCases } = transferTotals(branchTransfers);
+
+  // The person who registers findings (findings.create - Branch Controller)
+  // needs to see their own draft/in-flight-approval backlog, and the
+  // rectifier (findings.rectify - Branch Manager) needs their own
+  // pending-rectification backlog - both reach this same dashboard. Scoped
+  // to db.findings directly (not branchAllFindings/periodFindings), same
+  // convention as HO/District's own "what needs action right now" cards:
+  // this is an action-needed count, not a per-period reporting total, so
+  // it must never be narrowed by an ad-hoc FilterBar/date-range filter.
+  const hasFindingsAction = (action: string) => hasPermission(user.permissions, permissionKey("findings", action));
+  const canRegister = hasFindingsAction("create");
+  const canRectify = hasFindingsAction("rectify");
+  const branchOwnFindings = db.findings.filter((f) => f.branchId === branch.id);
+  const draftFindings = branchOwnFindings.filter((f) => f.status === "DRAFT").length;
+  const pendingApprovalFindings = branchOwnFindings.filter((f) =>
+    ["DISTRICT_REVIEW", "HO_REVIEW", "PENDING_BANK_APPROVAL"].includes(f.status)
+  ).length;
+  // Same statuses as queueStatusesForSession()'s own "rectify" matcher.
+  const pendingRectificationFindings = branchOwnFindings.filter((f) =>
+    ["SENT_TO_BRANCH_MANAGER", "PARTIALLY_RECTIFIED", "RECTIFICATION_RETURNED"].includes(f.status)
+  ).length;
 
   const isQueued = queueStatusesForSession(user, db);
   const workQueue = db.findings
@@ -148,7 +196,12 @@ export function BranchDashboard({
   // whether the comparison within that boundary is shown or hidden).
   const districtBranches = district ? db.branches.filter((b) => b.districtId === district.id) : [];
   const branchRanking = districtBranches
-    .map((b) => ({ branch: b, performance: openPeriod ? computePerformance(db, { branchId: b.id, periodId: openPeriod.id }) : null }))
+    .map((b) => ({
+      branch: b,
+      performance: hasPeriodScope
+        ? computePerformance(db, { branchId: b.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id })
+        : null,
+    }))
     .sort((a, b) => (b.performance ?? -1) - (a.performance ?? -1));
 
   return (
@@ -179,25 +232,36 @@ export function BranchDashboard({
       <TimeRangeFilter />
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatCard label="Total Findings" value={openPeriod ? totalFindings : "--"} hint={openPeriod ? openPeriod.code : "No open period"} />
-        <StatCard label="Total Cases" value={openPeriod ? totalCases : "--"} hint="Sum of case counts" />
-        <StatCard label="Rectified Findings" value={openPeriod ? rectifiedFindings : "--"} hint="Formally closed" />
-        <StatCard label="Rectified Cases" value={openPeriod ? rectifiedCases : "--"} hint="Closed, this period" />
-        <StatCard label="Outstanding" value={openPeriod ? outstandingFindings : "--"} hint="Findings" />
-        <StatCard label="Transferred Findings" value={openPeriod ? transferredFindings : "--"} hint="Out of this period" />
-        <StatCard label="Transferred Cases" value={openPeriod ? transferredCases : "--"} hint="Out of this period" />
-        <StatCard label="High-Risk Findings" value={openPeriod ? highRiskFindings : "--"} hint="Open, top risk tiers" />
+        <StatCard
+          label="Total Findings"
+          value={hasPeriodScope ? totalFindings : "--"}
+          hint={allPeriodsSelected ? "All periods" : openPeriod ? openPeriod.code : "No open period"}
+        />
+        <StatCard label="Total Cases" value={hasPeriodScope ? totalCases : "--"} hint="Sum of case counts" />
+        <StatCard label="Rectified Findings" value={hasPeriodScope ? rectifiedFindings : "--"} hint="Formally closed" />
+        <StatCard label="Rectified Cases" value={hasPeriodScope ? rectifiedCases : "--"} hint="Closed, this period" />
+        <StatCard label="Outstanding" value={hasPeriodScope ? outstandingFindings : "--"} hint="Findings" />
+        <StatCard label="Transferred Findings" value={hasPeriodScope ? transferredFindings : "--"} hint="Out of this period" />
+        <StatCard label="Transferred Cases" value={hasPeriodScope ? transferredCases : "--"} hint="Out of this period" />
+        <StatCard label="High-Risk Findings" value={hasPeriodScope ? highRiskFindings : "--"} hint="Open, top risk tiers" />
         <StatCard
           label="Branch Performance"
           value={performance !== null ? `${performance.toFixed(1)}%` : "--"}
           hint={activeScoringRule ? `v${activeScoringRule.version} formula` : "No active scoring rule"}
         />
-        <StatCard label="Total Amount" value={openPeriod ? totalAmount : "--"} hint="All findings" />
-        <StatCard label="Resolved Amount" value={openPeriod ? resolvedAmount : "--"} hint="Cumulative rectified" />
-        <StatCard label="Outstanding Amount" value={openPeriod ? outstandingAmount : "--"} hint="Still owed" />
+        <StatCard label="Total Amount" value={hasPeriodScope ? totalAmount : "--"} hint="All findings" />
+        <StatCard label="Resolved Amount" value={hasPeriodScope ? resolvedAmount : "--"} hint="Cumulative rectified" />
+        <StatCard label="Outstanding Amount" value={hasPeriodScope ? outstandingAmount : "--"} hint="Still owed" />
+        {canRegister && <StatCard label="Draft" value={draftFindings} hint="Not yet submitted" />}
+        {canRegister && (
+          <StatCard label="Pending Approval" value={pendingApprovalFindings} hint="District/HO review, your registrations" />
+        )}
+        {(canRegister || canRectify) && (
+          <StatCard label="Pending Rectification" value={pendingRectificationFindings} hint="Awaiting rectification" />
+        )}
       </div>
 
-      <CaseBasedPerformance db={db} scope={{ branchId: branch.id }} openPeriod={openPeriod} />
+      <CaseBasedPerformance db={db} scope={{ branchId: branch.id }} openPeriod={openPeriod} allPeriods={allPeriodsSelected} />
 
       {db.settings.rankingVisibility.branches ? (
         <Card>
@@ -288,12 +352,12 @@ export function BranchDashboard({
                   <td className="px-4 py-2 text-slate-900">
                     {c.name} {c.scored && <Badge tone="blue">Scored</Badge>}
                   </td>
-                  <td className="px-4 py-2 text-slate-700">{openPeriod ? total : "--"}</td>
-                  <td className="px-4 py-2 text-slate-700">{openPeriod ? rectified : "--"}</td>
-                  <td className="px-4 py-2 text-slate-700">{openPeriod ? outstanding : "--"}</td>
-                  <td className="px-4 py-2 text-slate-700">{openPeriod ? formatNumber(amount) : "--"}</td>
-                  <td className="px-4 py-2 text-slate-700">{openPeriod ? formatNumber(rectifiedAmount) : "--"}</td>
-                  <td className="px-4 py-2 text-slate-700">{openPeriod ? formatNumber(catOutstandingAmount) : "--"}</td>
+                  <td className="px-4 py-2 text-slate-700">{hasPeriodScope ? total : "--"}</td>
+                  <td className="px-4 py-2 text-slate-700">{hasPeriodScope ? rectified : "--"}</td>
+                  <td className="px-4 py-2 text-slate-700">{hasPeriodScope ? outstanding : "--"}</td>
+                  <td className="px-4 py-2 text-slate-700">{hasPeriodScope ? formatNumber(amount) : "--"}</td>
+                  <td className="px-4 py-2 text-slate-700">{hasPeriodScope ? formatNumber(rectifiedAmount) : "--"}</td>
+                  <td className="px-4 py-2 text-slate-700">{hasPeriodScope ? formatNumber(catOutstandingAmount) : "--"}</td>
                 </tr>
               ))}
             </tbody>
@@ -301,14 +365,14 @@ export function BranchDashboard({
         </div>
       </Card>
 
-      <FindingsByCategoryChart findings={approvedPeriodFindings} categories={categoriesInScope} openPeriod={openPeriod} />
+      <FindingsByCategoryChart findings={approvedPeriodFindings} categories={categoriesInScope} openPeriod={periodDisplayMarker} />
 
       <SourcePerformanceSummary
         db={db}
         sources={sourcesInScope}
-        periodFindings={periodFindings}
         scope={{ branchId: branch.id }}
         openPeriod={openPeriod}
+        allPeriods={allPeriodsSelected}
       />
 
       <MonthlyTrend db={db} scope={{ branchId: branch.id }} />

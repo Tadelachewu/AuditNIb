@@ -230,6 +230,11 @@ function buildSeedDatabase(): Database {
     // than an empty approver list nobody could ever use.
     hoApproval: { required: false, approverUserIds: ["user-ho-controller"] },
     rectificationReminders: { enabled: false, thresholdDays: 7 },
+    // The exact fields the duplicate-suggestion lookup always compared on
+    // before this became configurable - kept as the default so turning the
+    // feature into a setting doesn't silently change any existing
+    // install's behavior.
+    similarFindingFields: ["branchId", "categoryId", "operationArea", "irregularityType", "periodId"],
     updatedAt: now,
   };
 
@@ -272,6 +277,7 @@ function buildSeedDatabase(): Database {
     permissionKey("findings", "create"),
     permissionKey("findings", "ho-review"),
     permissionKey("findings", "close"),
+    permissionKey("findings", "ho-return-rectification"),
     permissionKey("findings", "comment"),
     // master.txt §22: "HO Internal Controllers can import/enter Internal
     // Audit findings" - the bulk sibling of the single-record "create"
@@ -302,6 +308,7 @@ function buildSeedDatabase(): Database {
     // one without the other; District Controller gets both by default.
     permissionKey("findings", "verify-rectification"),
     permissionKey("findings", "return-rectification"),
+    permissionKey("findings", "district-return-rectification"),
     permissionKey("findings", "close"),
     // "Transfer outstanding cases" (icfms.txt).
     permissionKey("findings", "transfer"),
@@ -719,6 +726,13 @@ function normalizeDb(db: Database): { db: Database; changed: boolean } {
     db.settings.hoApproval = { required: false, approverUserIds: [] };
     changed = true;
   }
+  if (!db.settings.similarFindingFields) {
+    // The fields the duplicate-suggestion lookup always compared on before
+    // this became configurable - preserves existing behavior for a
+    // pre-existing install rather than silently disabling the feature.
+    db.settings.similarFindingFields = ["branchId", "categoryId", "operationArea", "irregularityType", "periodId"];
+    changed = true;
+  }
   for (const p of db.reportingPeriods) {
     if (!p.startsAt || !p.endsAt) {
       // Predates the date-range field: default to the calendar month
@@ -806,6 +820,31 @@ function normalizeDb(db: Database): { db: Database; changed: boolean } {
     if (r.permissions.includes(permissionKey("findings", "verify-rectification")) && !r.permissions.includes(permissionKey("findings", "return-rectification"))) {
       r.permissions = [...r.permissions, permissionKey("findings", "return-rectification")];
       changed = true;
+    }
+  }
+  // "return-rectification" used to be a single combined permission for
+  // both District and HO. Now it's split into two scoped permissions with
+  // different gating rules: district-return-rectification (District can
+  // return at any point before/after verification) vs ho-return-
+  // rectification (HO can only return AFTER District has first verified
+  // the rectification). Any existing role holding the combined, legacy
+  // permission gets the appropriate scoped new one based on its orgScope
+  // (DISTRICT -> district variant, BANK -> HO variant) so behavior stays
+  // the same as before the split; an admin can fine-tune from /admin/roles.
+  for (const r of db.roles) {
+    if (r.permissions.includes(permissionKey("findings", "return-rectification"))) {
+      if (r.orgScope === "DISTRICT" || r.orgScope === "BRANCH") {
+        if (!r.permissions.includes(permissionKey("findings", "district-return-rectification"))) {
+          r.permissions = [...r.permissions, permissionKey("findings", "district-return-rectification")];
+          changed = true;
+        }
+      }
+      if (r.orgScope === "BANK") {
+        if (!r.permissions.includes(permissionKey("findings", "ho-return-rectification"))) {
+          r.permissions = [...r.permissions, permissionKey("findings", "ho-return-rectification")];
+          changed = true;
+        }
+      }
     }
   }
   // The 10 named report templates are new - any role that already held the

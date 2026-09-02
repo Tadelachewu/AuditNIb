@@ -192,6 +192,26 @@ export interface NotificationSettings {
   smtpPort?: number;
 }
 
+// The candidate fields the Register Finding form's duplicate-suggestion
+// lookup (src/app/api/findings/similar/route.ts) can compare on - every
+// one an exact-equality match (never a fuzzy/numeric-range one, so amount
+// and case count are deliberately not candidates: a near-duplicate and the
+// real entry routinely differ on those). Settings.similarFindingFields
+// picks which subset actually applies; SIMILAR_FINDING_FIELDS is the full
+// menu + display labels, shared by that route and the admin Settings page
+// so there's exactly one place a new candidate field gets added.
+export const SIMILAR_FINDING_FIELDS = [
+  { key: "branchId", label: "Branch" },
+  { key: "categoryId", label: "Classified case" },
+  { key: "operationArea", label: "Operation area" },
+  { key: "irregularityType", label: "Type of irregularity" },
+  { key: "periodId", label: "Reporting period" },
+  { key: "sourceId", label: "Source" },
+  { key: "departmentId", label: "Department" },
+  { key: "riskLevel", label: "Risk level" },
+] as const;
+export type SimilarFindingField = (typeof SIMILAR_FINDING_FIELDS)[number]["key"];
+
 export interface Settings {
   currencies: string[];
   riskLevels: string[];
@@ -252,6 +272,12 @@ export interface Settings {
     thresholdDays: number;
     lastCheckedAt?: string;
   };
+  // Which of SIMILAR_FINDING_FIELDS the duplicate-suggestion lookup on the
+  // Register Finding form requires to match before flagging a finding as a
+  // likely duplicate - see that route's own doc comment. Every configured
+  // field must match (AND, not OR) and must actually have a value on the
+  // in-progress form, or nothing is suggested at all.
+  similarFindingFields: SimilarFindingField[];
   updatedAt: string;
   updatedBy?: string;
 }

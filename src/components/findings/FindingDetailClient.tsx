@@ -35,6 +35,7 @@ interface Lookups {
   departmentName: string;
   categoryName: string;
   periodCode: string;
+  periodLookup: Map<string, { code: string; year: number; month: number }>;
 }
 
 interface Permissions {
@@ -42,14 +43,19 @@ interface Permissions {
   canDelete: boolean;
   canSubmit: boolean;
   canDistrictReview: boolean;
+  canDistrictReturnReview: boolean;
   canHoReview: boolean;
+  canHoReturnReview: boolean;
   canRectify: boolean;
   canVerifyRectification: boolean;
   canClose: boolean;
   canTransfer: boolean;
   canReturnRectification: boolean;
+  canDistrictReturnRectification: boolean;
+  canHoReturnRectification: boolean;
   canResubmitRectification: boolean;
   canBankApprove: boolean;
+  canBankReturnReview: boolean;
   canUploadEvidence: boolean;
   canComment: boolean;
 }
@@ -277,10 +283,10 @@ export function FindingDetailClient({
         isItemized
           ? { caseIds: selectedCaseIds, note: rectifyForm.note || undefined }
           : {
-              rectifiedCases: Number(rectifyForm.rectifiedCases || 0),
-              rectifiedAmount: Number(rectifyForm.rectifiedAmount || 0),
-              note: rectifyForm.note || undefined,
-            }
+            rectifiedCases: Number(rectifyForm.rectifiedCases || 0),
+            rectifiedAmount: Number(rectifyForm.rectifiedAmount || 0),
+            note: rectifyForm.note || undefined,
+          }
       );
       setRectifying(false);
       setRectifyForm({ rectifiedCases: "", rectifiedAmount: "", note: "" });
@@ -321,7 +327,7 @@ export function FindingDetailClient({
     const result = await confirm({
       title: "Return for correction?",
       message:
-        "Sends this back to the Branch Manager instead of closing/transferring it. They'll need to address the issue and resubmit before it can be closed, partially closed, or transferred.",
+        "Sends this back to the Branch Manager for correction. They'll need to address the issue and resubmit before it can be rectified further, closed, or transferred.",
       confirmLabel: "Return for Correction",
       needsReason: true,
     });
@@ -575,14 +581,23 @@ export function FindingDetailClient({
 
       {permissions.canDistrictReview && (
         <Card>
-          <CardHeader title="District Review" description="Approve, reject, or return this finding to the branch." />
+          <CardHeader
+            title="District Review"
+            description={
+              permissions.canDistrictReturnReview
+                ? "Approve, reject, or return this finding to the branch."
+                : "Approve or reject this finding. (Return is not available because you registered this finding.)"
+            }
+          />
           <div className="flex gap-2 p-4">
             <Button onClick={() => handleReview("district-review", "APPROVE")} disabled={busy}>
               Approve
             </Button>
-            <Button variant="secondary" onClick={() => handleReview("district-review", "RETURN")} disabled={busy}>
-              Return
-            </Button>
+            {permissions.canDistrictReturnReview && (
+              <Button variant="secondary" onClick={() => handleReview("district-review", "RETURN")} disabled={busy}>
+                Return
+              </Button>
+            )}
             <Button variant="danger" onClick={() => handleReview("district-review", "REJECT")} disabled={busy}>
               Reject
             </Button>
@@ -592,14 +607,23 @@ export function FindingDetailClient({
 
       {permissions.canHoReview && (
         <Card>
-          <CardHeader title="Head Office Review" description="Second approval. Routes to the Branch Manager once approved." />
+          <CardHeader
+            title="Head Office Review"
+            description={
+              permissions.canHoReturnReview
+                ? "Second approval. Routes to the Branch Manager once approved."
+                : "Second approval. (Return is not available because you registered this finding — use Reject instead if needed.)"
+            }
+          />
           <div className="flex gap-2 p-4">
             <Button onClick={() => handleReview("ho-review", "APPROVE")} disabled={busy}>
               Approve
             </Button>
-            <Button variant="secondary" onClick={() => handleReview("ho-review", "RETURN")} disabled={busy}>
-              Return
-            </Button>
+            {permissions.canHoReturnReview && (
+              <Button variant="secondary" onClick={() => handleReview("ho-review", "RETURN")} disabled={busy}>
+                Return
+              </Button>
+            )}
             <Button variant="danger" onClick={() => handleReview("ho-review", "REJECT")} disabled={busy}>
               Reject
             </Button>
@@ -611,15 +635,21 @@ export function FindingDetailClient({
         <Card>
           <CardHeader
             title="Approval"
-            description="Bank-registered finding awaiting your approval before it's sent to the branch."
+            description={
+              permissions.canBankReturnReview
+                ? "Bank-registered finding awaiting your approval before it's sent to the branch."
+                : "Bank-registered finding awaiting your approval. (Return is not available because you registered this finding — use Approve to send it forward or Reject to stop it.)"
+            }
           />
           <div className="flex gap-2 p-4">
             <Button onClick={() => handleReview("bank-approval", "APPROVE")} disabled={busy}>
               Approve
             </Button>
-            <Button variant="secondary" onClick={() => handleReview("bank-approval", "RETURN")} disabled={busy}>
-              Return
-            </Button>
+            {permissions.canBankReturnReview && (
+              <Button variant="secondary" onClick={() => handleReview("bank-approval", "RETURN")} disabled={busy}>
+                Return
+              </Button>
+            )}
             <Button variant="danger" onClick={() => handleReview("bank-approval", "REJECT")} disabled={busy}>
               Reject
             </Button>
@@ -747,7 +777,22 @@ export function FindingDetailClient({
         <Card>
           <CardHeader
             title="Verify Rectification"
-            description={`${verifiableCases} case(s) / ${finding.currency} ${formatNumber(verifiableAmount)} rectified and awaiting your verification, before it can reach Head Office for final closure. Approve it, or send it back to the Branch Manager for correction.`}
+            description={(() => {
+              if (permissions.canVerifyRectification) {
+                return `${verifiableCases} case(s) / ${finding.currency} ${formatNumber(verifiableAmount)} rectified and awaiting your verification, before it can reach Head Office for final closure. Approve it, or send it back to the Branch Manager for correction.`;
+              }
+              if (permissions.canDistrictReturnRectification) {
+                // District: can return even at SENT_TO_BRANCH_MANAGER (zero rectified)
+                if (finding.status === "SENT_TO_BRANCH_MANAGER") {
+                  return "Approved and sent to the branch, but nothing rectified yet. Send it back now if it needs correction before the branch acts on it.";
+                }
+                return "Recorded rectification awaiting District review. Approve it via Verify, or send it back to the Branch Manager for correction.";
+              }
+              if (permissions.canHoReturnRectification) {
+                return `${finding.districtVerifiedCases} case(s) / ${finding.currency} ${formatNumber(finding.districtVerifiedAmount)} already District-verified. You can return this finding to the Branch Manager for further correction only after District verification — which this portion has already passed.`;
+              }
+              return "";
+            })()}
           />
           <div className="flex gap-2 p-4">
             {permissions.canVerifyRectification && (
@@ -755,9 +800,14 @@ export function FindingDetailClient({
                 Verify
               </Button>
             )}
-            {permissions.canReturnRectification && (
+            {permissions.canDistrictReturnRectification && (
               <Button onClick={handleReturnRectification} disabled={busy}>
-                Return for Correction
+                Return for Correction (District)
+              </Button>
+            )}
+            {permissions.canHoReturnRectification && (
+              <Button onClick={handleReturnRectification} disabled={busy}>
+                Return for Correction (HO)
               </Button>
             )}
           </div>
@@ -821,6 +871,76 @@ export function FindingDetailClient({
                     ))}
                   </select>
                 </div>
+
+                {/* §15 Transfer Data — pre-transfer preview of every field
+                    that will be persisted in the FindingTransfer row, so the
+                    Controller can verify all 15 data points before clicking
+                    Transfer. Outstanding = total - closed (what's actually
+                    being moved forward), not just rectified. */}
+                <div className="rounded-md border border-slate-200 bg-slate-50">
+                  <div className="border-b border-slate-200 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    15. Transfer Data — Preview
+                  </div>
+                  <dl className="grid grid-cols-1 gap-x-4 gap-y-2 p-3 text-sm sm:grid-cols-2">
+                    <div className="flex justify-between gap-2">
+                      <dt className="text-slate-500">Original Finding ID</dt>
+                      <dd className="font-mono text-xs text-slate-900">{finding.id}</dd>
+                    </div>
+                    <div className="flex justify-between gap-2">
+                      <dt className="text-slate-500">Previous Reporting Month</dt>
+                      <dd className="font-medium text-slate-900">{lookups.periodCode}</dd>
+                    </div>
+                    <div className="flex justify-between gap-2">
+                      <dt className="text-slate-500">New Reporting Month</dt>
+                      <dd className="font-medium text-slate-900">
+                        {otherOpenPeriods.find((p) => p.id === transferPeriodId)?.code ?? "--"}
+                      </dd>
+                    </div>
+                    <div className="flex justify-between gap-2">
+                      <dt className="text-slate-500">Original Amount</dt>
+                      <dd className="font-medium text-slate-900">
+                        {finding.currency} {formatNumber(finding.amount)}
+                      </dd>
+                    </div>
+                    <div className="flex justify-between gap-2">
+                      <dt className="text-slate-500">Outstanding Amount</dt>
+                      <dd className="font-medium text-amber-700">
+                        {finding.currency} {formatNumber(outstandingAmount)}
+                      </dd>
+                    </div>
+                    <div className="flex justify-between gap-2">
+                      <dt className="text-slate-500">Original Case Count</dt>
+                      <dd className="font-medium text-slate-900">{formatNumber(finding.caseCount)}</dd>
+                    </div>
+                    <div className="flex justify-between gap-2">
+                      <dt className="text-slate-500">Outstanding Case Count</dt>
+                      <dd className="font-medium text-amber-700">{formatNumber(outstandingCases)}</dd>
+                    </div>
+                    <div className="flex justify-between gap-2">
+                      <dt className="text-slate-500">Transfer Date</dt>
+                      <dd className="font-medium text-slate-900">{new Date().toISOString().slice(0, 10)}</dd>
+                    </div>
+                    <div className="flex justify-between gap-2">
+                      <dt className="text-slate-500">Transferred By</dt>
+                      <dd className="font-medium text-slate-900">You (current user)</dd>
+                    </div>
+                    <div className="flex justify-between gap-2">
+                      <dt className="text-slate-500">Case Age (days)</dt>
+                      <dd className="font-medium text-slate-900">{caseAgeDays}</dd>
+                    </div>
+                    <div className="flex justify-between gap-2 sm:col-span-2">
+                      <dt className="text-slate-500">Transfer History (prior hops)</dt>
+                      <dd className="font-medium text-slate-900">
+                        {transfers.length === 0 ? "None — first transfer." : `${transfers.length} prior transfer(s).`}
+                      </dd>
+                    </div>
+                    <div className="flex justify-between gap-2 sm:col-span-2">
+                      <dt className="text-slate-500">Transfer Reason</dt>
+                      <dd className="text-slate-700">Entered at confirmation step (required).</dd>
+                    </div>
+                  </dl>
+                </div>
+
                 <div className="flex gap-2">
                   <Button variant="secondary" onClick={() => setTransferring(false)} disabled={busy}>
                     Cancel
@@ -1021,25 +1141,87 @@ export function FindingDetailClient({
 
       {transfers.length > 0 && (
         <Card>
-          <CardHeader title="Transfer History" />
-          <div className="divide-y divide-slate-100">
-            {transfers.map((t) => (
-              <div key={t.id} className="flex flex-col gap-0.5 px-4 py-2 text-sm">
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-600">
-                    <Badge tone={t.method === "AUTOMATIC" ? "blue" : "gray"}>{t.method === "AUTOMATIC" ? "Automatic" : "Manual"}</Badge>{" "}
-                    <span className="font-medium text-slate-900">{t.createdByName}</span> transferred {t.casesTransferred}{" "}
-                    case(s) / {finding.currency} {formatNumber(t.amountTransferred)}
-                    <span className="text-slate-400"> — {t.reason}</span>
-                  </span>
-                  <span className="text-xs text-slate-400">{formatDateTime(t.createdAt)}</span>
+          <CardHeader
+            title={`Transfer History (${transfers.length} hop${transfers.length === 1 ? "" : "s"})`}
+            description="Full §15 Transfer Data record per transfer hop (Original/Outstanding, From/To Period, Transfer Date, By, Reason, Case Age)."
+          />
+          <div className="flex flex-col gap-3 divide-y divide-slate-100 p-4">
+            {transfers.map((t) => {
+              const fromPeriod = lookups.periodLookup.get(t.fromPeriodId);
+              const toPeriod = lookups.periodLookup.get(t.toPeriodId);
+              return (
+                <div key={t.id} className="flex flex-col gap-2 pt-3 first:pt-0">
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge tone={t.method === "AUTOMATIC" ? "blue" : "gray"}>
+                        {t.method === "AUTOMATIC" ? "Auto Transfer" : "Manual Transfer"}
+                      </Badge>
+                      <span className="text-slate-500">
+                        Period:{" "}
+                        <span className="font-medium text-slate-800">{fromPeriod?.code ?? t.fromPeriodId}</span>{" "}
+                        <span aria-hidden>→</span>{" "}
+                        <span className="font-medium text-slate-900">{toPeriod?.code ?? t.toPeriodId}</span>
+                      </span>
+                    </div>
+                    <span className="text-xs text-slate-400">{formatDateTime(t.createdAt)}</span>
+                  </div>
+
+                  {/* §15 Transfer Data — 12 field rows, 2-column layout on wide screens. */}
+                  <dl className="grid grid-cols-1 gap-x-4 gap-y-1 rounded-md bg-slate-50 p-3 text-xs sm:grid-cols-2 sm:text-sm">
+                    <div className="flex justify-between gap-2">
+                      <dt className="text-slate-500">Original Finding ID</dt>
+                      <dd className="font-mono text-slate-800">{t.findingId}</dd>
+                    </div>
+                    <div className="flex justify-between gap-2">
+                      <dt className="text-slate-500">Case Age at Transfer</dt>
+                      <dd className="font-medium text-slate-800">
+                        {t.caseAgeAtTransferDays} day{t.caseAgeAtTransferDays === 1 ? "" : "s"}
+                      </dd>
+                    </div>
+                    <div className="flex justify-between gap-2">
+                      <dt className="text-slate-500">Previous Reporting Month</dt>
+                      <dd className="font-medium text-slate-800">{fromPeriod?.code ?? t.fromPeriodId}</dd>
+                    </div>
+                    <div className="flex justify-between gap-2">
+                      <dt className="text-slate-500">New Reporting Month</dt>
+                      <dd className="font-medium text-slate-800">{toPeriod?.code ?? t.toPeriodId}</dd>
+                    </div>
+                    <div className="flex justify-between gap-2">
+                      <dt className="text-slate-500">Original Amount</dt>
+                      <dd className="font-medium text-slate-800">
+                        {finding.currency} {formatNumber(t.originalAmount)}
+                      </dd>
+                    </div>
+                    <div className="flex justify-between gap-2">
+                      <dt className="text-slate-500">Outstanding Amount</dt>
+                      <dd className="font-medium text-amber-700">
+                        {finding.currency} {formatNumber(t.amountTransferred)}
+                      </dd>
+                    </div>
+                    <div className="flex justify-between gap-2">
+                      <dt className="text-slate-500">Original Case Count</dt>
+                      <dd className="font-medium text-slate-800">{formatNumber(t.originalCaseCount)}</dd>
+                    </div>
+                    <div className="flex justify-between gap-2">
+                      <dt className="text-slate-500">Outstanding Case Count</dt>
+                      <dd className="font-medium text-amber-700">{formatNumber(t.casesTransferred)}</dd>
+                    </div>
+                    <div className="flex justify-between gap-2">
+                      <dt className="text-slate-500">Transfer Date</dt>
+                      <dd className="font-medium text-slate-800">{t.createdAt.slice(0, 10)}</dd>
+                    </div>
+                    <div className="flex justify-between gap-2">
+                      <dt className="text-slate-500">Transferred By</dt>
+                      <dd className="font-medium text-slate-800">{t.createdByName}</dd>
+                    </div>
+                    <div className="flex justify-between gap-2 sm:col-span-2">
+                      <dt className="text-slate-500">Transfer Reason</dt>
+                      <dd className="text-slate-800">{t.reason}</dd>
+                    </div>
+                  </dl>
                 </div>
-                <p className="pl-1 text-xs text-slate-400">
-                  Original: {t.originalCaseCount} case(s) / {finding.currency} {formatNumber(t.originalAmount)} · Case age at
-                  transfer: {t.caseAgeAtTransferDays} day{t.caseAgeAtTransferDays === 1 ? "" : "s"}
-                </p>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </Card>
       )}

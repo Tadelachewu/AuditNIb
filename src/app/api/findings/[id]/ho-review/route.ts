@@ -41,6 +41,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "This finding is not awaiting HO review" }, { status: 409 });
   }
 
+  // Same separation-of-duties gate as district-review and bank-approval:
+  // an HO reviewer cannot return for correction a finding they themselves
+  // originally registered. Would be a no-op (returning it to themselves
+  // to edit and resubmit) and defeats the two-eye reviewer/creator split.
+  // Approve and Reject remain structurally allowed (the BRD doesn't ban
+  // self-approval outright — only the self-return loop is nonsensical).
+  if (decision === "RETURN" && existing.createdBy === auth.session.userId) {
+    return NextResponse.json(
+      { error: "You cannot return for correction a finding you yourself created at HO review. Use Reject instead if the finding should not proceed." },
+      { status: 409 }
+    );
+  }
+
   const periodError = assertPeriodWritable(db, existing.periodId);
   if (periodError) return NextResponse.json({ error: periodError }, { status: 409 });
 

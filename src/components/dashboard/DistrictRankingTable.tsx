@@ -13,20 +13,28 @@ export function DistrictRankingTable({
   db,
   districts,
   openPeriod,
+  allPeriods = false,
   title = "District Ranking",
   description = "All districts, ranked by performance, current period",
 }: {
   db: Database;
   districts: District[];
   openPeriod?: { id: string };
+  /** FilterBar's "All periods" choice (ALL_PERIODS_VALUE) - aggregates across every period instead of one; `openPeriod` is undefined in this mode. */
+  allPeriods?: boolean;
   title?: string;
   description?: string;
 }) {
+  const hasScope = allPeriods || Boolean(openPeriod);
   const rows = districts.map((d) => {
     const branchCount = db.branches.filter((b) => b.districtId === d.id && b.status === "ACTIVE").length;
-    const findings = openPeriod ? db.findings.filter((f) => f.districtId === d.id && f.periodId === openPeriod.id) : [];
+    const findings = hasScope
+      ? db.findings.filter((f) => f.districtId === d.id && (allPeriods || f.periodId === openPeriod!.id))
+      : [];
     const totalCases = findings.reduce((sum, f) => sum + f.caseCount, 0);
-    const performance = openPeriod ? computePerformance(db, { districtId: d.id, periodId: openPeriod.id }) : null;
+    const performance = hasScope
+      ? computePerformance(db, { districtId: d.id, periodId: allPeriods ? undefined : openPeriod!.id })
+      : null;
     return { district: d, branchCount, totalCases, performance };
   });
 
@@ -63,7 +71,7 @@ export function DistrictRankingTable({
                   </Link>
                 </td>
                 <td className="px-4 py-2 text-slate-700">{row.branchCount}</td>
-                <td className="px-4 py-2 text-slate-700">{openPeriod ? row.totalCases : "--"}</td>
+                <td className="px-4 py-2 text-slate-700">{hasScope ? row.totalCases : "--"}</td>
                 <td className="px-4 py-2 text-slate-700">{row.performance !== null ? `${row.performance.toFixed(1)}%` : "--"}</td>
               </tr>
             ))}

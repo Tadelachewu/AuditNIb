@@ -155,31 +155,41 @@ export function NewFindingForm({
   const caseAmountsSum = caseAmounts.reduce((sum, a) => sum + (Number(a) || 0), 0);
   const caseAmountsMatch = Math.abs(caseAmountsSum - (Number(form.amount) || 0)) < 0.01;
 
-  // Non-blocking duplicate suggestion (create mode only) - once branch,
-  // classified case, operation area, irregularity type, and period are all
-  // picked, check for a close match already on record so the registrar can
-  // double-check before submitting. Debounced since it fires on every one
-  // of those fields changing; dismissible per distinct field-combination
-  // rather than globally, so changing something re-checks instead of
-  // staying silently dismissed.
+  // Non-blocking duplicate suggestion (create mode only) - sends every
+  // candidate field the form currently has a value for (see
+  // SIMILAR_FINDING_FIELDS in src/types/index.ts); the API route itself
+  // decides which of those actually matter, per Settings.similarFindingFields
+  // (admin-configurable at /admin/settings), and only returns matches once
+  // every one of the *configured* fields has a value here - so this effect
+  // doesn't need to know the admin's configuration itself, just keep
+  // sending what it has. Debounced since it fires on every field changing;
+  // dismissible per distinct field-combination rather than globally, so
+  // changing something re-checks instead of staying silently dismissed.
   const [similarMatches, setSimilarMatches] = useState<SimilarFindingMatch[]>([]);
   const [similarDismissed, setSimilarDismissed] = useState(false);
-  const similarKey = [form.branchId, form.categoryId, form.operationArea, form.irregularityType, form.periodId].join("|");
+  const similarCandidates = {
+    branchId: form.branchId,
+    categoryId: form.categoryId,
+    operationArea: form.operationArea,
+    irregularityType: form.irregularityType,
+    periodId: form.periodId,
+    sourceId: form.sourceId,
+    departmentId: form.departmentId,
+    riskLevel: form.riskLevel,
+  };
+  const similarKey = Object.values(similarCandidates).join("|");
   useEffect(() => {
     setSimilarDismissed(false);
-    if (isEditing || !form.branchId || !form.categoryId || !form.operationArea || !form.irregularityType || !form.periodId) {
+    if (isEditing) {
       setSimilarMatches([]);
       return;
     }
     const controller = new AbortController();
     const timer = setTimeout(() => {
-      const params = new URLSearchParams({
-        branchId: form.branchId,
-        categoryId: form.categoryId,
-        operationArea: form.operationArea,
-        irregularityType: form.irregularityType,
-        periodId: form.periodId,
-      });
+      const params = new URLSearchParams();
+      for (const [key, value] of Object.entries(similarCandidates)) {
+        if (value) params.set(key, value);
+      }
       fetch(`/api/findings/similar?${params.toString()}`, { signal: controller.signal, cache: "no-store" })
         .then((res) => (res.ok ? res.json() : { matches: [] }))
         .then((data: { matches: SimilarFindingMatch[] }) => setSimilarMatches(data.matches ?? []))

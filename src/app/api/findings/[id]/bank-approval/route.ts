@@ -50,6 +50,22 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "This finding is not awaiting approval" }, { status: 409 });
   }
 
+  // Self-return block at the bank-approval stage — the single-step
+  // approval path for HO/Admin-registered findings (those that skipped
+  // DISTRICT_REVIEW/HO_REVIEW because the submitting user had orgScope
+  // === "BANK"). If the assigned approver is also the finding's creator,
+  // returning it would send it back to themselves for editing — a
+  // meaningless no-op. Approve and Reject are still allowed (the former
+  // is actually the common case: a HO Controller self-approves their own
+  // Internal Audit finding when Settings.hoApproval.required is on and
+  // they're in the approver list); only the self-return loop is blocked.
+  if (decision === "RETURN" && existing.createdBy === auth.session.userId) {
+    return NextResponse.json(
+      { error: "You cannot return for correction a finding you yourself created for bank approval. Use Reject instead if it should not proceed, or Approve to send it to the branch." },
+      { status: 409 }
+    );
+  }
+
   const periodError = assertPeriodWritable(db, existing.periodId);
   if (periodError) return NextResponse.json({ error: periodError }, { status: 409 });
 

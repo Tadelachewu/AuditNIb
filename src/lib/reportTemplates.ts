@@ -219,23 +219,31 @@ export function getMonthlySummaryReport(
 }
 
 // ---------------------------------------------------------------------------
-// 4/5. Monthly District History / Monthly District Detail - the same
-// District x Period Other-Case series, shared by both: #4's page groups it
-// by period (stacked blocks, one per reporting period). #5 - "Detail
-// monthly summaryBD" in the source workbook, "BD" being "By District" -
-// groups the exact same series the other way: one block per district,
-// months as rows, with a subtotal row per district and a grand TOTAL row
-// at the end (see report/*.xlsx - each district's block there also
-// includes a "Various internal Audit report" catch-all row that this app
-// has no equivalent bucket for, since every Finding here always belongs to
-// a real ReportingPeriod; that row is intentionally not reproduced).
-// Both pages group this same flat series client-side/server-side from the
-// one array below - no separate data function needed per grouping.
+// 4/5. Monthly District History / Monthly District Detail.
+//
+// Two distinct kinds of rows per district/period:
+//
+//   (a) "Other Cases" — the official scored metric, matching what #6, #4,
+//       the BRD, and computeEligibleCaseCounts() track. This is the same
+//       series Monthly District History uses.
+//   (b) "Various internal Audit report" — a catch-all bucket in the source
+//       Excel's "Detail monthly summaryBD" sheet for every *other*
+//       classified category (ATM Mismatch, IT, Zero Balance, Dormant,
+//       Cheque Book, … — anything NOT the official "Other Cases" scoring
+//       category). Row kind is tagged with `.rowKind` on each flat
+//       DistrictPeriodRow so the UI / CSV can render them distinctly and
+//       add them separately into each district's subtotal row.
+//
+// #4 groups the flat series by period (stacked blocks); #5 groups it by
+// district with a subtotal per district and a grand TOTAL at the end.
 // ---------------------------------------------------------------------------
+
+export type DistrictPeriodRowKind = "OTHER_CASES" | "VARIOUS_INTERNAL_AUDIT";
 
 export interface DistrictPeriodRow {
   period: ReportingPeriod;
   district: District;
+  rowKind: DistrictPeriodRowKind;
   totalBranches: number;
   totalCases: number;
   rectifiedCases: number;
@@ -244,22 +252,59 @@ export interface DistrictPeriodRow {
 }
 
 export function getMonthlyDistrictSeries(db: Database): DistrictPeriodRow[] {
+  const rule = db.scoringRules.find((r) => r.active);
   const periods = [...db.reportingPeriods].sort((a, b) => a.year - b.year || a.month - b.month);
   const districts = activeDistricts(db);
   const rows: DistrictPeriodRow[] = [];
   for (const period of periods) {
     for (const district of districts) {
-      const counts = computeEligibleCaseCounts(db, { districtId: district.id, periodId: period.id });
-      const totalCases = counts?.totalCases ?? 0;
-      const rectifiedCases = counts?.rectifiedCases ?? 0;
+      // (a) Official "Other Cases" bucket — ScoringRule gated, exactly the
+      // same series the history/ranking pages show.
+      const eligible = computeEligibleCaseCounts(db, { districtId: district.id, periodId: period.id });
+      const otherTotal = eligible?.totalCases ?? 0;
+      const otherRectified = eligible?.rectifiedCases ?? 0;
       rows.push({
         period,
         district,
+        rowKind: "OTHER_CASES",
         totalBranches: districtBranchCount(db, district.id),
-        totalCases,
-        rectifiedCases,
-        outstandingCases: totalCases - rectifiedCases,
-        performance: counts ? (rectifiedCases / totalCases) * 100 : null,
+        totalCases: otherTotal,
+        rectifiedCases: otherRectified,
+        outstandingCases: otherTotal - otherRectified,
+        performance: eligible && eligible.totalCases > 0 ? (eligible.rectifiedCases / eligible.totalCases) * 100 : null,
+      });
+
+      // (b) "Various internal Audit report" catch-all — every finding in
+      // this district/period that is NOT REJECTED and does NOT fall into
+      // the official ScoringRule's category+source bucket. If no active
+      // ScoringRule exists, this bucket defaults to ALL findings (all of
+      // them are "various" in that case, since nothing is official).
+      const allFindings = db.findings.filter(
+        (f) => f.districtId === district.id && f.periodId === period.id && f.status !== "REJECTED"
+      );
+      let variousTotal = 0;
+      let variousRectified = 0;
+      if (!rule) {
+        variousTotal = allFindings.reduce((s, f) => s + f.caseCount, 0);
+        variousRectified = allFindings.reduce((s, f) => s + f.rectifiedCases, 0);
+      } else {
+        for (const f of allFindings) {
+          const inOfficial = rule.categories.includes(f.categoryId) && rule.sources.includes(f.sourceId);
+          if (!inOfficial) {
+            variousTotal += f.caseCount;
+            variousRectified += f.rectifiedCases;
+          }
+        }
+      }
+      rows.push({
+        period,
+        district,
+        rowKind: "VARIOUS_INTERNAL_AUDIT",
+        totalBranches: districtBranchCount(db, district.id),
+        totalCases: variousTotal,
+        rectifiedCases: variousRectified,
+        outstandingCases: variousTotal - variousRectified,
+        performance: variousTotal > 0 ? (variousRectified / variousTotal) * 100 : null,
       });
     }
   }
@@ -564,6 +609,14 @@ export function getCategoryPerformanceSummary(
 // (findingCasesEligibleInPeriod) since an arbitrary as-of date doesn't
 // compose cleanly with that machinery, and the original report is itself
 // just a plain date cutoff.
+//
+// Rectified credit is districtVerifiedCases, same as computeEligibleCaseCounts()
+// - this snapshot already restricts to the active ScoringRule's own
+// category+source gate below, so it's presenting itself as the official
+// scored figure as of a cutoff date, not a broader raw lens (unlike #2/#7/
+// #8/#9). A case only counts as rectified once the authorized person
+// (District Controller) has accepted it - see computeEligibleCaseCounts()'s
+// own doc comment in src/lib/findings.ts.
 // ---------------------------------------------------------------------------
 
 export function getDistrictSnapshotAsOf(
@@ -583,7 +636,7 @@ export function getDistrictSnapshotAsOf(
           (!rule || (rule.categories.includes(f.categoryId) && rule.sources.includes(f.sourceId)))
       );
       const totalCases = findings.reduce((sum, f) => sum + f.caseCount, 0);
-      const rectifiedCases = findings.reduce((sum, f) => sum + f.rectifiedCases, 0);
+      const rectifiedCases = findings.reduce((sum, f) => sum + f.districtVerifiedCases, 0);
       return {
         district,
         totalBranches: districtBranchCount(db, district.id),

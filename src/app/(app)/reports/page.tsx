@@ -307,14 +307,14 @@ export default async function ReportsPage({
                 <th className="px-4 py-2 font-medium">Finding</th>
                 <th className="px-4 py-2 font-medium">From → To Period</th>
                 <th className="px-4 py-2 font-medium">Original Amount</th>
-                <th className="px-4 py-2 font-medium">Transferred Amount</th>
-                <th className="px-4 py-2 font-medium">Original Cases</th>
-                <th className="px-4 py-2 font-medium">Transferred Cases</th>
+                <th className="px-4 py-2 font-medium">Outstanding Amount</th>
+                <th className="px-4 py-2 font-medium">Original Case Count</th>
+                <th className="px-4 py-2 font-medium">Outstanding Case Count</th>
                 <th className="px-4 py-2 font-medium">Case Age</th>
                 <th className="px-4 py-2 font-medium">Method</th>
                 <th className="px-4 py-2 font-medium">Transferred By</th>
-                <th className="px-4 py-2 font-medium">Date</th>
-                <th className="px-4 py-2 font-medium">Reason</th>
+                <th className="px-4 py-2 font-medium">Transfer Date</th>
+                <th className="px-4 py-2 font-medium">Transfer Reason</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">

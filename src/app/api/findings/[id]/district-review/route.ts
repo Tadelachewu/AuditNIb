@@ -43,6 +43,20 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "This finding is not awaiting district review" }, { status: 409 });
   }
 
+  // Separation of duties: a reviewer cannot "return for correction" a
+  // finding they themselves created - that would be returning it to
+  // themselves to edit and resubmit, which is a meaningless no-op and
+  // breaks the reviewer/creactor separation at District level. Approve
+  // and Reject are still allowed (approving/rejecting your own work is
+  // arguably unwise, but not structurally impossible - the Return action
+  // is the one that makes no sense when creator === reviewer).
+  if (decision === "RETURN" && existing.createdBy === auth.session.userId) {
+    return NextResponse.json(
+      { error: "You cannot return for correction a finding you yourself created at district review. Use Edit (if still draft) or Reject instead." },
+      { status: 409 }
+    );
+  }
+
   const periodError = assertPeriodWritable(db, existing.periodId);
   if (periodError) return NextResponse.json({ error: periodError }, { status: 409 });
 

@@ -12,8 +12,14 @@ import type { FindingStatus } from "@/types";
 // recording new rectification while returned already moves the status
 // forward on its own (see RECTIFIABLE_STATUSES in rectify/route.ts); this
 // covers the case where there's nothing numeric left to add. Re-derives
-// RECTIFIED vs PARTIALLY_RECTIFIED from the finding's existing (unchanged)
-// totals, same computation the rectify route itself uses.
+// RECTIFIED vs PARTIALLY_RECTIFIED vs SENT_TO_BRANCH_MANAGER from the
+// finding's existing (unchanged) totals, same computation the rectify
+// route itself uses - plus the one case that route never has to handle:
+// return-rectification/route.ts can now return a finding that was
+// SENT_TO_BRANCH_MANAGER with *zero* ever rectified (approved, then sent
+// back before the branch touched it at all). Landing that on
+// PARTIALLY_RECTIFIED would be a lie - nothing has been rectified - so it
+// goes back to SENT_TO_BRANCH_MANAGER instead, exactly where it was.
 export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requirePermission("findings.rectify");
   if (!auth.ok) return auth.response;
@@ -37,7 +43,12 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     const f = current.findings.find((x) => x.id === id)!;
 
     const fullyRectified = f.rectifiedCases >= f.caseCount && f.rectifiedAmount >= f.amount;
-    const toStatus: FindingStatus = fullyRectified ? "RECTIFIED" : "PARTIALLY_RECTIFIED";
+    const nothingRectifiedYet = f.rectifiedCases === 0 && f.rectifiedAmount === 0;
+    const toStatus: FindingStatus = fullyRectified
+      ? "RECTIFIED"
+      : nothingRectifiedYet
+        ? "SENT_TO_BRANCH_MANAGER"
+        : "PARTIALLY_RECTIFIED";
     transitionFinding(current, f, {
       toStatus,
       action: "RESUBMIT_RECTIFICATION",

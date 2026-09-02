@@ -48,7 +48,7 @@ export default async function MonthlyDistrictHistoryPage() {
       )}
 
       {periods.map((period) => {
-        const rows = series.filter((r) => r.period.id === period.id);
+        const rows = series.filter((r) => r.period.id === period.id && r.rowKind === "OTHER_CASES");
         const totalCases = rows.reduce((sum, r) => sum + r.totalCases, 0);
         const rectifiedCases = rows.reduce((sum, r) => sum + r.rectifiedCases, 0);
         return (

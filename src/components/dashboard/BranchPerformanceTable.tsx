@@ -61,23 +61,34 @@ export function BranchPerformanceTable({
   db,
   branches,
   openPeriod,
+  allPeriods = false,
   title = "Branch Performance",
   description = "Rank, cases, and performance by branch, current period",
 }: {
   db: Database;
   branches: Branch[];
   openPeriod?: ReportingPeriod;
+  /** FilterBar's "All periods" choice (ALL_PERIODS_VALUE) - aggregates across every period instead of one; `openPeriod` is undefined in this mode. */
+  allPeriods?: boolean;
   title?: string;
   description?: string;
 }) {
+  const hasScope = allPeriods || Boolean(openPeriod);
+  // "Highest Improvement" compares against the one adjacent prior period -
+  // doesn't apply in "All periods" mode, where there's no single period to
+  // have a "previous" one.
   const previousPeriod = openPeriod ? findPreviousPeriod(db, openPeriod) : undefined;
   const highRiskTiers = new Set(db.settings.riskLevels.slice(-2).map((l) => l.toLowerCase()));
 
   const rows: Row[] = branches.map((b) => {
-    const findings = openPeriod ? db.findings.filter((f) => f.branchId === b.id && f.periodId === openPeriod.id) : [];
+    const findings = hasScope
+      ? db.findings.filter((f) => f.branchId === b.id && (allPeriods || f.periodId === openPeriod!.id))
+      : [];
     const totalCases = findings.reduce((sum, f) => sum + f.caseCount, 0);
     const rectifiedCases = findings.reduce((sum, f) => sum + f.rectifiedCases, 0);
-    const performance = openPeriod ? computePerformance(db, { branchId: b.id, periodId: openPeriod.id }) : null;
+    const performance = hasScope
+      ? computePerformance(db, { branchId: b.id, periodId: allPeriods ? undefined : openPeriod!.id })
+      : null;
     const prevPerformance = previousPeriod ? computePerformance(db, { branchId: b.id, periodId: previousPeriod.id }) : null;
     const highRiskCount = findings.filter(
       (f) => !["RECTIFIED", "CLOSED", "REJECTED"].includes(f.status) && highRiskTiers.has(f.riskLevel.toLowerCase())
@@ -170,9 +181,9 @@ export function BranchPerformanceTable({
                     {row.branch.name}
                   </Link>
                 </td>
-                <td className="px-4 py-2 text-slate-700">{openPeriod ? row.totalCases : "--"}</td>
-                <td className="px-4 py-2 text-slate-700">{openPeriod ? row.rectifiedCases : "--"}</td>
-                <td className="px-4 py-2 text-slate-700">{openPeriod ? row.outstandingCases : "--"}</td>
+                <td className="px-4 py-2 text-slate-700">{hasScope ? row.totalCases : "--"}</td>
+                <td className="px-4 py-2 text-slate-700">{hasScope ? row.rectifiedCases : "--"}</td>
+                <td className="px-4 py-2 text-slate-700">{hasScope ? row.outstandingCases : "--"}</td>
                 <td className="px-4 py-2 text-slate-700">{row.performance !== null ? `${row.performance.toFixed(1)}%` : "--"}</td>
               </tr>
             ))}

@@ -212,7 +212,7 @@ export function ExecutiveDashboard({ db, dateRange = {} }: { user: SessionData; 
         </Card>
       )}
 
-      <SourcePerformanceSummary db={db} sources={activeSources} periodFindings={periodFindings} scope={{}} openPeriod={openPeriod} />
+      <SourcePerformanceSummary db={db} sources={activeSources} scope={{}} openPeriod={openPeriod} />
 
       <Card>
         <CardHeader

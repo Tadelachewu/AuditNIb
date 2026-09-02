@@ -40,6 +40,13 @@ const updateSchema = z.object({
     required: z.boolean(),
     approverUserIds: z.array(z.string()),
   }),
+  // Keep in sync with SIMILAR_FINDING_FIELDS (src/types/index.ts) - a
+  // literal tuple here (same convention as notification.provider above)
+  // gets real static typing on Settings.similarFindingFields, which a
+  // runtime-only check against that array's keys couldn't.
+  similarFindingFields: z
+    .array(z.enum(["branchId", "categoryId", "operationArea", "irregularityType", "periodId", "sourceId", "departmentId", "riskLevel"]))
+    .min(1, "Select at least one field for the duplicate-suggestion check"),
 });
 
 export async function PATCH(request: Request) {

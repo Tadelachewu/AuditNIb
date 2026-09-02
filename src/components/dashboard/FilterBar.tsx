@@ -3,7 +3,7 @@
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { Select, Label } from "@/components/ui/Field";
 import { FINDING_STATUSES, type ReportingPeriod, type District, type Branch, type Source, type ClassifiedCategory } from "@/types";
-import { type DashboardFilters } from "@/lib/dashboardFilters";
+import { ALL_PERIODS_VALUE, type DashboardFilters } from "@/lib/dashboardFilters";
 
 export interface FilterBarProps {
   periods: ReportingPeriod[];
@@ -80,8 +80,15 @@ export function FilterBar({
       <div className="flex flex-wrap items-end gap-3">
         <div>
           <Label htmlFor="f-period">Period</Label>
+          {/* "All periods" is a real, explicit choice ("ALL"), never an
+              empty/unset value - an empty periodId means "no filter picked
+              yet," which every dashboard defaults to whichever period is
+              currently OPEN. Without a distinct sentinel, picking "All
+              periods" was indistinguishable from picking nothing at all and
+              silently fell back to that same single open period - see each
+              dashboard's own openPeriod/allPeriodsSelected computation. */}
           <Select id="f-period" value={filters.periodId} onChange={(e) => update({ periodId: e.target.value })}>
-            <option value="">All periods</option>
+            <option value={ALL_PERIODS_VALUE}>All periods</option>
             {periods.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.code} {p.status === "LOCKED" ? "(locked)" : ""}

@@ -127,7 +127,12 @@ function buildCsv(slug: string, db: Database, params: URLSearchParams): string |
       return toCsv(header, dataRows);
     }
     case "monthly-district-history": {
-      const series = getMonthlyDistrictSeries(db);
+      // Other-Case-only, matching the page's own filter - getMonthlyDistrictSeries()
+      // now returns two rows per district/period (OTHER_CASES and the
+      // VARIOUS_INTERNAL_AUDIT catch-all, see its own doc comment); this
+      // template is specifically the official scored-category series, same
+      // as Monthly District History has always been.
+      const series = getMonthlyDistrictSeries(db).filter((r) => r.rowKind === "OTHER_CASES");
       return toCsv(
         ["Period", "Total No. of Branches", "District", "Others Cases", "Unrectified", "Rectified", "rectified percetage"],
         series.map((r) => [r.period.code, r.totalBranches, r.district.name, r.totalCases, r.outstandingCases, r.rectifiedCases, pct(r.performance)])
@@ -138,7 +143,14 @@ function buildCsv(slug: string, db: Database, params: URLSearchParams): string |
       // District" - see getMonthlyDistrictSeries' own doc comment), each
       // district's months followed by its subtotal, then one grand TOTAL
       // row at the end - matching the source sheet's structure exactly.
+      // Each district/period pair now carries two rows (Other Cases +
+      // Various internal Audit report catch-all - see rowKind on
+      // DistrictPeriodRow) - the Case Type column and shared per-period SN
+      // mirror exactly how the on-screen table (monthly-district-detail/
+      // page.tsx) renders the same series, so CSV and screen never diverge.
       const series = getMonthlyDistrictSeries(db);
+      const caseTypeLabel = (kind: "OTHER_CASES" | "VARIOUS_INTERNAL_AUDIT") =>
+        kind === "OTHER_CASES" ? "Other Cases" : "Various internal Audit report";
       const byDistrict = new Map<string, typeof series>();
       for (const r of series) {
         const list = byDistrict.get(r.district.id) ?? [];
@@ -149,25 +161,43 @@ function buildCsv(slug: string, db: Database, params: URLSearchParams): string |
       let grandTotalCases = 0;
       let grandRectified = 0;
       for (const rows of byDistrict.values()) {
-        rows.forEach((r, i) => {
-          dataRows.push([i + 1, r.district.name, r.period.code, r.totalCases, r.outstandingCases, r.rectifiedCases, pct(r.performance)]);
+        const byPeriod = new Map<string, typeof rows>();
+        for (const r of rows) {
+          const list = byPeriod.get(r.period.id) ?? [];
+          list.push(r);
+          byPeriod.set(r.period.id, list);
+        }
+        [...byPeriod.values()].forEach((periodRows, i) => {
+          periodRows.forEach((r, kindIdx) => {
+            dataRows.push([
+              kindIdx === 0 ? i + 1 : "",
+              kindIdx === 0 ? r.district.name : "",
+              kindIdx === 0 ? r.period.code : "",
+              caseTypeLabel(r.rowKind),
+              r.totalCases,
+              r.outstandingCases,
+              r.rectifiedCases,
+              pct(r.performance),
+            ]);
+          });
         });
         const totalCases = rows.reduce((sum, r) => sum + r.totalCases, 0);
         const rectifiedCases = rows.reduce((sum, r) => sum + r.rectifiedCases, 0);
         grandTotalCases += totalCases;
         grandRectified += rectifiedCases;
-        dataRows.push(["", "", "", totalCases, totalCases - rectifiedCases, rectifiedCases, pct(totalCases > 0 ? (rectifiedCases / totalCases) * 100 : null)]);
+        dataRows.push(["", "", "", "", totalCases, totalCases - rectifiedCases, rectifiedCases, pct(totalCases > 0 ? (rectifiedCases / totalCases) * 100 : null)]);
       }
       dataRows.push([
         "",
         "TOTAL",
+        "",
         "",
         grandTotalCases,
         grandTotalCases - grandRectified,
         grandRectified,
         pct(grandTotalCases > 0 ? (grandRectified / grandTotalCases) * 100 : null),
       ]);
-      return toCsv(["SN", "District", "Month", "Others Cases", "Unrectified", "Rectified", "rectified percetage"], dataRows);
+      return toCsv(["SN", "District", "Month", "Case Type", "Total Cases", "Unrectified", "Rectified", "rectified percetage"], dataRows);
     }
     case "district-ranking-other-cases": {
       const { rows, totalRow } = getDistrictRankingOtherCases(db, periodIds);

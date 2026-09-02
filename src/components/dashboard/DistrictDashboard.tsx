@@ -5,7 +5,7 @@ import { computePerformance, queueStatusesForSession, findingCaseTotals, transfe
 import { sumAmountByCurrency, sumOutstandingByCurrency } from "@/lib/currency";
 import { formatDateTime } from "@/lib/format";
 import { inDateRange, type DateRange } from "@/lib/dateRange";
-import { applyDashboardFilters, EMPTY_DASHBOARD_FILTERS, type DashboardFilters } from "@/lib/dashboardFilters";
+import { applyDashboardFilters, EMPTY_DASHBOARD_FILTERS, ALL_PERIODS_VALUE, type DashboardFilters } from "@/lib/dashboardFilters";
 import { Card, CardHeader, StatCard } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { FilterBar } from "@/components/dashboard/FilterBar";
@@ -41,9 +41,16 @@ export function DistrictDashboard({
   // FilterBar's own period picker takes priority over "whichever period is
   // currently OPEN" - picking a locked/past period is exactly how you'd
   // review dashboard history, not just the live one.
-  const openPeriod = filters.periodId
-    ? db.reportingPeriods.find((p) => p.id === filters.periodId)
-    : db.reportingPeriods.find((p) => p.status === "OPEN");
+  const allPeriodsSelected = filters.periodId === ALL_PERIODS_VALUE;
+  const openPeriod = allPeriodsSelected
+    ? undefined
+    : filters.periodId
+      ? db.reportingPeriods.find((p) => p.id === filters.periodId)
+      : db.reportingPeriods.find((p) => p.status === "OPEN");
+  // True whenever there's real data to show - a specific period, or "All
+  // periods" explicitly chosen - see BranchDashboard.tsx's own doc comment.
+  const hasPeriodScope = allPeriodsSelected || Boolean(openPeriod);
+  const periodDisplayMarker = hasPeriodScope ? (openPeriod ?? { id: ALL_PERIODS_VALUE }) : undefined;
   const activeCategories = db.categories.filter((c) => c.active);
   const activeScoringRule = db.scoringRules.find((r) => r.active);
 
@@ -67,7 +74,11 @@ export function DistrictDashboard({
   // ad-hoc filter). A branch filter does narrow which rows the branch
   // ranking table shows - see branchesInScope below.
   const districtFindingsInRange = applyDashboardFilters(districtFindings.filter((f) => inDateRange(dateRange, f.findingDate)), filters);
-  const periodFindings = openPeriod ? districtFindingsInRange.filter((f) => f.periodId === openPeriod.id) : [];
+  const periodFindings = allPeriodsSelected
+    ? districtFindingsInRange
+    : openPeriod
+      ? districtFindingsInRange.filter((f) => f.periodId === openPeriod.id)
+      : [];
   const requiringReviewFindings = periodFindings.filter((f) => f.status === "DISTRICT_REVIEW").length;
   // "Approved" = passed district review and hasn't been rejected/returned
   // since - i.e. currently sitting at or past HO_REVIEW. Deliberately a
@@ -95,11 +106,13 @@ export function DistrictDashboard({
   // from FindingTransfer records: distinct findings this district
   // transferred out of the current period.
   const districtFindingIds = new Set(districtFindings.map((f) => f.id));
-  const districtTransfers = openPeriod
-    ? db.findingTransfers.filter((t) => t.fromPeriodId === openPeriod.id && districtFindingIds.has(t.findingId))
+  const districtTransfers = hasPeriodScope
+    ? db.findingTransfers.filter((t) => (allPeriodsSelected || t.fromPeriodId === openPeriod!.id) && districtFindingIds.has(t.findingId))
     : [];
   const { transferredFindings, transferredCases } = transferTotals(districtTransfers);
-  const performance = openPeriod ? computePerformance(db, { districtId: district.id, periodId: openPeriod.id }) : null;
+  const performance = hasPeriodScope
+    ? computePerformance(db, { districtId: district.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id })
+    : null;
   const totalAmount = sumAmountByCurrency(approvedPeriodFindings, "amount");
   const outstandingAmount = sumOutstandingByCurrency(approvedPeriodFindings);
   const resolvedAmount = sumAmountByCurrency(approvedPeriodFindings, "rectifiedAmount");
@@ -111,7 +124,12 @@ export function DistrictDashboard({
   // HO-only, since the setting is what decides whether this comparison is
   // shown at all, not who has oversight of what.
   const districtRanking = db.districts
-    .map((d) => ({ district: d, performance: openPeriod ? computePerformance(db, { districtId: d.id, periodId: openPeriod.id }) : null }))
+    .map((d) => ({
+      district: d,
+      performance: hasPeriodScope
+        ? computePerformance(db, { districtId: d.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id })
+        : null,
+    }))
     .sort((a, b) => (b.performance ?? -1) - (a.performance ?? -1));
 
   // A branch/source/category filter narrows which rows the ranking tables
@@ -128,7 +146,9 @@ export function DistrictDashboard({
 
   const branchRanking = branchesInScope
     .map((b) => {
-      const perf = openPeriod ? computePerformance(db, { branchId: b.id, periodId: openPeriod.id }) : null;
+      const perf = hasPeriodScope
+        ? computePerformance(db, { branchId: b.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id })
+        : null;
       // Same isHoApproved() gate as everywhere else on this dashboard - a
       // volume count feeding "Findings by Branch" shouldn't grow the moment
       // something's merely registered either.
@@ -163,6 +183,22 @@ export function DistrictDashboard({
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
     .slice(0, 8);
 
+  // District's own distinctive second-stage gate is *verifying* a
+  // self-reported rectification, not closing it (that's the same
+  // verify-rectification/return-rectification predicate
+  // queueStatusesForSession() uses) - "Requiring Review" above already
+  // covers the DISTRICT_REVIEW count, so there's no separate "Pending
+  // Approval" card here (that was a duplicate of Requiring Review). Not
+  // period-scoped - "what needs action right now," not a per-period
+  // reporting total.
+  const pendingVerifyFindings = db.findings.filter(
+    (f) =>
+      f.districtId === district.id &&
+      f.status !== "RECTIFICATION_RETURNED" &&
+      f.status !== "CLOSED" &&
+      (f.rectifiedCases > f.districtVerifiedCases || f.rectifiedAmount > f.districtVerifiedAmount)
+  );
+
   const recentActivity = db.findingTransitions
     .filter((t) => districtFindingIds.has(t.findingId))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
@@ -192,28 +228,48 @@ export function DistrictDashboard({
       <TimeRangeFilter />
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatCard label="Total Findings" value={openPeriod ? totalFindings : "--"} hint={openPeriod ? openPeriod.code : "No open period"} />
-        <StatCard label="Total Cases" value={openPeriod ? totalCases : "--"} hint={`Across ${totalFindings} finding(s)`} />
-        <StatCard label="Requiring Review" value={openPeriod ? requiringReviewFindings : "--"} hint="Awaiting district decision" />
-        <StatCard label="Approved" value={openPeriod ? approvedFindings : "--"} hint="Passed district review" />
-        <StatCard label="Outstanding" value={openPeriod ? outstandingFindings : "--"} hint="Findings" />
-        <StatCard label="Rejected" value={openPeriod ? rejectedFindings : "--"} hint="Findings" />
-        <StatCard label="Returned" value={openPeriod ? returnedFindings : "--"} hint="Findings" />
-        <StatCard label="Rectified Findings" value={openPeriod ? rectifiedFindings : "--"} hint="Formally closed" />
-        <StatCard label="Rectified Cases" value={openPeriod ? rectifiedCases : "--"} hint="Closed, this period" />
-        <StatCard label="Transferred Findings" value={openPeriod ? transferredFindings : "--"} hint="Out of this period" />
-        <StatCard label="Transferred Cases" value={openPeriod ? transferredCases : "--"} hint="Out of this period" />
+        <StatCard
+          label="Total Findings"
+          value={hasPeriodScope ? totalFindings : "--"}
+          hint={allPeriodsSelected ? "All periods" : openPeriod ? openPeriod.code : "No open period"}
+        />
+        <StatCard label="Total Cases" value={hasPeriodScope ? totalCases : "--"} hint={`Across ${totalFindings} finding(s)`} />
+        <StatCard label="Requiring Review" value={hasPeriodScope ? requiringReviewFindings : "--"} hint="Awaiting district decision" />
+        <StatCard label="Approved" value={hasPeriodScope ? approvedFindings : "--"} hint="Passed district review" />
+        <StatCard label="Outstanding" value={hasPeriodScope ? outstandingFindings : "--"} hint="Findings" />
+        <StatCard label="Rejected" value={hasPeriodScope ? rejectedFindings : "--"} hint="Findings" />
+        <StatCard label="Returned" value={hasPeriodScope ? returnedFindings : "--"} hint="Findings" />
+        <StatCard label="Rectified Findings" value={hasPeriodScope ? rectifiedFindings : "--"} hint="Formally closed" />
+        <StatCard label="Rectified Cases" value={hasPeriodScope ? rectifiedCases : "--"} hint="Closed, this period" />
+        <StatCard label="Transferred Findings" value={hasPeriodScope ? transferredFindings : "--"} hint="Out of this period" />
+        <StatCard label="Transferred Cases" value={hasPeriodScope ? transferredCases : "--"} hint="Out of this period" />
         <StatCard
           label="District Performance"
           value={performance !== null ? `${performance.toFixed(1)}%` : "--"}
           hint={activeScoringRule ? `v${activeScoringRule.version} formula` : "No active scoring rule"}
         />
-        <StatCard label="Total Amount" value={openPeriod ? totalAmount : "--"} hint="All findings" />
-        <StatCard label="Resolved Amount" value={openPeriod ? resolvedAmount : "--"} hint="Cumulative rectified" />
-        <StatCard label="Outstanding Amount" value={openPeriod ? outstandingAmount : "--"} hint="Still owed" />
+        <StatCard label="Total Amount" value={hasPeriodScope ? totalAmount : "--"} hint="All findings" />
+        <StatCard label="Resolved Amount" value={hasPeriodScope ? resolvedAmount : "--"} hint="Cumulative rectified" />
+        <StatCard label="Outstanding Amount" value={hasPeriodScope ? outstandingAmount : "--"} hint="Still owed" />
       </div>
 
-      <CaseBasedPerformance db={db} scope={{ districtId: district.id }} openPeriod={openPeriod} />
+      <Card>
+        <CardHeader title="Pending Verify" description={`${pendingVerifyFindings.length} rectified, awaiting your verification`} />
+        <div className="divide-y divide-slate-100">
+          {pendingVerifyFindings.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-400">Nothing pending.</p>}
+          {pendingVerifyFindings
+            .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+            .slice(0, 8)
+            .map((f) => (
+              <Link key={f.id} href={`/findings/${f.id}`} className="flex items-center justify-between px-4 py-2 text-sm hover:bg-slate-50">
+                <span className="font-mono text-xs text-blue-800">{f.reference}</span>
+                <FindingStatusBadge status={f.status} />
+              </Link>
+            ))}
+        </div>
+      </Card>
+
+      <CaseBasedPerformance db={db} scope={{ districtId: district.id }} openPeriod={openPeriod} allPeriods={allPeriodsSelected} />
 
       {db.settings.rankingVisibility.branches && (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -279,6 +335,7 @@ export function DistrictDashboard({
             db={db}
             districts={db.districts}
             openPeriod={openPeriod}
+            allPeriods={allPeriodsSelected}
             description="Every district bank-wide - branch counts are dynamic per district"
           />
         </>
@@ -294,6 +351,7 @@ export function DistrictDashboard({
           db={db}
           branches={branchesInScope}
           openPeriod={openPeriod}
+          allPeriods={allPeriodsSelected}
           title="Branch Performance"
           description="Every branch in this district, ranked by performance this period"
         />
@@ -307,9 +365,9 @@ export function DistrictDashboard({
       <SourcePerformanceSummary
         db={db}
         sources={sourcesInScope}
-        periodFindings={periodFindings}
         scope={{ districtId: district.id }}
         openPeriod={openPeriod}
+        allPeriods={allPeriodsSelected}
       />
 
       <Card>
@@ -335,9 +393,9 @@ export function DistrictDashboard({
               {categoryTotals.map(({ category: c, total, rectified, outstanding }) => (
                 <tr key={c.id}>
                   <td className="px-4 py-2 text-slate-900">{c.name}</td>
-                  <td className="px-4 py-2 text-slate-700">{openPeriod ? total : "--"}</td>
-                  <td className="px-4 py-2 text-slate-700">{openPeriod ? rectified : "--"}</td>
-                  <td className="px-4 py-2 text-slate-700">{openPeriod ? outstanding : "--"}</td>
+                  <td className="px-4 py-2 text-slate-700">{hasPeriodScope ? total : "--"}</td>
+                  <td className="px-4 py-2 text-slate-700">{hasPeriodScope ? rectified : "--"}</td>
+                  <td className="px-4 py-2 text-slate-700">{hasPeriodScope ? outstanding : "--"}</td>
                 </tr>
               ))}
             </tbody>
@@ -345,7 +403,7 @@ export function DistrictDashboard({
         </div>
       </Card>
 
-      <FindingsByCategoryChart findings={approvedPeriodFindings} categories={categoriesInScope} openPeriod={openPeriod} />
+      <FindingsByCategoryChart findings={approvedPeriodFindings} categories={categoriesInScope} openPeriod={periodDisplayMarker} />
 
       <MonthlyTrend db={db} scope={{ districtId: district.id }} />
 
@@ -356,7 +414,7 @@ export function DistrictDashboard({
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
-          <CardHeader title="Work Queue" description="Findings awaiting your action" />
+          <CardHeader title="Work Queue" description="Every finding awaiting your action, all categories" />
           <div className="divide-y divide-slate-100">
             {workQueue.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-400">Nothing pending.</p>}
             {workQueue.map((f) => (

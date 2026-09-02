@@ -6,6 +6,7 @@ import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input, Select, Label } from "@/components/ui/Field";
 import { SettingsListEditor } from "@/components/admin/SettingsListEditor";
+import { SIMILAR_FINDING_FIELDS } from "@/types";
 import type { Settings, SafeUser } from "@/types";
 
 export default function SettingsPage() {
@@ -47,6 +48,7 @@ export default function SettingsPage() {
         rectificationReminders: settings.rectificationReminders,
         performanceThresholds: settings.performanceThresholds,
         hoApproval: settings.hoApproval,
+        similarFindingFields: settings.similarFindingFields,
       };
       const res = await apiSend<{ settings: Settings }>("/api/admin/settings", "PATCH", payload);
       setSettings(res.settings);
@@ -385,6 +387,41 @@ export default function SettingsPage() {
               ))}
             </div>
           </div>
+        </div>
+      </Card>
+
+      <Card className="mt-4">
+        <CardHeader
+          title="Duplicate Finding Detection"
+          description="Which fields the Register Finding form's 'similar finding already on record' check compares."
+        />
+        <div className="flex flex-col gap-3 p-4">
+          <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+            {SIMILAR_FINDING_FIELDS.map(({ key, label }) => (
+              <label key={key} className="flex items-center gap-2 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={settings.similarFindingFields.includes(key)}
+                  onChange={(e) =>
+                    setSettings({
+                      ...settings,
+                      similarFindingFields: e.target.checked
+                        ? [...settings.similarFindingFields, key]
+                        : settings.similarFindingFields.filter((f) => f !== key),
+                    })
+                  }
+                  className="h-4 w-4 rounded border-slate-300"
+                />
+                {label}
+              </label>
+            ))}
+          </div>
+          <p className="text-xs text-slate-400">
+            A finding is flagged as a likely duplicate only when it matches on <strong>every</strong> field checked
+            above - narrower selections (fewer fields) catch more possible duplicates but risk more false
+            positives; broader selections (more fields) are stricter. This is only ever a suggestion shown to the
+            person registering - it never blocks saving.
+          </p>
         </div>
       </Card>
 

@@ -5,7 +5,7 @@ import { computePerformance, findingCaseTotals, transferTotals, averageCaseAgeDa
 import { sumAmountByCurrency, sumOutstandingByCurrency } from "@/lib/currency";
 import { formatDateTime, formatNumber } from "@/lib/format";
 import { inDateRange, type DateRange } from "@/lib/dateRange";
-import { applyDashboardFilters, EMPTY_DASHBOARD_FILTERS, type DashboardFilters } from "@/lib/dashboardFilters";
+import { applyDashboardFilters, EMPTY_DASHBOARD_FILTERS, ALL_PERIODS_VALUE, type DashboardFilters } from "@/lib/dashboardFilters";
 import { Card, CardHeader, StatCard } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { FilterBar } from "@/components/dashboard/FilterBar";
@@ -40,9 +40,16 @@ export function HODashboard({
   // FilterBar's own period picker takes priority over "whichever period is
   // currently OPEN" - picking a locked/past period is exactly how you'd
   // review dashboard history, not just the live one.
-  const openPeriod = filters.periodId
-    ? db.reportingPeriods.find((p) => p.id === filters.periodId)
-    : db.reportingPeriods.find((p) => p.status === "OPEN");
+  const allPeriodsSelected = filters.periodId === ALL_PERIODS_VALUE;
+  const openPeriod = allPeriodsSelected
+    ? undefined
+    : filters.periodId
+      ? db.reportingPeriods.find((p) => p.id === filters.periodId)
+      : db.reportingPeriods.find((p) => p.status === "OPEN");
+  // True whenever there's real data to show - a specific period, or "All
+  // periods" explicitly chosen - see BranchDashboard.tsx's own doc comment.
+  const hasPeriodScope = allPeriodsSelected || Boolean(openPeriod);
+  const periodDisplayMarker = hasPeriodScope ? (openPeriod ?? { id: ALL_PERIODS_VALUE }) : undefined;
   const activeSources = db.sources.filter((s) => s.active);
   const activeScoringRule = db.scoringRules.find((r) => r.active);
 
@@ -59,7 +66,11 @@ export function HODashboard({
     db.findings.filter((f) => inDateRange(dateRange, f.findingDate)),
     filters
   );
-  const periodFindings = openPeriod ? allFindingsInRange.filter((f) => f.periodId === openPeriod.id) : [];
+  const periodFindings = allPeriodsSelected
+    ? allFindingsInRange
+    : openPeriod
+      ? allFindingsInRange.filter((f) => f.periodId === openPeriod.id)
+      : [];
   const { totalFindings, totalCases, rectifiedFindings, rectifiedCases } = findingCaseTotals(periodFindings);
   // Every other "official" figure below (as opposed to RiskDistribution/
   // FindingStatusDistribution's deliberately broader in-flight-workflow
@@ -68,7 +79,9 @@ export function HODashboard({
   // actually been approved.
   const approvedPeriodFindings = periodFindings.filter(isHoApproved);
   const outstandingFindings = approvedPeriodFindings.filter((f) => !["RECTIFIED", "CLOSED", "REJECTED"].includes(f.status)).length;
-  const bankPerformance = openPeriod ? computePerformance(db, { periodId: openPeriod.id }) : null;
+  const bankPerformance = hasPeriodScope
+    ? computePerformance(db, { periodId: allPeriodsSelected ? undefined : openPeriod?.id })
+    : null;
   const totalAmount = sumAmountByCurrency(approvedPeriodFindings, "amount");
   const outstandingAmount = sumOutstandingByCurrency(approvedPeriodFindings);
   const resolvedAmount = sumAmountByCurrency(approvedPeriodFindings, "rectifiedAmount");
@@ -93,7 +106,9 @@ export function HODashboard({
 
   const districtRanking = districtsInScope
     .map((d) => {
-      const perf = openPeriod ? computePerformance(db, { districtId: d.id, periodId: openPeriod.id }) : null;
+      const perf = hasPeriodScope
+        ? computePerformance(db, { districtId: d.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id })
+        : null;
       // Same isHoApproved() gate as everywhere else on this dashboard - a
       // volume count feeding "Findings by District" shouldn't grow the
       // moment something's merely registered either.
@@ -115,7 +130,9 @@ export function HODashboard({
   // branches"), not just rolled up into its district's number.
   const branchRanking = branchesInScope
     .map((b) => {
-      const perf = openPeriod ? computePerformance(db, { branchId: b.id, periodId: openPeriod.id }) : null;
+      const perf = hasPeriodScope
+        ? computePerformance(db, { branchId: b.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id })
+        : null;
       const findings = approvedPeriodFindings.filter((f) => f.branchId === b.id);
       return { branch: b, performance: perf, total: findings.length };
     })
@@ -177,7 +194,9 @@ export function HODashboard({
   // forward, so a transferred finding is no longer in periodFindings for
   // its *source* period - counted from FindingTransfer records instead,
   // bank-wide here rather than scoped to one district.
-  const bankTransfers = openPeriod ? db.findingTransfers.filter((t) => t.fromPeriodId === openPeriod.id) : [];
+  const bankTransfers = hasPeriodScope
+    ? db.findingTransfers.filter((t) => allPeriodsSelected || t.fromPeriodId === openPeriod!.id)
+    : [];
   // Previously this StatCard was labeled "Transferred Cases" but held this
   // distinct-finding count, not a case count - transferredCases below is
   // the real per-case sum (FindingTransfer.casesTransferred), added
@@ -228,22 +247,26 @@ export function HODashboard({
       <TimeRangeFilter />
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatCard label="Total Findings" value={openPeriod ? totalFindings : "--"} hint={openPeriod ? openPeriod.code : "No open period"} />
-        <StatCard label="Total Cases" value={openPeriod ? totalCases : "--"} hint="Sum of case counts, bank-wide" />
-        <StatCard label="Rectified Findings" value={openPeriod ? rectifiedFindings : "--"} hint="Formally closed" />
-        <StatCard label="Rectified Cases" value={openPeriod ? rectifiedCases : "--"} hint="Closed, this period" />
-        <StatCard label="Outstanding" value={openPeriod ? outstandingFindings : "--"} hint="Findings" />
+        <StatCard
+          label="Total Findings"
+          value={hasPeriodScope ? totalFindings : "--"}
+          hint={allPeriodsSelected ? "All periods" : openPeriod ? openPeriod.code : "No open period"}
+        />
+        <StatCard label="Total Cases" value={hasPeriodScope ? totalCases : "--"} hint="Sum of case counts, bank-wide" />
+        <StatCard label="Rectified Findings" value={hasPeriodScope ? rectifiedFindings : "--"} hint="Formally closed" />
+        <StatCard label="Rectified Cases" value={hasPeriodScope ? rectifiedCases : "--"} hint="Closed, this period" />
+        <StatCard label="Outstanding" value={hasPeriodScope ? outstandingFindings : "--"} hint="Findings" />
         <StatCard
           label="Bank-wide Performance"
           value={bankPerformance !== null ? `${bankPerformance.toFixed(1)}%` : "--"}
           hint={activeScoringRule ? `v${activeScoringRule.version} formula` : "No active scoring rule"}
         />
-        <StatCard label="High-Risk Findings" value={openPeriod ? highRiskFindings : "--"} hint="Open, top risk tiers" />
-        <StatCard label="Transferred Findings" value={openPeriod ? transferredFindings : "--"} hint="Out of this period" />
-        <StatCard label="Transferred Cases" value={openPeriod ? transferredCases : "--"} hint="Out of this period" />
-        <StatCard label="Total Amount" value={openPeriod ? totalAmount : "--"} hint="All findings, bank-wide" />
-        <StatCard label="Resolved Amount" value={openPeriod ? resolvedAmount : "--"} hint="Cumulative rectified" />
-        <StatCard label="Outstanding Amount" value={openPeriod ? outstandingAmount : "--"} hint="Still owed, bank-wide" />
+        <StatCard label="High-Risk Findings" value={hasPeriodScope ? highRiskFindings : "--"} hint="Open, top risk tiers" />
+        <StatCard label="Transferred Findings" value={hasPeriodScope ? transferredFindings : "--"} hint="Out of this period" />
+        <StatCard label="Transferred Cases" value={hasPeriodScope ? transferredCases : "--"} hint="Out of this period" />
+        <StatCard label="Total Amount" value={hasPeriodScope ? totalAmount : "--"} hint="All findings, bank-wide" />
+        <StatCard label="Resolved Amount" value={hasPeriodScope ? resolvedAmount : "--"} hint="Cumulative rectified" />
+        <StatCard label="Outstanding Amount" value={hasPeriodScope ? outstandingAmount : "--"} hint="Still owed, bank-wide" />
         <StatCard
           label="Avg. Backlog Age"
           value={avgOutstandingAgeDays !== null ? `${avgOutstandingAgeDays}d` : "--"}
@@ -251,7 +274,47 @@ export function HODashboard({
         />
       </div>
 
-      <CaseBasedPerformance db={db} scope={{}} openPeriod={openPeriod} />
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader
+            title="Pending Approval"
+            description={`${pendingApprovalFindings.length} awaiting your review decision${isBankApprover ? " (HO review + bank approval)" : ""}`}
+          />
+          <div className="divide-y divide-slate-100">
+            {pendingApprovalFindings.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-400">Nothing pending.</p>}
+            {pendingApprovalFindings
+              .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+              .slice(0, 8)
+              .map((f) => (
+                <Link key={f.id} href={`/findings/${f.id}`} className="flex items-center justify-between px-4 py-2 text-sm hover:bg-slate-50">
+                  <span className="font-mono text-xs text-blue-800">{f.reference}</span>
+                  <FindingStatusBadge status={f.status} />
+                </Link>
+              ))}
+          </div>
+        </Card>
+
+        <Card>
+          <CardHeader
+            title="Pending Close / Accept"
+            description={`${pendingCloseFindings.length} district-verified, awaiting close`}
+          />
+          <div className="divide-y divide-slate-100">
+            {pendingCloseFindings.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-400">Nothing pending.</p>}
+            {pendingCloseFindings
+              .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+              .slice(0, 8)
+              .map((f) => (
+                <Link key={f.id} href={`/findings/${f.id}`} className="flex items-center justify-between px-4 py-2 text-sm hover:bg-slate-50">
+                  <span className="font-mono text-xs text-blue-800">{f.reference}</span>
+                  <FindingStatusBadge status={f.status} />
+                </Link>
+              ))}
+          </div>
+        </Card>
+      </div>
+
+      <CaseBasedPerformance db={db} scope={{}} openPeriod={openPeriod} allPeriods={allPeriodsSelected} />
 
       {db.settings.rankingVisibility.districts && (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -317,6 +380,7 @@ export function HODashboard({
             db={db}
             districts={districtsInScope}
             openPeriod={openPeriod}
+            allPeriods={allPeriodsSelected}
             description="All districts, ranked by performance - branch counts are dynamic per district"
           />
         </>
@@ -375,13 +439,14 @@ export function HODashboard({
             db={db}
             branches={branchesInScope}
             openPeriod={openPeriod}
+            allPeriods={allPeriodsSelected}
             title="Branch Performance"
             description="Every branch bank-wide, ranked by performance this period"
           />
         </>
       )}
 
-      <SourcePerformanceSummary db={db} sources={sourcesInScope} periodFindings={periodFindings} scope={{}} openPeriod={openPeriod} />
+      <SourcePerformanceSummary db={db} sources={sourcesInScope} scope={{}} openPeriod={openPeriod} allPeriods={allPeriodsSelected} />
 
       <Card>
         <CardHeader title="Findings by District" description="Top districts by finding count, current period" />
@@ -393,9 +458,8 @@ export function HODashboard({
       <Card>
         <CardHeader
           title="Source Comparison"
-          description={`Internal Control vs. Internal Audit (and any other active source), current period${
-            activeScoringRule ? ` — "Eligible Cases" = v${activeScoringRule.version}'s scored categories` : ""
-          }`}
+          description={`Internal Control vs. Internal Audit (and any other active source), current period${activeScoringRule ? ` — "Eligible Cases" = v${activeScoringRule.version}'s scored categories` : ""
+            }`}
         />
         <div className="flex flex-col gap-4 p-4">
           <div>
@@ -446,13 +510,13 @@ export function HODashboard({
                 ({ source: s, total, eligibleCases, rectified, outstanding, amount, rectifiedAmount, outstandingAmount }) => (
                   <tr key={s.id}>
                     <td className="px-4 py-2 text-slate-900">{s.name}</td>
-                    <td className="px-4 py-2 text-slate-700">{openPeriod ? total : "--"}</td>
-                    <td className="px-4 py-2 text-slate-700">{openPeriod ? eligibleCases : "--"}</td>
-                    <td className="px-4 py-2 text-slate-700">{openPeriod ? rectified : "--"}</td>
-                    <td className="px-4 py-2 text-slate-700">{openPeriod ? outstanding : "--"}</td>
-                    <td className="px-4 py-2 text-slate-700">{openPeriod ? formatNumber(amount) : "--"}</td>
-                    <td className="px-4 py-2 text-slate-700">{openPeriod ? formatNumber(rectifiedAmount) : "--"}</td>
-                    <td className="px-4 py-2 text-slate-700">{openPeriod ? formatNumber(outstandingAmount) : "--"}</td>
+                    <td className="px-4 py-2 text-slate-700">{hasPeriodScope ? total : "--"}</td>
+                    <td className="px-4 py-2 text-slate-700">{hasPeriodScope ? eligibleCases : "--"}</td>
+                    <td className="px-4 py-2 text-slate-700">{hasPeriodScope ? rectified : "--"}</td>
+                    <td className="px-4 py-2 text-slate-700">{hasPeriodScope ? outstanding : "--"}</td>
+                    <td className="px-4 py-2 text-slate-700">{hasPeriodScope ? formatNumber(amount) : "--"}</td>
+                    <td className="px-4 py-2 text-slate-700">{hasPeriodScope ? formatNumber(rectifiedAmount) : "--"}</td>
+                    <td className="px-4 py-2 text-slate-700">{hasPeriodScope ? formatNumber(outstandingAmount) : "--"}</td>
                   </tr>
                 )
               )}
@@ -461,7 +525,7 @@ export function HODashboard({
         </div>
       </Card>
 
-      <FindingsByCategoryChart findings={approvedPeriodFindings} categories={categoriesInScope} openPeriod={openPeriod} />
+      <FindingsByCategoryChart findings={approvedPeriodFindings} categories={categoriesInScope} openPeriod={periodDisplayMarker} />
 
       <MonthlyTrend db={db} scope={{}} />
 
@@ -481,46 +545,6 @@ export function HODashboard({
           ))}
         </div>
       </Card>
-
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader
-            title="Pending Approval"
-            description={`${pendingApprovalFindings.length} awaiting your review decision${isBankApprover ? " (HO review + bank approval)" : ""}`}
-          />
-          <div className="divide-y divide-slate-100">
-            {pendingApprovalFindings.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-400">Nothing pending.</p>}
-            {pendingApprovalFindings
-              .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
-              .slice(0, 8)
-              .map((f) => (
-                <Link key={f.id} href={`/findings/${f.id}`} className="flex items-center justify-between px-4 py-2 text-sm hover:bg-slate-50">
-                  <span className="font-mono text-xs text-blue-800">{f.reference}</span>
-                  <FindingStatusBadge status={f.status} />
-                </Link>
-              ))}
-          </div>
-        </Card>
-
-        <Card>
-          <CardHeader
-            title="Pending Close / Accept"
-            description={`${pendingCloseFindings.length} district-verified, awaiting close`}
-          />
-          <div className="divide-y divide-slate-100">
-            {pendingCloseFindings.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-400">Nothing pending.</p>}
-            {pendingCloseFindings
-              .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
-              .slice(0, 8)
-              .map((f) => (
-                <Link key={f.id} href={`/findings/${f.id}`} className="flex items-center justify-between px-4 py-2 text-sm hover:bg-slate-50">
-                  <span className="font-mono text-xs text-blue-800">{f.reference}</span>
-                  <FindingStatusBadge status={f.status} />
-                </Link>
-              ))}
-          </div>
-        </Card>
-      </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>

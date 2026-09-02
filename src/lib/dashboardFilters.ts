@@ -10,6 +10,15 @@ import type { Finding } from "@/types";
  * string, and each dashboard page parses them straight from
  * `searchParams` server-side - no client fetch, no duplicated state.
  */
+/**
+ * The FilterBar period Select's explicit "All periods" choice - never an
+ * empty string, which already means something different ("no filter
+ * picked yet," under which every dashboard defaults to whichever period is
+ * currently OPEN). Without this distinct sentinel, picking "All periods"
+ * was indistinguishable from picking nothing at all.
+ */
+export const ALL_PERIODS_VALUE = "ALL";
+
 export interface DashboardFilters {
   periodId: string;
   districtId: string;

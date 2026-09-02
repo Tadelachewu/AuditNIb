@@ -28,6 +28,8 @@ export type PermissionAction =
   | "rectify"
   | "verify-rectification"
   | "return-rectification"
+  | "district-return-rectification"
+  | "ho-return-rectification"
   | "close"
   | "transfer"
   | "evidence"
@@ -95,7 +97,9 @@ export const PAGE_REGISTRY: PageDefinition[] = [
       // correction - split out from "verify-rectification" so a role can
       // hold one without the other (e.g. a reviewer who can only approve,
       // never bounce work back, or vice versa).
-      { action: "return-rectification", label: "Return Rectification for Correction" },
+      { action: "return-rectification", label: "Return Rectification for Correction (Legacy)" },
+      { action: "district-return-rectification", label: "District: Return Rectification for Correction" },
+      { action: "ho-return-rectification", label: "HO: Return Rectification for Correction (after District verification)" },
       { action: "close", label: "Close (Verify)" },
       { action: "transfer", label: "Transfer to Next Period" },
       { action: "evidence", label: "Upload Evidence" },

@@ -374,6 +374,55 @@ export function nextFindingReference(db: Database, branch: Branch, period: Repor
   return `${prefix}-${String(seq).padStart(3, "0")}`;
 }
 
+// ---------------------------------------------------------------------------
+// Return-for-correction gating helpers (used by return-rectification/route.ts
+// on top of the plain RETURNABLE_STATUSES check that route already does):
+//
+//   1. Separation of duties, scoped to *this* rectification: whoever already
+//      verified or closed the currently-outstanding rectification can't also
+//      be the one to return it - one person shouldn't be able to sign off on
+//      a rectification and then flip to "actually it's wrong" as the same
+//      identity. Return is only ever a decision about the rectification
+//      itself, so it's blocked by DISTRICT_VERIFY_RECTIFICATION/CLOSE/
+//      PARTIAL_CLOSE - never by DISTRICT_APPROVE/HO_APPROVE/BANK_APPROVE,
+//      which are the *finding's own* review-stage approvals, an earlier and
+//      unrelated decision. Those already block their own stage's Return via
+//      each review route's own createdBy self-check plus the DISTRICT_REVIEW/
+//      HO_REVIEW status gate - they must never also block *this* gate, or
+//      the District Controller who approved a finding at District Review
+//      (routinely the same person who later verifies its rectification)
+//      would be locked out of returning that rectification entirely, even
+//      though they've never touched it. A *different* person holding the
+//      same permission still can, same as before.
+//   2. Post-transfer: once a finding is sitting at TRANSFERRED, returning it
+//      is blocked until the branch has recorded new rectification *after*
+//      that transfer - otherwise "return" would just be re-litigating the
+//      outstanding balance the transfer already carried forward untouched,
+//      with nothing new on record to actually be wrong.
+// ---------------------------------------------------------------------------
+
+/**
+ * Checked against db.auditLogs, not db.findingTransitions -
+ * DISTRICT_VERIFY_RECTIFICATION and PARTIAL_CLOSE never go through
+ * transitionFinding() (neither changes finding.status), so they only ever
+ * land in the audit log, never the transition history. CLOSE does go
+ * through transitionFinding(), which itself calls appendAuditLog() with the
+ * same action string - so all three are reliably found here, in one place,
+ * regardless of which path recorded them.
+ */
+export function userPerformedApprovalOrVerifyAction(db: Database, findingId: string, userId: string): boolean {
+  const actions = new Set(["DISTRICT_VERIFY_RECTIFICATION", "CLOSE", "PARTIAL_CLOSE"]);
+  return db.auditLogs.some((a) => a.entityType === "Finding" && a.entityId === findingId && a.userId === userId && actions.has(a.action));
+}
+
+/** True if the finding has never been transferred, or has a RectificationEntry recorded strictly after its most recent transfer. */
+export function hasRectificationAfterLastTransfer(db: Database, finding: Finding): boolean {
+  const transfers = db.findingTransfers.filter((t) => t.findingId === finding.id);
+  if (transfers.length === 0) return true;
+  const latestTransferAt = Math.max(...transfers.map((t) => new Date(t.createdAt).getTime()));
+  return db.rectifications.some((r) => r.findingId === finding.id && new Date(r.createdAt).getTime() > latestTransferAt);
+}
+
 /**
  * "Relevant work queue" (plan doc §3.3/§3.4), computed generically from
  * which findings.* permissions the session holds rather than a hard-coded
@@ -435,6 +484,13 @@ export interface PerformanceScope {
   branchId?: string;
   districtId?: string;
   periodId?: string;
+  // Narrows to one source on top of the active ScoringRule's own source
+  // gate (rule.sources) - CaseBasedPerformance/SourcePerformanceSummary's
+  // per-source breakdown use this rather than hand-rolling their own
+  // candidate filter, so the transfer-case-segmentation fix in
+  // findingCasesEligibleInPeriod() applies there too, not just to the
+  // headline Performance % figure.
+  sourceId?: string;
 }
 
 /**
@@ -456,9 +512,70 @@ function findingCasesEligibleInPeriod(db: Database, finding: Finding, periodId: 
   if (transfers.length === 0) {
     return finding.periodId === periodId ? finding.caseCount : null;
   }
-  if (transfers[0].fromPeriodId === periodId) return finding.caseCount;
-  const hop = transfers.find((t) => t.toPeriodId === periodId);
-  return hop ? hop.casesTransferred : null;
+  if (transfers[0].fromPeriodId === periodId) {
+    // Only the portion that never transferred out belongs to the origin
+    // period - casesTransferred (see transferFinding()) is exactly what was
+    // still outstanding, and therefore carried forward, at that moment.
+    // Crediting the origin period the *full* caseCount here (the previous
+    // behavior) would count a transferred CASE as "eligible but never
+    // rectified" against the period it left - i.e. a case transfer would
+    // drag down that period's performance for something that isn't a
+    // rectification failure there. Performance must never be moved by a
+    // transferred case, in either direction, in the period it left.
+    return finding.caseCount - transfers[0].casesTransferred;
+  }
+  const hopIndex = transfers.findIndex((t) => t.toPeriodId === periodId);
+  if (hopIndex === -1) return null;
+  // Same reasoning for an intermediate hop (a finding transferred more than
+  // once): this period is only credited what arrived minus whatever moved
+  // on again via the *next* transfer, never the finding's full caseCount.
+  const arrived = transfers[hopIndex].casesTransferred;
+  const nextTransfer = transfers[hopIndex + 1];
+  const left = nextTransfer ? nextTransfer.casesTransferred : 0;
+  return arrived - left;
+}
+
+/**
+ * How many of a finding's RectificationEntry rows stamped to `periodId` are
+ * actually *verified* (districtVerifiedCases/Amount), not merely
+ * self-reported by the Branch Manager. A case only becomes "rectified" for
+ * performance purposes once the authorized person (District Controller,
+ * via verify-rectification) accepts it - the raw entry the manager records
+ * is a claim, not yet a fact the scoring formula can credit.
+ *
+ * verify-rectification/route.ts always catches districtVerifiedCases/Amount
+ * up to the *entire* currently-outstanding rectifiedCases/Amount in one
+ * call (never a partial, hand-picked sub-amount) - so at any moment,
+ * `finding.districtVerifiedCases` is exactly the sum of some chronological
+ * prefix of this finding's RectificationEntry rows, never a fraction that
+ * splits one entry in a way a single verify call couldn't have produced.
+ * That makes a FIFO walk - oldest entry first, each one credited verified
+ * status up to whatever budget remains - an exact reconstruction of which
+ * entries (and which period they're stamped to) are actually verified,
+ * with no separate "verified" ledger needed. Cases and amount are tracked
+ * independently since a Branch Manager can rectify a case count and an
+ * amount that don't verify in lockstep.
+ */
+function verifiedRectifiedInPeriod(db: Database, finding: Finding, periodId: string): { cases: number; amount: number } {
+  const entries = [...db.rectifications]
+    .filter((r) => r.findingId === finding.id)
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+  let casesBudget = finding.districtVerifiedCases;
+  let amountBudget = finding.districtVerifiedAmount;
+  let cases = 0;
+  let amount = 0;
+  for (const entry of entries) {
+    const verifiedCases = Math.min(entry.rectifiedCases, casesBudget);
+    const verifiedAmount = Math.min(entry.rectifiedAmount, amountBudget);
+    casesBudget -= verifiedCases;
+    amountBudget -= verifiedAmount;
+    if (entry.periodId === periodId) {
+      cases += verifiedCases;
+      amount += verifiedAmount;
+    }
+  }
+  return { cases, amount };
 }
 
 /**
@@ -479,6 +596,16 @@ function findingCasesEligibleInPeriod(db: Database, finding: Finding, periodId: 
  * gate existed, a branch/district's Performance % would drop the moment a
  * new finding was merely *registered*, before anyone even reviewed it -
  * isHoApproved() already excludes REJECTED, so that check is folded in.
+ *
+ * The numerator is district-*verified* cases/amount, never the Branch
+ * Manager's raw self-reported rectifiedCases/rectifiedAmount: a case only
+ * counts as rectified once the authorized person (District Controller, via
+ * verify-rectification) has accepted it, same reasoning as
+ * findingCaseTotals()'s own closed-only gate one step further downstream.
+ * A rectification the manager recorded but District hasn't verified yet is
+ * a claim, not yet something the scoring formula can credit - crediting it
+ * immediately would let performance improve before anyone authorized had
+ * actually checked the work.
  */
 export function computeEligibleCaseCounts(db: Database, scope: PerformanceScope): { totalCases: number; rectifiedCases: number } | null {
   const rule = db.scoringRules.find((r) => r.active);
@@ -490,13 +617,14 @@ export function computeEligibleCaseCounts(db: Database, scope: PerformanceScope)
       rule.sources.includes(f.sourceId) &&
       isHoApproved(f) &&
       (!scope.branchId || f.branchId === scope.branchId) &&
-      (!scope.districtId || f.districtId === scope.districtId)
+      (!scope.districtId || f.districtId === scope.districtId) &&
+      (!scope.sourceId || f.sourceId === scope.sourceId)
   );
 
   if (!scope.periodId) {
     const totalCases = candidates.reduce((sum, f) => sum + f.caseCount, 0);
     if (totalCases === 0) return null;
-    const rectifiedCases = candidates.reduce((sum, f) => sum + f.rectifiedCases, 0);
+    const rectifiedCases = candidates.reduce((sum, f) => sum + f.districtVerifiedCases, 0);
     return { totalCases, rectifiedCases };
   }
 
@@ -506,9 +634,7 @@ export function computeEligibleCaseCounts(db: Database, scope: PerformanceScope)
     const eligibleCases = findingCasesEligibleInPeriod(db, f, scope.periodId);
     if (eligibleCases === null) continue;
     totalCases += eligibleCases;
-    rectifiedCases += db.rectifications
-      .filter((r) => r.findingId === f.id && r.periodId === scope.periodId)
-      .reduce((sum, r) => sum + r.rectifiedCases, 0);
+    rectifiedCases += verifiedRectifiedInPeriod(db, f, scope.periodId).cases;
   }
   if (totalCases === 0) return null;
   return { totalCases, rectifiedCases };
@@ -521,12 +647,15 @@ export function computeEligibleCaseCounts(db: Database, scope: PerformanceScope)
  * hard-coding "Other Case". Returns null when there's no active rule or no
  * eligible cases yet (an honest "not computable," not a fabricated 0%).
  *
- * When scoped to a period, each finding's rectified credit comes from its
- * RectificationEntry ledger rows stamped with that periodId - not the
- * finding's lifetime `rectifiedCases` - so a case rectified before a
- * transfer stays credited to the period it actually happened in, and a
- * destination period only gets credit for work done after the case arrived
- * (see findingCasesEligibleInPeriod() above for the matching denominator).
+ * When scoped to a period, each finding's rectified credit comes from
+ * whichever of its RectificationEntry ledger rows are both stamped with
+ * that periodId AND district-verified (see verifiedRectifiedInPeriod()) -
+ * not the finding's lifetime `rectifiedCases` (self-reported) or
+ * `districtVerifiedCases` (a lifetime total, not period-attributed) - so a
+ * case verified before a transfer stays credited to the period it actually
+ * happened in, and a destination period only gets credit for work done
+ * (and verified) after the case arrived (see findingCasesEligibleInPeriod()
+ * above for the matching denominator).
  */
 export function computePerformance(db: Database, scope: PerformanceScope): number | null {
   const counts = computeEligibleCaseCounts(db, scope);

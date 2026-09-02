@@ -95,8 +95,9 @@ SENT_TO_BRANCH_MANAGER
         └──> RECTIFIED  (can happen on the very first call, if the
                           whole balance is recorded at once)
 
-  From PARTIALLY_RECTIFIED, RECTIFIED, or TRANSFERRED, a District/HO
-  Controller doing the close-verification can instead send it back:
+  From SENT_TO_BRANCH_MANAGER (nothing rectified yet), PARTIALLY_RECTIFIED,
+  RECTIFIED, or TRANSFERRED, a District/HO Controller can instead send it
+  back:
 
         return-rectification (mandatory reason)
                         │
@@ -108,7 +109,7 @@ SENT_TO_BRANCH_MANAGER
         │                          e.g. fixed evidence/note)
         └───────────────┬───────────────┘
                          v
-        re-enters PARTIALLY_RECTIFIED / RECTIFIED
+     re-enters SENT_TO_BRANCH_MANAGER / PARTIALLY_RECTIFIED / RECTIFIED
         (recomputed from the finding's unchanged totals)
 
 RECTIFIED ──close (verify)──> CLOSED (terminal)
@@ -150,13 +151,19 @@ merging them hides the difference between "permanently rejected" and
 ## 3. Return-for-Correction and Resubmit
 
 `POST /api/findings/[id]/return-rectification`, `{ reason }` (min 5
-chars) — gated by `findings.close` (the same authority as closing itself,
-since this is "the other half of the same verify duty"). Accepted from
+chars) — gated by its own `findings.return-rectification` permission
+(split from `findings.verify-rectification`, so a role can hold one
+without the other). Accepted from `SENT_TO_BRANCH_MANAGER`,
 `PARTIALLY_RECTIFIED`, `RECTIFIED`, or `TRANSFERRED` — **not** limited to
-partial rectifications. All three represent "a rectification was recorded
-and something about it is wrong" (wrong amount, wrong case, insufficient
-evidence), regardless of whether the recorded rectification happened to
-be partial, full, or already carried into a new period by a transfer.
+partial rectifications, and not limited to findings with a recorded
+rectification at all. The latter three represent "a rectification was
+recorded and something about it is wrong" (wrong amount, wrong case,
+insufficient evidence); `SENT_TO_BRANCH_MANAGER` covers the case a
+Controller only realizes needs correction *after* approving it but
+*before* the branch has rectified anything - without this status included,
+there was no way to send an approved finding back at all once it was past
+District/HO Review's own Return (which only works while still at that
+review stage).
 
 Effect: status → `RECTIFICATION_RETURNED`. Blocks close, partial-close,
 and transfer until addressed. Notifies every `findings.rectify` holder at
@@ -170,8 +177,10 @@ an identical permission set) with the Controller's name and reason.
   `rectifiedAmount` moves it forward the normal way.
 - **Resubmit** (`POST .../resubmit-rectification`, no body) — for when the
   correction didn't involve any new numbers (e.g. it was an evidence or
-  note problem). Re-derives `RECTIFIED` vs `PARTIALLY_RECTIFIED` from the
-  finding's *existing, unchanged* totals and notifies close-holders again.
+  note problem). Re-derives `RECTIFIED` vs `PARTIALLY_RECTIFIED` vs
+  `SENT_TO_BRANCH_MANAGER` (the last one only when nothing had ever been
+  rectified before the return) from the finding's *existing, unchanged*
+  totals and notifies close-holders again.
 
 ---
 
