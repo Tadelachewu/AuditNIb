@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { Database } from "@/types";
 import type { SessionData } from "@/lib/session";
 import { findBranchManager, findBranchSubManager, findBranchController } from "@/lib/org";
-import { computePerformance, queueStatusesForSession, findingCaseTotals, transferTotals } from "@/lib/findings";
+import { computePerformance, queueStatusesForSession, findingCaseTotals, transferTotals, isHoApproved } from "@/lib/findings";
 import { sumAmountByCurrency, sumOutstandingByCurrency } from "@/lib/currency";
 import { formatDateTime, formatNumber } from "@/lib/format";
 import { inDateRange, type DateRange } from "@/lib/dateRange";
@@ -18,6 +18,7 @@ import { MonthlyTrend } from "@/components/dashboard/MonthlyTrend";
 import { FindingStatusBadge } from "@/components/findings/FindingStatusBadge";
 import { CaseBasedPerformance } from "@/components/dashboard/CaseBasedPerformance";
 import { FindingsByCategoryChart } from "@/components/dashboard/FindingsByCategoryChart";
+import { SourcePerformanceSummary } from "@/components/dashboard/SourcePerformanceSummary";
 
 // Per master.txt §10: "Selected month; category totals; total/rectified/
 // outstanding; Other Case summary; performance; monthly trend; risk
@@ -71,23 +72,35 @@ export function BranchDashboard({
   );
   const periodFindings = openPeriod ? branchAllFindings.filter((f) => f.periodId === openPeriod.id) : [];
   const { totalFindings, totalCases, rectifiedFindings, rectifiedCases } = findingCaseTotals(periodFindings);
-  const outstandingFindings = periodFindings.filter((f) => !["RECTIFIED", "CLOSED", "REJECTED"].includes(f.status)).length;
+  // Every StatCard/table below that reports an "official" figure (as
+  // opposed to RiskDistribution/FindingStatusDistribution's deliberately
+  // broader in-flight-workflow view) is scoped to this, not periodFindings -
+  // same isHoApproved() gate findingCaseTotals() already applies to Total
+  // Findings/Total Cases above, so a finding sitting in DISTRICT_REVIEW/
+  // HO_REVIEW doesn't inflate Total Amount, Outstanding, Category Totals,
+  // etc. before anyone's actually approved it.
+  const approvedPeriodFindings = periodFindings.filter(isHoApproved);
+  const outstandingFindings = approvedPeriodFindings.filter((f) => !["RECTIFIED", "CLOSED", "REJECTED"].includes(f.status)).length;
   const performance = openPeriod ? computePerformance(db, { branchId: branch.id, periodId: openPeriod.id }) : null;
-  const totalAmount = sumAmountByCurrency(periodFindings, "amount");
-  const outstandingAmount = sumOutstandingByCurrency(periodFindings);
-  const resolvedAmount = sumAmountByCurrency(periodFindings, "rectifiedAmount");
+  const totalAmount = sumAmountByCurrency(approvedPeriodFindings, "amount");
+  const outstandingAmount = sumOutstandingByCurrency(approvedPeriodFindings);
+  const resolvedAmount = sumAmountByCurrency(approvedPeriodFindings, "rectifiedAmount");
 
-  const otherCaseFindings = otherCase ? periodFindings.filter((f) => f.categoryId === otherCase.id) : [];
+  const otherCaseFindings = otherCase ? approvedPeriodFindings.filter((f) => f.categoryId === otherCase.id) : [];
   const otherCaseTotal = otherCaseFindings.reduce((sum, f) => sum + f.caseCount, 0);
   const otherCaseRectified = otherCaseFindings.reduce((sum, f) => sum + f.rectifiedCases, 0);
 
-  // A category filter narrows which rows the category widgets even list -
+  // A category/source filter narrows which rows those widgets even list -
   // a real narrowing of "what am I looking at," not a redefinition of the
-  // performance formula (computePerformance() itself is untouched).
+  // performance formula (computePerformance() itself is untouched). Same
+  // convention as DistrictDashboard's own categoriesInScope/sourcesInScope.
   const categoriesInScope = filters.categoryId ? activeCategories.filter((c) => c.id === filters.categoryId) : activeCategories;
+  const sourcesInScope = filters.sourceId
+    ? db.sources.filter((s) => s.active && s.id === filters.sourceId)
+    : db.sources.filter((s) => s.active);
 
   const categoryTotals = categoriesInScope.map((c) => {
-    const findings = periodFindings.filter((f) => f.categoryId === c.id);
+    const findings = approvedPeriodFindings.filter((f) => f.categoryId === c.id);
     const total = findings.reduce((sum, f) => sum + f.caseCount, 0);
     const rectified = findings.reduce((sum, f) => sum + f.rectifiedCases, 0);
     const amount = findings.reduce((sum, f) => sum + f.amount, 0);
@@ -114,7 +127,7 @@ export function BranchDashboard({
     : [];
   const { transferredFindings, transferredCases } = transferTotals(branchTransfers);
 
-  const isQueued = queueStatusesForSession(user);
+  const isQueued = queueStatusesForSession(user, db);
   const workQueue = db.findings
     .filter((f) => f.branchId === branch.id && isQueued(f))
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
@@ -168,8 +181,8 @@ export function BranchDashboard({
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatCard label="Total Findings" value={openPeriod ? totalFindings : "--"} hint={openPeriod ? openPeriod.code : "No open period"} />
         <StatCard label="Total Cases" value={openPeriod ? totalCases : "--"} hint="Sum of case counts" />
-        <StatCard label="Rectified Findings" value={openPeriod ? rectifiedFindings : "--"} hint="Fully rectified or closed" />
-        <StatCard label="Rectified Cases" value={openPeriod ? rectifiedCases : "--"} hint="Cumulative, this period" />
+        <StatCard label="Rectified Findings" value={openPeriod ? rectifiedFindings : "--"} hint="Formally closed" />
+        <StatCard label="Rectified Cases" value={openPeriod ? rectifiedCases : "--"} hint="Closed, this period" />
         <StatCard label="Outstanding" value={openPeriod ? outstandingFindings : "--"} hint="Findings" />
         <StatCard label="Transferred Findings" value={openPeriod ? transferredFindings : "--"} hint="Out of this period" />
         <StatCard label="Transferred Cases" value={openPeriod ? transferredCases : "--"} hint="Out of this period" />
@@ -184,7 +197,7 @@ export function BranchDashboard({
         <StatCard label="Outstanding Amount" value={openPeriod ? outstandingAmount : "--"} hint="Still owed" />
       </div>
 
-      <CaseBasedPerformance db={db} periodFindings={periodFindings} openPeriod={openPeriod} />
+      <CaseBasedPerformance db={db} scope={{ branchId: branch.id }} openPeriod={openPeriod} />
 
       {db.settings.rankingVisibility.branches ? (
         <Card>
@@ -288,7 +301,15 @@ export function BranchDashboard({
         </div>
       </Card>
 
-      <FindingsByCategoryChart findings={periodFindings} categories={categoriesInScope} openPeriod={openPeriod} />
+      <FindingsByCategoryChart findings={approvedPeriodFindings} categories={categoriesInScope} openPeriod={openPeriod} />
+
+      <SourcePerformanceSummary
+        db={db}
+        sources={sourcesInScope}
+        periodFindings={periodFindings}
+        scope={{ branchId: branch.id }}
+        openPeriod={openPeriod}
+      />
 
       <MonthlyTrend db={db} scope={{ branchId: branch.id }} />
 

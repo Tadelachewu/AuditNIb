@@ -37,7 +37,14 @@ const rectifySchema = z.object({
 // ("Verify rectifications"). Cases and amount are validated independently
 // against what's still outstanding - plan doc §3.5's own acceptance
 // example (3 cases/45,000 -> 1 case/10,000 rectified, 2 cases/35,000
-// outstanding) is exactly this rule.
+// outstanding) is exactly this rule, and still holds whenever more than
+// one case remains. Two narrower rules on top of that (non-itemized path
+// only - an itemized finding's amount is always the exact sum of whichever
+// case(s) were picked, so these can't arise there): a positive case count
+// can't be paired with a zero amount or vice versa (see the "both zero or
+// both positive" check below), and when exactly one case remains
+// outstanding, it's atomic - the entry must rectify exactly that 1 case
+// for its exact remaining amount, not a partial slice of it.
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requirePermission("findings.rectify");
   if (!auth.ok) return auth.response;
@@ -77,6 +84,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   let rectifiedAmount: number;
   let selectedCaseIds: string[] | undefined;
 
+  // Computed up front (not just after the branch below) so the
+  // non-itemized branch can apply the single-outstanding-case rule right
+  // where the input is validated.
+  const outstandingCases = existing.caseCount - existing.rectifiedCases;
+  const outstandingAmount = existing.amount - existing.rectifiedAmount;
+
   if (existingCases.length > 0) {
     if (!input.caseIds || input.caseIds.length === 0) {
       return NextResponse.json({ error: "This finding's cases are itemized - select which case(s) to rectify" }, { status: 400 });
@@ -103,12 +116,32 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (input.rectifiedCases === 0 && input.rectifiedAmount === 0) {
       return NextResponse.json({ error: "Enter at least a rectified case count or amount" }, { status: 400 });
     }
+    // A rectified case count with no amount (or an amount with no case
+    // count) doesn't represent a real rectification - the two must move
+    // together, same as the itemized path where amount is always derived
+    // from the case(s) actually picked.
+    if ((input.rectifiedCases > 0) !== (input.rectifiedAmount > 0)) {
+      return NextResponse.json(
+        { error: "Enter both a rectified case count and its amount together - one can't be recorded without the other" },
+        { status: 400 }
+      );
+    }
+    // A single remaining case is atomic - there's no such thing as
+    // rectifying "part of" the last case, so this entry must close it out
+    // exactly (1 case, the full remaining amount) rather than leave it
+    // outstanding with a partially-reduced balance nothing else can act on.
+    if (outstandingCases === 1 && (input.rectifiedCases !== 1 || input.rectifiedAmount !== outstandingAmount)) {
+      return NextResponse.json(
+        {
+          error: `Only 1 case remains outstanding - rectify exactly 1 case for the full remaining amount (${outstandingAmount})`,
+        },
+        { status: 400 }
+      );
+    }
     rectifiedCases = input.rectifiedCases;
     rectifiedAmount = input.rectifiedAmount;
   }
 
-  const outstandingCases = existing.caseCount - existing.rectifiedCases;
-  const outstandingAmount = existing.amount - existing.rectifiedAmount;
   if (rectifiedCases > outstandingCases) {
     return NextResponse.json(
       { error: `Rectified cases (${rectifiedCases}) cannot exceed the outstanding ${outstandingCases}` },

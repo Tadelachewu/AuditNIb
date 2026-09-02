@@ -87,7 +87,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ error: "Only draft or returned findings can be edited" }, { status: 409 });
   }
 
-  const periodError = assertPeriodWritable(db, existing.periodId);
+  const periodError = assertPeriodWritable(db, existing.periodId, existing.status);
   if (periodError) return NextResponse.json({ error: periodError }, { status: 409 });
 
   // Same org-scope rule POST /api/findings enforces at creation: a
@@ -112,9 +112,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const periodId = input.periodId ?? existing.periodId;
   const period = db.reportingPeriods.find((p) => p.id === periodId);
   if (!period) return NextResponse.json({ error: "Selected reporting period does not exist" }, { status: 400 });
-  if (period.status === "LOCKED") {
-    return NextResponse.json({ error: `${period.code} is locked and cannot accept changes` }, { status: 409 });
-  }
+  // Re-checks the *target* period (relevant when periodId itself is being
+  // changed, not just the finding's current one already checked above at
+  // line ~90) - same assertPeriodWritable() helper, same DRAFT-while-
+  // draftable exception, so moving a still-draft finding into another
+  // locked-but-draftable period isn't blocked by a second, drifted copy of
+  // this same rule.
+  const targetPeriodError = assertPeriodWritable(db, periodId, existing.status);
+  if (targetPeriodError) return NextResponse.json({ error: targetPeriodError }, { status: 409 });
 
   const sourceId = input.sourceId ?? existing.sourceId;
   if (!db.sources.some((s) => s.id === sourceId && s.active)) {
@@ -195,7 +200,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
     return NextResponse.json({ error: "Only draft findings can be deleted" }, { status: 409 });
   }
 
-  const periodError = assertPeriodWritable(db, existing.periodId);
+  const periodError = assertPeriodWritable(db, existing.periodId, existing.status);
   if (periodError) return NextResponse.json({ error: periodError }, { status: 409 });
 
   updateDb((current) => {

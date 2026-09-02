@@ -231,12 +231,18 @@ written (outstanding cases/amount at that moment, snapshotted `originalCaseCount
 original registration. No new `Finding` row is ever created — this is a
 continuation, never a duplicate.
 
-**Configurable Automatic Transfer** (`Settings.autoTransferOnLock`): when
-enabled, locking a period (`PATCH /api/admin/reporting-periods/[id]`)
-sweeps every still-outstanding finding in it (`SENT_TO_BRANCH_MANAGER`,
-`PARTIALLY_RECTIFIED`, `TRANSFERRED`) into the next `OPEN` period,
-tagged `method: "AUTOMATIC"` — same underlying `transferFinding()`
-mechanism, just triggered by the lock action instead of a manual click. A
+**Configurable Automatic Transfer** (`Settings.autoTransferOnLock`): the
+bank-wide "is this allowed at all" switch — when enabled, the Lock dialog
+on Reporting Periods shows the locking user a preview (outstanding case
+count + destination period code, from `outstandingTransferPreview()`) and
+asks them to opt in for that specific lock, via a checkbox. It is never
+silent: locking never transfers anything unless the locking user checks
+that box, which sends `transferOverdueCases: true` on
+`PATCH /api/admin/reporting-periods/[id]`. Only then does it sweep every
+still-outstanding finding in the period (`SENT_TO_BRANCH_MANAGER`,
+`PARTIALLY_RECTIFIED`, `TRANSFERRED`) into the next `OPEN` period, tagged
+`method: "AUTOMATIC"` — same underlying `transferFinding()` mechanism as
+a manual click, just bulk-triggered by the confirmed lock action. A
 finding already manually transferred earlier that period is naturally
 skipped (it's no longer in that period by the time the sweep runs).
 
@@ -261,9 +267,10 @@ that period — edit, delete, submit, district review, HO review, rectify —
 with `409`. Two deliberate exceptions: **Transfer** (§6, the designed way
 forward) and **Close** (verifying/closing doesn't change any reportable
 total, so it isn't what locking protects against). Locking/unlocking
-notifies every district-review and rectify holder bank-wide, and — if
-`autoTransferOnLock` is on — runs the automatic sweep in the same
-transaction, audit-logged as its own `AUTO_TRANSFER` entry.
+notifies every district-review and rectify holder bank-wide, and — if the
+locking user opted in via the Lock dialog's transfer prompt (§6) — runs
+the automatic sweep in the same transaction, audit-logged as its own
+`AUTO_TRANSFER` entry.
 
 ---
 

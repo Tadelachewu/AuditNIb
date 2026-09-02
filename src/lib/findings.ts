@@ -59,13 +59,47 @@ export function transferFinding(
 // silently move to a new period out from under the return).
 const AUTO_TRANSFERABLE_STATUSES = ["SENT_TO_BRANCH_MANAGER", "PARTIALLY_RECTIFIED", "TRANSFERRED"];
 
+// Shared by outstandingTransferPreview() and autoTransferOnLock() so the
+// count a locking user is shown in the confirmation prompt can never drift
+// from what actually gets transferred a moment later.
+function findAutoTransferDestination(db: Database, lockedPeriod: ReportingPeriod): ReportingPeriod | undefined {
+  return db.reportingPeriods
+    .filter((p) => p.status === "OPEN" && (p.year > lockedPeriod.year || (p.year === lockedPeriod.year && p.month > lockedPeriod.month)))
+    .sort((a, b) => a.year - b.year || a.month - b.month)[0];
+}
+function outstandingTransferableFindings(db: Database, period: ReportingPeriod) {
+  return db.findings.filter((f) => f.periodId === period.id && AUTO_TRANSFERABLE_STATUSES.includes(f.status));
+}
+
 /**
- * The Admin-configurable half of "Configurable Automatic Transfer": when
- * Settings.autoTransferOnLock is on, locking a period sweeps every still-
- * outstanding finding in it into the next OPEN period (earliest year/
- * month after the one being locked), tagged `method: "AUTOMATIC"` in its
- * FindingTransfer row. A finding already transferred manually earlier
- * that period is naturally excluded - it's no longer in
+ * What the Lock dialog shows the locking user *before* they decide whether
+ * to transfer - how many outstanding cases are sitting in this period and
+ * which period they'd land in, so "ask his permission" (see
+ * autoTransferOnLock()'s doc comment) is a real, informed choice rather
+ * than a blind checkbox.
+ */
+export function outstandingTransferPreview(
+  db: Database,
+  period: ReportingPeriod
+): { count: number; destinationCode: string | null } {
+  const destination = findAutoTransferDestination(db, period);
+  return { count: outstandingTransferableFindings(db, period).length, destinationCode: destination?.code ?? null };
+}
+
+/**
+ * The Admin-configurable half of "Configurable Automatic Transfer":
+ * Settings.autoTransferOnLock is the bank-wide "is this allowed at all"
+ * switch (see /admin/settings' Case Transfer card), but locking a period
+ * no longer transfers silently just because that switch is on - the
+ * locking user is asked at lock time (the reporting-periods PATCH route's
+ * `transferOverdueCases` flag, surfaced as a checkbox in the Lock dialog)
+ * and this only runs when they said yes. When it does run, it sweeps
+ * every still-outstanding finding in the period into the next OPEN period
+ * (earliest year/month after the one being locked), tagged
+ * `method: "AUTOMATIC"` in its FindingTransfer row - "automatic" meaning
+ * the bulk-sweep mechanism, as opposed to a one-off manual Transfer,  not
+ * that it ran without anyone asking. A finding already transferred
+ * manually earlier that period is naturally excluded - it's no longer in
  * `db.findings.filter(f => f.periodId === period.id)` by the time this
  * runs, since transferring moves `periodId` immediately. Called from
  * inside the same updateDb() transaction that sets the period LOCKED, by
@@ -78,16 +112,14 @@ export function autoTransferOnLock(
 ): { transferredCount: number; skippedNoDestination: boolean } {
   if (!db.settings.autoTransferOnLock) return { transferredCount: 0, skippedNoDestination: false };
 
-  const destination = db.reportingPeriods
-    .filter((p) => p.status === "OPEN" && (p.year > lockedPeriod.year || (p.year === lockedPeriod.year && p.month > lockedPeriod.month)))
-    .sort((a, b) => a.year - b.year || a.month - b.month)[0];
+  const destination = findAutoTransferDestination(db, lockedPeriod);
   if (!destination) return { transferredCount: 0, skippedNoDestination: true };
 
-  const outstanding = db.findings.filter((f) => f.periodId === lockedPeriod.id && AUTO_TRANSFERABLE_STATUSES.includes(f.status));
+  const outstanding = outstandingTransferableFindings(db, lockedPeriod);
   for (const f of outstanding) {
     transferFinding(db, f, {
       toPeriodId: destination.id,
-      reason: `Automatic transfer - ${lockedPeriod.code} locked with this finding still outstanding.`,
+      reason: `Automatic transfer - ${lockedPeriod.code} locked with this finding still outstanding, transfer confirmed by the locking user.`,
       userId: opts.userId,
       userName: opts.userName,
       method: "AUTOMATIC",
@@ -128,6 +160,35 @@ export function averageCaseAgeDays(findings: Finding[]): number | null {
   return Math.round(findings.reduce((sum, f) => sum + caseAgeDays(f), 0) / findings.length);
 }
 
+// A finding isn't "official" for dashboard-counting purposes until it's
+// been through HO's sign-off - DRAFT/SUBMITTED/DISTRICT_REVIEW/
+// DISTRICT_APPROVED/HO_REVIEW/PENDING_BANK_APPROVAL are all still in
+// flight, and REJECTED/RETURNED never made it past district review, so
+// none of those should inflate "Total Findings." HO_APPROVED itself is a
+// momentary pass-through status (transitionFinding() moves straight
+// through it to SENT_TO_BRANCH_MANAGER within one call - see
+// hoApproveFinding()) so it's included here for completeness but is
+// rarely a finding's *resting* status. RECTIFICATION_RETURNED is included
+// because the underlying finding already cleared HO approval - only its
+// rectification submission was bounced back for correction, not the
+// finding itself. A bank-registered finding that skips district/HO review
+// entirely lands straight on SENT_TO_BRANCH_MANAGER (see submitFinding()'s
+// registeredByBankScope branch), which is itself the bank's own approval,
+// so it's correctly included too.
+const HO_APPROVED_OR_LATER = new Set<FindingStatus>([
+  "SENT_TO_BRANCH_MANAGER",
+  "PARTIALLY_RECTIFIED",
+  "RECTIFICATION_RETURNED",
+  "RECTIFIED",
+  "CLOSED",
+  "TRANSFERRED",
+]);
+
+/** Whether a finding has cleared HO approval (or later) - see HO_APPROVED_OR_LATER's own doc comment. */
+export function isHoApproved(f: Finding): boolean {
+  return HO_APPROVED_OR_LATER.has(f.status);
+}
+
 /**
  * Dashboards report two different units side by side: "findings" (the
  * record - one per registered irregularity) and "cases" (Finding.caseCount/
@@ -137,6 +198,14 @@ export function averageCaseAgeDays(findings: Finding[]): number | null {
  * caseCount 5 and 2 rectified counts as 1 finding but 5/2 cases - the two
  * numbers diverge exactly when itemization matters, so both are shown
  * rather than picking one.
+ *
+ * Both totals are scoped to HO-approved-or-later findings only (see
+ * isHoApproved()) - a still-in-flight draft or a district-level reject
+ * shouldn't inflate "Total Findings." "Rectified" is scoped further still:
+ * counted only once formally CLOSED (Finding.closedCases/status===CLOSED),
+ * not merely self-reported RECTIFIED - a controller's sign-off is what
+ * makes a rectification official for dashboard purposes, same reasoning
+ * as the HO-approval gate above.
  */
 export function findingCaseTotals(findings: Finding[]): {
   totalFindings: number;
@@ -144,11 +213,12 @@ export function findingCaseTotals(findings: Finding[]): {
   rectifiedFindings: number;
   rectifiedCases: number;
 } {
+  const approved = findings.filter(isHoApproved);
   return {
-    totalFindings: findings.length,
-    totalCases: findings.reduce((sum, f) => sum + f.caseCount, 0),
-    rectifiedFindings: findings.filter((f) => f.status === "RECTIFIED" || f.status === "CLOSED").length,
-    rectifiedCases: findings.reduce((sum, f) => sum + f.rectifiedCases, 0),
+    totalFindings: approved.length,
+    totalCases: approved.reduce((sum, f) => sum + f.caseCount, 0),
+    rectifiedFindings: approved.filter((f) => f.status === "CLOSED").length,
+    rectifiedCases: approved.reduce((sum, f) => sum + f.closedCases, 0),
   };
 }
 
@@ -278,12 +348,22 @@ export function hoApproveFinding(db: Database, finding: Finding, userId: string,
  * separately since there's no existing finding yet to read a periodId
  * from. No "exceptional correction" override is built (master.txt §13
  * calls that out as needing to be "explicit and authorized" - left for
- * a future phase; for now a locked period is a hard stop for everyone).
+ * a future phase; for now a locked period is a hard stop for everyone) -
+ * with one narrow, explicit exception: `editingFindingStatus` lets a
+ * caller that's about to edit/delete a finding still sitting in DRAFT pass
+ * that status through, and if the period's own draftsAllowedWhileLocked
+ * flag is set, the block is lifted for that DRAFT write only. Submitting
+ * (moving past DRAFT) never passes this param, so it's never exempted -
+ * a draft can be worked on in a locked-but-draftable period, but can't
+ * progress until the period is genuinely OPEN.
  */
-export function assertPeriodWritable(db: Database, periodId: string): string | null {
+export function assertPeriodWritable(db: Database, periodId: string, editingFindingStatus?: FindingStatus): string | null {
   const period = db.reportingPeriods.find((p) => p.id === periodId);
   if (!period) return "Reporting period not found";
-  if (period.status === "LOCKED") return `${period.code} is locked and cannot accept changes`;
+  if (period.status === "LOCKED") {
+    if (editingFindingStatus === "DRAFT" && period.draftsAllowedWhileLocked) return null;
+    return `${period.code} is locked and cannot accept changes`;
+  }
   return null;
 }
 
@@ -305,13 +385,24 @@ export function nextFindingReference(db: Database, branch: Branch, period: Repor
  * closing" is no longer a single status: a controller can verify-and-close
  * a rectified-but-unclosed portion while the finding is still
  * PARTIALLY_RECTIFIED/RECTIFIED/TRANSFERRED overall (see close/route.ts).
+ *
+ * Takes `db` (not just `session`) for one reason: PENDING_BANK_APPROVAL
+ * isn't gated by a findings.* permission at all - it's a specific
+ * per-person assignment (Settings.hoApproval.approverUserIds, see
+ * bank-approval/route.ts's own doc comment), so it can't be decided by the
+ * has() helper below and is checked directly against the session's userId
+ * instead. Without this, an assigned approver's own bank-registered
+ * findings awaiting their sign-off never showed up in any work queue.
  */
-export function queueStatusesForSession(session: SessionData): (finding: Finding) => boolean {
+export function queueStatusesForSession(session: SessionData, db: Database): (finding: Finding) => boolean {
   const has = (action: string) => hasPermission(session.permissions, permissionKey("findings", action));
   const matchers: ((f: Finding) => boolean)[] = [];
   if (has("edit") || has("submit")) matchers.push((f) => f.status === "DRAFT" || f.status === "RETURNED");
   if (has("district-review")) matchers.push((f) => f.status === "DISTRICT_REVIEW");
   if (has("ho-review")) matchers.push((f) => f.status === "HO_REVIEW");
+  if (session.userId && db.settings.hoApproval.approverUserIds.includes(session.userId)) {
+    matchers.push((f) => f.status === "PENDING_BANK_APPROVAL");
+  }
   if (has("rectify"))
     matchers.push(
       (f) =>
@@ -381,6 +472,13 @@ function findingCasesEligibleInPeriod(db: Database, finding: Finding, periodId: 
  * never hard-coded to "Other Case". Returns null under the same conditions
  * computePerformance() would return null for (no active rule, no eligible
  * cases in scope).
+ *
+ * Candidates are gated by isHoApproved(), same as findingCaseTotals() -
+ * a finding still sitting in DISTRICT_REVIEW/HO_REVIEW/etc. isn't official
+ * yet, so it can't be part of the eligible denominator either. Before this
+ * gate existed, a branch/district's Performance % would drop the moment a
+ * new finding was merely *registered*, before anyone even reviewed it -
+ * isHoApproved() already excludes REJECTED, so that check is folded in.
  */
 export function computeEligibleCaseCounts(db: Database, scope: PerformanceScope): { totalCases: number; rectifiedCases: number } | null {
   const rule = db.scoringRules.find((r) => r.active);
@@ -390,7 +488,7 @@ export function computeEligibleCaseCounts(db: Database, scope: PerformanceScope)
     (f) =>
       rule.categories.includes(f.categoryId) &&
       rule.sources.includes(f.sourceId) &&
-      f.status !== "REJECTED" &&
+      isHoApproved(f) &&
       (!scope.branchId || f.branchId === scope.branchId) &&
       (!scope.districtId || f.districtId === scope.districtId)
   );

@@ -101,8 +101,8 @@ export function ColumnChart({
           const barY = yFor(item.value);
           const barH = padTop + plotH - barY;
           const labelX = bandX + bandW / 2;
-          return (
-            <g key={item.id}>
+          const content = (
+            <>
               {hovered === i && <rect x={bandX} y={padTop} width={bandW} height={plotH} fill="#0b0b0b" opacity={0.04} />}
               <path
                 d={roundedTopBarPath(barX, barY, barW, barH, 5)}
@@ -127,7 +127,17 @@ export function ColumnChart({
               >
                 {item.label}
               </text>
-            </g>
+            </>
+          );
+          // A full <a> navigation (not Next Link), same convention as
+          // DonutChart's clickable arcs - "filter to this item's findings"
+          // is exactly what a server-rendered /findings page load needs.
+          return item.href ? (
+            <a key={item.id} href={item.href} className="cursor-pointer">
+              {content}
+            </a>
+          ) : (
+            <g key={item.id}>{content}</g>
           );
         })}
       </svg>

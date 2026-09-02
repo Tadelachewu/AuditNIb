@@ -261,7 +261,9 @@ export function validateImportRow(
 
   const period = db.reportingPeriods.find((p) => p.code === row.periodCode?.trim());
   if (!period) return { rowNumber, outcome: "error", error: `Unknown reporting period code "${row.periodCode}"` };
-  if (period.status === "LOCKED") {
+  // Imported rows always land as DRAFT (see below) - same exception as
+  // manual creation in src/app/api/findings/route.ts.
+  if (period.status === "LOCKED" && !period.draftsAllowedWhileLocked) {
     return { rowNumber, outcome: "error", error: `${period.code} is locked and cannot accept new findings` };
   }
 

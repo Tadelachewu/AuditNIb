@@ -11,8 +11,8 @@ import { Pagination } from "@/components/ui/Pagination";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import type { SafeUser, District, Branch, Department, RoleDefinition } from "@/types";
 
-const emptyForm = { name: "", username: "", password: "", role: "", districtId: "", branchId: "", departmentId: "" };
-const emptyEditForm = { name: "", role: "", districtId: "", branchId: "", departmentId: "", password: "" };
+const emptyForm = { name: "", username: "", email: "", password: "", role: "", districtId: "", branchId: "", departmentId: "" };
+const emptyEditForm = { name: "", email: "", role: "", districtId: "", branchId: "", departmentId: "", password: "" };
 
 export default function UsersPage() {
   const [users, setUsers] = useState<SafeUser[]>([]);
@@ -133,6 +133,7 @@ export default function UsersPage() {
       await apiSend("/api/admin/users", "POST", {
         name: form.name,
         username: form.username,
+        email: form.email || undefined,
         password: form.password,
         role: form.role,
         districtId: form.districtId || null,
@@ -152,6 +153,7 @@ export default function UsersPage() {
     setEditingId(user.id);
     setEditForm({
       name: user.name,
+      email: user.email ?? "",
       role: user.role,
       districtId: user.districtId ?? "",
       branchId: user.branchId ?? "",
@@ -167,6 +169,7 @@ export default function UsersPage() {
     try {
       const payload: Record<string, unknown> = {
         name: editForm.name,
+        email: editForm.email || null,
         role: editForm.role,
         districtId: editForm.districtId || null,
         branchId: editForm.branchId || null,
@@ -235,6 +238,15 @@ export default function UsersPage() {
               required
               value={form.username}
               onChange={(e) => setForm({ ...form, username: e.target.value })}
+            />
+          </div>
+          <div>
+            <Label htmlFor="email">Email (optional)</Label>
+            <Input
+              id="email"
+              type="email"
+              value={form.email}
+              onChange={(e) => setForm({ ...form, email: e.target.value })}
             />
           </div>
           <div>
@@ -336,6 +348,7 @@ export default function UsersPage() {
               <tr>
                 <th className="px-4 py-2 font-medium">Name</th>
                 <th className="px-4 py-2 font-medium">Username</th>
+                <th className="px-4 py-2 font-medium">Email</th>
                 <th className="px-4 py-2 font-medium">Role</th>
                 <th className="px-4 py-2 font-medium">Org Unit</th>
                 <th className="px-4 py-2 font-medium">Department</th>
@@ -347,7 +360,7 @@ export default function UsersPage() {
             <tbody className="divide-y divide-slate-100">
               {loading && (
                 <tr>
-                  <td className="px-4 py-4 text-slate-400" colSpan={8}>
+                  <td className="px-4 py-4 text-slate-400" colSpan={9}>
                     Loading...
                   </td>
                 </tr>
@@ -360,6 +373,7 @@ export default function UsersPage() {
                       <tr>
                         <td className="px-4 py-2 font-medium text-slate-900">{u.name}</td>
                         <td className="px-4 py-2 font-mono text-xs text-slate-600">{u.username}</td>
+                        <td className="px-4 py-2 text-slate-600">{u.email || "—"}</td>
                         <td className="px-4 py-2 text-slate-600">{roleName(u.role)}</td>
                         <td className="px-4 py-2 text-slate-600">
                           {u.branchId ? branchName(u.branchId) : u.districtId ? districtName(u.districtId) : "Bank-wide"}
@@ -388,7 +402,7 @@ export default function UsersPage() {
                       </tr>
                       {isEditing && (
                         <tr>
-                          <td colSpan={8} className="bg-slate-50 px-4 py-3">
+                          <td colSpan={9} className="bg-slate-50 px-4 py-3">
                             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
                               <div>
                                 <Label htmlFor="edit-name">Full name</Label>
@@ -396,6 +410,15 @@ export default function UsersPage() {
                                   id="edit-name"
                                   value={editForm.name}
                                   onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                                />
+                              </div>
+                              <div>
+                                <Label htmlFor="edit-email">Email (optional)</Label>
+                                <Input
+                                  id="edit-email"
+                                  type="email"
+                                  value={editForm.email}
+                                  onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
                                 />
                               </div>
                               <div>

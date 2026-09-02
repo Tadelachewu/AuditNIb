@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { Database } from "@/types";
 import type { SessionData } from "@/lib/session";
-import { computePerformance, queueStatusesForSession, findingCaseTotals, transferTotals } from "@/lib/findings";
+import { computePerformance, queueStatusesForSession, findingCaseTotals, transferTotals, isHoApproved } from "@/lib/findings";
 import { sumAmountByCurrency, sumOutstandingByCurrency } from "@/lib/currency";
 import { formatDateTime } from "@/lib/format";
 import { inDateRange, type DateRange } from "@/lib/dateRange";
@@ -68,26 +68,28 @@ export function DistrictDashboard({
   // ranking table shows - see branchesInScope below.
   const districtFindingsInRange = applyDashboardFilters(districtFindings.filter((f) => inDateRange(dateRange, f.findingDate)), filters);
   const periodFindings = openPeriod ? districtFindingsInRange.filter((f) => f.periodId === openPeriod.id) : [];
-  // District's "Total Findings" excludes DRAFT - a draft hasn't entered
-  // the workflow yet, so it isn't one of this district's findings for the
-  // period (unlike Branch's own "Total Findings", which does include its
-  // own drafts - each dashboard's count is its own natural population).
-  // Total Cases below is scoped to this same set (not periodFindings) so
-  // its "Across N finding(s)" hint always agrees with Total Findings right
-  // next to it, instead of silently including branch-level drafts the
-  // district hasn't even received yet.
-  const submittedPeriodFindings = periodFindings.filter((f) => f.status !== "DRAFT");
-  const submittedFindings = submittedPeriodFindings.length;
   const requiringReviewFindings = periodFindings.filter((f) => f.status === "DISTRICT_REVIEW").length;
   // "Approved" = passed district review and hasn't been rejected/returned
-  // since - i.e. currently sitting at or past HO_REVIEW.
+  // since - i.e. currently sitting at or past HO_REVIEW. Deliberately a
+  // wider set than Total Findings' HO_APPROVED_OR_LATER (includes
+  // HO_REVIEW/HO_APPROVED, still mid-review) since this card is tracking
+  // workflow progress, not "is this finding official yet."
   const approvedFindings = periodFindings.filter((f) =>
     ["HO_REVIEW", "HO_APPROVED", "SENT_TO_BRANCH_MANAGER", "PARTIALLY_RECTIFIED", "RECTIFIED", "TRANSFERRED", "CLOSED"].includes(f.status)
   ).length;
   const rejectedFindings = periodFindings.filter((f) => f.status === "REJECTED").length;
   const returnedFindings = periodFindings.filter((f) => f.status === "RETURNED").length;
-  const outstandingFindings = periodFindings.filter((f) => !["RECTIFIED", "CLOSED", "REJECTED"].includes(f.status)).length;
-  const { totalCases, rectifiedFindings, rectifiedCases } = findingCaseTotals(submittedPeriodFindings);
+  // Total Findings/Cases/Rectified below only count HO-approved-or-later,
+  // closed-only-rectified findings, same as every other dashboard - see
+  // findingCaseTotals()'s own doc comment in src/lib/findings.ts.
+  const { totalFindings, totalCases, rectifiedFindings, rectifiedCases } = findingCaseTotals(periodFindings);
+  // Every other "official" figure below (as opposed to RiskDistribution/
+  // FindingStatusDistribution's deliberately broader in-flight-workflow
+  // view) shares that same isHoApproved() gate, so Total Amount,
+  // Outstanding, Category Totals, etc. don't inflate before a finding's
+  // actually been approved.
+  const approvedPeriodFindings = periodFindings.filter(isHoApproved);
+  const outstandingFindings = approvedPeriodFindings.filter((f) => !["RECTIFIED", "CLOSED", "REJECTED"].includes(f.status)).length;
   // A transfer moves periodId forward, so a transferred finding is no
   // longer in periodFindings for its *source* period - counted separately
   // from FindingTransfer records: distinct findings this district
@@ -98,9 +100,9 @@ export function DistrictDashboard({
     : [];
   const { transferredFindings, transferredCases } = transferTotals(districtTransfers);
   const performance = openPeriod ? computePerformance(db, { districtId: district.id, periodId: openPeriod.id }) : null;
-  const totalAmount = sumAmountByCurrency(periodFindings, "amount");
-  const outstandingAmount = sumOutstandingByCurrency(periodFindings);
-  const resolvedAmount = sumAmountByCurrency(periodFindings, "rectifiedAmount");
+  const totalAmount = sumAmountByCurrency(approvedPeriodFindings, "amount");
+  const outstandingAmount = sumOutstandingByCurrency(approvedPeriodFindings);
+  const resolvedAmount = sumAmountByCurrency(approvedPeriodFindings, "rectifiedAmount");
 
   // Performance Ranking Visibility, enabled: bank-wide, so a District
   // Controller/Director can see how their own district compares to every
@@ -127,7 +129,10 @@ export function DistrictDashboard({
   const branchRanking = branchesInScope
     .map((b) => {
       const perf = openPeriod ? computePerformance(db, { branchId: b.id, periodId: openPeriod.id }) : null;
-      const findings = periodFindings.filter((f) => f.branchId === b.id);
+      // Same isHoApproved() gate as everywhere else on this dashboard - a
+      // volume count feeding "Findings by Branch" shouldn't grow the moment
+      // something's merely registered either.
+      const findings = approvedPeriodFindings.filter((f) => f.branchId === b.id);
       return { branch: b, performance: perf, total: findings.length };
     })
     .sort((a, b) => (b.performance ?? -1) - (a.performance ?? -1));
@@ -146,13 +151,13 @@ export function DistrictDashboard({
   const findingsByBranch = [...branchRanking].sort((a, b) => b.total - a.total).slice(0, 10);
 
   const categoryTotals = categoriesInScope.map((c) => {
-    const findings = periodFindings.filter((f) => f.categoryId === c.id);
+    const findings = approvedPeriodFindings.filter((f) => f.categoryId === c.id);
     const total = findings.reduce((sum, f) => sum + f.caseCount, 0);
     const rectified = findings.reduce((sum, f) => sum + f.rectifiedCases, 0);
     return { category: c, total, rectified, outstanding: total - rectified };
   });
 
-  const isQueued = queueStatusesForSession(user);
+  const isQueued = queueStatusesForSession(user, db);
   const workQueue = db.findings
     .filter((f) => f.districtId === district.id && isQueued(f))
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
@@ -187,15 +192,15 @@ export function DistrictDashboard({
       <TimeRangeFilter />
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatCard label="Total Findings" value={openPeriod ? submittedFindings : "--"} hint={openPeriod ? openPeriod.code : "No open period"} />
-        <StatCard label="Total Cases" value={openPeriod ? totalCases : "--"} hint={`Across ${submittedFindings} finding(s)`} />
+        <StatCard label="Total Findings" value={openPeriod ? totalFindings : "--"} hint={openPeriod ? openPeriod.code : "No open period"} />
+        <StatCard label="Total Cases" value={openPeriod ? totalCases : "--"} hint={`Across ${totalFindings} finding(s)`} />
         <StatCard label="Requiring Review" value={openPeriod ? requiringReviewFindings : "--"} hint="Awaiting district decision" />
         <StatCard label="Approved" value={openPeriod ? approvedFindings : "--"} hint="Passed district review" />
         <StatCard label="Outstanding" value={openPeriod ? outstandingFindings : "--"} hint="Findings" />
         <StatCard label="Rejected" value={openPeriod ? rejectedFindings : "--"} hint="Findings" />
         <StatCard label="Returned" value={openPeriod ? returnedFindings : "--"} hint="Findings" />
-        <StatCard label="Rectified Findings" value={openPeriod ? rectifiedFindings : "--"} hint="Fully rectified or closed" />
-        <StatCard label="Rectified Cases" value={openPeriod ? rectifiedCases : "--"} hint="Cumulative, this period" />
+        <StatCard label="Rectified Findings" value={openPeriod ? rectifiedFindings : "--"} hint="Formally closed" />
+        <StatCard label="Rectified Cases" value={openPeriod ? rectifiedCases : "--"} hint="Closed, this period" />
         <StatCard label="Transferred Findings" value={openPeriod ? transferredFindings : "--"} hint="Out of this period" />
         <StatCard label="Transferred Cases" value={openPeriod ? transferredCases : "--"} hint="Out of this period" />
         <StatCard
@@ -208,7 +213,7 @@ export function DistrictDashboard({
         <StatCard label="Outstanding Amount" value={openPeriod ? outstandingAmount : "--"} hint="Still owed" />
       </div>
 
-      <CaseBasedPerformance db={db} periodFindings={periodFindings} openPeriod={openPeriod} />
+      <CaseBasedPerformance db={db} scope={{ districtId: district.id }} openPeriod={openPeriod} />
 
       {db.settings.rankingVisibility.branches && (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -340,7 +345,7 @@ export function DistrictDashboard({
         </div>
       </Card>
 
-      <FindingsByCategoryChart findings={periodFindings} categories={categoriesInScope} openPeriod={openPeriod} />
+      <FindingsByCategoryChart findings={approvedPeriodFindings} categories={categoriesInScope} openPeriod={openPeriod} />
 
       <MonthlyTrend db={db} scope={{ districtId: district.id }} />
 

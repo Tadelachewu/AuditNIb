@@ -115,8 +115,23 @@ export async function POST(request: Request) {
   const branch = db.branches.find((b) => b.id === branchId)!;
   const period = db.reportingPeriods.find((p) => p.id === input.periodId);
   if (!period) return NextResponse.json({ error: "Selected reporting period does not exist" }, { status: 400 });
-  if (period.status === "LOCKED") {
+  // A newly-created finding is always DRAFT (see below), so a LOCKED
+  // period still accepts it when draftsAllowedWhileLocked is set - the
+  // hard stop is for progressing past DRAFT (submit and beyond), enforced
+  // separately by assertPeriodWritable() at that point for an *existing*
+  // finding's own submit route. This create-and-submit-in-one-call path
+  // has no existing finding to run that check against yet, so it's
+  // re-checked explicitly right here: `submit: true` against any LOCKED
+  // period - drafts-allowed or not - is rejected the same way, instead of
+  // silently creating-then-submitting and skipping the lock entirely.
+  if (period.status === "LOCKED" && !period.draftsAllowedWhileLocked) {
     return NextResponse.json({ error: `${period.code} is locked and cannot accept new findings` }, { status: 409 });
+  }
+  if (input.submit && period.status === "LOCKED") {
+    return NextResponse.json(
+      { error: `${period.code} is locked - save as a draft instead, then submit once the period is open` },
+      { status: 409 }
+    );
   }
   if (!db.sources.some((s) => s.id === input.sourceId && s.active)) {
     return NextResponse.json({ error: "Selected source is not active" }, { status: 400 });

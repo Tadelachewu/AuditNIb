@@ -1,5 +1,6 @@
 import { v4 as uuid } from "uuid";
 import { permissionKey } from "@/lib/permissions/registry";
+import { sendNotificationEmail } from "@/lib/mail";
 import type { Database } from "@/types";
 
 export interface NotifyOptions {
@@ -12,14 +13,17 @@ export interface NotifyOptions {
 
 /**
  * master.txt §12: "Notifications for submit, approve, reject, return,
- * assignment, rectification, transfer and period events." In-app only
- * (see PHASE7.md) - no Outlook/SMTP integration exists, matching
- * master.txt §24 listing that architecture as still undecided.
+ * assignment, rectification, transfer and period events." Every push here
+ * also fires a mirrored email (see src/lib/mail.ts) fire-and-forget - not
+ * awaited, since this runs synchronously inside updateDb() mutators across
+ * the whole app and a slow/down mail server must never delay or break the
+ * underlying workflow action. Sending itself no-ops silently whenever the
+ * recipient has no email or SMTP isn't configured (see EMAIL_SETUP.md).
  */
 export function notifyUsers(db: Database, recipientUserIds: string[], opts: NotifyOptions): void {
   const now = new Date().toISOString();
   for (const recipientUserId of new Set(recipientUserIds)) {
-    db.notifications.unshift({
+    const notification = {
       id: uuid(),
       recipientUserId,
       type: opts.type,
@@ -29,7 +33,9 @@ export function notifyUsers(db: Database, recipientUserIds: string[], opts: Noti
       entityId: opts.entityId,
       readAt: null,
       createdAt: now,
-    });
+    };
+    db.notifications.unshift(notification);
+    sendNotificationEmail(db, recipientUserId, notification);
   }
 }
 

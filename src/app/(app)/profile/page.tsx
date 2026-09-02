@@ -34,6 +34,10 @@ export default async function ProfilePage() {
         <CardHeader title="Account" description="Set by an administrator - contact one to change any of this." />
         <dl className="grid grid-cols-1 gap-x-6 gap-y-3 p-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
           <div>
+            <dt className="text-xs font-medium text-slate-500">Display Name</dt>
+            <dd className="mt-0.5 text-slate-900">{user.name}</dd>
+          </div>
+          <div>
             <dt className="text-xs font-medium text-slate-500">Username</dt>
             <dd className="mt-0.5 font-mono text-slate-900">{user.username}</dd>
           </div>
@@ -56,7 +60,7 @@ export default async function ProfilePage() {
         </dl>
       </Card>
 
-      <ProfileClient initialName={user.name} forced={Boolean(user.mustChangePassword)} />
+      <ProfileClient initialEmail={user.email ?? ""} forced={Boolean(user.mustChangePassword)} />
     </div>
   );
 }

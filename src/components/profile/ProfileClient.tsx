@@ -8,20 +8,22 @@ import { Button } from "@/components/ui/Button";
 import { Input, Label } from "@/components/ui/Field";
 
 /**
- * The two things a user can change about themself - see
- * /api/auth/profile (name) and /api/auth/change-password (password)'s own
- * doc comments for why the line is drawn exactly there. `forced` renders
- * the page as a mandatory first step (no way to navigate elsewhere until
- * the password is changed - src/proxy.ts already blocks every other page)
- * rather than an optional settings screen.
+ * The two things a user can change about themself - password (see
+ * /api/auth/change-password's own doc comment) and email (see
+ * /api/auth/email's own doc comment for why it's self-service unlike
+ * display name/username/role/org, which stay admin-only and read-only on
+ * the Account card above this, so the audit trail's "who did this" stays
+ * trustworthy). `forced` renders the page as a mandatory first step (no
+ * way to navigate elsewhere until the password is changed - src/proxy.ts
+ * already blocks every other page) rather than an optional settings screen.
  */
-export function ProfileClient({ initialName, forced }: { initialName: string; forced: boolean }) {
+export function ProfileClient({ initialEmail, forced }: { initialEmail: string; forced: boolean }) {
   const router = useRouter();
 
-  const [name, setName] = useState(initialName);
-  const [nameSaving, setNameSaving] = useState(false);
-  const [nameError, setNameError] = useState<string | null>(null);
-  const [nameSaved, setNameSaved] = useState(false);
+  const [email, setEmail] = useState(initialEmail);
+  const [emailSaving, setEmailSaving] = useState(false);
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [emailSaved, setEmailSaved] = useState(false);
 
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -29,19 +31,19 @@ export function ProfileClient({ initialName, forced }: { initialName: string; fo
   const [passwordSaving, setPasswordSaving] = useState(false);
   const [passwordError, setPasswordError] = useState<string | null>(null);
 
-  async function saveName(e: React.FormEvent) {
+  async function saveEmail(e: React.FormEvent) {
     e.preventDefault();
-    setNameError(null);
-    setNameSaved(false);
-    setNameSaving(true);
+    setEmailError(null);
+    setEmailSaved(false);
+    setEmailSaving(true);
     try {
-      await apiSend("/api/auth/profile", "PATCH", { name });
-      setNameSaved(true);
+      await apiSend("/api/auth/email", "PATCH", { email });
+      setEmailSaved(true);
       router.refresh();
     } catch (err) {
-      setNameError(err instanceof ApiError ? err.message : "Failed to save changes");
+      setEmailError(err instanceof ApiError ? err.message : "Failed to save changes");
     } finally {
-      setNameSaving(false);
+      setEmailSaving(false);
     }
   }
 
@@ -82,24 +84,30 @@ export function ProfileClient({ initialName, forced }: { initialName: string; fo
       )}
 
       <Card>
-        <CardHeader title="Display Name" description="Shown throughout the app - notifications, the audit trail, comments." />
-        <form onSubmit={saveName} className="flex flex-wrap items-end gap-3 p-4">
-          <div className="w-64">
-            <Label htmlFor="profile-name">Full name</Label>
-            <Input id="profile-name" required value={name} onChange={(e) => setName(e.target.value)} />
+        <CardHeader title="Email" description="Used for notification emails (submissions, approvals, rectifications, period events, ...)." />
+        <form onSubmit={saveEmail} className="flex flex-wrap items-end gap-3 p-4">
+          <div className="w-72">
+            <Label htmlFor="profile-email">Email address</Label>
+            <Input
+              id="profile-email"
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
           </div>
-          <Button type="submit" disabled={nameSaving || !name.trim()}>
-            {nameSaving ? "Saving..." : "Save Name"}
+          <Button type="submit" disabled={emailSaving || !email.trim()}>
+            {emailSaving ? "Saving..." : "Save Email"}
           </Button>
-          {nameSaved && <p className="text-sm text-emerald-700">Saved.</p>}
-          {nameError && <p className="text-sm text-red-600">{nameError}</p>}
+          {emailSaved && <p className="text-sm text-emerald-700">Saved.</p>}
+          {emailError && <p className="text-sm text-red-600">{emailError}</p>}
         </form>
       </Card>
 
       <Card>
         <CardHeader
           title="Change Password"
-          description="Requires your current password. Username, role, and organization assignment can only be changed by an administrator."
+          description="Requires your current password. Display name, username, role, and organization assignment can only be changed by an administrator."
         />
         <form onSubmit={savePassword} className="flex flex-col gap-3 p-4 sm:max-w-sm">
           <div>

@@ -31,11 +31,12 @@ export function FindingStatusDistribution({ findings }: { findings: Finding[] })
     label: bucket.label,
     value: findings.filter((f) => (bucket.statuses as string[]).includes(f.status)).length,
     color: categoricalColor(i),
+    href: `/findings?status=${bucket.statuses.map(encodeURIComponent).join(",")}`,
   }));
 
   return (
     <Card>
-      <CardHeader title="Finding Status Distribution" description="Every finding in scope, by current lifecycle stage" />
+      <CardHeader title="Finding Status Distribution" description="Every finding in scope, by current lifecycle stage - click a segment to filter" />
       <div className="p-4">
         <DonutChart segments={segments} emptyText="No findings yet." />
       </div>

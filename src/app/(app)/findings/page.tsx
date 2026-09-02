@@ -47,12 +47,19 @@ export default async function FindingsPage({
   if (sourceId) findings = findings.filter((f) => f.sourceId === sourceId);
   if (categoryId) findings = findings.filter((f) => f.categoryId === categoryId);
   if (risk) findings = findings.filter((f) => f.riskLevel === risk);
-  if (status) findings = findings.filter((f) => f.status === status);
+  // Comma-separated to support the Status Distribution donut's multi-status
+  // buckets (e.g. "Draft / In Review" spans 6 statuses) linking here with
+  // one query param - a single status value still works unchanged since
+  // split(",") on a value with no comma just returns that one value.
+  if (status) {
+    const statuses = new Set(status.split(","));
+    findings = findings.filter((f) => statuses.has(f.status));
+  }
   // Optional Today/This Week/This Month/Custom filter (TimeRangeFilter) -
   // by each finding's own findingDate, same convention as the Reports page.
   if (dateFrom || dateTo) findings = findings.filter((f) => inDateRange({ from: dateFrom || undefined, to: dateTo || undefined }, f.findingDate));
 
-  const isQueued = queueStatusesForSession(user);
+  const isQueued = queueStatusesForSession(user, db);
   if (queueOnly) findings = findings.filter(isQueued);
 
   findings = [...findings].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));

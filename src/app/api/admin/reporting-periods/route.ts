@@ -4,12 +4,23 @@ import { z } from "zod";
 import { requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { appendAuditLog } from "@/lib/audit";
+import { outstandingTransferPreview } from "@/lib/findings";
 
 export async function GET() {
   const auth = await requirePermission("reporting-periods.view");
   if (!auth.ok) return auth.response;
-  const periods = [...readDb().reportingPeriods].sort((a, b) => b.code.localeCompare(a.code));
-  return NextResponse.json({ reportingPeriods: periods });
+  const db = readDb();
+  // outstandingTransferableCount/transferDestinationCode let the Lock
+  // dialog ask an informed "transfer N outstanding cases to <period>?"
+  // question (see autoTransferOnLock()'s doc comment) without a second
+  // round-trip - this route already requires only reporting-periods.view,
+  // which everyone who can reach the Lock button already holds, unlike
+  // settings.view.
+  const periods = [...db.reportingPeriods].sort((a, b) => b.code.localeCompare(a.code)).map((p) => {
+    const preview = outstandingTransferPreview(db, p);
+    return { ...p, outstandingTransferableCount: preview.count, transferDestinationCode: preview.destinationCode };
+  });
+  return NextResponse.json({ reportingPeriods: periods, autoTransferOnLock: db.settings.autoTransferOnLock });
 }
 
 // year/month are derived from `startsAt` (the reporting window's own
@@ -48,6 +59,11 @@ export async function POST(request: Request) {
   }
 
   const now = new Date().toISOString();
+  // Created LOCKED, not OPEN - a period starts closed to the full workflow
+  // (submit/review/rectify/etc.) until an admin deliberately opens it, but
+  // still accepts DRAFT findings by default (draftsAllowedWhileLocked)
+  // so registration work isn't blocked in the meantime. See
+  // src/lib/findings.ts's assertPeriodWritable() for the DRAFT exception.
   const period = {
     id: uuid(),
     year,
@@ -55,10 +71,11 @@ export async function POST(request: Request) {
     code,
     startsAt: start.toISOString(),
     endsAt: new Date(endsAt).toISOString(),
-    status: "OPEN" as const,
-    lockedBy: null,
-    lockedAt: null,
-    lockReason: null,
+    status: "LOCKED" as const,
+    lockedBy: auth.session.userId!,
+    lockedAt: now,
+    lockReason: "Created locked by default - open it to allow full submission/review workflow.",
+    draftsAllowedWhileLocked: true,
     createdAt: now,
     updatedAt: now,
   };

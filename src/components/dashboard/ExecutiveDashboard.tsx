@@ -1,6 +1,6 @@
 import type { Database } from "@/types";
 import type { SessionData } from "@/lib/session";
-import { computePerformance, findingCaseTotals, transferTotals, averageCaseAgeDays } from "@/lib/findings";
+import { computePerformance, findingCaseTotals, transferTotals, averageCaseAgeDays, isHoApproved } from "@/lib/findings";
 import { sumAmountByCurrency, sumOutstandingByCurrency } from "@/lib/currency";
 import { inDateRange, type DateRange } from "@/lib/dateRange";
 import { Card, CardHeader, StatCard } from "@/components/ui/Card";
@@ -36,11 +36,17 @@ export function ExecutiveDashboard({ db, dateRange = {} }: { user: SessionData; 
   const activeScoringRule = db.scoringRules.find((r) => r.active);
   const activeSources = db.sources.filter((s) => s.active);
   const { totalFindings, totalCases, rectifiedFindings, rectifiedCases } = findingCaseTotals(periodFindings);
+  // Same isHoApproved() gate as every other dashboard - Total Amount,
+  // Outstanding Amount, Source Comparison, etc. shouldn't move before a
+  // finding's actually cleared HO approval (RiskDistribution/
+  // FindingStatusDistribution below are the deliberate exception - they
+  // track the whole in-flight workflow, not just the "official" figures).
+  const approvedPeriodFindings = periodFindings.filter(isHoApproved);
   const bankTransfers = openPeriod ? db.findingTransfers.filter((t) => t.fromPeriodId === openPeriod.id) : [];
   const { transferredFindings, transferredCases } = transferTotals(bankTransfers);
-  const totalAmount = sumAmountByCurrency(periodFindings, "amount");
-  const outstandingAmount = sumOutstandingByCurrency(periodFindings);
-  const resolvedAmount = sumAmountByCurrency(periodFindings, "rectifiedAmount");
+  const totalAmount = sumAmountByCurrency(approvedPeriodFindings, "amount");
+  const outstandingAmount = sumOutstandingByCurrency(approvedPeriodFindings);
+  const resolvedAmount = sumAmountByCurrency(approvedPeriodFindings, "rectifiedAmount");
 
   const outstanding = db.findings.filter((f) => !["RECTIFIED", "CLOSED", "REJECTED"].includes(f.status));
   const avgOutstandingAgeDays = averageCaseAgeDays(outstanding);
@@ -72,11 +78,20 @@ export function ExecutiveDashboard({ db, dateRange = {} }: { user: SessionData; 
   // uses - Executive Management is exactly the audience for "how do our
   // two finding sources compare bank-wide," not just HO Controller.
   const scoredCategoryIds = new Set(activeScoringRule?.categories ?? []);
+  const scoredSourceIds = new Set(activeScoringRule?.sources ?? []);
   const sourceComparison = activeSources.map((s) => {
-    const findings = periodFindings.filter((f) => f.sourceId === s.id);
+    // isHoApproved(), same gate as everywhere else on this dashboard.
+    const findings = approvedPeriodFindings.filter((f) => f.sourceId === s.id);
     const total = findings.reduce((sum, f) => sum + f.caseCount, 0);
     const rectified = findings.reduce((sum, f) => sum + f.rectifiedCases, 0);
-    const eligibleCases = findings.filter((f) => scoredCategoryIds.has(f.categoryId)).reduce((sum, f) => sum + f.caseCount, 0);
+    // Eligible = the same category AND source gate computeEligibleCaseCounts
+    // enforces (not category-only) - a source the active rule doesn't
+    // include contributes 0 eligible cases regardless of category. findings
+    // is already isHoApproved()-filtered above, so no separate status check
+    // is needed here.
+    const eligibleCases = scoredSourceIds.has(s.id)
+      ? findings.filter((f) => scoredCategoryIds.has(f.categoryId)).reduce((sum, f) => sum + f.caseCount, 0)
+      : 0;
     return { source: s, total, rectified, outstanding: total - rectified, eligibleCases };
   });
 
@@ -99,8 +114,8 @@ export function ExecutiveDashboard({ db, dateRange = {} }: { user: SessionData; 
         <StatCard label="Total Cases" value={openPeriod ? totalCases : "--"} hint="Sum of case counts, bank-wide" />
         <StatCard label="Outstanding (all periods)" value={outstanding.length} hint="Findings" />
         <StatCard label="High/Critical Exceptions" value={exceptions.length} hint="Outstanding, high or critical risk" />
-        <StatCard label="Rectified Findings" value={openPeriod ? rectifiedFindings : "--"} hint="Fully rectified or closed" />
-        <StatCard label="Rectified Cases" value={openPeriod ? rectifiedCases : "--"} hint="Cumulative, this period" />
+        <StatCard label="Rectified Findings" value={openPeriod ? rectifiedFindings : "--"} hint="Formally closed" />
+        <StatCard label="Rectified Cases" value={openPeriod ? rectifiedCases : "--"} hint="Closed, this period" />
         <StatCard label="Transferred Findings" value={openPeriod ? transferredFindings : "--"} hint="Out of this period" />
         <StatCard label="Transferred Cases" value={openPeriod ? transferredCases : "--"} hint="Out of this period" />
         <StatCard label="Total Amount" value={openPeriod ? totalAmount : "--"} hint="All findings, bank-wide" />
@@ -113,7 +128,7 @@ export function ExecutiveDashboard({ db, dateRange = {} }: { user: SessionData; 
         />
       </div>
 
-      <CaseBasedPerformance db={db} periodFindings={periodFindings} openPeriod={openPeriod} />
+      <CaseBasedPerformance db={db} scope={{}} openPeriod={openPeriod} />
 
       {db.settings.rankingVisibility.districts ? (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -245,7 +260,7 @@ export function ExecutiveDashboard({ db, dateRange = {} }: { user: SessionData; 
         </div>
       </Card>
 
-      <FindingsByCategoryChart findings={periodFindings} categories={db.categories.filter((c) => c.active)} openPeriod={openPeriod} />
+      <FindingsByCategoryChart findings={approvedPeriodFindings} categories={db.categories.filter((c) => c.active)} openPeriod={openPeriod} />
 
       <MonthlyTrend db={db} scope={{}} />
 

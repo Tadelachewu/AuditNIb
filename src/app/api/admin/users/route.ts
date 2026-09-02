@@ -43,6 +43,7 @@ const createUserSchema = z.object({
     .string()
     .min(3, "Username must be at least 3 characters")
     .regex(/^[a-zA-Z0-9._-]+$/, "Username may only contain letters, numbers, dots, dashes and underscores"),
+  email: z.string().email("Enter a valid email address").optional(),
   password: z.string().min(8, "Password must be at least 8 characters"),
   role: z.string().min(1, "Role is required"),
   districtId: z.string().nullable().optional(),
@@ -64,6 +65,9 @@ export async function POST(request: Request) {
   const db = readDb();
   if (db.users.some((u) => u.username.toLowerCase() === input.username.toLowerCase())) {
     return NextResponse.json({ error: "That username is already taken" }, { status: 409 });
+  }
+  if (input.email && db.users.some((u) => u.email?.toLowerCase() === input.email!.toLowerCase())) {
+    return NextResponse.json({ error: "That email is already in use" }, { status: 409 });
   }
 
   const assignment = resolveOrgAssignment(db, {
@@ -91,6 +95,7 @@ export async function POST(request: Request) {
     id: uuid(),
     name: input.name,
     username: input.username,
+    email: input.email || null,
     passwordHash: hashPassword(input.password),
     role: input.role,
     status: "ACTIVE" as const,
@@ -113,7 +118,7 @@ export async function POST(request: Request) {
       action: "CREATE",
       entityType: "User",
       entityId: user.id,
-      newValue: { name: user.name, username: user.username, role: user.role },
+      newValue: { name: user.name, username: user.username, email: user.email, role: user.role },
     });
   });
 

@@ -22,7 +22,12 @@ export default async function NewFindingPage() {
         sources={db.sources.filter((s) => s.active)}
         departments={db.departments.filter((d) => d.active)}
         categories={db.categories.filter((c) => c.active)}
-        periods={db.reportingPeriods.filter((p) => p.status === "OPEN")}
+        // OPEN periods take the full workflow; a LOCKED period only accepts
+        // DRAFT writes when draftsAllowedWhileLocked is set (see
+        // assertPeriodWritable()) - still listed here so a draft can be
+        // registered against it, with NewFindingForm disabling Save & Submit
+        // for that case rather than hiding the period entirely.
+        periods={db.reportingPeriods.filter((p) => p.status === "OPEN" || p.draftsAllowedWhileLocked)}
         districts={db.districts.filter((d) => d.status === "ACTIVE")}
         branches={db.branches.filter((b) => b.status === "ACTIVE")}
         currencies={db.settings.currencies}

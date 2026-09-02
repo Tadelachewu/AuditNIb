@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { Database } from "@/types";
 import type { SessionData } from "@/lib/session";
-import { computePerformance, queueStatusesForSession, findingCaseTotals, transferTotals, averageCaseAgeDays } from "@/lib/findings";
+import { computePerformance, findingCaseTotals, transferTotals, averageCaseAgeDays, isHoApproved } from "@/lib/findings";
 import { sumAmountByCurrency, sumOutstandingByCurrency } from "@/lib/currency";
 import { formatDateTime, formatNumber } from "@/lib/format";
 import { inDateRange, type DateRange } from "@/lib/dateRange";
@@ -61,11 +61,17 @@ export function HODashboard({
   );
   const periodFindings = openPeriod ? allFindingsInRange.filter((f) => f.periodId === openPeriod.id) : [];
   const { totalFindings, totalCases, rectifiedFindings, rectifiedCases } = findingCaseTotals(periodFindings);
-  const outstandingFindings = periodFindings.filter((f) => !["RECTIFIED", "CLOSED", "REJECTED"].includes(f.status)).length;
+  // Every other "official" figure below (as opposed to RiskDistribution/
+  // FindingStatusDistribution's deliberately broader in-flight-workflow
+  // view) shares that same isHoApproved() gate, so Total Amount,
+  // Outstanding, Source Comparison, etc. don't inflate before a finding's
+  // actually been approved.
+  const approvedPeriodFindings = periodFindings.filter(isHoApproved);
+  const outstandingFindings = approvedPeriodFindings.filter((f) => !["RECTIFIED", "CLOSED", "REJECTED"].includes(f.status)).length;
   const bankPerformance = openPeriod ? computePerformance(db, { periodId: openPeriod.id }) : null;
-  const totalAmount = sumAmountByCurrency(periodFindings, "amount");
-  const outstandingAmount = sumOutstandingByCurrency(periodFindings);
-  const resolvedAmount = sumAmountByCurrency(periodFindings, "rectifiedAmount");
+  const totalAmount = sumAmountByCurrency(approvedPeriodFindings, "amount");
+  const outstandingAmount = sumOutstandingByCurrency(approvedPeriodFindings);
+  const resolvedAmount = sumAmountByCurrency(approvedPeriodFindings, "rectifiedAmount");
   // "How stale is our backlog?" bank-wide - all periods, not just the open
   // one, since a stale finding that got transferred forward is still part
   // of the same outstanding backlog HO needs visibility into.
@@ -88,7 +94,10 @@ export function HODashboard({
   const districtRanking = districtsInScope
     .map((d) => {
       const perf = openPeriod ? computePerformance(db, { districtId: d.id, periodId: openPeriod.id }) : null;
-      const findings = periodFindings.filter((f) => f.districtId === d.id);
+      // Same isHoApproved() gate as everywhere else on this dashboard - a
+      // volume count feeding "Findings by District" shouldn't grow the
+      // moment something's merely registered either.
+      const findings = approvedPeriodFindings.filter((f) => f.districtId === d.id);
       return { district: d, performance: perf, total: findings.length };
     })
     .sort((a, b) => (b.performance ?? -1) - (a.performance ?? -1));
@@ -107,7 +116,7 @@ export function HODashboard({
   const branchRanking = branchesInScope
     .map((b) => {
       const perf = openPeriod ? computePerformance(db, { branchId: b.id, periodId: openPeriod.id }) : null;
-      const findings = periodFindings.filter((f) => f.branchId === b.id);
+      const findings = approvedPeriodFindings.filter((f) => f.branchId === b.id);
       return { branch: b, performance: perf, total: findings.length };
     })
     .sort((a, b) => (b.performance ?? -1) - (a.performance ?? -1));
@@ -126,15 +135,24 @@ export function HODashboard({
   // hard-coding "Other Case" as a category name (master.txt §9: "do not
   // hard-code these policy decisions").
   const scoredCategoryIds = new Set(activeScoringRule?.categories ?? []);
+  const scoredSourceIds = new Set(activeScoringRule?.sources ?? []);
   const sourceComparison = sourcesInScope.map((s) => {
-    const findings = periodFindings.filter((f) => f.sourceId === s.id);
+    // isHoApproved(), same gate as everywhere else on this dashboard - a
+    // finding still in DISTRICT_REVIEW/HO_REVIEW doesn't belong in Source
+    // Comparison's Total/Rectified/Outstanding columns yet either.
+    const findings = approvedPeriodFindings.filter((f) => f.sourceId === s.id);
     const total = findings.reduce((sum, f) => sum + f.caseCount, 0);
     const rectified = findings.reduce((sum, f) => sum + f.rectifiedCases, 0);
     const amount = findings.reduce((sum, f) => sum + f.amount, 0);
     const rectifiedAmount = findings.reduce((sum, f) => sum + f.rectifiedAmount, 0);
-    const eligibleCases = findings
-      .filter((f) => scoredCategoryIds.has(f.categoryId))
-      .reduce((sum, f) => sum + f.caseCount, 0);
+    // Eligible = the same category AND source gate computeEligibleCaseCounts
+    // enforces (not category-only) - a source the active rule doesn't
+    // include contributes 0 eligible cases regardless of category. findings
+    // is already isHoApproved()-filtered above, so no separate status check
+    // is needed here.
+    const eligibleCases = scoredSourceIds.has(s.id)
+      ? findings.filter((f) => scoredCategoryIds.has(f.categoryId)).reduce((sum, f) => sum + f.caseCount, 0)
+      : 0;
     return {
       source: s,
       total,
@@ -166,11 +184,26 @@ export function HODashboard({
   // alongside rather than in place of the finding count.
   const { transferredFindings, transferredCases } = transferTotals(bankTransfers);
 
-  const isQueued = queueStatusesForSession(user);
-  const workQueue = db.findings
-    .filter(isQueued)
-    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
-    .slice(0, 8);
+  // Two figures HO specifically needs called out on their own: "awaiting my
+  // approval decision" and "district-verified, awaiting my close/accept."
+  // HO's own queue is exactly these two categories (findings.ho-review /
+  // close, plus any bank-approval assignment - see the seeded
+  // HO_CONTROLLER role's permission list), so unlike Branch/District these
+  // two dedicated cards fully replace a generic capped Work Queue rather
+  // than duplicating it. Not period-scoped - these are "what needs action
+  // right now," not a per-period reporting total.
+  const isBankApprover = Boolean(user.userId && db.settings.hoApproval.approverUserIds.includes(user.userId));
+  const pendingApprovalFindings = db.findings.filter(
+    (f) => f.status === "HO_REVIEW" || (isBankApprover && f.status === "PENDING_BANK_APPROVAL")
+  );
+  // Same closable-amount calculation as queueStatusesForSession()'s close()
+  // matcher and close/route.ts itself - a rectification only counts once
+  // district has verified it, not merely self-reported.
+  const pendingCloseFindings = db.findings.filter((f) => {
+    const verifiedCases = Math.min(f.rectifiedCases, f.districtVerifiedCases);
+    const verifiedAmount = Math.min(f.rectifiedAmount, f.districtVerifiedAmount);
+    return f.status !== "CLOSED" && (verifiedCases > f.closedCases || verifiedAmount > f.closedAmount);
+  });
 
   const recentActivity = [...db.findingTransitions].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 8);
 
@@ -197,8 +230,8 @@ export function HODashboard({
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatCard label="Total Findings" value={openPeriod ? totalFindings : "--"} hint={openPeriod ? openPeriod.code : "No open period"} />
         <StatCard label="Total Cases" value={openPeriod ? totalCases : "--"} hint="Sum of case counts, bank-wide" />
-        <StatCard label="Rectified Findings" value={openPeriod ? rectifiedFindings : "--"} hint="Fully rectified or closed" />
-        <StatCard label="Rectified Cases" value={openPeriod ? rectifiedCases : "--"} hint="Cumulative, this period" />
+        <StatCard label="Rectified Findings" value={openPeriod ? rectifiedFindings : "--"} hint="Formally closed" />
+        <StatCard label="Rectified Cases" value={openPeriod ? rectifiedCases : "--"} hint="Closed, this period" />
         <StatCard label="Outstanding" value={openPeriod ? outstandingFindings : "--"} hint="Findings" />
         <StatCard
           label="Bank-wide Performance"
@@ -218,7 +251,7 @@ export function HODashboard({
         />
       </div>
 
-      <CaseBasedPerformance db={db} periodFindings={periodFindings} openPeriod={openPeriod} />
+      <CaseBasedPerformance db={db} scope={{}} openPeriod={openPeriod} />
 
       {db.settings.rankingVisibility.districts && (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -428,7 +461,7 @@ export function HODashboard({
         </div>
       </Card>
 
-      <FindingsByCategoryChart findings={periodFindings} categories={categoriesInScope} openPeriod={openPeriod} />
+      <FindingsByCategoryChart findings={approvedPeriodFindings} categories={categoriesInScope} openPeriod={openPeriod} />
 
       <MonthlyTrend db={db} scope={{}} />
 
@@ -451,18 +484,45 @@ export function HODashboard({
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
-          <CardHeader title="Work Queue" description="Findings awaiting your action" />
+          <CardHeader
+            title="Pending Approval"
+            description={`${pendingApprovalFindings.length} awaiting your review decision${isBankApprover ? " (HO review + bank approval)" : ""}`}
+          />
           <div className="divide-y divide-slate-100">
-            {workQueue.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-400">Nothing pending.</p>}
-            {workQueue.map((f) => (
-              <Link key={f.id} href={`/findings/${f.id}`} className="flex items-center justify-between px-4 py-2 text-sm hover:bg-slate-50">
-                <span className="font-mono text-xs text-blue-800">{f.reference}</span>
-                <FindingStatusBadge status={f.status} />
-              </Link>
-            ))}
+            {pendingApprovalFindings.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-400">Nothing pending.</p>}
+            {pendingApprovalFindings
+              .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+              .slice(0, 8)
+              .map((f) => (
+                <Link key={f.id} href={`/findings/${f.id}`} className="flex items-center justify-between px-4 py-2 text-sm hover:bg-slate-50">
+                  <span className="font-mono text-xs text-blue-800">{f.reference}</span>
+                  <FindingStatusBadge status={f.status} />
+                </Link>
+              ))}
           </div>
         </Card>
 
+        <Card>
+          <CardHeader
+            title="Pending Close / Accept"
+            description={`${pendingCloseFindings.length} district-verified, awaiting close`}
+          />
+          <div className="divide-y divide-slate-100">
+            {pendingCloseFindings.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-400">Nothing pending.</p>}
+            {pendingCloseFindings
+              .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+              .slice(0, 8)
+              .map((f) => (
+                <Link key={f.id} href={`/findings/${f.id}`} className="flex items-center justify-between px-4 py-2 text-sm hover:bg-slate-50">
+                  <span className="font-mono text-xs text-blue-800">{f.reference}</span>
+                  <FindingStatusBadge status={f.status} />
+                </Link>
+              ))}
+          </div>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader title="Recent Activity" description="Submit, approve, return, and rectification events bank-wide" />
           <div className="divide-y divide-slate-100">

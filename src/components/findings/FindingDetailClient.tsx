@@ -141,6 +141,12 @@ export function FindingDetailClient({
 
   const outstandingCases = finding.caseCount - finding.rectifiedCases;
   const outstandingAmount = finding.amount - finding.rectifiedAmount;
+  // A single remaining case is atomic (see rectify/route.ts's own doc
+  // comment) - the non-itemized form locks to exactly 1 case / the full
+  // remaining amount instead of leaving those fields freely editable, so
+  // there's no way to type a mismatched value the server would reject
+  // anyway.
+  const singleCaseRemaining = !isItemized && outstandingCases === 1;
   // Bounded by what's actually district-verified, not just rectified -
   // mirrors close/route.ts's own calculation (District must verify a
   // rectification before it's closable at all).
@@ -247,8 +253,23 @@ export function FindingDetailClient({
   }
 
   async function handleRectify() {
-    setBusy(true);
     setError(null);
+    // Mirrors rectify/route.ts's own validation (see its doc comment) so a
+    // mismatched entry is caught immediately instead of round-tripping to
+    // the server first - that route is still the authoritative check.
+    if (!isItemized) {
+      const cases = Number(rectifyForm.rectifiedCases || 0);
+      const amount = Number(rectifyForm.rectifiedAmount || 0);
+      if ((cases > 0) !== (amount > 0)) {
+        setError("Enter both a rectified case count and its amount together - one can't be recorded without the other");
+        return;
+      }
+      if (outstandingCases === 1 && (cases !== 1 || amount !== outstandingAmount)) {
+        setError(`Only 1 case remains outstanding - rectify exactly 1 case for the full remaining amount (${outstandingAmount})`);
+        return;
+      }
+    }
+    setBusy(true);
     try {
       await apiSend(
         `/api/findings/${finding.id}/rectify`,
@@ -649,30 +670,39 @@ export function FindingDetailClient({
                   )}
                 </div>
               ) : (
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div>
-                    <Label htmlFor="r-cases">Rectified cases (this entry)</Label>
-                    <Input
-                      id="r-cases"
-                      type="number"
-                      min="0"
-                      max={outstandingCases}
-                      step="1"
-                      value={rectifyForm.rectifiedCases}
-                      onChange={(e) => setRectifyForm({ ...rectifyForm, rectifiedCases: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="r-amount">Rectified amount (this entry)</Label>
-                    <Input
-                      id="r-amount"
-                      type="number"
-                      min="0"
-                      max={outstandingAmount}
-                      step="0.01"
-                      value={rectifyForm.rectifiedAmount}
-                      onChange={(e) => setRectifyForm({ ...rectifyForm, rectifiedAmount: e.target.value })}
-                    />
+                <div className="flex flex-col gap-2">
+                  {singleCaseRemaining && (
+                    <p className="text-xs text-slate-500">
+                      Only 1 case remains outstanding - it must be rectified in full, so these are locked to that.
+                    </p>
+                  )}
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div>
+                      <Label htmlFor="r-cases">Rectified cases (this entry)</Label>
+                      <Input
+                        id="r-cases"
+                        type="number"
+                        min="0"
+                        max={outstandingCases}
+                        step="1"
+                        disabled={singleCaseRemaining}
+                        value={rectifyForm.rectifiedCases}
+                        onChange={(e) => setRectifyForm({ ...rectifyForm, rectifiedCases: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="r-amount">Rectified amount (this entry)</Label>
+                      <Input
+                        id="r-amount"
+                        type="number"
+                        min="0"
+                        max={outstandingAmount}
+                        step="0.01"
+                        disabled={singleCaseRemaining}
+                        value={rectifyForm.rectifiedAmount}
+                        onChange={(e) => setRectifyForm({ ...rectifyForm, rectifiedAmount: e.target.value })}
+                      />
+                    </div>
                   </div>
                 </div>
               )}
@@ -698,7 +728,16 @@ export function FindingDetailClient({
             </div>
           ) : (
             <div className="p-4">
-              <Button onClick={() => setRectifying(true)}>Record Rectification</Button>
+              <Button
+                onClick={() => {
+                  if (singleCaseRemaining) {
+                    setRectifyForm((f) => ({ ...f, rectifiedCases: "1", rectifiedAmount: String(outstandingAmount) }));
+                  }
+                  setRectifying(true);
+                }}
+              >
+                Record Rectification
+              </Button>
             </div>
           )}
         </Card>

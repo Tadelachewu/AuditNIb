@@ -1,5 +1,5 @@
 import type { Database, Finding, Source } from "@/types";
-import { computePerformance, type PerformanceScope } from "@/lib/findings";
+import { computePerformance, isHoApproved, type PerformanceScope } from "@/lib/findings";
 import { Card, CardHeader } from "@/components/ui/Card";
 
 /**
@@ -27,13 +27,24 @@ export function SourcePerformanceSummary({
 }) {
   const activeScoringRule = db.scoringRules.find((r) => r.active);
   const scoredCategoryIds = new Set(activeScoringRule?.categories ?? []);
+  const scoredSourceIds = new Set(activeScoringRule?.sources ?? []);
   const categoryNames = db.categories.filter((c) => scoredCategoryIds.has(c.id)).map((c) => c.name);
   const categoryLabel = categoryNames.length > 0 ? categoryNames.join(" / ") : "Scored";
 
+  // Eligible = the same category AND source gate computeEligibleCaseCounts
+  // enforces, including isHoApproved() (excludes REJECTED plus everything
+  // still short of HO approval - a source the active rule doesn't include
+  // contributes nothing here regardless of category, and neither does a
+  // finding merely sitting in DISTRICT_REVIEW/HO_REVIEW. "Rectified" is
+  // closed-only (Finding.closedCases), same "iff closed" gate as
+  // findingCaseTotals() - self-reported RECTIFIED isn't official until a
+  // controller closes it out.
   const perSource = sources.map((s) => {
-    const findings = periodFindings.filter((f) => f.sourceId === s.id && scoredCategoryIds.has(f.categoryId));
+    const findings = scoredSourceIds.has(s.id)
+      ? periodFindings.filter((f) => f.sourceId === s.id && scoredCategoryIds.has(f.categoryId) && isHoApproved(f))
+      : [];
     const total = findings.reduce((sum, f) => sum + f.caseCount, 0);
-    const rectified = findings.reduce((sum, f) => sum + f.rectifiedCases, 0);
+    const rectified = findings.reduce((sum, f) => sum + f.closedCases, 0);
     return { source: s, total, rectified, outstanding: total - rectified };
   });
 
@@ -59,7 +70,7 @@ export function SourcePerformanceSummary({
                 <dd className="font-medium text-slate-900">{openPeriod ? total : "--"}</dd>
               </div>
               <div className="flex items-center justify-between">
-                <dt className="text-slate-500">Rectified</dt>
+                <dt className="text-slate-500">Rectified (Closed)</dt>
                 <dd className="font-medium text-slate-900">{openPeriod ? rectified : "--"}</dd>
               </div>
               <div className="flex items-center justify-between">
@@ -77,7 +88,7 @@ export function SourcePerformanceSummary({
               <dd className="font-medium text-slate-900">{openPeriod ? combinedTotal : "--"}</dd>
             </div>
             <div className="flex items-center justify-between">
-              <dt className="text-slate-500">Rectified</dt>
+              <dt className="text-slate-500">Rectified (Closed)</dt>
               <dd className="font-medium text-slate-900">{openPeriod ? combinedRectified : "--"}</dd>
             </div>
             <div className="flex items-center justify-between">

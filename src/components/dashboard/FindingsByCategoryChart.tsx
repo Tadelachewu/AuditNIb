@@ -25,11 +25,12 @@ export function FindingsByCategoryChart({
     label: c.name,
     value: findings.filter((f) => f.categoryId === c.id).length,
     color: categoricalColor(i),
+    href: `/findings?categoryId=${c.id}`,
   }));
 
   return (
     <Card>
-      <CardHeader title="Findings by Category" description="Every classified case category, current period" />
+      <CardHeader title="Findings by Category" description="Every classified case category, current period - click a bar to filter" />
       <div className="p-4">
         <ColumnChart items={items} emptyText={openPeriod ? "No findings yet." : "No open reporting period."} />
       </div>

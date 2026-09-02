@@ -36,6 +36,13 @@ export interface User {
   id: string;
   name: string;
   username: string;
+  // Optional - existing/seeded users predate this field, and not every
+  // account needs one to log in (username/password is still the only
+  // login credential). Where notification emails actually get sent - see
+  // src/lib/mail.ts - and, unlike display name, editable by the user
+  // themself (src/app/api/auth/email/route.ts) since it carries no
+  // audit-attribution weight the way name does.
+  email?: string | null;
   passwordHash: string;
   role: string;
   status: Status;
@@ -170,6 +177,10 @@ export interface ReportingPeriod {
   lockedBy?: string | null;
   lockedAt?: string | null;
   lockReason?: string | null;
+  // Whether a finding can still be created/edited as a DRAFT while this
+  // period is LOCKED - everything past DRAFT (submit and beyond) remains a
+  // hard stop regardless of this flag. Irrelevant while OPEN.
+  draftsAllowedWhileLocked: boolean;
   createdAt: string;
   updatedAt: string;
 }

@@ -86,7 +86,11 @@ export default async function FindingDetailPage({ params }: { params: Promise<{ 
       editSources={db.sources.filter((s) => s.active)}
       editDepartments={db.departments.filter((d) => d.active)}
       editCategories={db.categories.filter((c) => c.active)}
-      editPeriods={db.reportingPeriods.filter((p) => p.status === "OPEN")}
+      // Same OPEN-or-drafts-allowed-while-locked set as the Register
+      // Finding form (see findings/new/page.tsx) - otherwise a DRAFT
+      // finding already sitting in a locked-but-draftable period wouldn't
+      // even show its own current period in this dropdown.
+      editPeriods={db.reportingPeriods.filter((p) => p.status === "OPEN" || p.draftsAllowedWhileLocked)}
       editDistricts={db.districts.filter((d) => d.status === "ACTIVE")}
       editBranches={db.branches.filter((b) => b.status === "ACTIVE")}
       editCurrencies={db.settings.currencies}

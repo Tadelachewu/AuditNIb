@@ -8,6 +8,7 @@ import { hasPermission, permissionKey } from "@/lib/permissions/registry";
 import { paginate, parsePage } from "@/lib/pagination";
 import { formatDateTime, formatNumber } from "@/lib/format";
 import { Card, CardHeader } from "@/components/ui/Card";
+import { Badge } from "@/components/ui/Badge";
 import { Pagination } from "@/components/ui/Pagination";
 import { FindingStatusBadge } from "@/components/findings/FindingStatusBadge";
 import { FilterBar } from "@/components/dashboard/FilterBar";
@@ -299,23 +300,66 @@ export default async function ReportsPage({
 
       <Card>
         <CardHeader title="Transfers" description="Findings carried into a later reporting period, matching the current filters" />
-        <div className="divide-y divide-slate-100">
-          {transfersPage.items.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-400">No transfers recorded.</p>}
-          {transfersPage.items.map((t) => {
-            const finding = db.findings.find((f) => f.id === t.findingId);
-            return (
-              <div key={t.id} className="flex items-center justify-between px-4 py-2 text-sm">
-                <span className="text-slate-600">
-                  <Link href={`/findings/${t.findingId}`} className="font-mono text-xs text-blue-800 hover:underline">
-                    {finding?.reference ?? t.findingId}
-                  </Link>{" "}
-                  — <span className="font-medium text-slate-900">{t.createdByName}</span> transferred {t.casesTransferred}{" "}
-                  case(s) / {finding?.currency ?? ""} {formatNumber(t.amountTransferred)}
-                </span>
-                <span className="text-xs text-slate-400">{formatDateTime(t.createdAt)}</span>
-              </div>
-            );
-          })}
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead className="border-b border-slate-100 text-xs uppercase text-slate-400">
+              <tr>
+                <th className="px-4 py-2 font-medium">Finding</th>
+                <th className="px-4 py-2 font-medium">From → To Period</th>
+                <th className="px-4 py-2 font-medium">Original Amount</th>
+                <th className="px-4 py-2 font-medium">Transferred Amount</th>
+                <th className="px-4 py-2 font-medium">Original Cases</th>
+                <th className="px-4 py-2 font-medium">Transferred Cases</th>
+                <th className="px-4 py-2 font-medium">Case Age</th>
+                <th className="px-4 py-2 font-medium">Method</th>
+                <th className="px-4 py-2 font-medium">Transferred By</th>
+                <th className="px-4 py-2 font-medium">Date</th>
+                <th className="px-4 py-2 font-medium">Reason</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {transfersPage.items.length === 0 && (
+                <tr>
+                  <td className="px-4 py-6 text-center text-slate-400" colSpan={11}>
+                    No transfers recorded.
+                  </td>
+                </tr>
+              )}
+              {transfersPage.items.map((t) => {
+                const finding = db.findings.find((f) => f.id === t.findingId);
+                const fromPeriod = db.reportingPeriods.find((p) => p.id === t.fromPeriodId);
+                const toPeriod = db.reportingPeriods.find((p) => p.id === t.toPeriodId);
+                const currency = finding?.currency ?? "";
+                return (
+                  <tr key={t.id}>
+                    <td className="px-4 py-2">
+                      <Link href={`/findings/${t.findingId}`} className="font-mono text-xs text-blue-800 hover:underline">
+                        {finding?.reference ?? t.findingId}
+                      </Link>
+                    </td>
+                    <td className="px-4 py-2 text-xs text-slate-600">
+                      {fromPeriod?.code ?? t.fromPeriodId} → {toPeriod?.code ?? t.toPeriodId}
+                    </td>
+                    <td className="px-4 py-2 text-slate-700">
+                      {currency} {formatNumber(t.originalAmount)}
+                    </td>
+                    <td className="px-4 py-2 text-slate-700">
+                      {currency} {formatNumber(t.amountTransferred)}
+                    </td>
+                    <td className="px-4 py-2 text-slate-700">{formatNumber(t.originalCaseCount)}</td>
+                    <td className="px-4 py-2 text-slate-700">{formatNumber(t.casesTransferred)}</td>
+                    <td className="px-4 py-2 text-slate-700">{t.caseAgeAtTransferDays}d</td>
+                    <td className="px-4 py-2">
+                      <Badge tone={t.method === "AUTOMATIC" ? "blue" : "gray"}>{t.method === "AUTOMATIC" ? "Automatic" : "Manual"}</Badge>
+                    </td>
+                    <td className="px-4 py-2 text-slate-900">{t.createdByName}</td>
+                    <td className="px-4 py-2 text-xs text-slate-400">{formatDateTime(t.createdAt)}</td>
+                    <td className="px-4 py-2 text-xs text-slate-500">{t.reason}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
         <Pagination
           page={transfersPage.page}

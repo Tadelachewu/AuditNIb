@@ -9,6 +9,7 @@ import { toSafeUser } from "@/lib/sanitize";
 
 const updateUserSchema = z.object({
   name: z.string().min(1).optional(),
+  email: z.string().email("Enter a valid email address").nullable().optional(),
   role: z.string().min(1).optional(),
   districtId: z.string().nullable().optional(),
   branchId: z.string().nullable().optional(),
@@ -37,6 +38,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const db = readDb();
   const existing = db.users.find((u) => u.id === id);
   if (!existing) return NextResponse.json({ error: "User not found" }, { status: 404 });
+
+  if (input.email && db.users.some((u) => u.id !== id && u.email?.toLowerCase() === input.email!.toLowerCase())) {
+    return NextResponse.json({ error: "That email is already in use" }, { status: 409 });
+  }
 
   const nextRole = input.role ?? existing.role;
   const wantsOrgChange = input.role !== undefined || input.districtId !== undefined || input.branchId !== undefined;
@@ -81,6 +86,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   const before = {
     name: existing.name,
+    email: existing.email,
     role: existing.role,
     status: existing.status,
     districtId: existing.districtId,
@@ -91,6 +97,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const updated = updateDb((current) => {
     const u = current.users.find((x) => x.id === id)!;
     if (input.name !== undefined) u.name = input.name;
+    if (input.email !== undefined) u.email = input.email;
     if (input.status !== undefined) u.status = input.status;
     if (input.password) {
       u.passwordHash = hashPassword(input.password);
@@ -111,7 +118,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       entityType: "User",
       entityId: u.id,
       oldValue: before,
-      newValue: { name: u.name, role: u.role, status: u.status, districtId: u.districtId, branchId: u.branchId, departmentId: u.departmentId },
+      newValue: {
+        name: u.name,
+        email: u.email,
+        role: u.role,
+        status: u.status,
+        districtId: u.districtId,
+        branchId: u.branchId,
+        departmentId: u.departmentId,
+      },
     });
 
     return u;

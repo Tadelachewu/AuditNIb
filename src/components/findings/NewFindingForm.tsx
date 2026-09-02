@@ -1,13 +1,23 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { apiSend, ApiError } from "@/lib/api-client";
-import { formatNumber } from "@/lib/format";
+import { formatDateTime, formatNumber } from "@/lib/format";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input, Select, Label, Textarea } from "@/components/ui/Field";
-import type { Source, Department, ClassifiedCategory, ReportingPeriod, District, Branch, Finding } from "@/types";
+import { FindingStatusBadge } from "@/components/findings/FindingStatusBadge";
+import type { Source, Department, ClassifiedCategory, ReportingPeriod, District, Branch, Finding, FindingStatus } from "@/types";
+
+interface SimilarFindingMatch {
+  id: string;
+  reference: string;
+  title: string;
+  status: FindingStatus;
+  createdAt: string;
+}
 
 interface Props {
   sources: Source[];
@@ -145,6 +155,50 @@ export function NewFindingForm({
   const caseAmountsSum = caseAmounts.reduce((sum, a) => sum + (Number(a) || 0), 0);
   const caseAmountsMatch = Math.abs(caseAmountsSum - (Number(form.amount) || 0)) < 0.01;
 
+  // Non-blocking duplicate suggestion (create mode only) - once branch,
+  // classified case, operation area, irregularity type, and period are all
+  // picked, check for a close match already on record so the registrar can
+  // double-check before submitting. Debounced since it fires on every one
+  // of those fields changing; dismissible per distinct field-combination
+  // rather than globally, so changing something re-checks instead of
+  // staying silently dismissed.
+  const [similarMatches, setSimilarMatches] = useState<SimilarFindingMatch[]>([]);
+  const [similarDismissed, setSimilarDismissed] = useState(false);
+  const similarKey = [form.branchId, form.categoryId, form.operationArea, form.irregularityType, form.periodId].join("|");
+  useEffect(() => {
+    setSimilarDismissed(false);
+    if (isEditing || !form.branchId || !form.categoryId || !form.operationArea || !form.irregularityType || !form.periodId) {
+      setSimilarMatches([]);
+      return;
+    }
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      const params = new URLSearchParams({
+        branchId: form.branchId,
+        categoryId: form.categoryId,
+        operationArea: form.operationArea,
+        irregularityType: form.irregularityType,
+        periodId: form.periodId,
+      });
+      fetch(`/api/findings/similar?${params.toString()}`, { signal: controller.signal, cache: "no-store" })
+        .then((res) => (res.ok ? res.json() : { matches: [] }))
+        .then((data: { matches: SimilarFindingMatch[] }) => setSimilarMatches(data.matches ?? []))
+        .catch(() => {});
+    }, 400);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [similarKey, isEditing]);
+
+  // The period list already excludes anything that can't take even a
+  // DRAFT (see findings/new/page.tsx) - but a LOCKED-drafts-allowed period
+  // still can't take a submit, so that half of the choice is disabled
+  // here rather than hidden, with a reason shown next to the button.
+  const selectedPeriod = periods.find((p) => p.id === form.periodId);
+  const periodBlocksSubmit = selectedPeriod?.status === "LOCKED";
+
   const branchOptions = useMemo(
     () => (form.districtId ? branches.filter((b) => b.districtId === form.districtId) : branches),
     [branches, form.districtId]
@@ -266,6 +320,7 @@ export function NewFindingForm({
               {periods.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.code}
+                  {p.status === "LOCKED" ? " (locked - drafts only)" : ""}
                 </option>
               ))}
             </Select>
@@ -510,6 +565,32 @@ export function NewFindingForm({
           />
         </div>
 
+        {!similarDismissed && similarMatches.length > 0 && (
+          <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm">
+            <div className="flex items-start justify-between gap-3">
+              <p className="font-medium text-amber-900">
+                {similarMatches.length} similar finding{similarMatches.length > 1 ? "s" : ""} already on record - double-check this isn&apos;t a
+                duplicate before continuing.
+              </p>
+              <button type="button" onClick={() => setSimilarDismissed(true)} className="shrink-0 text-xs text-amber-700 hover:underline">
+                Dismiss
+              </button>
+            </div>
+            <ul className="mt-2 flex flex-col gap-1">
+              {similarMatches.map((m) => (
+                <li key={m.id} className="flex items-center gap-2 text-xs text-amber-800">
+                  <Link href={`/findings/${m.id}`} target="_blank" className="font-medium hover:underline">
+                    {m.reference}
+                  </Link>
+                  <span className="truncate">{m.title}</span>
+                  <FindingStatusBadge status={m.status} />
+                  <span className="text-amber-600">{formatDateTime(m.createdAt)}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         {error && <p className="text-sm text-red-600">{error}</p>}
 
         <div className="flex gap-2">
@@ -527,9 +608,14 @@ export function NewFindingForm({
               <Button type="submit" variant="secondary" disabled={submitting !== null}>
                 {submitting === "draft" ? "Saving..." : "Save Draft"}
               </Button>
-              <Button type="button" disabled={submitting !== null} onClick={() => save(true)}>
+              <Button type="button" disabled={submitting !== null || periodBlocksSubmit} onClick={() => save(true)}>
                 {submitting === "submit" ? "Submitting..." : "Save & Submit"}
               </Button>
+              {periodBlocksSubmit && (
+                <p className="self-center text-xs text-slate-500">
+                  {selectedPeriod?.code} is locked - only a draft can be saved against it until it&apos;s open.
+                </p>
+              )}
             </>
           )}
         </div>

@@ -14,6 +14,8 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [testEmailSending, setTestEmailSending] = useState(false);
+  const [testEmailResult, setTestEmailResult] = useState<{ ok: boolean; message: string } | null>(null);
 
   useEffect(() => {
     apiGet<{ settings: Settings }>("/api/admin/settings").then(({ settings }) => setSettings(settings));
@@ -53,6 +55,19 @@ export default function SettingsPage() {
       setError(err instanceof ApiError ? err.message : "Failed to save settings");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleTestEmail() {
+    setTestEmailResult(null);
+    setTestEmailSending(true);
+    try {
+      const res = await apiSend<{ ok: boolean; sentTo: string }>("/api/admin/settings/test-email", "POST", {});
+      setTestEmailResult({ ok: true, message: `Sent to ${res.sentTo}.` });
+    } catch (err) {
+      setTestEmailResult({ ok: false, message: err instanceof ApiError ? err.message : "Failed to send test email" });
+    } finally {
+      setTestEmailSending(false);
     }
   }
 
@@ -152,10 +167,21 @@ export default function SettingsPage() {
             </>
           )}
         </div>
+        <div className="flex flex-wrap items-center gap-3 border-t border-slate-200 p-4">
+          <Button type="button" variant="secondary" onClick={handleTestEmail} disabled={testEmailSending}>
+            {testEmailSending ? "Sending..." : "Send Test Email"}
+          </Button>
+          <p className="text-xs text-slate-500">
+            Sends to your own account&apos;s email address. Save settings first if you just changed them.
+          </p>
+          {testEmailResult && (
+            <p className={`text-sm ${testEmailResult.ok ? "text-emerald-700" : "text-red-600"}`}>{testEmailResult.message}</p>
+          )}
+        </div>
       </Card>
 
       <Card className="mt-4">
-        <CardHeader title="Case Transfer" description="Configurable automatic transfer of outstanding findings when a period locks." />
+        <CardHeader title="Case Transfer" description="Allow transferring outstanding findings when a period locks." />
         <div className="p-4">
           <label className="flex items-start gap-2 text-sm text-slate-700">
             <input
@@ -165,12 +191,16 @@ export default function SettingsPage() {
               className="mt-0.5 h-4 w-4 rounded border-slate-300"
             />
             <span>
-              Automatically transfer outstanding findings when their period locks
+              Allow transferring outstanding findings when their period locks
               <br />
               <span className="text-xs text-slate-400">
-                Moves every still-outstanding finding into the next open period the moment a District/HO Controller
-                locks the period, tagged &quot;Automatic&quot; in its transfer history. A finding already transferred
-                manually before the lock is skipped.
+                When enabled, the Lock dialog on Reporting Periods asks the locking user whether to transfer this
+                period&apos;s still-outstanding findings into the next open period - it&apos;s never silent or
+                automatic. If they say yes, every still-outstanding finding moves, tagged &quot;Automatic&quot; in
+                its transfer history (referring to the bulk-sweep mechanism, not that it ran unasked). A finding
+                already transferred manually before the lock is skipped. Leave this off to hide that prompt
+                entirely - findings still outstanding when a period locks then just stay put until someone
+                transfers them manually.
               </span>
             </span>
           </label>
