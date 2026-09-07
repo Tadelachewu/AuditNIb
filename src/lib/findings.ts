@@ -2,7 +2,8 @@ import { v4 as uuid } from "uuid";
 import { appendAuditLog } from "@/lib/audit";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
 import type { SessionData } from "@/lib/session";
-import type { Database, Finding, FindingStatus, FindingTransfer, Branch, ReportingPeriod } from "@/types";
+import { REQUIRABLE_FINDING_FIELDS } from "@/types";
+import type { Database, Finding, FindingStatus, FindingTransfer, Branch, ReportingPeriod, RequirableFindingField } from "@/types";
 
 /**
  * A transfer moves the finding forward, it doesn't create a new one
@@ -363,6 +364,62 @@ export function assertPeriodWritable(db: Database, periodId: string, editingFind
   if (period.status === "LOCKED") {
     if (editingFindingStatus === "DRAFT" && period.draftsAllowedWhileLocked) return null;
     return `${period.code} is locked and cannot accept changes`;
+  }
+  return null;
+}
+
+/**
+ * A period's own submissionStartsAt/submissionEndsAt (set when it's
+ * created, admin-narrowable afterward - see the admin reporting-periods
+ * route and the type's own doc comment) is the actual window a finding is
+ * meant to be submitted within - narrower than, and independent of, both
+ * the period's overall startsAt/endsAt *and* its OPEN/LOCKED status. A
+ * period left OPEN past its submission window (nobody has locked it yet,
+ * or the admin deliberately set submissions to close early within a
+ * longer reporting period) shouldn't silently keep accepting new
+ * submissions just because nobody flipped the status - so this adds a
+ * stricter rule on top of "OPEN," gating only the act of submitting
+ * (moving a finding past DRAFT, the same scope assertPeriodWritable's own
+ * "submit never passes editingFindingStatus" case already covers).
+ * Saving/editing a DRAFT is untouched by this function entirely - it
+ * stays possible whenever assertPeriodWritable already allows it,
+ * regardless of today's date relative to the window. LOCKED periods are
+ * also untouched here - assertPeriodWritable (or the create route's own
+ * LOCKED check) already fully blocks those; this function only ever
+ * tightens the OPEN case.
+ */
+export function assertPeriodOpenForSubmission(db: Database, periodId: string): string | null {
+  const period = db.reportingPeriods.find((p) => p.id === periodId);
+  if (!period) return "Reporting period not found";
+  if (period.status !== "OPEN") return null;
+  const now = Date.now();
+  if (now < new Date(period.submissionStartsAt).getTime() || now > new Date(period.submissionEndsAt).getTime()) {
+    return `${period.code}'s submission window has closed - save this as a draft instead, or submit once a period's submission window covering today's date is open`;
+  }
+  return null;
+}
+
+/**
+ * Enforces Settings.requiredFindingFields against whichever of
+ * REQUIRABLE_FINDING_FIELDS the caller passes in - shared by the create
+ * and edit routes so there's exactly one place this decision is made.
+ * `values[key] === undefined` means two different things depending on the
+ * caller: a brand-new finding (create) genuinely never supplied that
+ * field, so it's treated the same as blank; an in-place edit (PATCH) that
+ * simply didn't include the key at all is "leave this field unchanged,"
+ * not "clear it" - `skipUnset` tells this function which case it's in.
+ * An explicitly-sent empty string always counts as blank either way.
+ */
+export function assertRequiredFindingFieldsPresent(
+  db: Database,
+  values: Partial<Record<RequirableFindingField, string | undefined>>,
+  opts?: { skipUnset?: boolean }
+): string | null {
+  for (const { key, label } of REQUIRABLE_FINDING_FIELDS) {
+    if (!db.settings.requiredFindingFields[key]) continue;
+    const value = values[key];
+    if (value === undefined && opts?.skipUnset) continue;
+    if (!value || !value.trim()) return `${label} is required`;
   }
   return null;
 }

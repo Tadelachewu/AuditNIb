@@ -4,7 +4,7 @@ import { z } from "zod";
 import { requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { findingsInScope } from "@/lib/findings-scope";
-import { nextFindingReference, submitFinding } from "@/lib/findings";
+import { nextFindingReference, submitFinding, assertPeriodOpenForSubmission, assertRequiredFindingFieldsPresent } from "@/lib/findings";
 import { isDepartmentInScope } from "@/lib/org";
 import type { Finding, FindingCase } from "@/types";
 
@@ -41,22 +41,29 @@ export async function GET(request: Request) {
 }
 
 const createSchema = z.object({
-  title: z.string().min(1, "Finding title is required"),
-  sourceId: z.string().min(1, "Source is required"),
-  departmentId: z.string().min(1, "Department is required"),
+  // title/sourceId/departmentId/findingDate/categoryId/currency/riskLevel
+  // are structurally optional here - whether each is actually required is
+  // an admin policy decision (Settings.requiredFindingFields), enforced
+  // below via assertRequiredFindingFieldsPresent() once `db` is loaded,
+  // not by this static schema. periodId/districtId/branchId/amount/
+  // caseCount are NOT in that setting and stay hard-required below -
+  // see REQUIRABLE_FINDING_FIELDS' own doc comment for why.
+  title: z.string().optional(),
+  sourceId: z.string().optional(),
+  departmentId: z.string().optional(),
   periodId: z.string().min(1, "Reporting period is required"),
   districtId: z.string().optional(),
   branchId: z.string().optional(),
-  findingDate: z.string().min(1, "Finding date is required"),
-  operationArea: z.string().min(1, "Operation area is required"),
-  irregularityType: z.string().min(1, "Type of irregularity is required"),
-  categoryId: z.string().min(1, "Classified case is required"),
+  findingDate: z.string().optional(),
+  operationArea: z.string().optional(),
+  irregularityType: z.string().optional(),
+  categoryId: z.string().optional(),
   amount: z.number().nonnegative(),
-  currency: z.string().min(1, "Currency is required"),
+  currency: z.string().optional(),
   caseCount: z.number().int().positive("Number of cases must be at least 1"),
-  riskLevel: z.string().min(1, "Risk level is required"),
-  priority: z.string().min(1, "Priority is required"),
-  description: z.string().min(1, "Description is required"),
+  riskLevel: z.string().optional(),
+  priority: z.string().optional(),
+  description: z.string().optional(),
   recommendation: z.string().optional(),
   rootCause: z.string().optional(),
   evidenceNote: z.string().optional(),
@@ -87,6 +94,24 @@ export async function POST(request: Request) {
   const input = parsed.data;
 
   const db = readDb();
+
+  const requiredFieldError = assertRequiredFindingFieldsPresent(db, {
+    title: input.title,
+    sourceId: input.sourceId,
+    departmentId: input.departmentId,
+    findingDate: input.findingDate,
+    operationArea: input.operationArea,
+    irregularityType: input.irregularityType,
+    categoryId: input.categoryId,
+    currency: input.currency,
+    riskLevel: input.riskLevel,
+    priority: input.priority,
+    description: input.description,
+    recommendation: input.recommendation,
+    rootCause: input.rootCause,
+    evidenceNote: input.evidenceNote,
+  });
+  if (requiredFieldError) return NextResponse.json({ error: requiredFieldError }, { status: 400 });
 
   let districtId: string;
   let branchId: string;
@@ -133,20 +158,30 @@ export async function POST(request: Request) {
       { status: 409 }
     );
   }
-  if (!db.sources.some((s) => s.id === input.sourceId && s.active)) {
+  if (input.submit) {
+    const windowError = assertPeriodOpenForSubmission(db, input.periodId);
+    if (windowError) return NextResponse.json({ error: windowError }, { status: 409 });
+  }
+  // Each of these three is only actually validated against reference data
+  // when a value was given - a blank one only ever reaches this point
+  // because Settings.requiredFindingFields has opted it out, in which case
+  // there's nothing to look up or scope-check.
+  if (input.sourceId && !db.sources.some((s) => s.id === input.sourceId && s.active)) {
     return NextResponse.json({ error: "Selected source is not active" }, { status: 400 });
   }
-  const department = db.departments.find((d) => d.id === input.departmentId && d.active);
-  if (!department) {
-    return NextResponse.json({ error: "Selected department is not active" }, { status: 400 });
+  if (input.departmentId) {
+    const department = db.departments.find((d) => d.id === input.departmentId && d.active);
+    if (!department) {
+      return NextResponse.json({ error: "Selected department is not active" }, { status: 400 });
+    }
+    // Same scope check the client applies to narrow its dropdown
+    // (NewFindingForm.tsx's departmentOptions), re-verified server-side
+    // since the client's filtering is only ever a convenience.
+    if (!isDepartmentInScope(department, { districtId, branchId })) {
+      return NextResponse.json({ error: "Selected department is not available for this district/branch" }, { status: 400 });
+    }
   }
-  // Same scope check the client applies to narrow its dropdown
-  // (NewFindingForm.tsx's departmentOptions), re-verified server-side
-  // since the client's filtering is only ever a convenience.
-  if (!isDepartmentInScope(department, { districtId, branchId })) {
-    return NextResponse.json({ error: "Selected department is not available for this district/branch" }, { status: 400 });
-  }
-  if (!db.categories.some((c) => c.id === input.categoryId && c.active)) {
+  if (input.categoryId && !db.categories.some((c) => c.id === input.categoryId && c.active)) {
     return NextResponse.json({ error: "Selected classified case is not active" }, { status: 400 });
   }
   if (input.caseAmounts) {
@@ -169,22 +204,26 @@ export async function POST(request: Request) {
   const finding: Finding = {
     id: uuid(),
     reference: nextFindingReference(db, branch, period),
-    title: input.title,
-    sourceId: input.sourceId,
-    departmentId: input.departmentId,
+    // Fall back to "" rather than leaving these undefined - the Finding
+    // type keeps every one of these as a plain (non-optional) string,
+    // since an admin-opted-out-of-required field is still a real field on
+    // the record, just possibly blank, not a structurally different shape.
+    title: input.title ?? "",
+    sourceId: input.sourceId ?? "",
+    departmentId: input.departmentId ?? "",
     periodId: input.periodId,
     districtId,
     branchId,
-    findingDate: input.findingDate,
-    operationArea: input.operationArea,
-    irregularityType: input.irregularityType,
-    categoryId: input.categoryId,
+    findingDate: input.findingDate ?? "",
+    operationArea: input.operationArea ?? "",
+    irregularityType: input.irregularityType ?? "",
+    categoryId: input.categoryId ?? "",
     amount: input.amount,
-    currency: input.currency,
+    currency: input.currency ?? "",
     caseCount: input.caseCount,
-    riskLevel: input.riskLevel,
-    priority: input.priority,
-    description: input.description,
+    riskLevel: input.riskLevel ?? "",
+    priority: input.priority ?? "",
+    description: input.description ?? "",
     recommendation: input.recommendation,
     rootCause: input.rootCause,
     evidenceNote: input.evidenceNote,

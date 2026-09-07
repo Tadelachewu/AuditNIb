@@ -2,7 +2,7 @@ import ExcelJS from "exceljs";
 import { v4 as uuid } from "uuid";
 import { nextFindingReference } from "@/lib/findings";
 import { isDepartmentInScope } from "@/lib/org";
-import type { Database, Finding, ImportBatchRow } from "@/types";
+import type { Database, Finding, ImportBatchRow, RequirableFindingField } from "@/types";
 
 const SHEET_NAME = "Findings";
 const REFERENCE_SHEET_NAME = "Reference Data";
@@ -37,12 +37,66 @@ const IMPORT_COLUMNS = [
   { key: "riskLevel", header: "Risk Level", required: true },
   { key: "priority", header: "Priority", required: true },
   { key: "description", header: "Description", required: true },
-  { key: "recommendation", header: "Recommendation (optional)", required: false },
-  { key: "evidenceNote", header: "Evidence Note (optional)", required: false },
+  { key: "recommendation", header: "Recommendation", required: false },
+  { key: "evidenceNote", header: "Evidence Note", required: false },
   { key: "externalReference", header: "External Reference (optional)", required: false },
 ] as const;
 
 type ImportColumnKey = (typeof IMPORT_COLUMNS)[number]["key"];
+
+// Maps each IMPORT_COLUMNS key that's also admin-configurable via
+// Settings.requiredFindingFields to the matching key there - explicit
+// rather than assuming identical names, because three of them genuinely
+// aren't: this file's columns are the *code* a spreadsheet row supplies
+// (sourceCode/departmentCode/categoryCode, resolved to a real record
+// below), while REQUIRABLE_FINDING_FIELDS names the *id* field actually
+// stored on the Finding (sourceId/departmentId/categoryId) - relying on
+// name equality here would have silently ignored the admin's setting for
+// exactly those three. Every column not listed here (districtCode,
+// branchCode, periodCode, amount, caseCount, externalReference) keeps its
+// own static `required` flag above - none of the five hard-required
+// fields are configurable, and externalReference is always optional.
+// rootCause has no import column at all (a pre-existing gap, not
+// introduced here), so a required/optional toggle for it has nothing to
+// affect on this path.
+const IMPORT_COLUMN_REQUIRABLE_KEY: Partial<Record<ImportColumnKey, RequirableFindingField>> = {
+  title: "title",
+  sourceCode: "sourceId",
+  departmentCode: "departmentId",
+  findingDate: "findingDate",
+  operationArea: "operationArea",
+  irregularityType: "irregularityType",
+  categoryCode: "categoryId",
+  currency: "currency",
+  riskLevel: "riskLevel",
+  priority: "priority",
+  description: "description",
+  recommendation: "recommendation",
+  evidenceNote: "evidenceNote",
+};
+
+// Whether this column is currently required - Settings.requiredFindingFields
+// for a configurable column, its own static flag otherwise.
+function columnRequired(db: Database, column: (typeof IMPORT_COLUMNS)[number]): boolean {
+  const requirableKey = IMPORT_COLUMN_REQUIRABLE_KEY[column.key];
+  return requirableKey ? db.settings.requiredFindingFields[requirableKey] : column.required;
+}
+
+// The base `header` above is a static label; for a configurable column,
+// whether "(optional)" belongs on the end depends on that live setting,
+// not a fixed per-column flag - externalReference (always optional, never
+// configurable) keeps its suffix baked into the literal above instead.
+function columnHeader(db: Database, column: (typeof IMPORT_COLUMNS)[number]): string {
+  if (!IMPORT_COLUMN_REQUIRABLE_KEY[column.key]) return column.header;
+  return columnRequired(db, column) ? column.header : `${column.header} (optional)`;
+}
+
+// Strips a trailing "(optional)" (case-insensitive) so an uploaded
+// header matches its column regardless of whether the file was
+// downloaded while the field was required or optional.
+function normalizeHeaderText(text: string): string {
+  return text.trim().toLowerCase().replace(/\s*\(optional\)\s*$/i, "");
+}
 type RawImportRow = Partial<Record<ImportColumnKey, string>>;
 
 function cellText(value: ExcelJS.CellValue): string {
@@ -65,7 +119,7 @@ export async function buildImportTemplate(db: Database): Promise<Buffer> {
   const workbook = new ExcelJS.Workbook();
 
   const sheet = workbook.addWorksheet(SHEET_NAME);
-  sheet.addRow(IMPORT_COLUMNS.map((c) => c.header));
+  sheet.addRow(IMPORT_COLUMNS.map((c) => columnHeader(db, c)));
   sheet.getRow(1).font = { bold: true };
   sheet.columns.forEach((col) => {
     col.width = 24;
@@ -136,8 +190,14 @@ export async function parseImportWorkbook(buffer: Buffer): Promise<ParsedImportR
   const headerRow = sheet.getRow(1);
   const columnForIndex = new Map<number, ImportColumnKey>();
   headerRow.eachCell((cell, colNumber) => {
-    const text = cellText(cell.value).toLowerCase();
-    const match = IMPORT_COLUMNS.find((c) => c.header.toLowerCase() === text);
+    const text = normalizeHeaderText(cellText(cell.value));
+    // Matched with a trailing "(optional)" stripped from both sides - a
+    // downloaded template's exact wording for a configurable column
+    // depends on Settings.requiredFindingFields at download time, which
+    // may have changed since (or the file predates this feature
+    // entirely), so this can't assume today's setting matches whatever
+    // the uploaded file's header literally says.
+    const match = IMPORT_COLUMNS.find((c) => normalizeHeaderText(c.header) === text);
     if (match) columnForIndex.set(colNumber, match.key);
   });
   if (columnForIndex.size === 0) {
@@ -245,9 +305,9 @@ export function validateImportRow(
   seenKeys: Map<string, string>,
   opts: { userId: string; importBatchId: string }
 ): ImportBatchRow & { finding?: Finding } {
-  const missing = IMPORT_COLUMNS.filter((c) => c.required && !row[c.key]?.trim());
+  const missing = IMPORT_COLUMNS.filter((c) => columnRequired(db, c) && !row[c.key]?.trim());
   if (missing.length > 0) {
-    return { rowNumber, outcome: "error", error: `Missing required value(s): ${missing.map((c) => c.header).join(", ")}` };
+    return { rowNumber, outcome: "error", error: `Missing required value(s): ${missing.map((c) => columnHeader(db, c)).join(", ")}` };
   }
 
   const district = db.districts.find((d) => d.code === row.districtCode?.trim() && d.status === "ACTIVE");
@@ -267,36 +327,47 @@ export function validateImportRow(
     return { rowNumber, outcome: "error", error: `${period.code} is locked and cannot accept new findings` };
   }
 
-  const source = db.sources.find((s) => s.code === row.sourceCode?.trim() && s.active);
-  if (!source) return { rowNumber, outcome: "error", error: `Unknown or inactive source code "${row.sourceCode}"` };
+  // Each of source/department/category is only looked up (and thus only
+  // validated against reference data) when a code was actually given -
+  // the row can only reach this point with one blank at all because the
+  // `missing` check above already let it through, which only happens
+  // when Settings.requiredFindingFields has opted that field out.
+  const sourceCode = row.sourceCode?.trim();
+  const source = sourceCode ? db.sources.find((s) => s.code === sourceCode && s.active) : undefined;
+  if (sourceCode && !source) return { rowNumber, outcome: "error", error: `Unknown or inactive source code "${row.sourceCode}"` };
 
-  const department = db.departments.find((d) => d.code === row.departmentCode?.trim() && d.active);
-  if (!department) return { rowNumber, outcome: "error", error: `Unknown or inactive department code "${row.departmentCode}"` };
-  if (!isDepartmentInScope(department, { districtId: district.id, branchId: branch.id })) {
+  const departmentCode = row.departmentCode?.trim();
+  const department = departmentCode ? db.departments.find((d) => d.code === departmentCode && d.active) : undefined;
+  if (departmentCode && !department) return { rowNumber, outcome: "error", error: `Unknown or inactive department code "${row.departmentCode}"` };
+  if (department && !isDepartmentInScope(department, { districtId: district.id, branchId: branch.id })) {
     return { rowNumber, outcome: "error", error: `Department "${row.departmentCode}" is not available for branch "${row.branchCode}"` };
   }
 
-  const category = db.categories.find((c) => c.code === row.categoryCode?.trim() && c.active);
-  if (!category) return { rowNumber, outcome: "error", error: `Unknown or inactive classified category code "${row.categoryCode}"` };
+  const categoryCode = row.categoryCode?.trim();
+  const category = categoryCode ? db.categories.find((c) => c.code === categoryCode && c.active) : undefined;
+  if (categoryCode && !category) return { rowNumber, outcome: "error", error: `Unknown or inactive classified category code "${row.categoryCode}"` };
 
-  if (!db.settings.currencies.includes(row.currency!.trim())) {
+  // Same reasoning for these five - a blank value only reaches here when
+  // it's been opted out of Settings.requiredFindingFields, in which case
+  // there's nothing to check it against.
+  if (row.currency?.trim() && !db.settings.currencies.includes(row.currency.trim())) {
     return { rowNumber, outcome: "error", error: `Unknown currency "${row.currency}"` };
   }
-  if (!db.settings.riskLevels.includes(row.riskLevel!.trim())) {
+  if (row.riskLevel?.trim() && !db.settings.riskLevels.includes(row.riskLevel.trim())) {
     return { rowNumber, outcome: "error", error: `Unknown risk level "${row.riskLevel}"` };
   }
-  if (!db.settings.priorityLevels.includes(row.priority!.trim())) {
+  if (row.priority?.trim() && !db.settings.priorityLevels.includes(row.priority.trim())) {
     return { rowNumber, outcome: "error", error: `Unknown priority "${row.priority}"` };
   }
-  if (!db.settings.operationAreas.includes(row.operationArea!.trim())) {
+  if (row.operationArea?.trim() && !db.settings.operationAreas.includes(row.operationArea.trim())) {
     return { rowNumber, outcome: "error", error: `Unknown operation area "${row.operationArea}"` };
   }
-  if (!db.settings.irregularityTypes.includes(row.irregularityType!.trim())) {
+  if (row.irregularityType?.trim() && !db.settings.irregularityTypes.includes(row.irregularityType.trim())) {
     return { rowNumber, outcome: "error", error: `Unknown type of irregularity "${row.irregularityType}"` };
   }
 
-  const findingDate = row.findingDate!.trim();
-  if (Number.isNaN(new Date(findingDate).getTime())) {
+  const findingDate = (row.findingDate ?? "").trim();
+  if (findingDate && Number.isNaN(new Date(findingDate).getTime())) {
     return { rowNumber, outcome: "error", error: `Invalid finding date "${row.findingDate}" - use YYYY-MM-DD` };
   }
 
@@ -312,13 +383,16 @@ export function validateImportRow(
   const key = dedupeKey({
     branchId: branch.id,
     periodId: period.id,
-    sourceId: source.id,
-    departmentId: department.id,
-    categoryId: category.id,
+    // Fall back to "" for any of these three left blank (admin-opted-out
+    // via Settings.requiredFindingFields) - same as operationArea/
+    // irregularityType/currency below, which can equally be blank now.
+    sourceId: source?.id ?? "",
+    departmentId: department?.id ?? "",
+    categoryId: category?.id ?? "",
     findingDate,
-    operationArea: row.operationArea!.trim(),
-    irregularityType: row.irregularityType!.trim(),
-    currency: row.currency!.trim(),
+    operationArea: (row.operationArea ?? "").trim(),
+    irregularityType: (row.irregularityType ?? "").trim(),
+    currency: (row.currency ?? "").trim(),
     amount,
     caseCount,
   });
@@ -331,22 +405,25 @@ export function validateImportRow(
   const finding: Finding = {
     id: uuid(),
     reference: nextFindingReference(db, branch, period),
-    title: row.title!.trim(),
-    sourceId: source.id,
-    departmentId: department.id,
+    // Same "" fallback pattern as operationArea/irregularityType/priority/
+    // description below for every one of these that's now admin-
+    // configurable and was left blank.
+    title: (row.title ?? "").trim(),
+    sourceId: source?.id ?? "",
+    departmentId: department?.id ?? "",
     periodId: period.id,
     districtId: district.id,
     branchId: branch.id,
     findingDate,
-    operationArea: row.operationArea!.trim(),
-    irregularityType: row.irregularityType!.trim(),
-    categoryId: category.id,
+    operationArea: (row.operationArea ?? "").trim(),
+    irregularityType: (row.irregularityType ?? "").trim(),
+    categoryId: category?.id ?? "",
     amount,
-    currency: row.currency!.trim(),
+    currency: (row.currency ?? "").trim(),
     caseCount,
-    riskLevel: row.riskLevel!.trim(),
-    priority: row.priority!.trim(),
-    description: row.description!.trim(),
+    riskLevel: (row.riskLevel ?? "").trim(),
+    priority: (row.priority ?? "").trim(),
+    description: (row.description ?? "").trim(),
     recommendation: row.recommendation?.trim() || undefined,
     evidenceNote: row.evidenceNote?.trim() || undefined,
     externalReference: row.externalReference?.trim() || undefined,

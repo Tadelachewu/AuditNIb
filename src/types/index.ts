@@ -173,6 +173,18 @@ export interface ReportingPeriod {
   // performance-period lookups) already keys off them.
   startsAt: string;
   endsAt: string;
+  // The narrower window inside startsAt..endsAt during which a finding
+  // can actually be SUBMITTED (moved past DRAFT) - see
+  // assertPeriodOpenForSubmission() in src/lib/findings.ts. Independent
+  // of startsAt/endsAt (the period's own overall reporting window) and
+  // independent of status/locking - this only ever tightens the already-
+  // OPEN case, it doesn't replace the lock mechanism. Defaults to exactly
+  // matching startsAt/endsAt at creation (submission allowed for the
+  // period's entire span), but an admin can narrow it - e.g. the period
+  // covers all of September, but branches should only submit new findings
+  // in the first two weeks.
+  submissionStartsAt: string;
+  submissionEndsAt: string;
   status: PeriodStatus;
   lockedBy?: string | null;
   lockedAt?: string | null;
@@ -211,6 +223,49 @@ export const SIMILAR_FINDING_FIELDS = [
   { key: "riskLevel", label: "Risk level" },
 ] as const;
 export type SimilarFindingField = (typeof SIMILAR_FINDING_FIELDS)[number]["key"];
+
+// Every registration-form field a bank might legitimately want to make
+// optional, as a matter of admin policy rather than a fixed form -
+// REQUIRABLE_FINDING_FIELDS is the full menu + display labels, shared by
+// the create/edit routes, the bulk import validator, and the admin
+// Settings page, same convention as SIMILAR_FINDING_FIELDS just above.
+// Deliberately excludes exactly five fields, none of which are
+// "descriptive content" in the sense every field below is - each is
+// either the axis the whole app organizes/secures data around, or a
+// quantity with no sensible blank state:
+//   - periodId: every dashboard, report, lock/transfer computation
+//     filters by Finding.periodId - a finding with none would be invisible
+//     everywhere and unreachable by the Transfer Engine.
+//   - districtId/branchId: the organizational-scope security boundary
+//     itself (assertFindingInScope/findingsInScope) - not descriptive
+//     content a registrant fills in, but the identity of whose data this
+//     is; leaving either blank would break the scoping every dashboard
+//     and permission check relies on.
+//   - amount/caseCount: the actual quantities every performance
+//     percentage, rectification, and closure calculation sums - a finding
+//     fundamentally represents "N cases worth some amount," so there's no
+//     coherent "blank" state, unlike a narrative field that can simply be
+//     empty.
+// Every field below this comment, by contrast, can be blank ("") without
+// breaking anything structural - at most it drops out of a report filter
+// or a dashboard grouping that already tolerates an unmatched value.
+export const REQUIRABLE_FINDING_FIELDS = [
+  { key: "title", label: "Finding title" },
+  { key: "sourceId", label: "Source" },
+  { key: "departmentId", label: "Department" },
+  { key: "findingDate", label: "Finding date" },
+  { key: "operationArea", label: "Operation area" },
+  { key: "irregularityType", label: "Type of irregularity" },
+  { key: "categoryId", label: "Classified case" },
+  { key: "currency", label: "Currency" },
+  { key: "riskLevel", label: "Risk level" },
+  { key: "priority", label: "Priority" },
+  { key: "description", label: "Description" },
+  { key: "recommendation", label: "Recommendation" },
+  { key: "rootCause", label: "Root cause" },
+  { key: "evidenceNote", label: "Evidence note" },
+] as const;
+export type RequirableFindingField = (typeof REQUIRABLE_FINDING_FIELDS)[number]["key"];
 
 export interface Settings {
   currencies: string[];
@@ -278,6 +333,15 @@ export interface Settings {
   // field must match (AND, not OR) and must actually have a value on the
   // in-progress form, or nothing is suggested at all.
   similarFindingFields: SimilarFindingField[];
+  // Which of REQUIRABLE_FINDING_FIELDS must be filled in to register or
+  // edit a finding - a bank policy decision, not a fixed form (see that
+  // const's own doc comment for the full menu, and for exactly which five
+  // fields - periodId/districtId/branchId/amount/caseCount - are
+  // deliberately NOT here and why). Every key defaults to `true` (today's
+  // fully-required behavior) so an existing install sees zero change
+  // until an admin actually opts a field out - see the normalizeDb()
+  // backfill.
+  requiredFindingFields: Record<RequirableFindingField, boolean>;
   updatedAt: string;
   updatedBy?: string;
 }

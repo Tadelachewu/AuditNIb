@@ -27,17 +27,82 @@ function endOfMonthLocal(d: Date): string {
   const day = String(end.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}T23:59`;
 }
+// Same local-time convention as startOfMonthLocal/endOfMonthLocal above,
+// just starting from an existing ISO timestamp (a period's own
+// submissionStartsAt/submissionEndsAt) instead of "now" - what a
+// <input type="datetime-local"> needs as its value.
+function toDatetimeLocal(iso: string): string {
+  const d = new Date(iso);
+  const y = d.getFullYear();
+  const mo = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  const h = String(d.getHours()).padStart(2, "0");
+  const mi = String(d.getMinutes()).padStart(2, "0");
+  return `${y}-${mo}-${day}T${h}:${mi}`;
+}
 
 export default function ReportingPeriodsPage() {
   const [periods, setPeriods] = useState<PeriodWithTransferPreview[]>([]);
   const [autoTransferAllowed, setAutoTransferAllowed] = useState(false);
   const [loading, setLoading] = useState(true);
   const now = new Date();
-  const [form, setForm] = useState({ startsAt: startOfMonthLocal(now), endsAt: endOfMonthLocal(now) });
+  // submissionStartsAt/submissionEndsAt default to exactly the period's
+  // own range - most admins never touch them. handleStartsAtChange/
+  // handleEndsAtChange below keep them "shadowing" the period's own dates
+  // until the admin explicitly edits one, at which point it stops
+  // following along (same pattern a spreadsheet's "linked cell" uses).
+  const [form, setForm] = useState({
+    startsAt: startOfMonthLocal(now),
+    endsAt: endOfMonthLocal(now),
+    submissionStartsAt: startOfMonthLocal(now),
+    submissionEndsAt: endOfMonthLocal(now),
+  });
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [rowBusy, setRowBusy] = useState<string | null>(null);
   const { confirm, dialog } = useConfirm();
+
+  function handleStartsAtChange(value: string) {
+    setForm((f) => ({ ...f, startsAt: value, submissionStartsAt: f.submissionStartsAt === f.startsAt ? value : f.submissionStartsAt }));
+  }
+  function handleEndsAtChange(value: string) {
+    setForm((f) => ({ ...f, endsAt: value, submissionEndsAt: f.submissionEndsAt === f.endsAt ? value : f.submissionEndsAt }));
+  }
+
+  // Editing an existing period's submission window - independent of
+  // lock/unlock, so it gets its own small dialog rather than overloading
+  // the Lock dialog's already-specific purpose.
+  const [windowTarget, setWindowTarget] = useState<PeriodWithTransferPreview | null>(null);
+  const [windowForm, setWindowForm] = useState({ submissionStartsAt: "", submissionEndsAt: "" });
+  const [windowReason, setWindowReason] = useState("");
+  const [windowError, setWindowError] = useState<string | null>(null);
+  const [windowBusy, setWindowBusy] = useState(false);
+
+  function openWindowDialog(p: PeriodWithTransferPreview) {
+    setWindowForm({ submissionStartsAt: toDatetimeLocal(p.submissionStartsAt), submissionEndsAt: toDatetimeLocal(p.submissionEndsAt) });
+    setWindowReason("");
+    setWindowError(null);
+    setWindowTarget(p);
+  }
+
+  async function confirmWindow() {
+    if (!windowTarget) return;
+    setWindowError(null);
+    setWindowBusy(true);
+    try {
+      await apiSend(`/api/admin/reporting-periods/${windowTarget.id}`, "PATCH", {
+        submissionStartsAt: windowForm.submissionStartsAt,
+        submissionEndsAt: windowForm.submissionEndsAt,
+        reason: windowReason,
+      });
+      setWindowTarget(null);
+      await load();
+    } catch (err) {
+      setWindowError(err instanceof ApiError ? err.message : "Failed to update submission window");
+    } finally {
+      setWindowBusy(false);
+    }
+  }
 
   // Locking needs more input (the drafts-while-locked checkbox, and the
   // transfer-overdue-cases prompt) than the generic reason-only
@@ -154,20 +219,29 @@ export default function ReportingPeriodsPage() {
         <form onSubmit={handleCreate} className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3 sm:items-end">
           <div>
             <Label htmlFor="startsAt">Starts at (date &amp; time)</Label>
-            <Input
-              id="startsAt"
-              type="datetime-local"
-              value={form.startsAt}
-              onChange={(e) => setForm({ ...form, startsAt: e.target.value })}
-            />
+            <Input id="startsAt" type="datetime-local" value={form.startsAt} onChange={(e) => handleStartsAtChange(e.target.value)} />
           </div>
           <div>
             <Label htmlFor="endsAt">Ends at (date &amp; time)</Label>
+            <Input id="endsAt" type="datetime-local" value={form.endsAt} onChange={(e) => handleEndsAtChange(e.target.value)} />
+          </div>
+          <div />
+          <div>
+            <Label htmlFor="submissionStartsAt">Submission window starts at</Label>
             <Input
-              id="endsAt"
+              id="submissionStartsAt"
               type="datetime-local"
-              value={form.endsAt}
-              onChange={(e) => setForm({ ...form, endsAt: e.target.value })}
+              value={form.submissionStartsAt}
+              onChange={(e) => setForm({ ...form, submissionStartsAt: e.target.value })}
+            />
+          </div>
+          <div>
+            <Label htmlFor="submissionEndsAt">Submission window ends at</Label>
+            <Input
+              id="submissionEndsAt"
+              type="datetime-local"
+              value={form.submissionEndsAt}
+              onChange={(e) => setForm({ ...form, submissionEndsAt: e.target.value })}
             />
           </div>
           <div>
@@ -177,6 +251,12 @@ export default function ReportingPeriodsPage() {
             </Button>
           </div>
         </form>
+        <p className="px-4 pb-4 text-xs text-slate-400">
+          The submission window is when a finding can actually be submitted (moved past draft) - narrower than, and
+          inside, the period&apos;s own date range above. Defaults to matching it exactly; narrow it only if new
+          findings should stop being submittable partway through the period (e.g. the period covers all of
+          September, but branches should only submit in the first two weeks).
+        </p>
       </Card>
 
       <Card className="mt-5">
@@ -206,6 +286,12 @@ export default function ReportingPeriodsPage() {
                     <td className="px-4 py-2 font-medium text-slate-900">{p.code}</td>
                     <td className="px-4 py-2 text-xs text-slate-500">
                       {formatDateTime(p.startsAt)} — {formatDateTime(p.endsAt)}
+                      <div className="mt-0.5 text-slate-400">
+                        Submissions: {formatDateTime(p.submissionStartsAt)} – {formatDateTime(p.submissionEndsAt)}{" "}
+                        <button type="button" onClick={() => openWindowDialog(p)} className="text-blue-800 hover:underline">
+                          Edit
+                        </button>
+                      </div>
                     </td>
                     <td className="px-4 py-2">
                       <Badge tone={p.status === "OPEN" ? "green" : "red"}>{p.status}</Badge>
@@ -294,6 +380,49 @@ export default function ReportingPeriodsPage() {
               </Button>
               <Button variant="danger" disabled={lockBusy || lockReasonInput.trim().length < 5} onClick={confirmLock}>
                 {lockBusy ? "Saving..." : isFlagEditOnly ? "Save" : "Lock"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {windowTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+          <div className="w-full max-w-sm rounded-lg bg-white p-5 shadow-xl">
+            <h2 className="text-sm font-semibold text-slate-900">Edit submission window for {windowTarget.code}</h2>
+            <p className="mt-2 text-sm text-slate-600">
+              Must fall within the period&apos;s own range ({formatDateTime(windowTarget.startsAt)} —{" "}
+              {formatDateTime(windowTarget.endsAt)}). Doesn&apos;t affect lock status or draft-saving.
+            </p>
+            <div className="mt-3">
+              <Label htmlFor="window-starts">Submission window starts at</Label>
+              <Input
+                id="window-starts"
+                type="datetime-local"
+                value={windowForm.submissionStartsAt}
+                onChange={(e) => setWindowForm({ ...windowForm, submissionStartsAt: e.target.value })}
+              />
+            </div>
+            <div className="mt-3">
+              <Label htmlFor="window-ends">Submission window ends at</Label>
+              <Input
+                id="window-ends"
+                type="datetime-local"
+                value={windowForm.submissionEndsAt}
+                onChange={(e) => setWindowForm({ ...windowForm, submissionEndsAt: e.target.value })}
+              />
+            </div>
+            <div className="mt-3">
+              <Label htmlFor="window-reason">Reason</Label>
+              <Input id="window-reason" autoFocus value={windowReason} onChange={(e) => setWindowReason(e.target.value)} />
+            </div>
+            {windowError && <p className="mt-2 text-sm text-red-600">{windowError}</p>}
+            <div className="mt-4 flex justify-end gap-2">
+              <Button variant="secondary" onClick={() => setWindowTarget(null)}>
+                Cancel
+              </Button>
+              <Button disabled={windowBusy || windowReason.trim().length < 5} onClick={confirmWindow}>
+                {windowBusy ? "Saving..." : "Save"}
               </Button>
             </div>
           </div>

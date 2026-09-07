@@ -164,6 +164,10 @@ function buildSeedDatabase(): Database {
       code: `${prevPeriodDate.getFullYear()}-${String(prevPeriodDate.getMonth() + 1).padStart(2, "0")}`,
       startsAt: prevPeriodStart.toISOString(),
       endsAt: prevPeriodEnd.toISOString(),
+      // Matches the full period range at seed time - see the type's own
+      // doc comment for what narrowing this later means.
+      submissionStartsAt: prevPeriodStart.toISOString(),
+      submissionEndsAt: prevPeriodEnd.toISOString(),
       status: "LOCKED",
       lockedBy: "user-admin",
       lockedAt: seedPeriodStart.toISOString(),
@@ -179,6 +183,8 @@ function buildSeedDatabase(): Database {
       code: `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`,
       startsAt: seedPeriodStart.toISOString(),
       endsAt: seedPeriodEnd.toISOString(),
+      submissionStartsAt: seedPeriodStart.toISOString(),
+      submissionEndsAt: seedPeriodEnd.toISOString(),
       status: "OPEN",
       lockedBy: null,
       lockedAt: null,
@@ -236,6 +242,26 @@ function buildSeedDatabase(): Database {
     // feature into a setting doesn't silently change any existing
     // install's behavior.
     similarFindingFields: ["branchId", "categoryId", "operationArea", "irregularityType", "periodId"],
+    // Matches exactly what was hard-required before this became
+    // configurable (everything except recommendation/rootCause/
+    // evidenceNote) - so turning this into a setting doesn't silently
+    // change behavior.
+    requiredFindingFields: {
+      title: true,
+      sourceId: true,
+      departmentId: true,
+      findingDate: true,
+      operationArea: true,
+      irregularityType: true,
+      categoryId: true,
+      currency: true,
+      riskLevel: true,
+      priority: true,
+      description: true,
+      recommendation: false,
+      rootCause: false,
+      evidenceNote: false,
+    },
     updatedAt: now,
   };
 
@@ -745,6 +771,52 @@ function normalizeDb(db: Database): { db: Database; changed: boolean } {
     db.settings.similarFindingFields = ["branchId", "categoryId", "operationArea", "irregularityType", "periodId"];
     changed = true;
   }
+  if (!db.settings.requiredFindingFields) {
+    // Matches exactly what was hard-required before this became
+    // configurable - preserves existing behavior for a pre-existing
+    // install rather than silently making anything optional (or
+    // required) that wasn't already.
+    db.settings.requiredFindingFields = {
+      title: true,
+      sourceId: true,
+      departmentId: true,
+      findingDate: true,
+      operationArea: true,
+      irregularityType: true,
+      categoryId: true,
+      currency: true,
+      riskLevel: true,
+      priority: true,
+      description: true,
+      recommendation: false,
+      rootCause: false,
+      evidenceNote: false,
+    };
+    changed = true;
+  } else {
+    // An install that already had this feature from an earlier pass
+    // (only operationArea/irregularityType/priority/description/
+    // recommendation/rootCause/evidenceNote) needs the newly-added keys
+    // backfilled individually, same true-by-default reasoning as above -
+    // each of these seven was hard-required before it became
+    // configurable, so `true` is the only value that doesn't silently
+    // change existing behavior.
+    const additions: Record<string, boolean> = {
+      title: true,
+      sourceId: true,
+      departmentId: true,
+      findingDate: true,
+      categoryId: true,
+      currency: true,
+      riskLevel: true,
+    };
+    for (const [key, value] of Object.entries(additions)) {
+      if (!(key in db.settings.requiredFindingFields)) {
+        (db.settings.requiredFindingFields as Record<string, boolean>)[key] = value;
+        changed = true;
+      }
+    }
+  }
   for (const p of db.reportingPeriods) {
     if (!p.startsAt || !p.endsAt) {
       // Predates the date-range field: default to the calendar month
@@ -762,6 +834,14 @@ function normalizeDb(db: Database): { db: Database; changed: boolean } {
       // pre-existing locked periods don't suddenly become a harder stop
       // than they were before this field existed.
       p.draftsAllowedWhileLocked = true;
+      changed = true;
+    }
+    if (!p.submissionStartsAt || !p.submissionEndsAt) {
+      // Predates the submission-window field: default to the period's own
+      // full startsAt/endsAt, so a pre-existing period's submission
+      // behavior doesn't narrow the moment this field is introduced.
+      p.submissionStartsAt = p.startsAt;
+      p.submissionEndsAt = p.endsAt;
       changed = true;
     }
   }

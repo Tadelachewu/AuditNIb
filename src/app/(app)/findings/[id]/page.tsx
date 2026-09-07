@@ -127,6 +127,7 @@ export default async function FindingDetailPage({ params }: { params: Promise<{ 
       operationAreas={db.settings.operationAreas}
       priorityLevels={db.settings.priorityLevels}
       irregularityTypes={db.settings.irregularityTypes}
+      requiredFields={db.settings.requiredFindingFields}
       editSources={db.sources.filter((s) => s.active)}
       editDepartments={db.departments.filter((d) => d.active)}
       editCategories={db.categories.filter((c) => c.active)}

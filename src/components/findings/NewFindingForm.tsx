@@ -9,7 +9,17 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input, Select, Label, Textarea } from "@/components/ui/Field";
 import { FindingStatusBadge } from "@/components/findings/FindingStatusBadge";
-import type { Source, Department, ClassifiedCategory, ReportingPeriod, District, Branch, Finding, FindingStatus } from "@/types";
+import type {
+  Source,
+  Department,
+  ClassifiedCategory,
+  ReportingPeriod,
+  District,
+  Branch,
+  Finding,
+  FindingStatus,
+  RequirableFindingField,
+} from "@/types";
 
 interface SimilarFindingMatch {
   id: string;
@@ -31,6 +41,12 @@ interface Props {
   operationAreas: string[];
   priorityLevels: string[];
   irregularityTypes: string[];
+  // Settings.requiredFindingFields (admin-configurable at /admin/settings)
+  // - which of these narrative fields the form actually blocks saving
+  // without. The API route enforces the same config server-side; this is
+  // just what lets the `required` attribute/label match it instead of
+  // every field being unconditionally required the way it used to be.
+  requiredFields: Record<RequirableFindingField, boolean>;
   fixedDistrict?: { id: string; name: string };
   fixedBranch?: { id: string; name: string };
   // Edit mode: every field prefilled from this finding, PATCHing it in
@@ -85,6 +101,7 @@ export function NewFindingForm({
   operationAreas,
   priorityLevels,
   irregularityTypes,
+  requiredFields,
   fixedDistrict,
   fixedBranch,
   finding,
@@ -93,6 +110,13 @@ export function NewFindingForm({
 }: Props) {
   const router = useRouter();
   const isEditing = Boolean(finding);
+  // Appends "(optional)" only when the admin has actually opted the field
+  // out of Settings.requiredFindingFields - previously hardcoded per-field
+  // (rootCause/recommendation/evidenceNote always said it, the rest never
+  // did), now it reflects whatever's actually configured.
+  function fieldLabel(base: string, key: RequirableFindingField): string {
+    return requiredFields[key] ? base : `${base} (optional)`;
+  }
   const [form, setForm] = useState(() =>
     finding
       ? {
@@ -284,10 +308,10 @@ export function NewFindingForm({
       className="flex flex-col gap-4"
     >
         <div>
-          <Label htmlFor="title">Finding title</Label>
+          <Label htmlFor="title">{fieldLabel("Finding title", "title")}</Label>
           <Input
             id="title"
-            required
+            required={requiredFields.title}
             placeholder="A short, descriptive title for this finding"
             value={form.title}
             onChange={(e) => setForm({ ...form, title: e.target.value })}
@@ -296,8 +320,13 @@ export function NewFindingForm({
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
-            <Label htmlFor="sourceId">Source</Label>
-            <Select id="sourceId" required value={form.sourceId} onChange={(e) => setForm({ ...form, sourceId: e.target.value })}>
+            <Label htmlFor="sourceId">{fieldLabel("Source", "sourceId")}</Label>
+            <Select
+              id="sourceId"
+              required={requiredFields.sourceId}
+              value={form.sourceId}
+              onChange={(e) => setForm({ ...form, sourceId: e.target.value })}
+            >
               <option value="">Select source</option>
               {sources.map((s) => (
                 <option key={s.id} value={s.id}>
@@ -307,10 +336,10 @@ export function NewFindingForm({
             </Select>
           </div>
           <div>
-            <Label htmlFor="departmentId">Department</Label>
+            <Label htmlFor="departmentId">{fieldLabel("Department", "departmentId")}</Label>
             <Select
               id="departmentId"
-              required
+              required={requiredFields.departmentId}
               value={form.departmentId}
               onChange={(e) => setForm({ ...form, departmentId: e.target.value })}
             >
@@ -384,18 +413,23 @@ export function NewFindingForm({
           )}
 
           <div>
-            <Label htmlFor="findingDate">Finding date</Label>
+            <Label htmlFor="findingDate">{fieldLabel("Finding date", "findingDate")}</Label>
             <Input
               id="findingDate"
               type="date"
-              required
+              required={requiredFields.findingDate}
               value={form.findingDate}
               onChange={(e) => setForm({ ...form, findingDate: e.target.value })}
             />
           </div>
           <div>
-            <Label htmlFor="categoryId">Classified case</Label>
-            <Select id="categoryId" required value={form.categoryId} onChange={(e) => setForm({ ...form, categoryId: e.target.value })}>
+            <Label htmlFor="categoryId">{fieldLabel("Classified case", "categoryId")}</Label>
+            <Select
+              id="categoryId"
+              required={requiredFields.categoryId}
+              value={form.categoryId}
+              onChange={(e) => setForm({ ...form, categoryId: e.target.value })}
+            >
               <option value="">Select classified case</option>
               {categories.map((c) => (
                 <option key={c.id} value={c.id}>
@@ -406,10 +440,10 @@ export function NewFindingForm({
           </div>
 
           <div>
-            <Label htmlFor="operationArea">Operation area</Label>
+            <Label htmlFor="operationArea">{fieldLabel("Operation area", "operationArea")}</Label>
             <Select
               id="operationArea"
-              required
+              required={requiredFields.operationArea}
               value={form.operationArea}
               onChange={(e) => setForm({ ...form, operationArea: e.target.value })}
             >
@@ -422,10 +456,10 @@ export function NewFindingForm({
             </Select>
           </div>
           <div>
-            <Label htmlFor="irregularityType">Type of irregularity</Label>
+            <Label htmlFor="irregularityType">{fieldLabel("Type of irregularity", "irregularityType")}</Label>
             <Select
               id="irregularityType"
-              required
+              required={requiredFields.irregularityType}
               value={form.irregularityType}
               onChange={(e) => setForm({ ...form, irregularityType: e.target.value })}
             >
@@ -439,8 +473,14 @@ export function NewFindingForm({
           </div>
 
           <div>
-            <Label htmlFor="currency">Currency</Label>
-            <Select id="currency" required value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })}>
+            <Label htmlFor="currency">{fieldLabel("Currency", "currency")}</Label>
+            <Select
+              id="currency"
+              required={requiredFields.currency}
+              value={form.currency}
+              onChange={(e) => setForm({ ...form, currency: e.target.value })}
+            >
+              {!requiredFields.currency && <option value="">Not specified</option>}
               {currencies.map((c) => (
                 <option key={c} value={c}>
                   {c}
@@ -474,8 +514,14 @@ export function NewFindingForm({
             />
           </div>
           <div>
-            <Label htmlFor="riskLevel">Risk level</Label>
-            <Select id="riskLevel" required value={form.riskLevel} onChange={(e) => setForm({ ...form, riskLevel: e.target.value })}>
+            <Label htmlFor="riskLevel">{fieldLabel("Risk level", "riskLevel")}</Label>
+            <Select
+              id="riskLevel"
+              required={requiredFields.riskLevel}
+              value={form.riskLevel}
+              onChange={(e) => setForm({ ...form, riskLevel: e.target.value })}
+            >
+              {!requiredFields.riskLevel && <option value="">Not specified</option>}
               {riskLevels.map((r) => (
                 <option key={r} value={r}>
                   {r}
@@ -485,8 +531,14 @@ export function NewFindingForm({
           </div>
 
           <div>
-            <Label htmlFor="priority">Priority</Label>
-            <Select id="priority" required value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })}>
+            <Label htmlFor="priority">{fieldLabel("Priority", "priority")}</Label>
+            <Select
+              id="priority"
+              required={requiredFields.priority}
+              value={form.priority}
+              onChange={(e) => setForm({ ...form, priority: e.target.value })}
+            >
+              {!requiredFields.priority && <option value="">Not specified</option>}
               {priorityLevels.map((p) => (
                 <option key={p} value={p}>
                   {p}
@@ -537,19 +589,20 @@ export function NewFindingForm({
         )}
 
         <div>
-          <Label htmlFor="description">Description</Label>
+          <Label htmlFor="description">{fieldLabel("Description", "description")}</Label>
           <Textarea
             id="description"
-            required
+            required={requiredFields.description}
             rows={3}
             value={form.description}
             onChange={(e) => setForm({ ...form, description: e.target.value })}
           />
         </div>
         <div>
-          <Label htmlFor="rootCause">Root cause (optional)</Label>
+          <Label htmlFor="rootCause">{fieldLabel("Root cause", "rootCause")}</Label>
           <Textarea
             id="rootCause"
+            required={requiredFields.rootCause}
             rows={2}
             placeholder="Why did this happen? - distinct from the description of what happened"
             value={form.rootCause}
@@ -557,18 +610,20 @@ export function NewFindingForm({
           />
         </div>
         <div>
-          <Label htmlFor="recommendation">Recommendation (optional)</Label>
+          <Label htmlFor="recommendation">{fieldLabel("Recommendation", "recommendation")}</Label>
           <Textarea
             id="recommendation"
+            required={requiredFields.recommendation}
             rows={2}
             value={form.recommendation}
             onChange={(e) => setForm({ ...form, recommendation: e.target.value })}
           />
         </div>
         <div>
-          <Label htmlFor="evidenceNote">Evidence note (optional)</Label>
+          <Label htmlFor="evidenceNote">{fieldLabel("Evidence note", "evidenceNote")}</Label>
           <Input
             id="evidenceNote"
+            required={requiredFields.evidenceNote}
             placeholder="e.g. filed in branch cabinet, ref #4 - no file upload yet"
             value={form.evidenceNote}
             onChange={(e) => setForm({ ...form, evidenceNote: e.target.value })}

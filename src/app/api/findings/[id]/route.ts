@@ -3,7 +3,7 @@ import { z } from "zod";
 import { requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { assertFindingInScope } from "@/lib/findings-scope";
-import { assertPeriodWritable, nextFindingReference } from "@/lib/findings";
+import { assertPeriodWritable, nextFindingReference, assertRequiredFindingFieldsPresent } from "@/lib/findings";
 import { isDepartmentInScope } from "@/lib/org";
 import { appendAuditLog } from "@/lib/audit";
 
@@ -40,22 +40,29 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 // changing branch or period regenerates `reference` to match (see below),
 // same as if the finding had been created fresh under the new values.
 const updateSchema = z.object({
-  title: z.string().min(1).optional(),
-  sourceId: z.string().min(1).optional(),
-  departmentId: z.string().min(1).optional(),
+  // No `.min(1)` on title/sourceId/departmentId/findingDate/categoryId/
+  // currency/riskLevel - whether each is actually required is an admin
+  // policy decision (Settings.requiredFindingFields), enforced below via
+  // assertRequiredFindingFieldsPresent() once `db` is loaded. periodId/
+  // districtId/branchId/amount/caseCount keep `.min(1)`/their own bounds -
+  // not in that setting, always required (see REQUIRABLE_FINDING_FIELDS'
+  // own doc comment for why).
+  title: z.string().optional(),
+  sourceId: z.string().optional(),
+  departmentId: z.string().optional(),
   periodId: z.string().min(1).optional(),
   districtId: z.string().min(1).optional(),
   branchId: z.string().min(1).optional(),
-  findingDate: z.string().min(1).optional(),
-  operationArea: z.string().min(1).optional(),
-  irregularityType: z.string().min(1).optional(),
-  categoryId: z.string().min(1).optional(),
+  findingDate: z.string().optional(),
+  operationArea: z.string().optional(),
+  irregularityType: z.string().optional(),
+  categoryId: z.string().optional(),
   amount: z.number().nonnegative().optional(),
-  currency: z.string().min(1).optional(),
+  currency: z.string().optional(),
   caseCount: z.number().int().positive().optional(),
-  riskLevel: z.string().min(1).optional(),
-  priority: z.string().min(1).optional(),
-  description: z.string().min(1).optional(),
+  riskLevel: z.string().optional(),
+  priority: z.string().optional(),
+  description: z.string().optional(),
   recommendation: z.string().optional(),
   rootCause: z.string().optional(),
   evidenceNote: z.string().optional(),
@@ -133,22 +140,51 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const targetPeriodError = assertPeriodWritable(db, periodId, existing.status);
   if (targetPeriodError) return NextResponse.json({ error: targetPeriodError }, { status: 409 });
 
+  // Each resolved value only gets validated against reference data when
+  // it's actually non-blank - blank here means either the caller just
+  // cleared it (allowed once Settings.requiredFindingFields opts it out)
+  // or it was already blank on `existing` and nothing here is touching
+  // it, and neither case has anything to look up or scope-check.
   const sourceId = input.sourceId ?? existing.sourceId;
-  if (!db.sources.some((s) => s.id === sourceId && s.active)) {
+  if (sourceId && !db.sources.some((s) => s.id === sourceId && s.active)) {
     return NextResponse.json({ error: "Selected source is not active" }, { status: 400 });
   }
   const departmentId = input.departmentId ?? existing.departmentId;
-  const department = db.departments.find((d) => d.id === departmentId && d.active);
-  if (!department) {
-    return NextResponse.json({ error: "Selected department is not active" }, { status: 400 });
-  }
-  if (!isDepartmentInScope(department, { districtId, branchId })) {
-    return NextResponse.json({ error: "Selected department is not available for this district/branch" }, { status: 400 });
+  if (departmentId) {
+    const department = db.departments.find((d) => d.id === departmentId && d.active);
+    if (!department) {
+      return NextResponse.json({ error: "Selected department is not active" }, { status: 400 });
+    }
+    if (!isDepartmentInScope(department, { districtId, branchId })) {
+      return NextResponse.json({ error: "Selected department is not available for this district/branch" }, { status: 400 });
+    }
   }
   const categoryId = input.categoryId ?? existing.categoryId;
-  if (!db.categories.some((c) => c.id === categoryId && c.active)) {
+  if (categoryId && !db.categories.some((c) => c.id === categoryId && c.active)) {
     return NextResponse.json({ error: "Selected classified case is not active" }, { status: 400 });
   }
+
+  const requiredFieldError = assertRequiredFindingFieldsPresent(
+    db,
+    {
+      title: input.title,
+      sourceId: input.sourceId,
+      departmentId: input.departmentId,
+      findingDate: input.findingDate,
+      operationArea: input.operationArea,
+      irregularityType: input.irregularityType,
+      categoryId: input.categoryId,
+      currency: input.currency,
+      riskLevel: input.riskLevel,
+      priority: input.priority,
+      description: input.description,
+      recommendation: input.recommendation,
+      rootCause: input.rootCause,
+      evidenceNote: input.evidenceNote,
+    },
+    { skipUnset: true }
+  );
+  if (requiredFieldError) return NextResponse.json({ error: requiredFieldError }, { status: 400 });
 
   // Document_3 §12/§34's per-case itemization (FindingCase) sums to
   // caseCount/amount by construction at creation time - there's no UI yet

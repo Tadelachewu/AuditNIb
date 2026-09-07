@@ -47,6 +47,26 @@ const updateSchema = z.object({
   similarFindingFields: z
     .array(z.enum(["branchId", "categoryId", "operationArea", "irregularityType", "periodId", "sourceId", "departmentId", "riskLevel"]))
     .min(1, "Select at least one field for the duplicate-suggestion check"),
+  // Keep in sync with REQUIRABLE_FINDING_FIELDS (src/types/index.ts) -
+  // same literal-keys-object convention as similarFindingFields above, one
+  // boolean per configurable field rather than an array since every one
+  // of them needs an explicit true/false, not just a "selected or not."
+  requiredFindingFields: z.object({
+    title: z.boolean(),
+    sourceId: z.boolean(),
+    departmentId: z.boolean(),
+    findingDate: z.boolean(),
+    operationArea: z.boolean(),
+    irregularityType: z.boolean(),
+    categoryId: z.boolean(),
+    currency: z.boolean(),
+    riskLevel: z.boolean(),
+    priority: z.boolean(),
+    description: z.boolean(),
+    recommendation: z.boolean(),
+    rootCause: z.boolean(),
+    evidenceNote: z.boolean(),
+  }),
 });
 
 export async function PATCH(request: Request) {

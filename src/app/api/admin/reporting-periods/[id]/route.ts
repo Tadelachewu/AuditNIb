@@ -23,10 +23,24 @@ const updateSchema = z
     // autoTransferOnLock()'s doc comment. Only meaningful on a genuine
     // OPEN->LOCKED transition; ignored otherwise (unlock, flag-only edit).
     transferOverdueCases: z.boolean().optional(),
+    // Narrowing the submission window (see ReportingPeriod.submissionStartsAt's
+    // own doc comment) is independent of lock/unlock - both provided
+    // together or neither, validated against the period's own (unchanged)
+    // startsAt/endsAt below since this route never lets those be edited.
+    submissionStartsAt: z.string().min(1).optional(),
+    submissionEndsAt: z.string().min(1).optional(),
   })
-  .refine((v) => v.status !== undefined || v.draftsAllowedWhileLocked !== undefined, {
+  .refine((v) => v.status !== undefined || v.draftsAllowedWhileLocked !== undefined || v.submissionStartsAt !== undefined, {
     message: "Nothing to update",
-  });
+  })
+  .refine((v) => (v.submissionStartsAt === undefined) === (v.submissionEndsAt === undefined), {
+    message: "Submission window start and end must be provided together",
+    path: ["submissionEndsAt"],
+  })
+  .refine(
+    (v) => v.submissionStartsAt === undefined || new Date(v.submissionEndsAt!).getTime() > new Date(v.submissionStartsAt).getTime(),
+    { message: "Submission window end must be after its start", path: ["submissionEndsAt"] }
+  );
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requirePermission("reporting-periods.lock");
@@ -37,13 +51,26 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid input" }, { status: 400 });
   }
-  const { status, reason, draftsAllowedWhileLocked, transferOverdueCases } = parsed.data;
+  const { status, reason, draftsAllowedWhileLocked, transferOverdueCases, submissionStartsAt, submissionEndsAt } = parsed.data;
 
   const db = readDb();
   const existing = db.reportingPeriods.find((p) => p.id === id);
   if (!existing) return NextResponse.json({ error: "Reporting period not found" }, { status: 404 });
-  if (status !== undefined && existing.status === status && draftsAllowedWhileLocked === undefined) {
+  if (
+    status !== undefined &&
+    existing.status === status &&
+    draftsAllowedWhileLocked === undefined &&
+    submissionStartsAt === undefined
+  ) {
     return NextResponse.json({ error: `Period is already ${status.toLowerCase()}` }, { status: 409 });
+  }
+  if (submissionStartsAt !== undefined) {
+    if (new Date(submissionStartsAt).getTime() < new Date(existing.startsAt).getTime()) {
+      return NextResponse.json({ error: "Submission window can't start before the period itself does" }, { status: 400 });
+    }
+    if (new Date(submissionEndsAt!).getTime() > new Date(existing.endsAt).getTime()) {
+      return NextResponse.json({ error: "Submission window can't end after the period itself does" }, { status: 400 });
+    }
   }
   // A true status transition, vs. a flag-only touch-up on an already-LOCKED
   // period (status provided but unchanged, or omitted entirely).
@@ -59,6 +86,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       p.lockReason = reason;
     }
     if (draftsAllowedWhileLocked !== undefined) p.draftsAllowedWhileLocked = draftsAllowedWhileLocked;
+    if (submissionStartsAt !== undefined) {
+      p.submissionStartsAt = new Date(submissionStartsAt).toISOString();
+      p.submissionEndsAt = new Date(submissionEndsAt!).toISOString();
+    }
     p.updatedAt = now;
     appendAuditLog(current, {
       userId: auth.session.userId!,
@@ -66,8 +97,18 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       action: isStatusChange ? (status === "LOCKED" ? "LOCK" : "UNLOCK") : "UPDATE",
       entityType: "ReportingPeriod",
       entityId: p.id,
-      oldValue: { status: existing.status, draftsAllowedWhileLocked: existing.draftsAllowedWhileLocked },
-      newValue: { status: p.status, draftsAllowedWhileLocked: p.draftsAllowedWhileLocked },
+      oldValue: {
+        status: existing.status,
+        draftsAllowedWhileLocked: existing.draftsAllowedWhileLocked,
+        submissionStartsAt: existing.submissionStartsAt,
+        submissionEndsAt: existing.submissionEndsAt,
+      },
+      newValue: {
+        status: p.status,
+        draftsAllowedWhileLocked: p.draftsAllowedWhileLocked,
+        submissionStartsAt: p.submissionStartsAt,
+        submissionEndsAt: p.submissionEndsAt,
+      },
       reason,
     });
 

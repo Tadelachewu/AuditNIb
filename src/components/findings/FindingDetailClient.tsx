@@ -26,6 +26,7 @@ import type {
   ReportingPeriod,
   District,
   Branch,
+  RequirableFindingField,
 } from "@/types";
 
 interface Lookups {
@@ -80,6 +81,7 @@ export function FindingDetailClient({
   operationAreas,
   priorityLevels,
   irregularityTypes,
+  requiredFields,
   editSources,
   editDepartments,
   editCategories,
@@ -106,6 +108,7 @@ export function FindingDetailClient({
   operationAreas: string[];
   priorityLevels: string[];
   irregularityTypes: string[];
+  requiredFields: Record<RequirableFindingField, boolean>;
   // All for the inline edit form (NewFindingForm in edit mode) - same
   // reference data the registration form itself uses.
   editSources: Source[];
@@ -472,6 +475,7 @@ export function FindingDetailClient({
               operationAreas={operationAreas}
               priorityLevels={priorityLevels}
               irregularityTypes={irregularityTypes}
+              requiredFields={requiredFields}
               fixedDistrict={fixedDistrict}
               fixedBranch={fixedBranch}
               onCancel={() => setEditing(false)}

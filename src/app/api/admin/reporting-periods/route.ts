@@ -25,15 +25,31 @@ export async function GET() {
 
 // year/month are derived from `startsAt` (the reporting window's own
 // start), not entered separately - one date range is the source of truth
-// instead of three overlapping fields that could disagree.
+// instead of three overlapping fields that could disagree. The
+// submission window is a separate, narrower pair inside that range - see
+// ReportingPeriod.submissionStartsAt's own doc comment (src/types/index.ts).
 const createSchema = z
   .object({
     startsAt: z.string().min(1, "Start date/time is required"),
     endsAt: z.string().min(1, "End date/time is required"),
+    submissionStartsAt: z.string().min(1, "Submission window start is required"),
+    submissionEndsAt: z.string().min(1, "Submission window end is required"),
   })
   .refine((v) => new Date(v.endsAt).getTime() > new Date(v.startsAt).getTime(), {
     message: "End date/time must be after the start date/time",
     path: ["endsAt"],
+  })
+  .refine((v) => new Date(v.submissionEndsAt).getTime() > new Date(v.submissionStartsAt).getTime(), {
+    message: "Submission window end must be after its start",
+    path: ["submissionEndsAt"],
+  })
+  .refine((v) => new Date(v.submissionStartsAt).getTime() >= new Date(v.startsAt).getTime(), {
+    message: "Submission window can't start before the period itself does",
+    path: ["submissionStartsAt"],
+  })
+  .refine((v) => new Date(v.submissionEndsAt).getTime() <= new Date(v.endsAt).getTime(), {
+    message: "Submission window can't end after the period itself does",
+    path: ["submissionEndsAt"],
   });
 
 export async function POST(request: Request) {
@@ -44,7 +60,7 @@ export async function POST(request: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid input" }, { status: 400 });
   }
-  const { startsAt, endsAt } = parsed.data;
+  const { startsAt, endsAt, submissionStartsAt, submissionEndsAt } = parsed.data;
   const start = new Date(startsAt);
   if (Number.isNaN(start.getTime())) {
     return NextResponse.json({ error: "Invalid start date/time" }, { status: 400 });
@@ -71,6 +87,8 @@ export async function POST(request: Request) {
     code,
     startsAt: start.toISOString(),
     endsAt: new Date(endsAt).toISOString(),
+    submissionStartsAt: new Date(submissionStartsAt).toISOString(),
+    submissionEndsAt: new Date(submissionEndsAt).toISOString(),
     status: "LOCKED" as const,
     lockedBy: auth.session.userId!,
     lockedAt: now,

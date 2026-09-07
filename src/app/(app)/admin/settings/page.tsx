@@ -2,11 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { apiGet, apiSend, ApiError } from "@/lib/api-client";
-import { Card, CardHeader } from "@/components/ui/Card";
+import { CollapsibleCard } from "@/components/ui/CollapsibleCard";
 import { Button } from "@/components/ui/Button";
 import { Input, Select, Label } from "@/components/ui/Field";
 import { SettingsListEditor } from "@/components/admin/SettingsListEditor";
-import { SIMILAR_FINDING_FIELDS } from "@/types";
+import { SIMILAR_FINDING_FIELDS, REQUIRABLE_FINDING_FIELDS } from "@/types";
 import type { Settings, SafeUser } from "@/types";
 
 export default function SettingsPage() {
@@ -49,6 +49,7 @@ export default function SettingsPage() {
         performanceThresholds: settings.performanceThresholds,
         hoApproval: settings.hoApproval,
         similarFindingFields: settings.similarFindingFields,
+        requiredFindingFields: settings.requiredFindingFields,
       };
       const res = await apiSend<{ settings: Settings }>("/api/admin/settings", "PATCH", payload);
       setSettings(res.settings);
@@ -83,11 +84,11 @@ export default function SettingsPage() {
         configuration.
       </p>
 
-      <Card className="mt-5">
-        <CardHeader
-          title="Configurable Lists"
-          description="Each list drives a dropdown on the Finding registration form. Expand a section to add or remove a value."
-        />
+      <CollapsibleCard
+        className="mt-5"
+        title="Configurable Lists"
+        description="Each list drives a dropdown on the Finding registration form. Expand a section to add or remove a value."
+      >
         <div className="flex flex-col gap-2 p-4">
           <SettingsListEditor
             title="Currencies"
@@ -117,10 +118,9 @@ export default function SettingsPage() {
             onChange={(items) => updateList("irregularityTypes", items)}
           />
         </div>
-      </Card>
+      </CollapsibleCard>
 
-      <Card className="mt-4">
-        <CardHeader title="Notification Delivery" />
+      <CollapsibleCard className="mt-4" title="Notification Delivery">
         <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2">
           <div>
             <Label htmlFor="provider">Provider</Label>
@@ -180,10 +180,13 @@ export default function SettingsPage() {
             <p className={`text-sm ${testEmailResult.ok ? "text-emerald-700" : "text-red-600"}`}>{testEmailResult.message}</p>
           )}
         </div>
-      </Card>
+      </CollapsibleCard>
 
-      <Card className="mt-4">
-        <CardHeader title="Case Transfer" description="Allow transferring outstanding findings when a period locks." />
+      <CollapsibleCard
+        className="mt-4"
+        title="Case Transfer"
+        description="Allow transferring outstanding findings when a period locks."
+      >
         <div className="p-4">
           <label className="flex items-start gap-2 text-sm text-slate-700">
             <input
@@ -207,10 +210,13 @@ export default function SettingsPage() {
             </span>
           </label>
         </div>
-      </Card>
+      </CollapsibleCard>
 
-      <Card className="mt-4">
-        <CardHeader title="Performance Ranking Visibility" description="Independently for branches and districts." />
+      <CollapsibleCard
+        className="mt-4"
+        title="Performance Ranking Visibility"
+        description="Independently for branches and districts."
+      >
         <div className="flex flex-col gap-3 p-4">
           <label className="flex items-center gap-2 text-sm text-slate-700">
             <input
@@ -243,13 +249,13 @@ export default function SettingsPage() {
             to others. Neither setting ever lets a branch see another district&apos;s branches.
           </p>
         </div>
-      </Card>
+      </CollapsibleCard>
 
-      <Card className="mt-4">
-        <CardHeader
-          title="Rectification Reminders"
-          description="A time-based nudge for findings sitting too long awaiting rectification."
-        />
+      <CollapsibleCard
+        className="mt-4"
+        title="Rectification Reminders"
+        description="A time-based nudge for findings sitting too long awaiting rectification."
+      >
         <div className="flex flex-col gap-3 p-4">
           <label className="flex items-center gap-2 text-sm text-slate-700">
             <input
@@ -292,13 +298,13 @@ export default function SettingsPage() {
             few minutes past the exact threshold to fire, never less.
           </p>
         </div>
-      </Card>
+      </CollapsibleCard>
 
-      <Card className="mt-4">
-        <CardHeader
-          title="Top / Bottom Performers"
-          description="Thresholds driving the Top/Bottom Performers widgets on HO/District/Executive dashboards."
-        />
+      <CollapsibleCard
+        className="mt-4"
+        title="Top / Bottom Performers"
+        description="Thresholds driving the Top/Bottom Performers widgets on HO/District/Executive dashboards."
+      >
         <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2">
           <div>
             <Label htmlFor="topPercent">Top performer: at or above (%)</Label>
@@ -338,13 +344,13 @@ export default function SettingsPage() {
             that clears the bar is shown - not a fixed top-5/bottom-5.
           </p>
         </div>
-      </Card>
+      </CollapsibleCard>
 
-      <Card className="mt-4">
-        <CardHeader
-          title="Bank-Wide Approval"
-          description="Optional approval step for findings registered by a bank-wide (HO/Admin) user."
-        />
+      <CollapsibleCard
+        className="mt-4"
+        title="Bank-Wide Approval"
+        description="Optional approval step for findings registered by a bank-wide (HO/Admin) user."
+      >
         <div className="flex flex-col gap-3 p-4">
           <label className="flex items-center gap-2 text-sm text-slate-700">
             <input
@@ -388,13 +394,49 @@ export default function SettingsPage() {
             </div>
           </div>
         </div>
-      </Card>
+      </CollapsibleCard>
 
-      <Card className="mt-4">
-        <CardHeader
-          title="Duplicate Finding Detection"
-          description="Which fields the Register Finding form's 'similar finding already on record' check compares."
-        />
+      <CollapsibleCard
+        className="mt-4"
+        title="Finding Registration Fields"
+        description="Which fields must be filled in to register or edit a finding, vs. left blank."
+      >
+        <div className="flex flex-col gap-3 p-4">
+          <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+            {REQUIRABLE_FINDING_FIELDS.map(({ key, label }) => (
+              <label key={key} className="flex items-center gap-2 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={settings.requiredFindingFields[key]}
+                  onChange={(e) =>
+                    setSettings({
+                      ...settings,
+                      requiredFindingFields: { ...settings.requiredFindingFields, [key]: e.target.checked },
+                    })
+                  }
+                  className="h-4 w-4 rounded border-slate-300"
+                />
+                {label}
+              </label>
+            ))}
+          </div>
+          <p className="text-xs text-slate-400">
+            Checked means required - the Register Finding form won&apos;t save without it, and bulk import rejects a
+            row missing it. Unchecked means optional - it can be left blank on either path (a source/department/
+            classified case left blank simply never matches anything scored or scoped by it, the way a blank text
+            field just stays blank). Only reporting period, district/branch, amount, and number of cases aren&apos;t
+            configurable here - those aren&apos;t content a registrant fills in, they&apos;re the identity and
+            quantity every dashboard, report, and performance calculation is built around, so leaving one blank
+            has no coherent meaning.
+          </p>
+        </div>
+      </CollapsibleCard>
+
+      <CollapsibleCard
+        className="mt-4"
+        title="Duplicate Finding Detection"
+        description="Which fields the Register Finding form's 'similar finding already on record' check compares."
+      >
         <div className="flex flex-col gap-3 p-4">
           <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
             {SIMILAR_FINDING_FIELDS.map(({ key, label }) => (
@@ -423,7 +465,7 @@ export default function SettingsPage() {
             person registering - it never blocks saving.
           </p>
         </div>
-      </Card>
+      </CollapsibleCard>
 
       {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
       {saved && <p className="mt-4 text-sm text-emerald-600">Settings saved.</p>}
