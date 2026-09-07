@@ -21,7 +21,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex min-h-screen bg-white">
-      <Sidebar permissions={user.permissions ?? []} />
+      <Sidebar permissions={user.permissions ?? []} role={user.role ?? ""} />
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar user={user} />
         <main className="flex-1 overflow-x-auto p-6">{children}</main>

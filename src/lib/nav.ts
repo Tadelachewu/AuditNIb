@@ -30,6 +30,13 @@ export interface NavItem {
   icon: LucideIcon;
   /** A "<pageCode>.view" permission key, or undefined for links every logged-in user can see. */
   permission?: string;
+  /**
+   * Role codes this item is hidden for, regardless of permission - for
+   * ADMIN specifically, /dashboard redirects straight to /admin (see
+   * (app)/dashboard/page.tsx), so keeping "Dashboard" in the sidebar
+   * alongside "Admin Dashboard" would just be two links to the same page.
+   */
+  hideForRoles?: string[];
 }
 
 export interface NavSection {
@@ -41,7 +48,8 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     label: "Overview",
     items: [
-      { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+      { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard, hideForRoles: ["ADMIN"] },
+      { label: "Admin Dashboard", href: "/admin", icon: LayoutGrid, permission: permissionKey("admin-dashboard", "view") },
       { label: "My Profile", href: "/profile", icon: UserCircle },
     ],
   },
@@ -58,7 +66,6 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     label: "Administration",
     items: [
-      { label: "Admin Dashboard", href: "/admin", icon: LayoutGrid, permission: permissionKey("admin-dashboard", "view") },
       { label: "Users", href: "/admin/users", icon: Users, permission: permissionKey("users", "view") },
       { label: "Districts", href: "/admin/districts", icon: Map, permission: permissionKey("districts", "view") },
       { label: "Branches", href: "/admin/branches", icon: Building2, permission: permissionKey("branches", "view") },
@@ -91,6 +98,7 @@ export const NAV_SECTIONS: NavSection[] = [
   },
 ];
 
-export function isNavItemVisible(item: NavItem, permissions: string[]): boolean {
+export function isNavItemVisible(item: NavItem, permissions: string[], role: string): boolean {
+  if (item.hideForRoles?.includes(role)) return false;
   return !item.permission || permissions.includes(item.permission);
 }

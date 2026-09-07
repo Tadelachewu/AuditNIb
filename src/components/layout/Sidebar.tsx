@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { NAV_SECTIONS, isNavItemVisible } from "@/lib/nav";
 
-export function Sidebar({ permissions }: { permissions: string[] }) {
+export function Sidebar({ permissions, role }: { permissions: string[]; role: string }) {
   const pathname = usePathname();
 
   return (
@@ -39,7 +39,7 @@ export function Sidebar({ permissions }: { permissions: string[] }) {
 
       <div className="flex flex-col gap-5 px-3 pb-5">
         {NAV_SECTIONS.map((section) => {
-          const items = section.items.filter((item) => isNavItemVisible(item, permissions));
+          const items = section.items.filter((item) => isNavItemVisible(item, permissions, role));
           if (items.length === 0) return null;
           return (
             <div key={section.label}>
