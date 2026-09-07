@@ -83,6 +83,18 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const scopeError = assertFindingInScope(session, existing);
   if (scopeError) return NextResponse.json({ error: scopeError }, { status: 403 });
 
+  // Ownership, not just org scope: assertFindingInScope only confirms this
+  // session's district/branch matches the finding's - it says nothing
+  // about who actually registered it. Two Branch Controllers at the same
+  // branch (or an HO-registered bank-wide finding sitting in this branch)
+  // would both pass that check; only the person who created it can edit
+  // it. Review/rectify/verify/close stay unrestricted here - those are
+  // legitimately different-actor actions by design, this is only the
+  // pre-submission authoring trio (edit/delete/submit).
+  if (existing.createdBy !== session.userId) {
+    return NextResponse.json({ error: "You can only edit findings you registered yourself" }, { status: 403 });
+  }
+
   if (!EDITABLE_STATUSES.includes(existing.status)) {
     return NextResponse.json({ error: "Only draft or returned findings can be edited" }, { status: 409 });
   }
@@ -195,6 +207,11 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
 
   const scopeError = assertFindingInScope(auth.session, existing);
   if (scopeError) return NextResponse.json({ error: scopeError }, { status: 403 });
+
+  // Ownership, not just org scope - see PATCH's own comment above.
+  if (existing.createdBy !== auth.session.userId) {
+    return NextResponse.json({ error: "You can only delete findings you registered yourself" }, { status: 403 });
+  }
 
   if (existing.status !== "DRAFT") {
     return NextResponse.json({ error: "Only draft findings can be deleted" }, { status: 409 });

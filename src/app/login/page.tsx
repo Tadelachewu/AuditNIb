@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { apiSend, ApiError } from "@/lib/api-client";
 import { Button } from "@/components/ui/Button";
@@ -42,7 +43,8 @@ export default function LoginPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-100 px-4">
       <div className="w-full max-w-sm">
-        <div className="mb-6 text-center">
+        <div className="mb-6 flex flex-col items-center text-center">
+          <Image src="/Nib_International_Bank.png" alt="NIB International Bank" width={64} height={64} className="mb-3" priority />
           <h1 className="text-xl font-bold text-blue-900">NIB Control360</h1>
           <p className="text-sm text-slate-500">Internal Control Findings Management System</p>
         </div>

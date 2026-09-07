@@ -13,8 +13,11 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "NIB Control360 — ICFMS",
+  title: "Nib InternationalBank",
   description: "Internal Control Findings Management System",
+  icons: {
+    icon: "/Nib_International_Bank.png",
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

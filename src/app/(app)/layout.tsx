@@ -12,7 +12,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // straight back here if clicked - hidden rather than shown-but-useless.
   if (user.mustChangePassword) {
     return (
-      <div className="flex min-h-screen flex-col bg-slate-50">
+      <div className="flex min-h-screen flex-col bg-white">
         <Topbar user={user} />
         <main className="flex-1 overflow-x-auto p-6">{children}</main>
       </div>
@@ -20,7 +20,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   }
 
   return (
-    <div className="flex min-h-screen bg-slate-50">
+    <div className="flex min-h-screen bg-white">
       <Sidebar permissions={user.permissions ?? []} />
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar user={user} />

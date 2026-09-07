@@ -12,11 +12,12 @@ import {
   getDistrictRankingAllCases,
   getCategoryPerformanceSummary,
   getDistrictSnapshotAsOf,
+  getTransferredFindings,
   formatPercentageRange,
 } from "@/lib/reportTemplates";
 import type { Database } from "@/types";
 
-// One shared text/csv exporter for all 10 report templates - same
+// One shared text/csv exporter for all report templates - same
 // escaping/header/attachment convention as /api/findings/export, just
 // dispatched by slug since each template's shape differs. Column headers
 // and ordering here deliberately mirror the bank's own report/*.xlsx
@@ -127,32 +128,32 @@ function buildCsv(slug: string, db: Database, params: URLSearchParams): string |
       return toCsv(header, dataRows);
     }
     case "monthly-district-history": {
-      // Other-Case-only, matching the page's own filter - getMonthlyDistrictSeries()
-      // now returns two rows per district/period (OTHER_CASES and the
-      // VARIOUS_INTERNAL_AUDIT catch-all, see its own doc comment); this
-      // template is specifically the official scored-category series, same
-      // as Monthly District History has always been.
-      const series = getMonthlyDistrictSeries(db).filter((r) => r.rowKind === "OTHER_CASES");
+      // Other-Case-only, matching the page's own filter. periodId narrows
+      // to whatever period the page currently has selected (its own period
+      // picker now shows one period at a time, not every period stacked) -
+      // omitted entirely, this still exports the full history across every
+      // period, same as before that page-level filter existed.
+      let rows = getMonthlyDistrictSeries(db).otherCases;
+      if (periodId) rows = rows.filter((r) => r.period.id === periodId);
       return toCsv(
         ["Period", "Total No. of Branches", "District", "Others Cases", "Unrectified", "Rectified", "rectified percetage"],
-        series.map((r) => [r.period.code, r.totalBranches, r.district.name, r.totalCases, r.outstandingCases, r.rectifiedCases, pct(r.performance)])
+        rows.map((r) => [r.period.code, r.totalBranches, r.district.name, r.totalCases, r.outstandingCases, r.rectifiedCases, pct(r.performance)])
       );
     }
     case "monthly-district-detail": {
       // Grouped by district ("Detail monthly summaryBD" - "BD" = "By
-      // District" - see getMonthlyDistrictSeries' own doc comment), each
-      // district's months followed by its subtotal, then one grand TOTAL
-      // row at the end - matching the source sheet's structure exactly.
-      // Each district/period pair now carries two rows (Other Cases +
-      // Various internal Audit report catch-all - see rowKind on
-      // DistrictPeriodRow) - the Case Type column and shared per-period SN
-      // mirror exactly how the on-screen table (monthly-district-detail/
-      // page.tsx) renders the same series, so CSV and screen never diverge.
-      const series = getMonthlyDistrictSeries(db);
-      const caseTypeLabel = (kind: "OTHER_CASES" | "VARIOUS_INTERNAL_AUDIT") =>
-        kind === "OTHER_CASES" ? "Other Cases" : "Various internal Audit report";
-      const byDistrict = new Map<string, typeof series>();
-      for (const r of series) {
+      // District"), each district's period rows followed by exactly ONE
+      // "Various internal Audit report" closing row, then its subtotal,
+      // then one grand TOTAL row at the end - matching the source Excel's
+      // structure exactly (cross-checked against its raw cells: Various is
+      // the literal last row of each district's block, not repeated per
+      // month - see getMonthlyDistrictSeries()'s own doc comment). Mirrors
+      // exactly how the on-screen table (monthly-district-detail/page.tsx)
+      // renders the same series, so CSV and screen never diverge.
+      const { otherCases, various } = getMonthlyDistrictSeries(db);
+      const variousByDistrict = new Map(various.map((v) => [v.district.id, v]));
+      const byDistrict = new Map<string, typeof otherCases>();
+      for (const r of otherCases) {
         const list = byDistrict.get(r.district.id) ?? [];
         list.push(r);
         byDistrict.set(r.district.id, list);
@@ -160,29 +161,25 @@ function buildCsv(slug: string, db: Database, params: URLSearchParams): string |
       const dataRows: (string | number)[][] = [];
       let grandTotalCases = 0;
       let grandRectified = 0;
-      for (const rows of byDistrict.values()) {
-        const byPeriod = new Map<string, typeof rows>();
-        for (const r of rows) {
-          const list = byPeriod.get(r.period.id) ?? [];
-          list.push(r);
-          byPeriod.set(r.period.id, list);
-        }
-        [...byPeriod.values()].forEach((periodRows, i) => {
-          periodRows.forEach((r, kindIdx) => {
-            dataRows.push([
-              kindIdx === 0 ? i + 1 : "",
-              kindIdx === 0 ? r.district.name : "",
-              kindIdx === 0 ? r.period.code : "",
-              caseTypeLabel(r.rowKind),
-              r.totalCases,
-              r.outstandingCases,
-              r.rectifiedCases,
-              pct(r.performance),
-            ]);
-          });
+      for (const [districtId, periodRows] of byDistrict) {
+        periodRows.forEach((r, i) => {
+          dataRows.push([i + 1, i === 0 ? r.district.name : "", r.period.code, "Other Cases", r.totalCases, r.outstandingCases, r.rectifiedCases, pct(r.performance)]);
         });
-        const totalCases = rows.reduce((sum, r) => sum + r.totalCases, 0);
-        const rectifiedCases = rows.reduce((sum, r) => sum + r.rectifiedCases, 0);
+        const variousRow = variousByDistrict.get(districtId);
+        if (variousRow) {
+          dataRows.push([
+            periodRows.length + 1,
+            "",
+            "",
+            "Various internal Audit report",
+            variousRow.totalCases,
+            variousRow.outstandingCases,
+            variousRow.rectifiedCases,
+            pct(variousRow.performance),
+          ]);
+        }
+        const totalCases = periodRows.reduce((sum, r) => sum + r.totalCases, 0) + (variousRow?.totalCases ?? 0);
+        const rectifiedCases = periodRows.reduce((sum, r) => sum + r.rectifiedCases, 0) + (variousRow?.rectifiedCases ?? 0);
         grandTotalCases += totalCases;
         grandRectified += rectifiedCases;
         dataRows.push(["", "", "", "", totalCases, totalCases - rectifiedCases, rectifiedCases, pct(totalCases > 0 ? (rectifiedCases / totalCases) * 100 : null)]);
@@ -209,7 +206,9 @@ function buildCsv(slug: string, db: Database, params: URLSearchParams): string |
       return toCsv(header, dataRows);
     }
     case "weekly-executive-summary": {
-      const sections = getWeeklyExecutiveSummary(db);
+      const thisWeekDate = params.get("thisWeekDate") || undefined;
+      const lastWeekDate = params.get("lastWeekDate") || undefined;
+      const sections = getWeeklyExecutiveSummary(db, thisWeekDate, lastWeekDate);
       const header = [
         "Section",
         "Types of cases",
@@ -291,6 +290,67 @@ function buildCsv(slug: string, db: Database, params: URLSearchParams): string |
       if (rows.length > 0) {
         dataRows.push(["", "TOTAL", totalRow.totalCases, totalRow.outstandingCases, totalRow.rectifiedCases, pct(totalRow.performance)]);
       }
+      return toCsv(header, dataRows);
+    }
+    case "transferred-findings": {
+      const rows = getTransferredFindings(db, {
+        fromPeriodId: params.get("fromPeriodId") || undefined,
+        toPeriodId: params.get("toPeriodId") || undefined,
+      });
+      const header = [
+        "Finding Reference",
+        "Original Finding ID",
+        "District",
+        "Branch",
+        "Category",
+        "Source",
+        "Risk Level",
+        "Hop",
+        "Method",
+        "Previous Reporting Month",
+        "New Reporting Month",
+        "Transfer Date",
+        "Case Age at Transfer",
+        "Original Case Count",
+        "Original Amount",
+        "Resolved Before Transfer (Cases)",
+        "Resolved Before Transfer (Amount)",
+        "Outstanding Case Count Transferred",
+        "Outstanding Amount Transferred",
+        "Transferred By",
+        "Transfer Reason",
+        "Current Status",
+        "Current Outstanding Cases",
+        "Current Outstanding Amount",
+        "Case Age Today",
+      ];
+      const dataRows = rows.map((r) => [
+        r.finding.reference,
+        r.finding.id,
+        r.district?.name ?? "",
+        r.branch?.name ?? "",
+        r.category?.name ?? "",
+        r.source?.name ?? "",
+        r.finding.riskLevel,
+        `${r.hopNumber} of ${r.totalHops}`,
+        r.transfer.method,
+        r.fromPeriod?.code ?? r.transfer.fromPeriodId,
+        r.toPeriod?.code ?? r.transfer.toPeriodId,
+        r.transfer.createdAt.slice(0, 10),
+        r.transfer.caseAgeAtTransferDays,
+        r.transfer.originalCaseCount,
+        r.transfer.originalAmount,
+        r.resolvedBeforeTransferCases,
+        r.resolvedBeforeTransferAmount,
+        r.transfer.casesTransferred,
+        r.transfer.amountTransferred,
+        r.transfer.createdByName,
+        r.transfer.reason,
+        r.currentStatus,
+        r.currentOutstandingCases,
+        r.currentOutstandingAmount,
+        r.caseAgeDaysNow,
+      ]);
       return toCsv(header, dataRows);
     }
     default:

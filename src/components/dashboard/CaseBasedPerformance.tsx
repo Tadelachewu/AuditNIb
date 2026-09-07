@@ -35,16 +35,16 @@ function Bar({ label, count, pct, color }: { label: string; count: number | stri
  * transferred OUT of this period is credited only for the portion that
  * never left, never the finding's full caseCount - performance must never
  * be moved by a transferred case, in the period it left or anywhere else.
- * "Rectified Cases" is every rectification stamped to this period
- * (RectificationEntry.periodId) that's also been District-*verified* - not
- * closed-only (Finding.closedCases), but also not the Branch Manager's raw
- * self-report the moment it's recorded: a case only counts as rectified
- * once the authorized person (District Controller, via verify-rectification)
- * has accepted it. A rectification sitting unverified is still a claim, not
- * yet something the scoring formula credits - see verifiedRectifiedInPeriod()
- * in src/lib/findings.ts. (Total Findings/Rectified Findings on the
- * StatCards row above stay closed-only - that pairing is about *records*,
- * not this widget's *cases* breakdown.)
+ * "Rectified Cases" is this period's share of Finding.closedCases (via
+ * FindingClosure.periodId) - unless it is closed, never count as
+ * rectified: not the Branch Manager's raw self-report the moment it's
+ * recorded, and not merely District-verified either (verification is
+ * District's own gate on the way to closure, one step short of it, not a
+ * substitute). See closedInPeriod() in src/lib/findings.ts. (Total
+ * Findings/Rectified Findings on the StatCards row above use this same
+ * closed-only definition already - this widget's *cases* breakdown is now
+ * on the identical basis, just period-attributed via the closure ledger
+ * instead of Finding.closedCases' lifetime total.)
  *
  * `allPeriods` (from the FilterBar's own "All periods" choice - see
  * ALL_PERIODS_VALUE) omits periodId from scope entirely, which is

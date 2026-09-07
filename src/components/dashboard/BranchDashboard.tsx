@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { Database } from "@/types";
 import type { SessionData } from "@/lib/session";
 import { findBranchManager, findBranchSubManager, findBranchController } from "@/lib/org";
-import { computePerformance, queueStatusesForSession, findingCaseTotals, transferTotals, isHoApproved } from "@/lib/findings";
+import { computePerformance, computeEligibleCaseCounts, queueStatusesForSession, findingCaseTotals, transferTotals, isHoApproved } from "@/lib/findings";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
 import { sumAmountByCurrency, sumOutstandingByCurrency } from "@/lib/currency";
 import { formatDateTime, formatNumber } from "@/lib/format";
@@ -94,8 +94,10 @@ export function BranchDashboard({
       : [];
   const { totalFindings, totalCases, rectifiedFindings, rectifiedCases } = findingCaseTotals(periodFindings);
   // Every StatCard/table below that reports an "official" figure (as
-  // opposed to RiskDistribution/FindingStatusDistribution's deliberately
-  // broader in-flight-workflow view) is scoped to this, not periodFindings -
+  // opposed to FindingStatusDistribution's deliberately broader
+  // in-flight-workflow view - RiskDistribution/CategoryDistribution both
+  // apply this same isHoApproved() gate internally now, not an exception)
+  // is scoped to this, not periodFindings -
   // same isHoApproved() gate findingCaseTotals() already applies to Total
   // Findings/Total Cases above, so a finding sitting in DISTRICT_REVIEW/
   // HO_REVIEW doesn't inflate Total Amount, Outstanding, Category Totals,
@@ -107,13 +109,25 @@ export function BranchDashboard({
   const performance = hasPeriodScope
     ? computePerformance(db, { branchId: branch.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id })
     : null;
+  // Same eligible-case counts computePerformance() itself divides to get
+  // that percentage - surfaced so the StatCard can show its own math on
+  // click (see StatCard's `detail` prop) instead of a bare, unexplained %.
+  const eligibleCounts = hasPeriodScope
+    ? computeEligibleCaseCounts(db, { branchId: branch.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id })
+    : null;
   const totalAmount = sumAmountByCurrency(approvedPeriodFindings, "amount");
   const outstandingAmount = sumOutstandingByCurrency(approvedPeriodFindings);
-  const resolvedAmount = sumAmountByCurrency(approvedPeriodFindings, "rectifiedAmount");
+  // Resolved Amount counts only formally CLOSED amount, never merely
+  // rectified-but-unclosed - same "a controller's sign-off is what makes it
+  // official" reasoning as findingCaseTotals()'s own closed-only gate.
+  const resolvedAmount = sumAmountByCurrency(approvedPeriodFindings, "closedAmount");
 
   const otherCaseFindings = otherCase ? approvedPeriodFindings.filter((f) => f.categoryId === otherCase.id) : [];
   const otherCaseTotal = otherCaseFindings.reduce((sum, f) => sum + f.caseCount, 0);
-  const otherCaseRectified = otherCaseFindings.reduce((sum, f) => sum + f.rectifiedCases, 0);
+  // Rectified is closedCases, not raw self-reported rectifiedCases - same
+  // "unless it is closed, never count as rectified" rule computeEligibleCaseCounts()
+  // and every other Rectified figure on this dashboard already follows.
+  const otherCaseRectified = otherCaseFindings.reduce((sum, f) => sum + f.closedCases, 0);
 
   // A category/source filter narrows which rows those widgets even list -
   // a real narrowing of "what am I looking at," not a redefinition of the
@@ -124,20 +138,28 @@ export function BranchDashboard({
     ? db.sources.filter((s) => s.active && s.id === filters.sourceId)
     : db.sources.filter((s) => s.active);
 
+  // Rectified/Rectified Amount are closedCases/closedAmount, not raw
+  // self-reported rectifiedCases/rectifiedAmount - unless it is closed,
+  // never count as rectified, same rule as computeEligibleCaseCounts()
+  // (src/lib/findings.ts) now applies to the headline Performance %.
   const categoryTotals = categoriesInScope.map((c) => {
     const findings = approvedPeriodFindings.filter((f) => f.categoryId === c.id);
     const total = findings.reduce((sum, f) => sum + f.caseCount, 0);
-    const rectified = findings.reduce((sum, f) => sum + f.rectifiedCases, 0);
+    const rectified = findings.reduce((sum, f) => sum + f.closedCases, 0);
     const amount = findings.reduce((sum, f) => sum + f.amount, 0);
-    const rectifiedAmount = findings.reduce((sum, f) => sum + f.rectifiedAmount, 0);
+    const rectifiedAmount = findings.reduce((sum, f) => sum + f.closedAmount, 0);
     return { category: c, total, rectified, outstanding: total - rectified, amount, rectifiedAmount, outstandingAmount: amount - rectifiedAmount };
   });
 
   // High-risk = the top two tiers of Settings.riskLevels, matched
   // case-insensitively since it's admin-configurable free text - same
-  // convention as HODashboard's own High-Risk Findings stat.
+  // convention as HODashboard's own High-Risk Findings stat. Scoped to
+  // approvedPeriodFindings, not periodFindings - a finding still in
+  // DISTRICT_REVIEW/HO_REVIEW hasn't cleared approval yet and shouldn't
+  // count here before it does, same isHoApproved() gate every other
+  // "official" figure on this dashboard already uses.
   const highRiskTiers = new Set(db.settings.riskLevels.slice(-2).map((l) => l.toLowerCase()));
-  const highRiskFindings = periodFindings.filter(
+  const highRiskFindings = approvedPeriodFindings.filter(
     (f) => !["RECTIFIED", "CLOSED", "REJECTED"].includes(f.status) && highRiskTiers.has(f.riskLevel.toLowerCase())
   ).length;
 
@@ -155,25 +177,31 @@ export function BranchDashboard({
   const { transferredFindings, transferredCases } = transferTotals(branchTransfers);
 
   // The person who registers findings (findings.create - Branch Controller)
-  // needs to see their own draft/in-flight-approval backlog, and the
-  // rectifier (findings.rectify - Branch Manager) needs their own
-  // pending-rectification backlog - both reach this same dashboard. Scoped
-  // to db.findings directly (not branchAllFindings/periodFindings), same
-  // convention as HO/District's own "what needs action right now" cards:
-  // this is an action-needed count, not a per-period reporting total, so
-  // it must never be narrowed by an ad-hoc FilterBar/date-range filter.
+  // needs to see their OWN draft/in-flight-approval backlog - scoped to
+  // createdBy, not the whole branch: edit/delete/submit are now
+  // createdBy-restricted too (see [id]/route.ts and submit/route.ts), so a
+  // branch-wide count would include drafts this session can't actually act
+  // on if another Branch Controller shares the branch. The rectifier
+  // (findings.rectify - Branch Manager) isn't the finding's author, so
+  // their pending-rectification backlog stays branch-wide - it's every
+  // finding awaiting rectification at this branch, not just ones they
+  // personally touched. Both scoped to db.findings directly (not
+  // branchAllFindings/periodFindings), same convention as HO/District's
+  // own "what needs action right now" cards: this is an action-needed
+  // count, not a per-period reporting total, so it must never be narrowed
+  // by an ad-hoc FilterBar/date-range filter.
   const hasFindingsAction = (action: string) => hasPermission(user.permissions, permissionKey("findings", action));
   const canRegister = hasFindingsAction("create");
   const canRectify = hasFindingsAction("rectify");
-  const branchOwnFindings = db.findings.filter((f) => f.branchId === branch.id);
-  const draftFindings = branchOwnFindings.filter((f) => f.status === "DRAFT").length;
-  const pendingApprovalFindings = branchOwnFindings.filter((f) =>
+  const ownFindings = db.findings.filter((f) => f.createdBy === user.userId);
+  const draftFindings = ownFindings.filter((f) => f.status === "DRAFT").length;
+  const pendingApprovalFindings = ownFindings.filter((f) =>
     ["DISTRICT_REVIEW", "HO_REVIEW", "PENDING_BANK_APPROVAL"].includes(f.status)
   ).length;
   // Same statuses as queueStatusesForSession()'s own "rectify" matcher.
-  const pendingRectificationFindings = branchOwnFindings.filter((f) =>
-    ["SENT_TO_BRANCH_MANAGER", "PARTIALLY_RECTIFIED", "RECTIFICATION_RETURNED"].includes(f.status)
-  ).length;
+  const pendingRectificationFindings = db.findings
+    .filter((f) => f.branchId === branch.id)
+    .filter((f) => ["SENT_TO_BRANCH_MANAGER", "PARTIALLY_RECTIFIED", "RECTIFICATION_RETURNED"].includes(f.status)).length;
 
   const isQueued = queueStatusesForSession(user, db);
   const workQueue = db.findings
@@ -240,6 +268,7 @@ export function BranchDashboard({
         <StatCard label="Total Cases" value={hasPeriodScope ? totalCases : "--"} hint="Sum of case counts" />
         <StatCard label="Rectified Findings" value={hasPeriodScope ? rectifiedFindings : "--"} hint="Formally closed" />
         <StatCard label="Rectified Cases" value={hasPeriodScope ? rectifiedCases : "--"} hint="Closed, this period" />
+        <StatCard label="Outstanding Cases" value={hasPeriodScope ? totalCases - rectifiedCases : "--"} hint="Total minus rectified" />
         <StatCard label="Outstanding" value={hasPeriodScope ? outstandingFindings : "--"} hint="Findings" />
         <StatCard label="Transferred Findings" value={hasPeriodScope ? transferredFindings : "--"} hint="Out of this period" />
         <StatCard label="Transferred Cases" value={hasPeriodScope ? transferredCases : "--"} hint="Out of this period" />
@@ -247,10 +276,25 @@ export function BranchDashboard({
         <StatCard
           label="Branch Performance"
           value={performance !== null ? `${performance.toFixed(1)}%` : "--"}
-          hint={activeScoringRule ? `v${activeScoringRule.version} formula` : "No active scoring rule"}
+          hint={activeScoringRule ? `v${activeScoringRule.version} formula - click % for detail` : "No active scoring rule"}
+          detail={
+            performance !== null && eligibleCounts ? (
+              <>
+                <p>
+                  <span className="font-medium text-slate-900">{eligibleCounts.rectifiedCases}</span> of{" "}
+                  <span className="font-medium text-slate-900">{eligibleCounts.totalCases}</span> eligible case(s) closed (unless it&apos;s
+                  closed, it never counts as rectified), giving {eligibleCounts.rectifiedCases} ÷ {eligibleCounts.totalCases} × 100 ={" "}
+                  {performance.toFixed(1)}%.
+                </p>
+                {activeScoringRule && <p className="mt-1 text-slate-500">Formula: {activeScoringRule.basis}</p>}
+              </>
+            ) : (
+              "No eligible cases in scope yet."
+            )
+          }
         />
         <StatCard label="Total Amount" value={hasPeriodScope ? totalAmount : "--"} hint="All findings" />
-        <StatCard label="Resolved Amount" value={hasPeriodScope ? resolvedAmount : "--"} hint="Cumulative rectified" />
+        <StatCard label="Resolved Amount" value={hasPeriodScope ? resolvedAmount : "--"} hint="Cumulative closed only" />
         <StatCard label="Outstanding Amount" value={hasPeriodScope ? outstandingAmount : "--"} hint="Still owed" />
         {canRegister && <StatCard label="Draft" value={draftFindings} hint="Not yet submitted" />}
         {canRegister && (

@@ -1,5 +1,6 @@
 import { Card, CardHeader } from "@/components/ui/Card";
 import { DonutChart } from "@/components/dashboard/charts/DonutChart";
+import { isHoApproved } from "@/lib/findings";
 import type { Finding } from "@/types";
 
 // Fixed status palette (never themed) - a risk tier is a severity state,
@@ -23,9 +24,14 @@ const FALLBACK_COLOR = "#898781";
  * Clicking a segment (arc or legend row) filters the Findings list to
  * that risk level - /findings already re-scopes server-side to whoever's
  * viewing, so no extra district/branch param is needed here.
+ *
+ * Gated by isHoApproved(), same as every "official" figure elsewhere on
+ * the dashboard - a finding still in DRAFT/SUBMITTED/DISTRICT_REVIEW/
+ * HO_REVIEW hasn't cleared approval yet and shouldn't count here before it
+ * does, even though its risk level is already known.
  */
 export function RiskDistribution({ findings, riskLevels }: { findings: Finding[]; riskLevels: string[] }) {
-  const open = findings.filter((f) => !["RECTIFIED", "CLOSED", "REJECTED"].includes(f.status));
+  const open = findings.filter((f) => isHoApproved(f) && !["RECTIFIED", "CLOSED", "REJECTED"].includes(f.status));
 
   const segments = riskLevels.map((level) => ({
     key: level,

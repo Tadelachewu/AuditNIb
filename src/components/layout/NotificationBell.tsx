@@ -112,7 +112,7 @@ export function NotificationBell() {
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="relative rounded-full p-2 text-slate-500 hover:bg-slate-100"
+        className="relative rounded-full p-2 text-white/70 hover:bg-white/10 hover:text-white"
         aria-label="Notifications"
       >
         <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>

@@ -536,46 +536,23 @@ function findingCasesEligibleInPeriod(db: Database, finding: Finding, periodId: 
 }
 
 /**
- * How many of a finding's RectificationEntry rows stamped to `periodId` are
- * actually *verified* (districtVerifiedCases/Amount), not merely
- * self-reported by the Branch Manager. A case only becomes "rectified" for
- * performance purposes once the authorized person (District Controller,
- * via verify-rectification) accepts it - the raw entry the manager records
- * is a claim, not yet a fact the scoring formula can credit.
- *
- * verify-rectification/route.ts always catches districtVerifiedCases/Amount
- * up to the *entire* currently-outstanding rectifiedCases/Amount in one
- * call (never a partial, hand-picked sub-amount) - so at any moment,
- * `finding.districtVerifiedCases` is exactly the sum of some chronological
- * prefix of this finding's RectificationEntry rows, never a fraction that
- * splits one entry in a way a single verify call couldn't have produced.
- * That makes a FIFO walk - oldest entry first, each one credited verified
- * status up to whatever budget remains - an exact reconstruction of which
- * entries (and which period they're stamped to) are actually verified,
- * with no separate "verified" ledger needed. Cases and amount are tracked
- * independently since a Branch Manager can rectify a case count and an
- * amount that don't verify in lockstep.
+ * Sum of this finding's FindingClosure rows stamped to `periodId`. A case
+ * only becomes "rectified" for performance purposes once it's formally
+ * CLOSED - not merely self-reported by the Branch Manager, and not merely
+ * district-verified either (verification is District's own gate before
+ * HO can close it, one step short of closure itself, not a substitute for
+ * it). Unlike verification, closure already has its own real ledger with
+ * its own periodId stamped per event (FindingClosure.periodId, snapshotted
+ * at the moment of closure, same convention as RectificationEntry) - so
+ * this is a plain filter-and-sum, no FIFO reconstruction needed the way
+ * verification requires.
  */
-function verifiedRectifiedInPeriod(db: Database, finding: Finding, periodId: string): { cases: number; amount: number } {
-  const entries = [...db.rectifications]
-    .filter((r) => r.findingId === finding.id)
-    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-
-  let casesBudget = finding.districtVerifiedCases;
-  let amountBudget = finding.districtVerifiedAmount;
-  let cases = 0;
-  let amount = 0;
-  for (const entry of entries) {
-    const verifiedCases = Math.min(entry.rectifiedCases, casesBudget);
-    const verifiedAmount = Math.min(entry.rectifiedAmount, amountBudget);
-    casesBudget -= verifiedCases;
-    amountBudget -= verifiedAmount;
-    if (entry.periodId === periodId) {
-      cases += verifiedCases;
-      amount += verifiedAmount;
-    }
-  }
-  return { cases, amount };
+function closedInPeriod(db: Database, finding: Finding, periodId: string): { cases: number; amount: number } {
+  const closures = db.findingClosures.filter((c) => c.findingId === finding.id && c.periodId === periodId);
+  return {
+    cases: closures.reduce((sum, c) => sum + c.closedCases, 0),
+    amount: closures.reduce((sum, c) => sum + c.closedAmount, 0),
+  };
 }
 
 /**
@@ -597,15 +574,19 @@ function verifiedRectifiedInPeriod(db: Database, finding: Finding, periodId: str
  * new finding was merely *registered*, before anyone even reviewed it -
  * isHoApproved() already excludes REJECTED, so that check is folded in.
  *
- * The numerator is district-*verified* cases/amount, never the Branch
- * Manager's raw self-reported rectifiedCases/rectifiedAmount: a case only
- * counts as rectified once the authorized person (District Controller, via
- * verify-rectification) has accepted it, same reasoning as
- * findingCaseTotals()'s own closed-only gate one step further downstream.
- * A rectification the manager recorded but District hasn't verified yet is
- * a claim, not yet something the scoring formula can credit - crediting it
- * immediately would let performance improve before anyone authorized had
- * actually checked the work.
+ * The numerator is CLOSED cases/amount, never the Branch Manager's raw
+ * self-reported rectifiedCases/rectifiedAmount, and never merely
+ * district-*verified* either: a case only counts as rectified once it's
+ * formally closed - verification is District's own gate on the way there,
+ * one step short of closure, not a substitute for it. Same reasoning as
+ * findingCaseTotals()'s own closed-only gate for Total/Rectified Findings -
+ * this is that exact same "unless it is closed, never count as rectified"
+ * rule, just applied to the eligible-case basis Performance % itself
+ * divides. A rectification the manager recorded, even one District has
+ * already verified, is still not something the scoring formula can credit
+ * until HO (or whoever holds findings.close) has actually closed it -
+ * crediting it earlier would let performance improve before the case is
+ * truly, finally resolved.
  */
 export function computeEligibleCaseCounts(db: Database, scope: PerformanceScope): { totalCases: number; rectifiedCases: number } | null {
   const rule = db.scoringRules.find((r) => r.active);
@@ -624,7 +605,7 @@ export function computeEligibleCaseCounts(db: Database, scope: PerformanceScope)
   if (!scope.periodId) {
     const totalCases = candidates.reduce((sum, f) => sum + f.caseCount, 0);
     if (totalCases === 0) return null;
-    const rectifiedCases = candidates.reduce((sum, f) => sum + f.districtVerifiedCases, 0);
+    const rectifiedCases = candidates.reduce((sum, f) => sum + f.closedCases, 0);
     return { totalCases, rectifiedCases };
   }
 
@@ -634,7 +615,7 @@ export function computeEligibleCaseCounts(db: Database, scope: PerformanceScope)
     const eligibleCases = findingCasesEligibleInPeriod(db, f, scope.periodId);
     if (eligibleCases === null) continue;
     totalCases += eligibleCases;
-    rectifiedCases += verifiedRectifiedInPeriod(db, f, scope.periodId).cases;
+    rectifiedCases += closedInPeriod(db, f, scope.periodId).cases;
   }
   if (totalCases === 0) return null;
   return { totalCases, rectifiedCases };
@@ -647,15 +628,15 @@ export function computeEligibleCaseCounts(db: Database, scope: PerformanceScope)
  * hard-coding "Other Case". Returns null when there's no active rule or no
  * eligible cases yet (an honest "not computable," not a fabricated 0%).
  *
- * When scoped to a period, each finding's rectified credit comes from
- * whichever of its RectificationEntry ledger rows are both stamped with
- * that periodId AND district-verified (see verifiedRectifiedInPeriod()) -
- * not the finding's lifetime `rectifiedCases` (self-reported) or
- * `districtVerifiedCases` (a lifetime total, not period-attributed) - so a
- * case verified before a transfer stays credited to the period it actually
- * happened in, and a destination period only gets credit for work done
- * (and verified) after the case arrived (see findingCasesEligibleInPeriod()
- * above for the matching denominator).
+ * When scoped to a period, each finding's rectified credit comes from its
+ * FindingClosure ledger rows stamped with that periodId (see
+ * closedInPeriod()) - not the finding's lifetime `rectifiedCases`
+ * (self-reported), `districtVerifiedCases` (verified but not yet closed),
+ * or a lifetime `closedCases` total not attributed to any one period - so
+ * a case closed before a transfer stays credited to the period it
+ * actually happened in, and a destination period only gets credit for
+ * work done (and closed) after the case arrived (see
+ * findingCasesEligibleInPeriod() above for the matching denominator).
  */
 export function computePerformance(db: Database, scope: PerformanceScope): number | null {
   const counts = computeEligibleCaseCounts(db, scope);

@@ -270,8 +270,19 @@ export function FindingDetailClient({
         setError("Enter both a rectified case count and its amount together - one can't be recorded without the other");
         return;
       }
-      if (outstandingCases === 1 && (cases !== 1 || amount !== outstandingAmount)) {
-        setError(`Only 1 case remains outstanding - rectify exactly 1 case for the full remaining amount (${outstandingAmount})`);
+      // Whenever this entry exhausts one dimension entirely (every
+      // remaining case, or every remaining birr), it must exhaust the
+      // other one too - see rectify/route.ts's own doc comment for why.
+      if (cases === outstandingCases && amount !== outstandingAmount) {
+        setError(
+          `This rectifies every remaining case (${outstandingCases}) - the amount must be the full remaining balance (${outstandingAmount}), not a partial amount`
+        );
+        return;
+      }
+      if (amount === outstandingAmount && cases !== outstandingCases) {
+        setError(
+          `This rectifies the full remaining amount (${outstandingAmount}) - the case count must be the full remaining ${outstandingCases} case(s), not a partial count`
+        );
         return;
       }
     }

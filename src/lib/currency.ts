@@ -7,10 +7,10 @@ import type { Finding } from "@/types";
  * currencies (ETB, USD, EUR, GBP - see Settings), so a raw cross-currency
  * sum would be meaningless; this groups instead, e.g. "ETB 45,000 · USD 500".
  */
-export function sumAmountByCurrency(findings: Finding[], field: "amount" | "rectifiedAmount"): string {
+export function sumAmountByCurrency(findings: Finding[], field: "amount" | "rectifiedAmount" | "closedAmount"): string {
   const totals = new Map<string, number>();
   for (const f of findings) {
-    const value = field === "amount" ? f.amount : f.rectifiedAmount;
+    const value = field === "amount" ? f.amount : field === "closedAmount" ? f.closedAmount : f.rectifiedAmount;
     totals.set(f.currency, (totals.get(f.currency) ?? 0) + value);
   }
   if (totals.size === 0) return "--";

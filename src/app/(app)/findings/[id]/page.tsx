@@ -158,9 +158,15 @@ export default async function FindingDetailPage({ params }: { params: Promise<{ 
         ),
       }}
       permissions={{
-        canEdit: has("edit") && ["DRAFT", "RETURNED"].includes(finding.status),
-        canDelete: has("delete") && finding.status === "DRAFT",
-        canSubmit: has("submit") && ["DRAFT", "RETURNED"].includes(finding.status),
+        // Ownership-restricted: edit/delete/submit are the pre-submission
+        // authoring trio, only ever meaningful for the person who actually
+        // registered this finding - enforced server-side too (see
+        // [id]/route.ts PATCH/DELETE and submit/route.ts). Review/rectify/
+        // verify/close stay unrestricted by design - those are legitimately
+        // different-actor actions.
+        canEdit: has("edit") && finding.createdBy === user.userId && ["DRAFT", "RETURNED"].includes(finding.status),
+        canDelete: has("delete") && finding.createdBy === user.userId && finding.status === "DRAFT",
+        canSubmit: has("submit") && finding.createdBy === user.userId && ["DRAFT", "RETURNED"].includes(finding.status),
         canDistrictReview: has("district-review") && finding.status === "DISTRICT_REVIEW",
         // At each review stage (District/HO/Bank), the "Return" option is
         // hidden when the reviewer is also the finding's creator — a

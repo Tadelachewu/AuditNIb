@@ -4,9 +4,11 @@ import { getCurrentUser } from "@/lib/session";
 import { readDb } from "@/lib/db";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
 import { formatNumber } from "@/lib/format";
-import { getWeeklyExecutiveSummary } from "@/lib/reportTemplates";
+import { getWeeklyExecutiveSummary, weekEndDate } from "@/lib/reportTemplates";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Input, Label } from "@/components/ui/Field";
 import { PrintButton } from "@/components/reports/PrintButton";
 
 function DifferenceBadge({ value }: { value: number | null }) {
@@ -24,13 +26,23 @@ function DifferenceBadge({ value }: { value: number | null }) {
 // per active, admin-configured classified category (not hardcoded to
 // Other Case) - see src/lib/reportTemplates.ts's getWeeklyExecutiveSummary
 // doc comment for why, and for what "Previous/Current Balance" means here.
-export default async function WeeklyExecutiveSummaryPage() {
+// Both cutoff dates default to the real Monday-start current/last calendar
+// week but are overridable via the two date pickers below, so a reviewer
+// can reproduce a past week-over-week comparison, not just the live one.
+export default async function WeeklyExecutiveSummaryPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   if (!hasPermission(user.permissions, permissionKey("report-templates", "weekly-executive-summary"))) redirect("/reports/templates");
 
   const db = readDb();
-  const sections = getWeeklyExecutiveSummary(db);
+  const params = await searchParams;
+  const thisWeekDate = (typeof params.thisWeekDate === "string" && params.thisWeekDate) || weekEndDate(0);
+  const lastWeekDate = (typeof params.lastWeekDate === "string" && params.lastWeekDate) || weekEndDate(1);
+  const sections = getWeeklyExecutiveSummary(db, thisWeekDate, lastWeekDate);
 
   return (
     <div className="flex flex-col gap-5">
@@ -45,7 +57,7 @@ export default async function WeeklyExecutiveSummaryPage() {
           <p className="mt-1 text-sm text-slate-500">Every classified category x district, balance carried forward this week vs. last week.</p>
         </div>
         <div className="flex gap-2">
-          <a href="/api/report-templates/weekly-executive-summary/export">
+          <a href={`/api/report-templates/weekly-executive-summary/export?thisWeekDate=${thisWeekDate}&lastWeekDate=${lastWeekDate}`}>
             <span className="inline-flex items-center rounded-md border border-brand-gold-dark bg-brand-gold px-3 py-1.5 text-sm font-medium text-slate-900 transition-colors hover:bg-brand-gold-dark">
               Download CSV
             </span>
@@ -53,6 +65,18 @@ export default async function WeeklyExecutiveSummaryPage() {
           <PrintButton />
         </div>
       </div>
+
+      <form method="GET" className="no-print flex flex-wrap items-end gap-2">
+        <div>
+          <Label htmlFor="thisWeekDate">This week (cutoff date)</Label>
+          <Input id="thisWeekDate" type="date" name="thisWeekDate" defaultValue={thisWeekDate} />
+        </div>
+        <div>
+          <Label htmlFor="lastWeekDate">Previous week (cutoff date)</Label>
+          <Input id="lastWeekDate" type="date" name="lastWeekDate" defaultValue={lastWeekDate} />
+        </div>
+        <Button type="submit">View</Button>
+      </form>
 
       {sections.length === 0 && (
         <Card className="p-4">

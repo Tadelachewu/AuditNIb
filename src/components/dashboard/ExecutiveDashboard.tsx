@@ -38,15 +38,19 @@ export function ExecutiveDashboard({ db, dateRange = {} }: { user: SessionData; 
   const { totalFindings, totalCases, rectifiedFindings, rectifiedCases } = findingCaseTotals(periodFindings);
   // Same isHoApproved() gate as every other dashboard - Total Amount,
   // Outstanding Amount, Source Comparison, etc. shouldn't move before a
-  // finding's actually cleared HO approval (RiskDistribution/
-  // FindingStatusDistribution below are the deliberate exception - they
-  // track the whole in-flight workflow, not just the "official" figures).
+  // finding's actually cleared HO approval (FindingStatusDistribution below
+  // is the deliberate exception - it tracks the whole in-flight workflow,
+  // not just the "official" figures; RiskDistribution applies this same
+  // gate internally now too).
   const approvedPeriodFindings = periodFindings.filter(isHoApproved);
   const bankTransfers = openPeriod ? db.findingTransfers.filter((t) => t.fromPeriodId === openPeriod.id) : [];
   const { transferredFindings, transferredCases } = transferTotals(bankTransfers);
   const totalAmount = sumAmountByCurrency(approvedPeriodFindings, "amount");
   const outstandingAmount = sumOutstandingByCurrency(approvedPeriodFindings);
-  const resolvedAmount = sumAmountByCurrency(approvedPeriodFindings, "rectifiedAmount");
+  // Resolved Amount counts only formally CLOSED amount, never merely
+  // rectified-but-unclosed - same "a controller's sign-off is what makes it
+  // official" reasoning as findingCaseTotals()'s own closed-only gate.
+  const resolvedAmount = sumAmountByCurrency(approvedPeriodFindings, "closedAmount");
 
   const outstanding = db.findings.filter((f) => !["RECTIFIED", "CLOSED", "REJECTED"].includes(f.status));
   const avgOutstandingAgeDays = averageCaseAgeDays(outstanding);
@@ -54,9 +58,13 @@ export function ExecutiveDashboard({ db, dateRange = {} }: { user: SessionData; 
   // same convention as HODashboard/BranchDashboard's own High-Risk stat.
   // Previously hard-coded to "HIGH"/"CRITICAL" (uppercase), which never
   // matched the seeded "High"/"Critical" (title case) and so always
-  // silently reported zero exceptions regardless of real data.
+  // silently reported zero exceptions regardless of real data. Gated by
+  // isHoApproved() on top of `outstanding` - a finding still short of HO
+  // approval hasn't cleared review yet and shouldn't count as a live
+  // exception before it does, same rule every other "official" figure on
+  // this dashboard already follows.
   const highRiskTiers = new Set(db.settings.riskLevels.slice(-2).map((l) => l.toLowerCase()));
-  const exceptions = outstanding.filter((f) => highRiskTiers.has(f.riskLevel.toLowerCase()));
+  const exceptions = outstanding.filter((f) => isHoApproved(f) && highRiskTiers.has(f.riskLevel.toLowerCase()));
 
   const { topPercent, bottomPercent } = db.settings.performanceThresholds;
 
@@ -83,7 +91,11 @@ export function ExecutiveDashboard({ db, dateRange = {} }: { user: SessionData; 
     // isHoApproved(), same gate as everywhere else on this dashboard.
     const findings = approvedPeriodFindings.filter((f) => f.sourceId === s.id);
     const total = findings.reduce((sum, f) => sum + f.caseCount, 0);
-    const rectified = findings.reduce((sum, f) => sum + f.rectifiedCases, 0);
+    // closedCases, not raw self-reported rectifiedCases - unless it is
+    // closed, never count as rectified, same rule as
+    // computeEligibleCaseCounts() (src/lib/findings.ts) now applies to the
+    // headline Performance %.
+    const rectified = findings.reduce((sum, f) => sum + f.closedCases, 0);
     // Eligible = the same category AND source gate computeEligibleCaseCounts
     // enforces (not category-only) - a source the active rule doesn't
     // include contributes 0 eligible cases regardless of category. findings
@@ -116,10 +128,11 @@ export function ExecutiveDashboard({ db, dateRange = {} }: { user: SessionData; 
         <StatCard label="High/Critical Exceptions" value={exceptions.length} hint="Outstanding, high or critical risk" />
         <StatCard label="Rectified Findings" value={openPeriod ? rectifiedFindings : "--"} hint="Formally closed" />
         <StatCard label="Rectified Cases" value={openPeriod ? rectifiedCases : "--"} hint="Closed, this period" />
+        <StatCard label="Outstanding Cases" value={openPeriod ? totalCases - rectifiedCases : "--"} hint="Total minus rectified, bank-wide" />
         <StatCard label="Transferred Findings" value={openPeriod ? transferredFindings : "--"} hint="Out of this period" />
         <StatCard label="Transferred Cases" value={openPeriod ? transferredCases : "--"} hint="Out of this period" />
         <StatCard label="Total Amount" value={openPeriod ? totalAmount : "--"} hint="All findings, bank-wide" />
-        <StatCard label="Resolved Amount" value={openPeriod ? resolvedAmount : "--"} hint="Cumulative rectified" />
+        <StatCard label="Resolved Amount" value={openPeriod ? resolvedAmount : "--"} hint="Cumulative closed only" />
         <StatCard label="Outstanding Amount" value={openPeriod ? outstandingAmount : "--"} hint="Still owed, bank-wide" />
         <StatCard
           label="Avg. Backlog Age"

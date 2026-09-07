@@ -94,9 +94,10 @@ export function DistrictDashboard({
   // closed-only-rectified findings, same as every other dashboard - see
   // findingCaseTotals()'s own doc comment in src/lib/findings.ts.
   const { totalFindings, totalCases, rectifiedFindings, rectifiedCases } = findingCaseTotals(periodFindings);
-  // Every other "official" figure below (as opposed to RiskDistribution/
+  // Every other "official" figure below (as opposed to
   // FindingStatusDistribution's deliberately broader in-flight-workflow
-  // view) shares that same isHoApproved() gate, so Total Amount,
+  // view - RiskDistribution applies this same isHoApproved() gate
+  // internally now too) shares that same isHoApproved() gate, so Total Amount,
   // Outstanding, Category Totals, etc. don't inflate before a finding's
   // actually been approved.
   const approvedPeriodFindings = periodFindings.filter(isHoApproved);
@@ -115,7 +116,10 @@ export function DistrictDashboard({
     : null;
   const totalAmount = sumAmountByCurrency(approvedPeriodFindings, "amount");
   const outstandingAmount = sumOutstandingByCurrency(approvedPeriodFindings);
-  const resolvedAmount = sumAmountByCurrency(approvedPeriodFindings, "rectifiedAmount");
+  // Resolved Amount counts only formally CLOSED amount, never merely
+  // rectified-but-unclosed - same "a controller's sign-off is what makes it
+  // official" reasoning as findingCaseTotals()'s own closed-only gate.
+  const resolvedAmount = sumAmountByCurrency(approvedPeriodFindings, "closedAmount");
 
   // Performance Ranking Visibility, enabled: bank-wide, so a District
   // Controller/Director can see how their own district compares to every
@@ -170,10 +174,14 @@ export function DistrictDashboard({
   // performance-ranked table above, sorted by count rather than %.
   const findingsByBranch = [...branchRanking].sort((a, b) => b.total - a.total).slice(0, 10);
 
+  // Rectified is closedCases, not raw self-reported rectifiedCases -
+  // unless it is closed, never count as rectified, same rule as
+  // computeEligibleCaseCounts() (src/lib/findings.ts) now applies to the
+  // headline Performance %.
   const categoryTotals = categoriesInScope.map((c) => {
     const findings = approvedPeriodFindings.filter((f) => f.categoryId === c.id);
     const total = findings.reduce((sum, f) => sum + f.caseCount, 0);
-    const rectified = findings.reduce((sum, f) => sum + f.rectifiedCases, 0);
+    const rectified = findings.reduce((sum, f) => sum + f.closedCases, 0);
     return { category: c, total, rectified, outstanding: total - rectified };
   });
 
@@ -241,6 +249,7 @@ export function DistrictDashboard({
         <StatCard label="Returned" value={hasPeriodScope ? returnedFindings : "--"} hint="Findings" />
         <StatCard label="Rectified Findings" value={hasPeriodScope ? rectifiedFindings : "--"} hint="Formally closed" />
         <StatCard label="Rectified Cases" value={hasPeriodScope ? rectifiedCases : "--"} hint="Closed, this period" />
+        <StatCard label="Outstanding Cases" value={hasPeriodScope ? totalCases - rectifiedCases : "--"} hint="Total minus rectified" />
         <StatCard label="Transferred Findings" value={hasPeriodScope ? transferredFindings : "--"} hint="Out of this period" />
         <StatCard label="Transferred Cases" value={hasPeriodScope ? transferredCases : "--"} hint="Out of this period" />
         <StatCard
@@ -249,7 +258,7 @@ export function DistrictDashboard({
           hint={activeScoringRule ? `v${activeScoringRule.version} formula` : "No active scoring rule"}
         />
         <StatCard label="Total Amount" value={hasPeriodScope ? totalAmount : "--"} hint="All findings" />
-        <StatCard label="Resolved Amount" value={hasPeriodScope ? resolvedAmount : "--"} hint="Cumulative rectified" />
+        <StatCard label="Resolved Amount" value={hasPeriodScope ? resolvedAmount : "--"} hint="Cumulative closed only" />
         <StatCard label="Outstanding Amount" value={hasPeriodScope ? outstandingAmount : "--"} hint="Still owed" />
       </div>
 

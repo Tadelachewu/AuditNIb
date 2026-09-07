@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { Database } from "@/types";
 import type { SessionData } from "@/lib/session";
 import { computePerformance, findingCaseTotals, transferTotals, averageCaseAgeDays, isHoApproved } from "@/lib/findings";
+import { hasPermission, permissionKey } from "@/lib/permissions/registry";
 import { sumAmountByCurrency, sumOutstandingByCurrency } from "@/lib/currency";
 import { formatDateTime, formatNumber } from "@/lib/format";
 import { inDateRange, type DateRange } from "@/lib/dateRange";
@@ -72,9 +73,10 @@ export function HODashboard({
       ? allFindingsInRange.filter((f) => f.periodId === openPeriod.id)
       : [];
   const { totalFindings, totalCases, rectifiedFindings, rectifiedCases } = findingCaseTotals(periodFindings);
-  // Every other "official" figure below (as opposed to RiskDistribution/
+  // Every other "official" figure below (as opposed to
   // FindingStatusDistribution's deliberately broader in-flight-workflow
-  // view) shares that same isHoApproved() gate, so Total Amount,
+  // view - RiskDistribution applies this same isHoApproved() gate
+  // internally now too) shares that same isHoApproved() gate, so Total Amount,
   // Outstanding, Source Comparison, etc. don't inflate before a finding's
   // actually been approved.
   const approvedPeriodFindings = periodFindings.filter(isHoApproved);
@@ -84,11 +86,29 @@ export function HODashboard({
     : null;
   const totalAmount = sumAmountByCurrency(approvedPeriodFindings, "amount");
   const outstandingAmount = sumOutstandingByCurrency(approvedPeriodFindings);
-  const resolvedAmount = sumAmountByCurrency(approvedPeriodFindings, "rectifiedAmount");
+  // Resolved Amount counts only formally CLOSED amount, never merely
+  // rectified-but-unclosed - same "a controller's sign-off is what makes it
+  // official" reasoning as findingCaseTotals()'s own closed-only gate.
+  const resolvedAmount = sumAmountByCurrency(approvedPeriodFindings, "closedAmount");
   // "How stale is our backlog?" bank-wide - all periods, not just the open
   // one, since a stale finding that got transferred forward is still part
   // of the same outstanding backlog HO needs visibility into.
   const avgOutstandingAgeDays = averageCaseAgeDays(db.findings.filter((f) => !["RECTIFIED", "CLOSED", "REJECTED"].includes(f.status)));
+
+  // HO Controller also holds findings.create (bank-registered Internal
+  // Audit findings - icfms.txt), so the same "MY own drafts/pending
+  // approvals" pattern BranchDashboard gives its own registrant applies
+  // here too - scoped to createdBy, not bank-wide, since edit/delete/
+  // submit are now createdBy-restricted (see [id]/route.ts and
+  // submit/route.ts): a bank-wide count would include other HO users'
+  // drafts this session can't actually act on. Not period-scoped - "what
+  // needs action right now," not a per-period reporting total.
+  const canRegister = hasPermission(user.permissions, permissionKey("findings", "create"));
+  const ownFindings = db.findings.filter((f) => f.createdBy === user.userId);
+  const ownDraftFindings = ownFindings.filter((f) => f.status === "DRAFT").length;
+  const ownPendingApprovalFindings = ownFindings.filter((f) =>
+    ["DISTRICT_REVIEW", "HO_REVIEW", "PENDING_BANK_APPROVAL"].includes(f.status)
+  ).length;
 
   // A district/branch filter narrows which rows the ranking tables even
   // list - a real narrowing of "what am I looking at," not a redefinition
@@ -159,9 +179,13 @@ export function HODashboard({
     // Comparison's Total/Rectified/Outstanding columns yet either.
     const findings = approvedPeriodFindings.filter((f) => f.sourceId === s.id);
     const total = findings.reduce((sum, f) => sum + f.caseCount, 0);
-    const rectified = findings.reduce((sum, f) => sum + f.rectifiedCases, 0);
+    // closedCases/closedAmount, not raw self-reported rectifiedCases/
+    // rectifiedAmount - unless it is closed, never count as rectified,
+    // same rule as computeEligibleCaseCounts() (src/lib/findings.ts) now
+    // applies to the headline Performance %.
+    const rectified = findings.reduce((sum, f) => sum + f.closedCases, 0);
     const amount = findings.reduce((sum, f) => sum + f.amount, 0);
-    const rectifiedAmount = findings.reduce((sum, f) => sum + f.rectifiedAmount, 0);
+    const rectifiedAmount = findings.reduce((sum, f) => sum + f.closedAmount, 0);
     // Eligible = the same category AND source gate computeEligibleCaseCounts
     // enforces (not category-only) - a source the active rule doesn't
     // include contributes 0 eligible cases regardless of category. findings
@@ -185,8 +209,12 @@ export function HODashboard({
   // High-risk = the top two tiers of whatever Settings.riskLevels currently
   // defines, matched case-insensitively since it's admin-configurable free
   // text, not a fixed enum - "High"/"Critical" are just the seeded names.
+  // Scoped to approvedPeriodFindings, not periodFindings - a finding still
+  // in DISTRICT_REVIEW/HO_REVIEW hasn't cleared approval yet and shouldn't
+  // count here before it does, same isHoApproved() gate every other
+  // "official" figure on this dashboard already uses.
   const highRiskTiers = new Set(db.settings.riskLevels.slice(-2).map((l) => l.toLowerCase()));
-  const highRiskFindings = periodFindings.filter(
+  const highRiskFindings = approvedPeriodFindings.filter(
     (f) => !["RECTIFIED", "CLOSED", "REJECTED"].includes(f.status) && highRiskTiers.has(f.riskLevel.toLowerCase())
   ).length;
 
@@ -255,6 +283,7 @@ export function HODashboard({
         <StatCard label="Total Cases" value={hasPeriodScope ? totalCases : "--"} hint="Sum of case counts, bank-wide" />
         <StatCard label="Rectified Findings" value={hasPeriodScope ? rectifiedFindings : "--"} hint="Formally closed" />
         <StatCard label="Rectified Cases" value={hasPeriodScope ? rectifiedCases : "--"} hint="Closed, this period" />
+        <StatCard label="Outstanding Cases" value={hasPeriodScope ? totalCases - rectifiedCases : "--"} hint="Total minus rectified, bank-wide" />
         <StatCard label="Outstanding" value={hasPeriodScope ? outstandingFindings : "--"} hint="Findings" />
         <StatCard
           label="Bank-wide Performance"
@@ -265,13 +294,17 @@ export function HODashboard({
         <StatCard label="Transferred Findings" value={hasPeriodScope ? transferredFindings : "--"} hint="Out of this period" />
         <StatCard label="Transferred Cases" value={hasPeriodScope ? transferredCases : "--"} hint="Out of this period" />
         <StatCard label="Total Amount" value={hasPeriodScope ? totalAmount : "--"} hint="All findings, bank-wide" />
-        <StatCard label="Resolved Amount" value={hasPeriodScope ? resolvedAmount : "--"} hint="Cumulative rectified" />
+        <StatCard label="Resolved Amount" value={hasPeriodScope ? resolvedAmount : "--"} hint="Cumulative closed only" />
         <StatCard label="Outstanding Amount" value={hasPeriodScope ? outstandingAmount : "--"} hint="Still owed, bank-wide" />
         <StatCard
           label="Avg. Backlog Age"
           value={avgOutstandingAgeDays !== null ? `${avgOutstandingAgeDays}d` : "--"}
           hint="Outstanding findings, all periods"
         />
+        {canRegister && <StatCard label="Draft" value={ownDraftFindings} hint="Your own, not yet submitted" />}
+        {canRegister && (
+          <StatCard label="Pending Approval" value={ownPendingApprovalFindings} hint="Review pending, your registrations" />
+        )}
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">

@@ -5,44 +5,57 @@ import { getCurrentUser } from "@/lib/session";
 import { readDb } from "@/lib/db";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
 import { formatNumber } from "@/lib/format";
-import { getMonthlyDistrictSeries } from "@/lib/reportTemplates";
+import { getMonthlyDistrictSeries, type DistrictPeriodRow, type DistrictVariousRow } from "@/lib/reportTemplates";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { PrintButton } from "@/components/reports/PrintButton";
 
 // The same District x Period series as Monthly District History, grouped
 // the other way - one block per district (months as rows) instead of one
 // block per period. "Detail monthly summaryBD" in the source workbook -
-// "BD" is "By District". Per district/period it now shows TWO rows (as the
-// source Excel does): one for the official "Other Cases" scored metric,
-// and a second catch-all "Various internal Audit report" row for all
-// non-scored categories (ATM, IT, Zero Balance, Dormant, Cheque Book…).
-// Each district's block ends with a subtotal row, and the whole table
-// ends with one grand TOTAL row — both reproduced here.
+// "BD" is "By District". Each district's block is its official "Other
+// Cases" scored row per period, followed by exactly ONE final "Various
+// internal Audit report" row (the catch-all for every non-scored
+// category, lifetime for that district) - cross-checked directly against
+// the source Excel's raw cells: it's the literal last row of each
+// district's block there too, not repeated per month. Each district's
+// block ends with a subtotal row (periods + the one Various row), and the
+// whole table ends with one grand TOTAL row.
 export default async function MonthlyDistrictDetailPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   if (!hasPermission(user.permissions, permissionKey("report-templates", "monthly-district-detail"))) redirect("/reports/templates");
 
   const db = readDb();
-  const series = getMonthlyDistrictSeries(db);
+  const { otherCases, various } = getMonthlyDistrictSeries(db);
 
-  const byDistrict = new Map<string, typeof series>();
-  for (const r of series) {
+  const variousByDistrict = new Map(various.map((v) => [v.district.id, v]));
+  const byDistrict = new Map<string, DistrictPeriodRow[]>();
+  for (const r of otherCases) {
     const list = byDistrict.get(r.district.id) ?? [];
     list.push(r);
     byDistrict.set(r.district.id, list);
   }
-  const groups = [...byDistrict.values()];
+  // Insertion order already follows chronological period order per
+  // district (otherCases is built period-outer, district-inner, so each
+  // district's own slice stays in period sequence as entries are appended).
+  const groups = [...byDistrict.entries()].map(([districtId, periodRows]) => ({
+    district: periodRows[0].district,
+    periodRows,
+    variousRow: variousByDistrict.get(districtId) as DistrictVariousRow | undefined,
+  }));
 
-  const caseTypeLabel = (kind: "OTHER_CASES" | "VARIOUS_INTERNAL_AUDIT") =>
-    kind === "OTHER_CASES" ? "Other Cases" : "Various internal Audit report";
+  const totalRowCount = otherCases.length + various.length;
 
-  // Grand TOTAL sums BOTH bucket types, matching the subtotal rows.
+  // Grand TOTAL sums both the period rows and the one Various row per district.
   let grandTotalCases = 0;
   let grandRectified = 0;
-  for (const rows of byDistrict.values()) {
-    grandTotalCases += rows.reduce((sum, r) => sum + r.totalCases, 0);
-    grandRectified += rows.reduce((sum, r) => sum + r.rectifiedCases, 0);
+  for (const r of otherCases) {
+    grandTotalCases += r.totalCases;
+    grandRectified += r.rectifiedCases;
+  }
+  for (const v of various) {
+    grandTotalCases += v.totalCases;
+    grandRectified += v.rectifiedCases;
   }
 
   return (
@@ -55,7 +68,9 @@ export default async function MonthlyDistrictDetailPage() {
             ← Report Templates
           </Link>
           <h1 className="mt-1 text-lg font-semibold text-slate-900">Monthly District Detail</h1>
-          <p className="mt-1 text-sm text-slate-500">District-by-district history with Other Cases plus the &quot;Various internal Audit report&quot; catch-all, subtotal per district, and grand total.</p>
+          <p className="mt-1 text-sm text-slate-500">
+            District-by-district history: Other Cases per period, then one closing &quot;Various internal Audit report&quot; row per district, subtotal, and grand total.
+          </p>
         </div>
         <div className="flex gap-2">
           <a href="/api/report-templates/monthly-district-detail/export">
@@ -68,7 +83,7 @@ export default async function MonthlyDistrictDetailPage() {
       </div>
 
       <Card>
-        <CardHeader title="Monthly District Detail" description={`${series.length} row(s) across ${groups.length} district(s)`} />
+        <CardHeader title="Monthly District Detail" description={`${totalRowCount} row(s) across ${groups.length} district(s)`} />
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead className="border-b border-slate-100 text-xs uppercase text-slate-400">
@@ -84,56 +99,46 @@ export default async function MonthlyDistrictDetailPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {series.length === 0 && (
+              {groups.length === 0 && (
                 <tr>
                   <td className="px-4 py-6 text-center text-slate-400" colSpan={8}>
                     No reporting periods configured yet.
                   </td>
                 </tr>
               )}
-              {groups.map((rows) => {
-                const totalCases = rows.reduce((sum, r) => sum + r.totalCases, 0);
-                const rectifiedCases = rows.reduce((sum, r) => sum + r.rectifiedCases, 0);
+              {groups.map(({ district, periodRows, variousRow }) => {
+                const totalCases = periodRows.reduce((sum, r) => sum + r.totalCases, 0) + (variousRow?.totalCases ?? 0);
+                const rectifiedCases = periodRows.reduce((sum, r) => sum + r.rectifiedCases, 0) + (variousRow?.rectifiedCases ?? 0);
                 const outstandingCases = totalCases - rectifiedCases;
                 const performance = totalCases > 0 ? (rectifiedCases / totalCases) * 100 : null;
-                const district = rows[0].district;
-                // Group the flat OTHER_CASES + VARIOUS_INTERNAL_AUDIT rows
-                // by Period.code so each month shows two sub-rows with
-                // shared SN numbering (one SN per month).
-                const byPeriod = new Map<string, typeof rows>();
-                for (const r of rows) {
-                  const list = byPeriod.get(r.period.id) ?? [];
-                  list.push(r);
-                  byPeriod.set(r.period.id, list);
-                }
                 return (
                   <Fragment key={district.id}>
-                    {[...byPeriod.values()].map((periodRows, i) => (
-                      <Fragment key={periodRows[0].period.id}>
-                        {periodRows.map((r, kindIdx) => (
-                          <tr key={`${r.period.id}-${r.district.id}-${r.rowKind}`} className={kindIdx === 1 ? "bg-slate-50/50" : ""}>
-                            <td className="px-4 py-2 text-slate-400">{kindIdx === 0 ? i + 1 : ""}</td>
-                            <td className="px-4 py-2 text-slate-900">{kindIdx === 0 ? r.district.name : ""}</td>
-                            <td className="px-4 py-2 font-mono text-xs text-slate-600">{kindIdx === 0 ? r.period.code : ""}</td>
-                            <td className="px-4 py-2 text-slate-700">
-                              <span
-                                className={
-                                  r.rowKind === "VARIOUS_INTERNAL_AUDIT"
-                                    ? "rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-700"
-                                    : ""
-                                }
-                              >
-                                {caseTypeLabel(r.rowKind)}
-                              </span>
-                            </td>
-                            <td className="px-4 py-2 text-slate-700">{formatNumber(r.totalCases)}</td>
-                            <td className="px-4 py-2 text-slate-700">{formatNumber(r.outstandingCases)}</td>
-                            <td className="px-4 py-2 text-slate-700">{formatNumber(r.rectifiedCases)}</td>
-                            <td className="px-4 py-2 text-slate-700">{r.performance !== null ? `${r.performance.toFixed(1)}%` : "--"}</td>
-                          </tr>
-                        ))}
-                      </Fragment>
+                    {periodRows.map((r, i) => (
+                      <tr key={`${district.id}-${r.period.id}`}>
+                        <td className="px-4 py-2 text-slate-400">{i + 1}</td>
+                        <td className="px-4 py-2 text-slate-900">{i === 0 ? district.name : ""}</td>
+                        <td className="px-4 py-2 font-mono text-xs text-slate-600">{r.period.code}</td>
+                        <td className="px-4 py-2 text-slate-700">Other Cases</td>
+                        <td className="px-4 py-2 text-slate-700">{formatNumber(r.totalCases)}</td>
+                        <td className="px-4 py-2 text-slate-700">{formatNumber(r.outstandingCases)}</td>
+                        <td className="px-4 py-2 text-slate-700">{formatNumber(r.rectifiedCases)}</td>
+                        <td className="px-4 py-2 text-slate-700">{r.performance !== null ? `${r.performance.toFixed(1)}%` : "--"}</td>
+                      </tr>
                     ))}
+                    {variousRow && (
+                      <tr key={`${district.id}-various`} className="bg-slate-50/50">
+                        <td className="px-4 py-2 text-slate-400">{periodRows.length + 1}</td>
+                        <td className="px-4 py-2" />
+                        <td className="px-4 py-2" />
+                        <td className="px-4 py-2 text-slate-700">
+                          <span className="rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-700">Various internal Audit report</span>
+                        </td>
+                        <td className="px-4 py-2 text-slate-700">{formatNumber(variousRow.totalCases)}</td>
+                        <td className="px-4 py-2 text-slate-700">{formatNumber(variousRow.outstandingCases)}</td>
+                        <td className="px-4 py-2 text-slate-700">{formatNumber(variousRow.rectifiedCases)}</td>
+                        <td className="px-4 py-2 text-slate-700">{variousRow.performance !== null ? `${variousRow.performance.toFixed(1)}%` : "--"}</td>
+                      </tr>
+                    )}
                     <tr key={`${district.id}-subtotal`} className="bg-slate-50 font-medium">
                       <td className="px-4 py-2" colSpan={4} />
                       <td className="px-4 py-2 text-slate-900">{formatNumber(totalCases)}</td>
@@ -144,7 +149,7 @@ export default async function MonthlyDistrictDetailPage() {
                   </Fragment>
                 );
               })}
-              {series.length > 0 && (
+              {groups.length > 0 && (
                 <tr className="bg-slate-100 font-semibold">
                   <td className="px-4 py-2" />
                   <td className="px-4 py-2 text-slate-900">TOTAL</td>

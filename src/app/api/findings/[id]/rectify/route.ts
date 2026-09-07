@@ -37,14 +37,18 @@ const rectifySchema = z.object({
 // ("Verify rectifications"). Cases and amount are validated independently
 // against what's still outstanding - plan doc §3.5's own acceptance
 // example (3 cases/45,000 -> 1 case/10,000 rectified, 2 cases/35,000
-// outstanding) is exactly this rule, and still holds whenever more than
-// one case remains. Two narrower rules on top of that (non-itemized path
-// only - an itemized finding's amount is always the exact sum of whichever
-// case(s) were picked, so these can't arise there): a positive case count
-// can't be paired with a zero amount or vice versa (see the "both zero or
-// both positive" check below), and when exactly one case remains
-// outstanding, it's atomic - the entry must rectify exactly that 1 case
-// for its exact remaining amount, not a partial slice of it.
+// outstanding) is exactly this rule, and still holds whenever this entry
+// leaves at least one case AND some amount still outstanding afterward.
+// Three narrower rules on top of that (non-itemized path only - an
+// itemized finding's amount is always the exact sum of whichever case(s)
+// were picked, so these can't arise there): a positive case count can't
+// be paired with a zero amount or vice versa (see the "both zero or both
+// positive" check below); and - the rule that actually catches "2 of 2
+// cases rectified for only 7,000 of a 70,000 balance" - whenever this
+// entry exhausts every remaining case OR every remaining birr, it must
+// exhaust the other dimension too, since a non-itemized finding has no
+// per-case amount to attach a leftover balance (or a leftover case) to
+// once the other side hits zero.
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requirePermission("findings.rectify");
   if (!auth.ok) return auth.response;
@@ -126,14 +130,33 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         { status: 400 }
       );
     }
-    // A single remaining case is atomic - there's no such thing as
-    // rectifying "part of" the last case, so this entry must close it out
-    // exactly (1 case, the full remaining amount) rather than leave it
-    // outstanding with a partially-reduced balance nothing else can act on.
-    if (outstandingCases === 1 && (input.rectifiedCases !== 1 || input.rectifiedAmount !== outstandingAmount)) {
+    // Whenever this entry would exhaust one dimension entirely - every
+    // remaining case, or every remaining birr - it must exhaust the other
+    // one too. A non-itemized finding only tracks two running totals, not
+    // a per-case amount, so "all cases done, some money still owed" (or
+    // the mirror: all the money accounted for but a case count still
+    // outstanding) has nothing left for a future rectification to attach
+    // the remainder to - it'd be a permanently orphaned balance. This is
+    // what actually catches "I rectified 2 of 2 cases for only 7,000 of
+    // 70,000" - both individual checks below it pass (2 <= 2 outstanding
+    // cases, 7,000 <= 70,000 outstanding amount) without this rule.
+    // Subsumes the old single-last-case special case (outstandingCases
+    // === 1 forces rectifiedCases === 1 via the "cannot exceed outstanding"
+    // check just below anyway, so the only thing that rule added beyond
+    // generic bounds-checking - amount must be the full remainder - is
+    // exactly what this generalizes to every case, not just the very last.
+    if (input.rectifiedCases === outstandingCases && input.rectifiedAmount !== outstandingAmount) {
       return NextResponse.json(
         {
-          error: `Only 1 case remains outstanding - rectify exactly 1 case for the full remaining amount (${outstandingAmount})`,
+          error: `This rectifies every remaining case (${outstandingCases}) - the amount must be the full remaining balance (${outstandingAmount}), not a partial amount`,
+        },
+        { status: 400 }
+      );
+    }
+    if (input.rectifiedAmount === outstandingAmount && input.rectifiedCases !== outstandingCases) {
+      return NextResponse.json(
+        {
+          error: `This rectifies the full remaining amount (${outstandingAmount}) - the case count must be the full remaining ${outstandingCases} case(s), not a partial count`,
         },
         { status: 400 }
       );

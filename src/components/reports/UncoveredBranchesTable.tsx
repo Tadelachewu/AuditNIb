@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { apiSend, ApiError } from "@/lib/api-client";
 import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Field";
 import { ReasonPicker, resolveReason } from "@/components/reports/ReasonPicker";
 import { UncoveredBranchNoteForm } from "@/components/reports/UncoveredBranchNoteForm";
 import type { UncoveredReason, Branch, District, BranchCoverageNote } from "@/types";
@@ -21,16 +22,41 @@ interface Row {
 // selection layer and the shared ReasonPicker used for the bulk apply.
 export function UncoveredBranchesTable({ rows, periodId, reasons }: { rows: Row[]; periodId: string; reasons: UncoveredReason[] }) {
   const router = useRouter();
+  const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkValue, setBulkValue] = useState("");
   const [bulkCustomText, setBulkCustomText] = useState("");
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkError, setBulkError] = useState<string | null>(null);
 
-  const allSelected = rows.length > 0 && selected.size === rows.length;
+  // A long branch list (410+ branches bank-wide) is otherwise a scroll-and-
+  // scan exercise for the one person looking for their own branch to add a
+  // reason - client-side, so it filters instantly against data already on
+  // the page rather than round-tripping the server on every keystroke.
+  // Matches branch name OR district name, so "West" finds every uncovered
+  // branch in the West district too, not just a branch literally named it.
+  const visibleRows = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter((r) => r.branch.name.toLowerCase().includes(q) || (r.district?.name.toLowerCase().includes(q) ?? false));
+  }, [rows, search]);
+
+  // "Select all" only ever selects what's currently visible - selecting a
+  // branch the search has filtered out would be invisible and confusing to
+  // undo. A selection made before narrowing the search still survives
+  // (selected is keyed by branch id, not by row position), it just won't
+  // show a checked checkbox while its row is hidden.
+  const allSelected = visibleRows.length > 0 && visibleRows.every((r) => selected.has(r.branch.id));
 
   function toggleAll() {
-    setSelected(allSelected ? new Set() : new Set(rows.map((r) => r.branch.id)));
+    setSelected((prev) => {
+      if (allSelected) {
+        const next = new Set(prev);
+        for (const r of visibleRows) next.delete(r.branch.id);
+        return next;
+      }
+      return new Set([...prev, ...visibleRows.map((r) => r.branch.id)]);
+    });
   }
   function toggleOne(branchId: string) {
     setSelected((prev) => {
@@ -91,6 +117,22 @@ export function UncoveredBranchesTable({ rows, periodId, reasons }: { rows: Row[
         </div>
       )}
 
+      <div className="no-print flex items-center gap-2 px-4 pt-4">
+        <Input
+          type="search"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search by branch or district name..."
+          aria-label="Search branches"
+          className="max-w-xs"
+        />
+        {search && (
+          <span className="text-xs text-slate-400">
+            {visibleRows.length} of {rows.length} branch(es)
+          </span>
+        )}
+      </div>
+
       <div className="overflow-x-auto">
         <table className="w-full text-left text-sm">
           <thead className="border-b border-slate-100 text-xs uppercase text-slate-400">
@@ -100,8 +142,8 @@ export function UncoveredBranchesTable({ rows, periodId, reasons }: { rows: Row[
                   type="checkbox"
                   checked={allSelected}
                   onChange={toggleAll}
-                  disabled={rows.length === 0}
-                  aria-label="Select all branches"
+                  disabled={visibleRows.length === 0}
+                  aria-label="Select all visible branches"
                   className="h-3.5 w-3.5 rounded border-slate-300"
                 />
               </th>
@@ -119,7 +161,14 @@ export function UncoveredBranchesTable({ rows, periodId, reasons }: { rows: Row[
                 </td>
               </tr>
             )}
-            {rows.map((r, i) => (
+            {rows.length > 0 && visibleRows.length === 0 && (
+              <tr>
+                <td className="px-4 py-6 text-center text-slate-400" colSpan={5}>
+                  No branches match &quot;{search}&quot;.
+                </td>
+              </tr>
+            )}
+            {visibleRows.map((r, i) => (
               <tr key={r.branch.id}>
                 <td className="no-print px-4 py-2">
                   <input

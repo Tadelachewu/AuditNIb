@@ -1,6 +1,7 @@
 import { Card, CardHeader } from "@/components/ui/Card";
 import { StackedBarChart, type StackedBarSegment } from "@/components/dashboard/charts/StackedBarChart";
 import { categoricalColor } from "@/components/dashboard/charts/categoricalPalette";
+import { isHoApproved } from "@/lib/findings";
 import type { ClassifiedCategory, Finding } from "@/types";
 
 /**
@@ -11,9 +12,13 @@ import type { ClassifiedCategory, Finding } from "@/types";
  * per category, same graphical+numeric pairing as RiskDistribution.
  * Categories are identity, not severity, so this uses the fixed
  * categorical palette rather than the status colors RiskDistribution uses.
+ *
+ * Gated by isHoApproved(), same as every "official" figure elsewhere on
+ * the dashboard and same as RiskDistribution's own reasoning - a finding
+ * still short of HO approval shouldn't count here yet either.
  */
 export function CategoryDistribution({ findings, categories }: { findings: Finding[]; categories: ClassifiedCategory[] }) {
-  const open = findings.filter((f) => !["RECTIFIED", "CLOSED", "REJECTED"].includes(f.status));
+  const open = findings.filter((f) => isHoApproved(f) && !["RECTIFIED", "CLOSED", "REJECTED"].includes(f.status));
   const total = open.length;
 
   const segments: StackedBarSegment[] = categories.map((c, i) => ({

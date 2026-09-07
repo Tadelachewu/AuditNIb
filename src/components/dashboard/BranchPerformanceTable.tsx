@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { Database, Branch, ReportingPeriod } from "@/types";
-import { computePerformance, findPreviousPeriod } from "@/lib/findings";
+import { computePerformance, computeEligibleCaseCounts, findPreviousPeriod, isHoApproved } from "@/lib/findings";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 
@@ -12,6 +12,22 @@ interface Row {
   performance: number | null;
   improvement: number | null;
   highRiskCount: number;
+}
+
+/** Performance %'s own math, revealed on click - see StatCard's `detail` prop for the same pattern. */
+function PerformanceDetail({ row }: { row: Row }) {
+  if (row.performance === null) return null;
+  return (
+    <details className="group">
+      <summary className="cursor-pointer list-none text-slate-700 marker:content-none hover:underline">
+        {row.performance.toFixed(1)}%
+      </summary>
+      <div className="mt-1 max-w-[14rem] text-xs leading-relaxed text-slate-500">
+        {row.rectifiedCases} of {row.totalCases} eligible case(s) closed (unless it&apos;s closed, it never counts as rectified):{" "}
+        {row.rectifiedCases} ÷ {row.totalCases} × 100 = {row.performance.toFixed(1)}%.
+      </div>
+    </details>
+  );
 }
 
 function Callout({
@@ -84,14 +100,24 @@ export function BranchPerformanceTable({
     const findings = hasScope
       ? db.findings.filter((f) => f.branchId === b.id && (allPeriods || f.periodId === openPeriod!.id))
       : [];
-    const totalCases = findings.reduce((sum, f) => sum + f.caseCount, 0);
-    const rectifiedCases = findings.reduce((sum, f) => sum + f.rectifiedCases, 0);
+    // Total/Rectified come from computeEligibleCaseCounts() - the exact
+    // same function computePerformance() itself divides to get the
+    // Performance % in this same row - not a hand-rolled raw findings
+    // reduce (every category, self-reported rectifiedCases), which could
+    // disagree with what the percentage right next to it actually means.
+    const eligible = hasScope ? computeEligibleCaseCounts(db, { branchId: b.id, periodId: allPeriods ? undefined : openPeriod!.id }) : null;
+    const totalCases = eligible?.totalCases ?? 0;
+    const rectifiedCases = eligible?.rectifiedCases ?? 0;
     const performance = hasScope
       ? computePerformance(db, { branchId: b.id, periodId: allPeriods ? undefined : openPeriod!.id })
       : null;
     const prevPerformance = previousPeriod ? computePerformance(db, { branchId: b.id, periodId: previousPeriod.id }) : null;
+    // isHoApproved() gate, same as every other "official" figure - a
+    // finding still in DISTRICT_REVIEW/HO_REVIEW hasn't cleared approval
+    // yet and shouldn't count toward the "High-Risk Branch" callout (or
+    // any other exceptions figure) before it does.
     const highRiskCount = findings.filter(
-      (f) => !["RECTIFIED", "CLOSED", "REJECTED"].includes(f.status) && highRiskTiers.has(f.riskLevel.toLowerCase())
+      (f) => isHoApproved(f) && !["RECTIFIED", "CLOSED", "REJECTED"].includes(f.status) && highRiskTiers.has(f.riskLevel.toLowerCase())
     ).length;
     return {
       branch: b,
@@ -159,9 +185,9 @@ export function BranchPerformanceTable({
             <tr>
               <th className="px-4 py-2 font-medium">Rank</th>
               <th className="px-4 py-2 font-medium">Branch</th>
-              <th className="px-4 py-2 font-medium">Total Cases</th>
-              <th className="px-4 py-2 font-medium">Rectified</th>
-              <th className="px-4 py-2 font-medium">Outstanding</th>
+              <th className="px-4 py-2 font-medium">Total Eligible Cases</th>
+              <th className="px-4 py-2 font-medium">Solved</th>
+              <th className="px-4 py-2 font-medium">Unsolved</th>
               <th className="px-4 py-2 font-medium">Performance</th>
             </tr>
           </thead>
@@ -184,7 +210,7 @@ export function BranchPerformanceTable({
                 <td className="px-4 py-2 text-slate-700">{hasScope ? row.totalCases : "--"}</td>
                 <td className="px-4 py-2 text-slate-700">{hasScope ? row.rectifiedCases : "--"}</td>
                 <td className="px-4 py-2 text-slate-700">{hasScope ? row.outstandingCases : "--"}</td>
-                <td className="px-4 py-2 text-slate-700">{row.performance !== null ? `${row.performance.toFixed(1)}%` : "--"}</td>
+                <td className="px-4 py-2 text-slate-700">{row.performance !== null ? <PerformanceDetail row={row} /> : "--"}</td>
               </tr>
             ))}
           </tbody>

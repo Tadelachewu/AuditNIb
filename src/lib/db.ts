@@ -50,6 +50,7 @@ const reportTemplatePermissions = [
   permissionKey("report-templates", "district-ranking-all-cases"),
   permissionKey("report-templates", "category-performance-summary"),
   permissionKey("report-templates", "mid-month-district-snapshot"),
+  permissionKey("report-templates", "transferred-findings"),
 ];
 
 // Default canned reasons for the Uncovered Branches report - module-level
@@ -273,8 +274,19 @@ function buildSeedDatabase(): Database {
     permissionKey("audit-log", "view"),
     // "Register Internal Audit findings received from the Internal Audit
     // Department" (icfms.txt) + the second-approval stage of the workflow.
+    // edit/delete/submit round out "create" the same way they do for
+    // Branch Controller below - without them HO could register a finding,
+    // save it as a draft, and then never be able to touch it again (the
+    // one-shot create-with-submit:true path doesn't need these, but a
+    // save-as-draft-for-later one does). All three are still
+    // createdBy-restricted to HO's own registrations (see
+    // [id]/route.ts and submit/route.ts) - this permission just makes
+    // that restriction reachable instead of a dead end.
     permissionKey("findings", "view"),
     permissionKey("findings", "create"),
+    permissionKey("findings", "edit"),
+    permissionKey("findings", "delete"),
+    permissionKey("findings", "submit"),
     permissionKey("findings", "ho-review"),
     permissionKey("findings", "close"),
     permissionKey("findings", "ho-return-rectification"),
@@ -847,7 +859,26 @@ function normalizeDb(db: Database): { db: Database; changed: boolean } {
       }
     }
   }
-  // The 10 named report templates are new - any role that already held the
+  // edit/delete/submit are new companions to findings.create for any
+  // BANK-scope role (HO Controller) - previously a bank-registered finding
+  // saved as a draft (submit: false) could never be edited, submitted, or
+  // deleted again, since only the one-shot create-with-submit:true path
+  // (which needs only findings.create) worked. Backfilled onto any
+  // existing BANK-scope role that already holds findings.create, so a
+  // stuck draft an admin already registered this way becomes reachable
+  // again without a manual /admin/roles edit.
+  for (const r of db.roles) {
+    if (r.orgScope === "BANK" && r.permissions.includes(permissionKey("findings", "create"))) {
+      const missing = [permissionKey("findings", "edit"), permissionKey("findings", "delete"), permissionKey("findings", "submit")].filter(
+        (k) => !r.permissions.includes(k)
+      );
+      if (missing.length > 0) {
+        r.permissions = [...r.permissions, ...missing];
+        changed = true;
+      }
+    }
+  }
+  // The named report templates are new - any role that already held the
   // existing Reports page's reports.view (HO Controller, District
   // Controller, District Director, and Executive via
   // ALL_VIEW_PERMISSION_KEYS) picks up every template too, matching the

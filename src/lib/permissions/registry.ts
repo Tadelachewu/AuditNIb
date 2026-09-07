@@ -44,7 +44,8 @@ export type PermissionAction =
   | "weekly-executive-summary"
   | "district-ranking-all-cases"
   | "category-performance-summary"
-  | "mid-month-district-snapshot";
+  | "mid-month-district-snapshot"
+  | "transferred-findings";
 
 export interface PageAction {
   action: PermissionAction;
@@ -131,6 +132,7 @@ export const PAGE_REGISTRY: PageDefinition[] = [
       { action: "district-ranking-all-cases", label: "District Ranking - All Cases Report" },
       { action: "category-performance-summary", label: "Category Performance Summary Report" },
       { action: "mid-month-district-snapshot", label: "Mid-Month District Snapshot Report" },
+      { action: "transferred-findings", label: "Transferred Findings Report" },
     ],
   },
   { code: "district-dashboard", label: "District Dashboard", actions: [V] },

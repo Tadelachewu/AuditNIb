@@ -1,13 +1,16 @@
-import { computeEligibleCaseCounts } from "@/lib/findings";
+import { computeEligibleCaseCounts, caseAgeDays } from "@/lib/findings";
 import { formatNumber } from "@/lib/format";
-import type { Database, Branch, District, ReportingPeriod, ClassifiedCategory, BranchCoverageNote } from "@/types";
+import type { Database, Branch, District, ReportingPeriod, ClassifiedCategory, BranchCoverageNote, Finding, Source } from "@/types";
 
 // The 10 named Internal Control Division report templates (see report/*.xlsx,
-// already relabeled with these exact names) as pure aggregation functions
-// over the existing Finding/District/Branch data - nothing here is stored
-// separately (aside from BranchCoverageNote, the one genuinely writable
-// piece - see #1), so every number is always live and can never drift from
-// what the Findings list itself shows.
+// already relabeled with these exact names), plus #11 Transferred Findings
+// (not sourced from a bank Excel sheet - a bank-wide register of Document_3
+// §15's own Transfer Data, requested directly rather than modeled on a
+// legacy report) - as pure aggregation functions over the existing
+// Finding/District/Branch data - nothing here is stored separately (aside
+// from BranchCoverageNote, the one genuinely writable piece - see #1), so
+// every number is always live and can never drift from what the Findings
+// list itself shows.
 
 // Single source of truth for slug <-> permission action <-> display copy,
 // shared by the hub page, each template page, and the CSV export route -
@@ -24,13 +27,14 @@ export const REPORT_TEMPLATES: ReportTemplateMeta[] = [
   { slug: "uncovered-branches", action: "uncovered-branches", label: "Uncovered Branches", description: "Branches with no findings submitted this period, and why." },
   { slug: "category-detail-by-district", action: "category-detail-by-district", label: "Category Detail by District", description: "Every district x classified-case category, Unrectified/Rectified." },
   { slug: "monthly-summary", action: "monthly-summary", label: "Monthly Summary Report", description: "Category detail plus amount involved and branch dispatch coverage." },
-  { slug: "monthly-district-history", action: "monthly-district-history", label: "Monthly District History", description: "Other-Case performance by district, one block per reporting period." },
+  { slug: "monthly-district-history", action: "monthly-district-history", label: "Monthly District History", description: "Other-Case performance by district, filterable by reporting period." },
   { slug: "monthly-district-detail", action: "monthly-district-detail", label: "Monthly District Detail", description: "The same district/period history as a flat, long-format table." },
   { slug: "district-ranking-other-cases", action: "district-ranking-other-cases", label: "District Ranking - Other Cases", description: "Cumulative district ranking on the official scored category." },
   { slug: "weekly-executive-summary", action: "weekly-executive-summary", label: "Weekly Executive Summary", description: "Every classified category x district, balance carried forward this week vs. last week." },
   { slug: "district-ranking-all-cases", action: "district-ranking-all-cases", label: "District Ranking - All Cases", description: "District ranking across every classified-case category." },
   { slug: "category-performance-summary", action: "category-performance-summary", label: "Category Performance Summary", description: "Bank-wide rectification rate per category, with the district range." },
   { slug: "mid-month-district-snapshot", action: "mid-month-district-snapshot", label: "Mid-Month District Snapshot", description: "District performance as of any chosen cutoff date within a period." },
+  { slug: "transferred-findings", action: "transferred-findings", label: "Transferred Findings", description: "Every transfer hop: original-period detail, what happened before it left, where it went, and its status today." },
 ];
 
 function activeBranches(db: Database): Branch[] {
@@ -221,29 +225,31 @@ export function getMonthlySummaryReport(
 // ---------------------------------------------------------------------------
 // 4/5. Monthly District History / Monthly District Detail.
 //
-// Two distinct kinds of rows per district/period:
+// Two structurally different series, matching the source Excel's own
+// "Detail monthly summaryBD" sheet exactly (cross-checked against
+// report/.backup/Summarized unrectified Irreg report-*.xlsx's raw cell
+// data, not just its cached-formula values):
 //
-//   (a) "Other Cases" — the official scored metric, matching what #6, #4,
-//       the BRD, and computeEligibleCaseCounts() track. This is the same
-//       series Monthly District History uses.
-//   (b) "Various internal Audit report" — a catch-all bucket in the source
-//       Excel's "Detail monthly summaryBD" sheet for every *other*
-//       classified category (ATM Mismatch, IT, Zero Balance, Dormant,
-//       Cheque Book, … — anything NOT the official "Other Cases" scoring
-//       category). Row kind is tagged with `.rowKind` on each flat
-//       DistrictPeriodRow so the UI / CSV can render them distinctly and
-//       add them separately into each district's subtotal row.
-//
-// #4 groups the flat series by period (stacked blocks); #5 groups it by
-// district with a subtotal per district and a grand TOTAL at the end.
+//   (a) otherCases — one row per district PER PERIOD, the official scored
+//       metric (what #6, #9, the BRD, and computeEligibleCaseCounts()
+//       track). This is the whole series Monthly District History uses.
+//   (b) various — exactly ONE row per district, a lifetime/cumulative
+//       catch-all for every OTHER classified category (ATM Mismatch, IT,
+//       Zero Balance, Dormant, Cheque Book, … - anything NOT the official
+//       "Other Cases" scoring category), never broken out per period. In
+//       the source sheet this is literally the last row of each district's
+//       block - no Month value at all - and its total/rectified feed
+//       straight into that district's subtotal alongside the period rows
+//       (confirmed: East's subtotal 11,464 = its 13 monthly Other-Case
+//       rows summed (10,561) + its one Various row (903), not duplicated
+//       per month). Monthly District Detail (#5) is the only page that
+//       renders it; Monthly District History (#4) has never shown it at
+//       all (Other-Case only).
 // ---------------------------------------------------------------------------
-
-export type DistrictPeriodRowKind = "OTHER_CASES" | "VARIOUS_INTERNAL_AUDIT";
 
 export interface DistrictPeriodRow {
   period: ReportingPeriod;
   district: District;
-  rowKind: DistrictPeriodRowKind;
   totalBranches: number;
   totalCases: number;
   rectifiedCases: number;
@@ -251,64 +257,73 @@ export interface DistrictPeriodRow {
   performance: number | null;
 }
 
-export function getMonthlyDistrictSeries(db: Database): DistrictPeriodRow[] {
+export interface DistrictVariousRow {
+  district: District;
+  totalBranches: number;
+  totalCases: number;
+  rectifiedCases: number;
+  outstandingCases: number;
+  performance: number | null;
+}
+
+export function getMonthlyDistrictSeries(db: Database): { otherCases: DistrictPeriodRow[]; various: DistrictVariousRow[] } {
   const rule = db.scoringRules.find((r) => r.active);
   const periods = [...db.reportingPeriods].sort((a, b) => a.year - b.year || a.month - b.month);
   const districts = activeDistricts(db);
-  const rows: DistrictPeriodRow[] = [];
+
+  const otherCases: DistrictPeriodRow[] = [];
   for (const period of periods) {
     for (const district of districts) {
-      // (a) Official "Other Cases" bucket — ScoringRule gated, exactly the
+      // Official "Other Cases" bucket — ScoringRule gated, exactly the
       // same series the history/ranking pages show.
       const eligible = computeEligibleCaseCounts(db, { districtId: district.id, periodId: period.id });
       const otherTotal = eligible?.totalCases ?? 0;
       const otherRectified = eligible?.rectifiedCases ?? 0;
-      rows.push({
+      otherCases.push({
         period,
         district,
-        rowKind: "OTHER_CASES",
         totalBranches: districtBranchCount(db, district.id),
         totalCases: otherTotal,
         rectifiedCases: otherRectified,
         outstandingCases: otherTotal - otherRectified,
         performance: eligible && eligible.totalCases > 0 ? (eligible.rectifiedCases / eligible.totalCases) * 100 : null,
       });
-
-      // (b) "Various internal Audit report" catch-all — every finding in
-      // this district/period that is NOT REJECTED and does NOT fall into
-      // the official ScoringRule's category+source bucket. If no active
-      // ScoringRule exists, this bucket defaults to ALL findings (all of
-      // them are "various" in that case, since nothing is official).
-      const allFindings = db.findings.filter(
-        (f) => f.districtId === district.id && f.periodId === period.id && f.status !== "REJECTED"
-      );
-      let variousTotal = 0;
-      let variousRectified = 0;
-      if (!rule) {
-        variousTotal = allFindings.reduce((s, f) => s + f.caseCount, 0);
-        variousRectified = allFindings.reduce((s, f) => s + f.rectifiedCases, 0);
-      } else {
-        for (const f of allFindings) {
-          const inOfficial = rule.categories.includes(f.categoryId) && rule.sources.includes(f.sourceId);
-          if (!inOfficial) {
-            variousTotal += f.caseCount;
-            variousRectified += f.rectifiedCases;
-          }
-        }
-      }
-      rows.push({
-        period,
-        district,
-        rowKind: "VARIOUS_INTERNAL_AUDIT",
-        totalBranches: districtBranchCount(db, district.id),
-        totalCases: variousTotal,
-        rectifiedCases: variousRectified,
-        outstandingCases: variousTotal - variousRectified,
-        performance: variousTotal > 0 ? (variousRectified / variousTotal) * 100 : null,
-      });
     }
   }
-  return rows;
+
+  // "Various internal Audit report" — every one of this district's
+  // findings (any period, not REJECTED) that does NOT fall into the
+  // official ScoringRule's category+source bucket. If no active
+  // ScoringRule exists, this bucket defaults to ALL findings (all of them
+  // are "various" in that case, since nothing is official). Lifetime, not
+  // period-scoped - see this block's own doc comment above for why.
+  const various: DistrictVariousRow[] = districts.map((district) => {
+    const allFindings = db.findings.filter((f) => f.districtId === district.id && f.status !== "REJECTED");
+    let variousTotal = 0;
+    let variousRectified = 0;
+    if (!rule) {
+      variousTotal = allFindings.reduce((s, f) => s + f.caseCount, 0);
+      variousRectified = allFindings.reduce((s, f) => s + f.rectifiedCases, 0);
+    } else {
+      for (const f of allFindings) {
+        const inOfficial = rule.categories.includes(f.categoryId) && rule.sources.includes(f.sourceId);
+        if (!inOfficial) {
+          variousTotal += f.caseCount;
+          variousRectified += f.rectifiedCases;
+        }
+      }
+    }
+    return {
+      district,
+      totalBranches: districtBranchCount(db, district.id),
+      totalCases: variousTotal,
+      rectifiedCases: variousRectified,
+      outstandingCases: variousTotal - variousRectified,
+      performance: variousTotal > 0 ? (variousRectified / variousTotal) * 100 : null,
+    };
+  });
+
+  return { otherCases, various };
 }
 
 // ---------------------------------------------------------------------------
@@ -417,8 +432,13 @@ export function getDistrictRankingOtherCases(
 // to filter by directly. thisWeekPct/lastWeekPct/difference preserve
 // section 1's own week-over-week trend, applied uniformly to every
 // category. Computed live on every view rather than a persisted snapshot -
-// see the plan doc for that tradeoff. Monday-start week, matching
-// TimeRangeFilter's own "This Week" preset.
+// see the plan doc for that tradeoff.
+//
+// Both cutoff dates are caller-overridable (the page offers two date
+// pickers) - defaulting to the real Monday-start current/last calendar
+// week (matching TimeRangeFilter's own "This Week" preset) when omitted,
+// but a reviewer can point either cutoff at any date to reproduce a past
+// week-over-week comparison, not just the live rolling one.
 // ---------------------------------------------------------------------------
 
 export interface WeeklyExecutiveRow {
@@ -439,8 +459,8 @@ export interface WeeklyCategorySummary {
   totalRow: Omit<WeeklyExecutiveRow, "district" | "totalBranches">;
 }
 
-/** ISO date for the Monday-start week ending `weeksAgo` weeks before today (0 = this week). */
-function weekEndDate(weeksAgo: number): string {
+/** ISO date for the Monday-start week ending `weeksAgo` weeks before today (0 = this week). Exported so the page can default its two date pickers to the same real calendar week this function itself defaults to. */
+export function weekEndDate(weeksAgo: number): string {
   const now = new Date();
   const day = now.getDay();
   const diffToMonday = day === 0 ? 6 : day - 1;
@@ -451,9 +471,11 @@ function weekEndDate(weeksAgo: number): string {
   return sunday.toISOString().slice(0, 10);
 }
 
-export function getWeeklyExecutiveSummary(db: Database): WeeklyCategorySummary[] {
-  const thisWeekCutoff = weekEndDate(0);
-  const lastWeekCutoff = weekEndDate(1);
+export function getWeeklyExecutiveSummary(
+  db: Database,
+  thisWeekCutoff: string = weekEndDate(0),
+  lastWeekCutoff: string = weekEndDate(1)
+): WeeklyCategorySummary[] {
   const districts = activeDistricts(db);
 
   function cumulativeAsOf(categoryId: string, districtId: string, asOfDate: string): { totalCases: number; rectifiedCases: number } {
@@ -610,13 +632,13 @@ export function getCategoryPerformanceSummary(
 // compose cleanly with that machinery, and the original report is itself
 // just a plain date cutoff.
 //
-// Rectified credit is districtVerifiedCases, same as computeEligibleCaseCounts()
-// - this snapshot already restricts to the active ScoringRule's own
+// Rectified credit is closedCases, same as computeEligibleCaseCounts() -
+// this snapshot already restricts to the active ScoringRule's own
 // category+source gate below, so it's presenting itself as the official
 // scored figure as of a cutoff date, not a broader raw lens (unlike #2/#7/
-// #8/#9). A case only counts as rectified once the authorized person
-// (District Controller) has accepted it - see computeEligibleCaseCounts()'s
-// own doc comment in src/lib/findings.ts.
+// #8/#9). A case only counts as rectified once it's formally closed, not
+// merely district-verified - see computeEligibleCaseCounts()'s own doc
+// comment in src/lib/findings.ts.
 // ---------------------------------------------------------------------------
 
 export function getDistrictSnapshotAsOf(
@@ -636,7 +658,7 @@ export function getDistrictSnapshotAsOf(
           (!rule || (rule.categories.includes(f.categoryId) && rule.sources.includes(f.sourceId)))
       );
       const totalCases = findings.reduce((sum, f) => sum + f.caseCount, 0);
-      const rectifiedCases = findings.reduce((sum, f) => sum + f.districtVerifiedCases, 0);
+      const rectifiedCases = findings.reduce((sum, f) => sum + f.closedCases, 0);
       return {
         district,
         totalBranches: districtBranchCount(db, district.id),
@@ -648,4 +670,100 @@ export function getDistrictSnapshotAsOf(
     })
     .sort((a, b) => (b.performance ?? -1) - (a.performance ?? -1));
   return { rows, totalRow: districtRankingTotalRow(rows) };
+}
+
+// ---------------------------------------------------------------------------
+// 11. Transferred Findings - a bank-wide, one-row-per-hop register of every
+// FindingTransfer record: the exact Document_3 §15 "Transfer Data" field
+// set already shown per-finding on FindingDetailClient.tsx's own "Transfer
+// History" card, now aggregated across every finding and period so a
+// reviewer doesn't have to open findings one at a time to see what
+// transferred, from where, to where, and what's happened since.
+//
+// Three layers of detail per row, matching what was asked for:
+//   - Original period data: fromPeriod, the finding's originalCaseCount/
+//     originalAmount and caseAgeAtTransferDays AS OF that hop (all
+//     snapshotted on the FindingTransfer row itself, never recomputed).
+//   - What happened on it (before it left): resolvedBeforeTransferCases/
+//     Amount = originalCaseCount/Amount minus casesTransferred/
+//     amountTransferred - the portion rectified in the origin period,
+//     never carried forward.
+//   - Where it transfers, and its status today: toPeriod plus the
+//     finding's live, current-day state (status/outstanding/case age) -
+//     not snapshotted at transfer time, so this reflects everything that's
+//     happened since, all the way up to now, including any later hop.
+// ---------------------------------------------------------------------------
+
+export interface TransferredFindingRow {
+  transfer: Database["findingTransfers"][number];
+  finding: Finding;
+  district: District | undefined;
+  branch: Branch | undefined;
+  category: ClassifiedCategory | undefined;
+  source: Source | undefined;
+  fromPeriod: ReportingPeriod | undefined;
+  toPeriod: ReportingPeriod | undefined;
+  resolvedBeforeTransferCases: number;
+  resolvedBeforeTransferAmount: number;
+  // This finding's own transfer sequence - 1-based position among ALL of
+  // its FindingTransfer rows, chronological, and whether this is the most
+  // recent one (a finding transferred more than once shows every hop as
+  // its own row, newest transfers first overall - see the final sort
+  // below).
+  hopNumber: number;
+  totalHops: number;
+  isLatestHop: boolean;
+  currentStatus: Finding["status"];
+  currentOutstandingCases: number;
+  currentOutstandingAmount: number;
+  caseAgeDaysNow: number;
+}
+
+export function getTransferredFindings(
+  db: Database,
+  filters?: { fromPeriodId?: string; toPeriodId?: string }
+): TransferredFindingRow[] {
+  const hopsByFinding = new Map<string, Database["findingTransfers"]>();
+  for (const t of db.findingTransfers) {
+    const list = hopsByFinding.get(t.findingId) ?? [];
+    list.push(t);
+    hopsByFinding.set(t.findingId, list);
+  }
+  for (const list of hopsByFinding.values()) {
+    list.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  }
+
+  return db.findingTransfers
+    .filter(
+      (t) =>
+        (!filters?.fromPeriodId || t.fromPeriodId === filters.fromPeriodId) &&
+        (!filters?.toPeriodId || t.toPeriodId === filters.toPeriodId)
+    )
+    .map((t): TransferredFindingRow | null => {
+      const finding = db.findings.find((f) => f.id === t.findingId);
+      if (!finding) return null;
+      const hops = hopsByFinding.get(t.findingId) ?? [t];
+      const hopNumber = hops.findIndex((h) => h.id === t.id) + 1;
+      return {
+        transfer: t,
+        finding,
+        district: db.districts.find((d) => d.id === finding.districtId),
+        branch: db.branches.find((b) => b.id === finding.branchId),
+        category: db.categories.find((c) => c.id === finding.categoryId),
+        source: db.sources.find((s) => s.id === finding.sourceId),
+        fromPeriod: db.reportingPeriods.find((p) => p.id === t.fromPeriodId),
+        toPeriod: db.reportingPeriods.find((p) => p.id === t.toPeriodId),
+        resolvedBeforeTransferCases: t.originalCaseCount - t.casesTransferred,
+        resolvedBeforeTransferAmount: t.originalAmount - t.amountTransferred,
+        hopNumber,
+        totalHops: hops.length,
+        isLatestHop: hopNumber === hops.length,
+        currentStatus: finding.status,
+        currentOutstandingCases: finding.caseCount - finding.rectifiedCases,
+        currentOutstandingAmount: finding.amount - finding.rectifiedAmount,
+        caseAgeDaysNow: caseAgeDays(finding),
+      };
+    })
+    .filter((r): r is TransferredFindingRow => r !== null)
+    .sort((a, b) => b.transfer.createdAt.localeCompare(a.transfer.createdAt));
 }

@@ -19,6 +19,12 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
   const scopeError = assertFindingInScope(auth.session, existing);
   if (scopeError) return NextResponse.json({ error: scopeError }, { status: 403 });
 
+  // Ownership, not just org scope - same reasoning as [id]/route.ts's own
+  // PATCH/DELETE checks: only the person who registered it can submit it.
+  if (existing.createdBy !== auth.session.userId) {
+    return NextResponse.json({ error: "You can only submit findings you registered yourself" }, { status: 403 });
+  }
+
   if (!SUBMITTABLE_STATUSES.includes(existing.status)) {
     return NextResponse.json({ error: "Only draft or returned findings can be submitted" }, { status: 409 });
   }
