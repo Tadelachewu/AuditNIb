@@ -1,8 +1,22 @@
 import ExcelJS from "exceljs";
 import { v4 as uuid } from "uuid";
-import { nextFindingReference } from "@/lib/findings";
+import { nextFindingReference, transitionFinding } from "@/lib/findings";
 import { isDepartmentInScope } from "@/lib/org";
 import type { Database, Finding, ImportBatchRow, RequirableFindingField } from "@/types";
+
+// What a row's Status column can declare - DRAFT is the only one that
+// still goes through the real, live workflow (district/HO review,
+// rectify, close, all clicked by a human same as today). The other four
+// are for backfilling a bank's already-resolved paper/Excel records:
+// each one fast-forwards the finding straight to that resting state via
+// the same transition machinery a live action would use (see
+// fastForwardHistoricalImport() below), not a bare status assignment, so
+// the finding's own history/audit trail stays honest about what happened
+// and when - just stamped "Historical import" as the actor's reason
+// instead of a live human's decision. See ALLOWED_IMPORT_STATUSES' own
+// validation in validateImportRow() for what each one requires.
+const ALLOWED_IMPORT_STATUSES = ["DRAFT", "SENT_TO_BRANCH_MANAGER", "PARTIALLY_RECTIFIED", "RECTIFIED", "CLOSED"] as const;
+type ImportStatus = (typeof ALLOWED_IMPORT_STATUSES)[number];
 
 const SHEET_NAME = "Findings";
 const REFERENCE_SHEET_NAME = "Reference Data";
@@ -13,13 +27,17 @@ export const MAX_IMPORT_BYTES = 10 * 1024 * 1024;
 // updateDb() transaction.
 export const MAX_IMPORT_ROWS = 2000;
 
-// Ordered to match the registration form (NewFindingForm.tsx / the
-// createSchema in src/app/api/findings/route.ts) field-for-field - the
-// dedupe key below is defined over the same fields for the same reason
-// (master.txt §22: "other fields should be the same as the finding
-// registration form fields"). Reference/status/rectifiedCases etc. are
-// never columns here - they're either system-generated or start at zero,
-// exactly like a manually-registered finding.
+// The first eighteen columns (through evidenceNote) are ordered to match
+// the registration form (NewFindingForm.tsx / the createSchema in
+// src/app/api/findings/route.ts) field-for-field - the dedupe key below
+// is defined over the same fields for the same reason (master.txt §22:
+// "other fields should be the same as the finding registration form
+// fields"). Reference is never a column - always system-generated, same
+// as a manually-registered finding. Status/rectifiedCases/rectifiedAmount
+// have no analog on that live form at all (a brand-new finding is always
+// DRAFT) - they exist only here, to let a row declare it's actually
+// backfilling an already-resolved historical record instead of
+// registering a new one - see ALLOWED_IMPORT_STATUSES' own doc comment.
 const IMPORT_COLUMNS = [
   { key: "districtCode", header: "District Code", required: true },
   { key: "branchCode", header: "Branch Code", required: true },
@@ -39,6 +57,21 @@ const IMPORT_COLUMNS = [
   { key: "description", header: "Description", required: true },
   { key: "recommendation", header: "Recommendation", required: false },
   { key: "evidenceNote", header: "Evidence Note", required: false },
+  {
+    key: "status",
+    header: "Status (DRAFT / SENT_TO_BRANCH_MANAGER / PARTIALLY_RECTIFIED / RECTIFIED / CLOSED)",
+    required: true,
+  },
+  {
+    key: "rectifiedCases",
+    header: "Rectified Cases (required only if Status is PARTIALLY_RECTIFIED)",
+    required: false,
+  },
+  {
+    key: "rectifiedAmount",
+    header: "Rectified Amount (required only if Status is PARTIALLY_RECTIFIED)",
+    required: false,
+  },
   { key: "externalReference", header: "External Reference (optional)", required: false },
 ] as const;
 
@@ -162,6 +195,16 @@ export async function buildImportTemplate(db: Database): Promise<Buffer> {
   refSection("Priorities", db.settings.priorityLevels.map((p) => [p]));
   refSection("Operation Areas", db.settings.operationAreas.map((a) => [a]));
   refSection("Types of Irregularity", db.settings.irregularityTypes.map((t) => [t]));
+  refSection(
+    "Status values",
+    [
+      ["DRAFT", "New finding - goes through the normal live review/rectify/close workflow, same as registering one by hand."],
+      ["SENT_TO_BRANCH_MANAGER", "Historical - already approved, nothing rectified yet."],
+      ["PARTIALLY_RECTIFIED", "Historical - requires Rectified Cases and Rectified Amount too."],
+      ["RECTIFIED", "Historical - fully rectified, not yet closed."],
+      ["CLOSED", "Historical - fully resolved."],
+    ]
+  );
   ref.columns.forEach((col) => {
     col.width = 28;
   });
@@ -283,11 +326,14 @@ export function existingDedupeKeys(db: Database): Map<string, string> {
 
 /**
  * Validates one raw row against current reference data and, if valid and
- * not a duplicate, creates the Finding (status DRAFT, same as a manually-
- * registered one - master.txt §24 leaves "does Internal Audit skip
- * workflow" as an open decision, so import deliberately reuses the exact
- * same entry point/workflow as the existing single-record HO "create"
- * path rather than inventing a shortcut).
+ * not a duplicate, creates the Finding. A DRAFT-status row goes through
+ * the exact same entry point/live workflow as a manually-registered
+ * finding (master.txt §24's "does Internal Audit skip workflow" left as
+ * an open decision, resolved as "no" for genuinely new findings). A row
+ * declaring any other status is a historical backfill - see
+ * fastForwardHistoricalImport() for how it's fast-forwarded to that
+ * resting state through the same transition machinery a live action uses,
+ * not a bare status assignment.
  *
  * `db` must be the live mutable draft inside an updateDb() callback, not a
  * read-only snapshot: a valid row is pushed straight into `db.findings`
@@ -303,12 +349,22 @@ export function validateImportRow(
   row: RawImportRow,
   rowNumber: number,
   seenKeys: Map<string, string>,
-  opts: { userId: string; importBatchId: string }
+  opts: { userId: string; userName: string; importBatchId: string }
 ): ImportBatchRow & { finding?: Finding } {
   const missing = IMPORT_COLUMNS.filter((c) => columnRequired(db, c) && !row[c.key]?.trim());
   if (missing.length > 0) {
     return { rowNumber, outcome: "error", error: `Missing required value(s): ${missing.map((c) => columnHeader(db, c)).join(", ")}` };
   }
+
+  const statusInput = (row.status ?? "").trim().toUpperCase();
+  if (!(ALLOWED_IMPORT_STATUSES as readonly string[]).includes(statusInput)) {
+    return {
+      rowNumber,
+      outcome: "error",
+      error: `Invalid status "${row.status}" - must be one of ${ALLOWED_IMPORT_STATUSES.join(", ")}`,
+    };
+  }
+  const status = statusInput as ImportStatus;
 
   const district = db.districts.find((d) => d.code === row.districtCode?.trim() && d.status === "ACTIVE");
   if (!district) return { rowNumber, outcome: "error", error: `Unknown or inactive district code "${row.districtCode}"` };
@@ -321,10 +377,14 @@ export function validateImportRow(
 
   const period = db.reportingPeriods.find((p) => p.code === row.periodCode?.trim());
   if (!period) return { rowNumber, outcome: "error", error: `Unknown reporting period code "${row.periodCode}"` };
-  // Imported rows always land as DRAFT (see below) - same exception as
-  // manual creation in src/app/api/findings/route.ts.
-  if (period.status === "LOCKED" && !period.draftsAllowedWhileLocked) {
-    return { rowNumber, outcome: "error", error: `${period.code} is locked and cannot accept new findings` };
+  // Only a DRAFT row is subject to the normal "locked periods don't
+  // accept new writes" rule - the whole point of a historical-status row
+  // is backfilling a fact about a period that's very possibly long since
+  // locked (that's usually *why* it's being backfilled now instead of
+  // handled live), so it isn't a "new write against a live period" in the
+  // sense assertPeriodWritable()/this same check elsewhere guards against.
+  if (status === "DRAFT" && period.status === "LOCKED" && !period.draftsAllowedWhileLocked) {
+    return { rowNumber, outcome: "error", error: `${period.code} is locked and cannot accept new draft findings` };
   }
 
   // Each of source/department/category is only looked up (and thus only
@@ -378,6 +438,70 @@ export function validateImportRow(
   const caseCount = Number(row.caseCount);
   if (!Number.isInteger(caseCount) || caseCount < 1) {
     return { rowNumber, outcome: "error", error: `Invalid number of cases "${row.caseCount}" - must be a whole number of at least 1` };
+  }
+
+  // Historical-status amounts: RECTIFIED/CLOSED imply full resolution (no
+  // partial-accounting columns needed for the common "yes, this was fully
+  // dealt with" case); only PARTIALLY_RECTIFIED needs the row to actually
+  // say how much, and is bound-checked the same way the live rectify
+  // route validates a real rectification entry (src/app/api/findings/[id]/
+  // rectify/route.ts) - including its "can't leave an orphaned balance"
+  // rule, since a non-itemized finding has no per-case amount to attach a
+  // leftover to. District verification isn't a separate column - a
+  // historical import is treated as already verified (whoever's importing
+  // it is attesting to its recorded state), same amount as rectified.
+  let rectifiedCases = 0;
+  let rectifiedAmount = 0;
+  if (status === "PARTIALLY_RECTIFIED") {
+    const rectifiedCasesRaw = row.rectifiedCases?.trim();
+    const rectifiedAmountRaw = row.rectifiedAmount?.trim();
+    if (!rectifiedCasesRaw || !rectifiedAmountRaw) {
+      return {
+        rowNumber,
+        outcome: "error",
+        error: `Status "PARTIALLY_RECTIFIED" requires both Rectified Cases and Rectified Amount`,
+      };
+    }
+    rectifiedCases = Number(rectifiedCasesRaw);
+    rectifiedAmount = Number(rectifiedAmountRaw);
+    if (!Number.isInteger(rectifiedCases) || rectifiedCases < 0 || rectifiedCases > caseCount) {
+      return {
+        rowNumber,
+        outcome: "error",
+        error: `Invalid rectified cases "${row.rectifiedCases}" - must be a whole number from 0 to ${caseCount}`,
+      };
+    }
+    if (!Number.isFinite(rectifiedAmount) || rectifiedAmount < 0 || rectifiedAmount > amount) {
+      return {
+        rowNumber,
+        outcome: "error",
+        error: `Invalid rectified amount "${row.rectifiedAmount}" - must be from 0 to ${amount}`,
+      };
+    }
+    if (rectifiedCases === 0 && rectifiedAmount === 0) {
+      return {
+        rowNumber,
+        outcome: "error",
+        error: `Status "PARTIALLY_RECTIFIED" requires a positive rectified case count or amount - use SENT_TO_BRANCH_MANAGER if nothing has been rectified yet`,
+      };
+    }
+    if (rectifiedCases === caseCount && rectifiedAmount !== amount) {
+      return {
+        rowNumber,
+        outcome: "error",
+        error: `Rectified cases equals the full case count (${caseCount}) - rectified amount must equal the full amount (${amount}) too, or use status RECTIFIED/CLOSED instead`,
+      };
+    }
+    if (rectifiedAmount === amount && rectifiedCases !== caseCount) {
+      return {
+        rowNumber,
+        outcome: "error",
+        error: `Rectified amount equals the full amount (${amount}) - rectified cases must equal the full case count (${caseCount}) too, or use status RECTIFIED/CLOSED instead`,
+      };
+    }
+  } else if (status === "RECTIFIED" || status === "CLOSED") {
+    rectifiedCases = caseCount;
+    rectifiedAmount = amount;
   }
 
   const key = dedupeKey({
@@ -443,5 +567,111 @@ export function validateImportRow(
   seenKeys.set(key, finding.reference);
   db.findings.push(finding);
 
+  if (status !== "DRAFT") {
+    fastForwardHistoricalImport(
+      db,
+      finding,
+      status,
+      {
+        rectifiedCases,
+        rectifiedAmount,
+        // "Verified" mirrors "rectified" for a historical import - see
+        // this function's own doc comment for why there's no separate
+        // verification column.
+        districtVerifiedCases: rectifiedCases,
+        districtVerifiedAmount: rectifiedAmount,
+        closedCases: status === "CLOSED" ? caseCount : 0,
+        closedAmount: status === "CLOSED" ? amount : 0,
+      },
+      { userId: opts.userId, userName: opts.userName }
+    );
+  }
+
   return { rowNumber, outcome: "imported", findingId: finding.id, reference: finding.reference, finding };
+}
+
+/**
+ * Fast-forwards a freshly-created DRAFT finding straight to `target`
+ * through the same transition machinery a live action would use
+ * (transitionFinding(), plus the actual RectificationEntry/FindingClosure
+ * ledger rows scoring reads - src/lib/findings.ts's closedInPeriod() sums
+ * FindingClosure rows, not a bare cumulative field, so a "closed" import
+ * with no such row would silently score as 0 rectified/closed despite its
+ * own status) - never a bare status/counter assignment, so the finding's
+ * FindingTransition history and audit log stay exactly as complete and
+ * honest as a live-approved, live-rectified, live-closed finding's would.
+ * Every hop is stamped with a distinct "IMPORT_*" action and the same
+ * "Historical import" reason, specifically so anyone reading the trail
+ * later can tell at a glance this was backfilled, not a live decision -
+ * a bulk import silently posing as a normal reviewed/approved finding
+ * would defeat the whole point of the review trail everywhere else in
+ * this app relies on.
+ *
+ * Skips DISTRICT_REVIEW/HO_REVIEW/PENDING_BANK_APPROVAL entirely and goes
+ * straight to SENT_TO_BRANCH_MANAGER - the same "no natural district to
+ * review it" reasoning submitFinding()'s registeredByBankScope branch
+ * already applies to a live HO-registered finding (import is HO/Admin-only
+ * - see findings.import's default role grants), extended here to also
+ * bypass Settings.hoApproval.required: there's no live approver to wait on
+ * for a fact that's already resolved.
+ */
+function fastForwardHistoricalImport(
+  db: Database,
+  finding: Finding,
+  target: Exclude<ImportStatus, "DRAFT">,
+  amounts: {
+    rectifiedCases: number;
+    rectifiedAmount: number;
+    districtVerifiedCases: number;
+    districtVerifiedAmount: number;
+    closedCases: number;
+    closedAmount: number;
+  },
+  opts: { userId: string; userName: string }
+): void {
+  const reason = "Historical import - backfilled from an already-resolved external record, not reviewed live.";
+  const { userId, userName } = opts;
+
+  transitionFinding(db, finding, { toStatus: "SUBMITTED", action: "IMPORT_SUBMIT", userId, userName, reason });
+  transitionFinding(db, finding, { toStatus: "SENT_TO_BRANCH_MANAGER", action: "IMPORT_APPROVE", userId, userName, reason });
+  if (target === "SENT_TO_BRANCH_MANAGER") return;
+
+  finding.rectifiedCases = amounts.rectifiedCases;
+  finding.rectifiedAmount = amounts.rectifiedAmount;
+  db.rectifications.push({
+    id: uuid(),
+    findingId: finding.id,
+    periodId: finding.periodId,
+    rectifiedCases: amounts.rectifiedCases,
+    rectifiedAmount: amounts.rectifiedAmount,
+    note: reason,
+    submittedBy: userId,
+    submittedByName: userName,
+    createdAt: finding.updatedAt,
+  });
+  transitionFinding(db, finding, {
+    toStatus: target === "PARTIALLY_RECTIFIED" ? "PARTIALLY_RECTIFIED" : "RECTIFIED",
+    action: "IMPORT_RECTIFY",
+    userId,
+    userName,
+    reason,
+  });
+
+  finding.districtVerifiedCases = amounts.districtVerifiedCases;
+  finding.districtVerifiedAmount = amounts.districtVerifiedAmount;
+  if (target !== "CLOSED") return;
+
+  finding.closedCases = amounts.closedCases;
+  finding.closedAmount = amounts.closedAmount;
+  db.findingClosures.push({
+    id: uuid(),
+    findingId: finding.id,
+    periodId: finding.periodId,
+    closedCases: amounts.closedCases,
+    closedAmount: amounts.closedAmount,
+    submittedBy: userId,
+    submittedByName: userName,
+    createdAt: finding.updatedAt,
+  });
+  transitionFinding(db, finding, { toStatus: "CLOSED", action: "IMPORT_CLOSE", userId, userName, reason });
 }

@@ -65,7 +65,7 @@ export async function POST(request: Request) {
   const batch = updateDb((current) => {
     const seenKeys = existingDedupeKeys(current);
     const rows: ImportBatchRow[] = parsed.rows.map((row, i) =>
-      validateImportRow(current, row, i + 2, seenKeys, { userId: auth.session.userId!, importBatchId })
+      validateImportRow(current, row, i + 2, seenKeys, { userId: auth.session.userId!, userName: auth.session.name!, importBatchId })
     );
 
     const importedCount = rows.filter((r) => r.outcome === "imported").length;

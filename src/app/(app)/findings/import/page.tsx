@@ -108,9 +108,16 @@ export default function ImportFindingsPage() {
       <div>
         <h1 className="text-lg font-semibold text-slate-900">Import Findings</h1>
         <p className="mt-1 text-sm text-slate-500">
-          Bulk-register Internal Audit findings from an Excel file. Every row goes through the same DRAFT-first
-          workflow as a manually-registered finding — importing doesn&apos;t skip district/HO review. Reference
-          numbers are always system-generated, never taken from the file.
+          Bulk-register findings from an Excel file. Each row&apos;s Status column decides what happens: a{" "}
+          <span className="font-medium text-slate-700">DRAFT</span> row goes through the normal live workflow, same
+          as registering one by hand — importing doesn&apos;t skip district/HO review. Any other status (
+          <span className="font-medium text-slate-700">SENT_TO_BRANCH_MANAGER</span>,{" "}
+          <span className="font-medium text-slate-700">PARTIALLY_RECTIFIED</span>,{" "}
+          <span className="font-medium text-slate-700">RECTIFIED</span>, or{" "}
+          <span className="font-medium text-slate-700">CLOSED</span>) is for backfilling a finding that&apos;s
+          already been resolved outside the system — it&apos;s fast-forwarded straight to that state, clearly marked
+          in its history as a historical import rather than a live decision. Reference numbers are always
+          system-generated, never taken from the file.
         </p>
       </div>
 
