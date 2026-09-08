@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireUser } from "@/lib/guard";
+import { requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { assertFindingInScope } from "@/lib/findings-scope";
 import { transitionFinding, assertPeriodWritable } from "@/lib/findings";
@@ -18,14 +18,20 @@ const reviewSchema = z
 
 // The optional single approval step for a bank-wide (HO/Admin)-registered
 // finding (Settings.hoApproval.required - see submitFinding()'s branch in
-// src/lib/findings.ts). Gated to the specific user(s) an admin assigned in
-// Settings.hoApproval.approverUserIds, not a role/permission - "who
-// approves" here is a deliberate per-person assignment, always drawn from
-// BANK-scoped users only (enforced in the settings PATCH route), rather
-// than "everyone holding some permission" the way every other review stage
-// in this app works.
+// src/lib/findings.ts). Two layers, both required, not one: holding
+// findings.bank-approval says a role is *eligible* to ever be a bank
+// approver (grantable/revocable through Roles & Permissions like every
+// other action in this app, and what makes this a real, server-enforced
+// permission rather than a bare "any logged-in user" endpoint); being
+// individually listed in Settings.hoApproval.approverUserIds says which
+// specific eligible person is *actually assigned* right now, always drawn
+// from BANK-scoped users only (enforced in the settings PATCH route). A
+// role losing this permission immediately stops any of its members from
+// approving even if they're still sitting in approverUserIds from before -
+// the settings list alone was never enough to say "this action is
+// controlled by the same permission system as everything else."
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requireUser();
+  const auth = await requirePermission("findings.bank-approval");
   if (!auth.ok) return auth.response;
   const { id } = await params;
 

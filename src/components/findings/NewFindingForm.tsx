@@ -19,6 +19,7 @@ import type {
   Finding,
   FindingStatus,
   RequirableFindingField,
+  OtherValueAllowedField,
 } from "@/types";
 
 interface SimilarFindingMatch {
@@ -27,6 +28,88 @@ interface SimilarFindingMatch {
   title: string;
   status: FindingStatus;
   createdAt: string;
+}
+
+// Sentinel for the Select's own value when "Other" is picked - never sent
+// to the server (save() only ever reads the underlying `value`, which by
+// then holds whatever the admin typed, not this sentinel).
+const OTHER_SENTINEL = "__OTHER__";
+
+// A Settings-configurable list (operation area/irregularity type/priority/
+// risk level/currency) rendered as a dropdown, plus a fallback text input
+// for a value the admin hasn't added to that list yet - "unavailable" in
+// the dropdown shouldn't mean "can't register the finding," just "type it
+// in instead." Whether that fallback exists at all is itself admin policy
+// (`allowOther`, from Settings.allowOtherValueFields - see that field's
+// own doc comment), not a fixed code-level decision.
+//
+// `otherMode` is real UI state, not purely derived from `value`, because
+// picking "Other" clears the value to "" so the input starts blank ready
+// to type - deriving isCustom from "non-blank and not in options" alone
+// would immediately flip back to "not custom" the moment it's cleared,
+// hiding the input again before anything's typed. `initiallyCustom` still
+// seeds that state from the value itself, so an existing finding whose
+// value isn't in the current list (removed since, from a historical
+// import, or typed in before `allowOther` was later turned off for this
+// field) also opens already in "Other" mode with its real value pre-
+// filled, not silently blank - `allowOther: false` only ever blocks
+// choosing a *new* custom value from a blank start, never hides or
+// corrupts one that's already there.
+function SelectOrOther({
+  id,
+  required,
+  value,
+  options,
+  placeholder,
+  onChange,
+  allowOther = true,
+}: {
+  id: string;
+  required?: boolean;
+  value: string;
+  options: string[];
+  placeholder: string;
+  onChange: (value: string) => void;
+  allowOther?: boolean;
+}) {
+  const initiallyCustom = value !== "" && !options.includes(value);
+  const [otherMode, setOtherMode] = useState(initiallyCustom);
+  const isCustom = otherMode || (value !== "" && !options.includes(value));
+  return (
+    <>
+      <Select
+        id={id}
+        required={required}
+        value={isCustom ? OTHER_SENTINEL : value}
+        onChange={(e) => {
+          if (e.target.value === OTHER_SENTINEL) {
+            setOtherMode(true);
+            onChange("");
+          } else {
+            setOtherMode(false);
+            onChange(e.target.value);
+          }
+        }}
+      >
+        <option value="">{placeholder}</option>
+        {options.map((o) => (
+          <option key={o} value={o}>
+            {o}
+          </option>
+        ))}
+        {(allowOther || isCustom) && <option value={OTHER_SENTINEL}>Other (type in)</option>}
+      </Select>
+      {isCustom && (
+        <Input
+          className="mt-1.5"
+          autoFocus
+          placeholder="Enter a value not in the list above"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      )}
+    </>
+  );
 }
 
 interface Props {
@@ -47,6 +130,11 @@ interface Props {
   // just what lets the `required` attribute/label match it instead of
   // every field being unconditionally required the way it used to be.
   requiredFields: Record<RequirableFindingField, boolean>;
+  // Settings.allowOtherValueFields (admin-configurable at /admin/settings)
+  // - which of these dropdowns offer "Other (type in)" at all. See
+  // SelectOrOther's own doc comment for what turning one off does (and
+  // doesn't) affect.
+  allowOther: Record<OtherValueAllowedField, boolean>;
   fixedDistrict?: { id: string; name: string };
   fixedBranch?: { id: string; name: string };
   // Edit mode: every field prefilled from this finding, PATCHing it in
@@ -102,6 +190,7 @@ export function NewFindingForm({
   priorityLevels,
   irregularityTypes,
   requiredFields,
+  allowOther,
   fixedDistrict,
   fixedBranch,
   finding,
@@ -192,6 +281,7 @@ export function NewFindingForm({
   const [similarMatches, setSimilarMatches] = useState<SimilarFindingMatch[]>([]);
   const [similarDismissed, setSimilarDismissed] = useState(false);
   const similarCandidates = {
+    districtId: form.districtId,
     branchId: form.branchId,
     categoryId: form.categoryId,
     operationArea: form.operationArea,
@@ -200,6 +290,16 @@ export function NewFindingForm({
     sourceId: form.sourceId,
     departmentId: form.departmentId,
     riskLevel: form.riskLevel,
+    findingDate: form.findingDate,
+    currency: form.currency,
+    priority: form.priority,
+    amount: form.amount,
+    caseCount: form.caseCount,
+    title: form.title,
+    description: form.description,
+    recommendation: form.recommendation,
+    rootCause: form.rootCause,
+    evidenceNote: form.evidenceNote,
   };
   const similarKey = Object.values(similarCandidates).join("|");
   useEffect(() => {
@@ -441,52 +541,40 @@ export function NewFindingForm({
 
           <div>
             <Label htmlFor="operationArea">{fieldLabel("Operation area", "operationArea")}</Label>
-            <Select
+            <SelectOrOther
               id="operationArea"
               required={requiredFields.operationArea}
               value={form.operationArea}
-              onChange={(e) => setForm({ ...form, operationArea: e.target.value })}
-            >
-              <option value="">Select operation area</option>
-              {operationAreas.map((a) => (
-                <option key={a} value={a}>
-                  {a}
-                </option>
-              ))}
-            </Select>
+              options={operationAreas}
+              placeholder="Select operation area"
+              onChange={(value) => setForm({ ...form, operationArea: value })}
+              allowOther={allowOther.operationArea}
+            />
           </div>
           <div>
             <Label htmlFor="irregularityType">{fieldLabel("Type of irregularity", "irregularityType")}</Label>
-            <Select
+            <SelectOrOther
               id="irregularityType"
               required={requiredFields.irregularityType}
               value={form.irregularityType}
-              onChange={(e) => setForm({ ...form, irregularityType: e.target.value })}
-            >
-              <option value="">Select irregularity type</option>
-              {irregularityTypes.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </Select>
+              options={irregularityTypes}
+              placeholder="Select irregularity type"
+              onChange={(value) => setForm({ ...form, irregularityType: value })}
+              allowOther={allowOther.irregularityType}
+            />
           </div>
 
           <div>
             <Label htmlFor="currency">{fieldLabel("Currency", "currency")}</Label>
-            <Select
+            <SelectOrOther
               id="currency"
               required={requiredFields.currency}
               value={form.currency}
-              onChange={(e) => setForm({ ...form, currency: e.target.value })}
-            >
-              {!requiredFields.currency && <option value="">Not specified</option>}
-              {currencies.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </Select>
+              options={currencies}
+              placeholder="Select currency"
+              onChange={(value) => setForm({ ...form, currency: value })}
+              allowOther={allowOther.currency}
+            />
           </div>
           <div>
             <Label htmlFor="amount">Amount involved</Label>
@@ -515,36 +603,28 @@ export function NewFindingForm({
           </div>
           <div>
             <Label htmlFor="riskLevel">{fieldLabel("Risk level", "riskLevel")}</Label>
-            <Select
+            <SelectOrOther
               id="riskLevel"
               required={requiredFields.riskLevel}
               value={form.riskLevel}
-              onChange={(e) => setForm({ ...form, riskLevel: e.target.value })}
-            >
-              {!requiredFields.riskLevel && <option value="">Not specified</option>}
-              {riskLevels.map((r) => (
-                <option key={r} value={r}>
-                  {r}
-                </option>
-              ))}
-            </Select>
+              options={riskLevels}
+              placeholder="Select risk level"
+              onChange={(value) => setForm({ ...form, riskLevel: value })}
+              allowOther={allowOther.riskLevel}
+            />
           </div>
 
           <div>
             <Label htmlFor="priority">{fieldLabel("Priority", "priority")}</Label>
-            <Select
+            <SelectOrOther
               id="priority"
               required={requiredFields.priority}
               value={form.priority}
-              onChange={(e) => setForm({ ...form, priority: e.target.value })}
-            >
-              {!requiredFields.priority && <option value="">Not specified</option>}
-              {priorityLevels.map((p) => (
-                <option key={p} value={p}>
-                  {p}
-                </option>
-              ))}
-            </Select>
+              options={priorityLevels}
+              placeholder="Select priority"
+              onChange={(value) => setForm({ ...form, priority: value })}
+              allowOther={allowOther.priority}
+            />
           </div>
         </div>
 

@@ -206,21 +206,40 @@ export interface NotificationSettings {
 
 // The candidate fields the Register Finding form's duplicate-suggestion
 // lookup (src/app/api/findings/similar/route.ts) can compare on - every
-// one an exact-equality match (never a fuzzy/numeric-range one, so amount
-// and case count are deliberately not candidates: a near-duplicate and the
-// real entry routinely differ on those). Settings.similarFindingFields
-// picks which subset actually applies; SIMILAR_FINDING_FIELDS is the full
-// menu + display labels, shared by that route and the admin Settings page
-// so there's exactly one place a new candidate field gets added.
+// one an exact-equality match (never a fuzzy/numeric-range one). Which
+// subset actually applies is entirely a matter of admin config
+// (Settings.similarFindingFields, same "let the admin decide" philosophy
+// as Settings.requiredFindingFields) - every field the Register Finding
+// form itself collects is a candidate here, nothing hardcoded-excluded.
+// externalReference is deliberately NOT included even though it's a real
+// Finding field: it only exists on imported findings (see src/lib/import.ts)
+// and has no input on the interactive form at all, so this route's own
+// "every configured field must have a value from the in-progress form"
+// rule (see that route) could never be satisfied for it - an admin
+// checking it would silently disable suggestions entirely rather than
+// narrow them. SIMILAR_FINDING_FIELDS is the full menu + display labels,
+// shared by that route and the admin Settings page so there's exactly one
+// place a new candidate field gets added.
 export const SIMILAR_FINDING_FIELDS = [
+  { key: "districtId", label: "District" },
   { key: "branchId", label: "Branch" },
-  { key: "categoryId", label: "Classified case" },
-  { key: "operationArea", label: "Operation area" },
-  { key: "irregularityType", label: "Type of irregularity" },
-  { key: "periodId", label: "Reporting period" },
   { key: "sourceId", label: "Source" },
   { key: "departmentId", label: "Department" },
+  { key: "categoryId", label: "Classified case" },
+  { key: "periodId", label: "Reporting period" },
+  { key: "findingDate", label: "Finding date" },
+  { key: "operationArea", label: "Operation area" },
+  { key: "irregularityType", label: "Type of irregularity" },
+  { key: "amount", label: "Amount" },
+  { key: "currency", label: "Currency" },
+  { key: "caseCount", label: "Number of cases" },
   { key: "riskLevel", label: "Risk level" },
+  { key: "priority", label: "Priority" },
+  { key: "title", label: "Title" },
+  { key: "description", label: "Description" },
+  { key: "recommendation", label: "Recommendation" },
+  { key: "rootCause", label: "Root cause" },
+  { key: "evidenceNote", label: "Evidence note" },
 ] as const;
 export type SimilarFindingField = (typeof SIMILAR_FINDING_FIELDS)[number]["key"];
 
@@ -266,6 +285,24 @@ export const REQUIRABLE_FINDING_FIELDS = [
   { key: "evidenceNote", label: "Evidence note" },
 ] as const;
 export type RequirableFindingField = (typeof REQUIRABLE_FINDING_FIELDS)[number]["key"];
+
+// The five Settings-configurable *list* fields on the Register Finding
+// form (operation area/irregularity type/priority/risk level/currency -
+// everything else on the form is either a real linked record with its own
+// id, like source/department/category, which can't take a typed-in value
+// at all, or already free text with nothing to be "Other" than). Whether
+// each one's dropdown also offers "Other (type in)" - a value not
+// currently in the admin's configured list - is itself admin policy, not
+// a fixed code-level decision, same "matter of config" philosophy as
+// REQUIRABLE_FINDING_FIELDS/SIMILAR_FINDING_FIELDS above.
+export const OTHER_VALUE_ALLOWED_FIELDS = [
+  { key: "operationArea", label: "Operation area" },
+  { key: "irregularityType", label: "Type of irregularity" },
+  { key: "priority", label: "Priority" },
+  { key: "riskLevel", label: "Risk level" },
+  { key: "currency", label: "Currency" },
+] as const;
+export type OtherValueAllowedField = (typeof OTHER_VALUE_ALLOWED_FIELDS)[number]["key"];
 
 export interface Settings {
   currencies: string[];
@@ -342,6 +379,16 @@ export interface Settings {
   // until an admin actually opts a field out - see the normalizeDb()
   // backfill.
   requiredFindingFields: Record<RequirableFindingField, boolean>;
+  // Whether each of OTHER_VALUE_ALLOWED_FIELDS' dropdowns offers
+  // "Other (type in)" on the Register Finding form - see that const's own
+  // doc comment. Every key defaults to `true` (today's behavior) so an
+  // existing install sees zero change until an admin actually opts a
+  // field out - see the normalizeDb() backfill. Turning one off only
+  // blocks *new* custom entries; an existing finding whose value was
+  // typed in before the field was locked down keeps displaying and
+  // remains editable, it just can't be freshly chosen again from a blank
+  // start once disabled.
+  allowOtherValueFields: Record<OtherValueAllowedField, boolean>;
   updatedAt: string;
   updatedBy?: string;
 }

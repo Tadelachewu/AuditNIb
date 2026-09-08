@@ -24,15 +24,25 @@ const updateSchema = z
     // OPEN->LOCKED transition; ignored otherwise (unlock, flag-only edit).
     transferOverdueCases: z.boolean().optional(),
     // Narrowing the submission window (see ReportingPeriod.submissionStartsAt's
-    // own doc comment) is independent of lock/unlock - both provided
-    // together or neither, validated against the period's own (unchanged)
-    // startsAt/endsAt below since this route never lets those be edited.
+    // own doc comment) is independent of lock/unlock and independent of
+    // startsAt/endsAt below - both provided together or neither.
     submissionStartsAt: z.string().min(1).optional(),
     submissionEndsAt: z.string().min(1).optional(),
+    // Editing the period's own overall range - only safe while nothing
+    // references it yet (checked below, since a period with even one
+    // finding has its reference-number sequence, dedupe keys, and every
+    // period-scoped stat already keyed off the current dates). Requiring
+    // submissionStartsAt/submissionEndsAt in the same request (see the
+    // refine below) means the combined range is always validated
+    // together, never left in a state where the submission window no
+    // longer fits inside the just-changed period range.
+    startsAt: z.string().min(1).optional(),
+    endsAt: z.string().min(1).optional(),
   })
-  .refine((v) => v.status !== undefined || v.draftsAllowedWhileLocked !== undefined || v.submissionStartsAt !== undefined, {
-    message: "Nothing to update",
-  })
+  .refine(
+    (v) => v.status !== undefined || v.draftsAllowedWhileLocked !== undefined || v.submissionStartsAt !== undefined || v.startsAt !== undefined,
+    { message: "Nothing to update" }
+  )
   .refine((v) => (v.submissionStartsAt === undefined) === (v.submissionEndsAt === undefined), {
     message: "Submission window start and end must be provided together",
     path: ["submissionEndsAt"],
@@ -40,7 +50,19 @@ const updateSchema = z
   .refine(
     (v) => v.submissionStartsAt === undefined || new Date(v.submissionEndsAt!).getTime() > new Date(v.submissionStartsAt).getTime(),
     { message: "Submission window end must be after its start", path: ["submissionEndsAt"] }
-  );
+  )
+  .refine((v) => (v.startsAt === undefined) === (v.endsAt === undefined), {
+    message: "Start and end date/time must be provided together",
+    path: ["endsAt"],
+  })
+  .refine((v) => v.startsAt === undefined || new Date(v.endsAt!).getTime() > new Date(v.startsAt).getTime(), {
+    message: "End date/time must be after the start date/time",
+    path: ["endsAt"],
+  })
+  .refine((v) => v.startsAt === undefined || v.submissionStartsAt !== undefined, {
+    message: "Editing the period's own date range also requires the submission window (even if left unchanged), so the two are always validated together",
+    path: ["submissionStartsAt"],
+  });
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requirePermission("reporting-periods.lock");
@@ -51,7 +73,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid input" }, { status: 400 });
   }
-  const { status, reason, draftsAllowedWhileLocked, transferOverdueCases, submissionStartsAt, submissionEndsAt } = parsed.data;
+  const { status, reason, draftsAllowedWhileLocked, transferOverdueCases, submissionStartsAt, submissionEndsAt, startsAt, endsAt } =
+    parsed.data;
 
   const db = readDb();
   const existing = db.reportingPeriods.find((p) => p.id === id);
@@ -60,15 +83,48 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     status !== undefined &&
     existing.status === status &&
     draftsAllowedWhileLocked === undefined &&
-    submissionStartsAt === undefined
+    submissionStartsAt === undefined &&
+    startsAt === undefined
   ) {
     return NextResponse.json({ error: `Period is already ${status.toLowerCase()}` }, { status: 409 });
   }
+
+  // Editing the period's own date range is only safe while nothing
+  // references it yet - a period with even one finding already has its
+  // reference-number sequence, dedupe keys (src/lib/import.ts), and every
+  // period-scoped stat keyed off the current dates/code.
+  let year = existing.year;
+  let month = existing.month;
+  let code = existing.code;
+  if (startsAt !== undefined) {
+    const findingCount = db.findings.filter((f) => f.periodId === id).length;
+    if (findingCount > 0) {
+      return NextResponse.json(
+        { error: `Can't change ${existing.code}'s date range - ${findingCount} finding(s) already reference it` },
+        { status: 409 }
+      );
+    }
+    const start = new Date(startsAt);
+    if (Number.isNaN(start.getTime())) return NextResponse.json({ error: "Invalid start date/time" }, { status: 400 });
+    year = start.getFullYear();
+    month = start.getMonth() + 1;
+    code = `${year}-${String(month).padStart(2, "0")}`;
+    if (db.reportingPeriods.some((p) => p.id !== id && p.code === code)) {
+      return NextResponse.json({ error: "That reporting period already exists" }, { status: 409 });
+    }
+  }
+
+  // The submission window is bound-checked against whatever the period's
+  // own range will actually be after this request - the just-submitted
+  // startsAt/endsAt when those are being changed too, otherwise the
+  // existing ones.
+  const effectiveStartsAt = startsAt ?? existing.startsAt;
+  const effectiveEndsAt = endsAt ?? existing.endsAt;
   if (submissionStartsAt !== undefined) {
-    if (new Date(submissionStartsAt).getTime() < new Date(existing.startsAt).getTime()) {
+    if (new Date(submissionStartsAt).getTime() < new Date(effectiveStartsAt).getTime()) {
       return NextResponse.json({ error: "Submission window can't start before the period itself does" }, { status: 400 });
     }
-    if (new Date(submissionEndsAt!).getTime() > new Date(existing.endsAt).getTime()) {
+    if (new Date(submissionEndsAt!).getTime() > new Date(effectiveEndsAt).getTime()) {
       return NextResponse.json({ error: "Submission window can't end after the period itself does" }, { status: 400 });
     }
   }
@@ -86,6 +142,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       p.lockReason = reason;
     }
     if (draftsAllowedWhileLocked !== undefined) p.draftsAllowedWhileLocked = draftsAllowedWhileLocked;
+    if (startsAt !== undefined) {
+      p.year = year;
+      p.month = month;
+      p.code = code;
+      p.startsAt = new Date(startsAt).toISOString();
+      p.endsAt = new Date(endsAt!).toISOString();
+    }
     if (submissionStartsAt !== undefined) {
       p.submissionStartsAt = new Date(submissionStartsAt).toISOString();
       p.submissionEndsAt = new Date(submissionEndsAt!).toISOString();
@@ -100,12 +163,18 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       oldValue: {
         status: existing.status,
         draftsAllowedWhileLocked: existing.draftsAllowedWhileLocked,
+        code: existing.code,
+        startsAt: existing.startsAt,
+        endsAt: existing.endsAt,
         submissionStartsAt: existing.submissionStartsAt,
         submissionEndsAt: existing.submissionEndsAt,
       },
       newValue: {
         status: p.status,
         draftsAllowedWhileLocked: p.draftsAllowedWhileLocked,
+        code: p.code,
+        startsAt: p.startsAt,
+        endsAt: p.endsAt,
         submissionStartsAt: p.submissionStartsAt,
         submissionEndsAt: p.submissionEndsAt,
       },

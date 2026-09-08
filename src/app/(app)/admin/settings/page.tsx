@@ -6,7 +6,7 @@ import { CollapsibleCard } from "@/components/ui/CollapsibleCard";
 import { Button } from "@/components/ui/Button";
 import { Input, Select, Label } from "@/components/ui/Field";
 import { SettingsListEditor } from "@/components/admin/SettingsListEditor";
-import { SIMILAR_FINDING_FIELDS, REQUIRABLE_FINDING_FIELDS } from "@/types";
+import { SIMILAR_FINDING_FIELDS, REQUIRABLE_FINDING_FIELDS, OTHER_VALUE_ALLOWED_FIELDS } from "@/types";
 import type { Settings, SafeUser } from "@/types";
 
 export default function SettingsPage() {
@@ -50,6 +50,7 @@ export default function SettingsPage() {
         hoApproval: settings.hoApproval,
         similarFindingFields: settings.similarFindingFields,
         requiredFindingFields: settings.requiredFindingFields,
+        allowOtherValueFields: settings.allowOtherValueFields,
       };
       const res = await apiSend<{ settings: Settings }>("/api/admin/settings", "PATCH", payload);
       setSettings(res.settings);
@@ -428,6 +429,39 @@ export default function SettingsPage() {
             configurable here - those aren&apos;t content a registrant fills in, they&apos;re the identity and
             quantity every dashboard, report, and performance calculation is built around, so leaving one blank
             has no coherent meaning.
+          </p>
+        </div>
+      </CollapsibleCard>
+
+      <CollapsibleCard
+        className="mt-4"
+        title={'Custom "Other" Values'}
+        description="Which dropdowns let a registrant type in a value that isn't in the configured list."
+      >
+        <div className="flex flex-col gap-3 p-4">
+          <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+            {OTHER_VALUE_ALLOWED_FIELDS.map(({ key, label }) => (
+              <label key={key} className="flex items-center gap-2 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={settings.allowOtherValueFields[key]}
+                  onChange={(e) =>
+                    setSettings({
+                      ...settings,
+                      allowOtherValueFields: { ...settings.allowOtherValueFields, [key]: e.target.checked },
+                    })
+                  }
+                  className="h-4 w-4 rounded border-slate-300"
+                />
+                {label}
+              </label>
+            ))}
+          </div>
+          <p className="text-xs text-slate-400">
+            Checked (default) means the dropdown offers &quot;Other (type in)&quot; when the value someone needs
+            isn&apos;t in the list below - unchecked restricts it to that list only. Turning this off never hides or
+            blocks an existing finding that already has a custom value from before - it only stops new ones from
+            being typed in from a blank start.
           </p>
         </div>
       </CollapsibleCard>

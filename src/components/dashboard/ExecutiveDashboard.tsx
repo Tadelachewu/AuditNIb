@@ -1,7 +1,7 @@
 import type { Database } from "@/types";
 import type { SessionData } from "@/lib/session";
-import { computePerformance, findingCaseTotals, transferTotals, averageCaseAgeDays, isHoApproved } from "@/lib/findings";
-import { sumAmountByCurrency, sumOutstandingByCurrency } from "@/lib/currency";
+import { computePerformance, findingCaseTotals, findingCaseTotalsInPeriod, transferTotals, averageCaseAgeDays, isHoApproved } from "@/lib/findings";
+import { sumAmountByCurrency, sumOutstandingByCurrency, sumAmountByCurrencyInPeriod, sumOutstandingByCurrencyInPeriod } from "@/lib/currency";
 import { inDateRange, type DateRange } from "@/lib/dateRange";
 import { Card, CardHeader, StatCard } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -35,7 +35,13 @@ export function ExecutiveDashboard({ db, dateRange = {} }: { user: SessionData; 
   const bankPerformance = openPeriod ? computePerformance(db, { periodId: openPeriod.id }) : null;
   const activeScoringRule = db.scoringRules.find((r) => r.active);
   const activeSources = db.sources.filter((s) => s.active);
-  const { totalFindings, totalCases, rectifiedFindings, rectifiedCases } = findingCaseTotals(periodFindings);
+  // Period-residency-aware (see findingCaseTotalsInPeriod()'s doc comment
+  // in src/lib/findings.ts) - a finding partially rectified here and then
+  // transferred still counts its slice toward this period instead of
+  // vanishing from it.
+  const { totalFindings, totalCases, rectifiedFindings, rectifiedCases } = openPeriod
+    ? findingCaseTotalsInPeriod(db, openPeriod.id, allFindingsInRange)
+    : findingCaseTotals(periodFindings);
   // Same isHoApproved() gate as every other dashboard - Total Amount,
   // Outstanding Amount, Source Comparison, etc. shouldn't move before a
   // finding's actually cleared HO approval (FindingStatusDistribution below
@@ -45,12 +51,23 @@ export function ExecutiveDashboard({ db, dateRange = {} }: { user: SessionData; 
   const approvedPeriodFindings = periodFindings.filter(isHoApproved);
   const bankTransfers = openPeriod ? db.findingTransfers.filter((t) => t.fromPeriodId === openPeriod.id) : [];
   const { transferredFindings, transferredCases } = transferTotals(bankTransfers);
-  const totalAmount = sumAmountByCurrency(approvedPeriodFindings, "amount");
-  const outstandingAmount = sumOutstandingByCurrency(approvedPeriodFindings);
+  // Period-residency-aware (see sumAmountByCurrencyInPeriod()'s doc
+  // comment in src/lib/currency.ts) - a finding partially rectified here
+  // and then transferred must have its amount split between this period
+  // and wherever it went, not attributed wholesale to just one of them.
+  const approvedAllFindingsInRange = allFindingsInRange.filter(isHoApproved);
+  const totalAmount = openPeriod
+    ? sumAmountByCurrencyInPeriod(db, openPeriod.id, approvedAllFindingsInRange, "eligible")
+    : sumAmountByCurrency(approvedPeriodFindings, "amount");
+  const outstandingAmount = openPeriod
+    ? sumOutstandingByCurrencyInPeriod(db, openPeriod.id, approvedAllFindingsInRange)
+    : sumOutstandingByCurrency(approvedPeriodFindings);
   // Resolved Amount counts only formally CLOSED amount, never merely
   // rectified-but-unclosed - same "a controller's sign-off is what makes it
   // official" reasoning as findingCaseTotals()'s own closed-only gate.
-  const resolvedAmount = sumAmountByCurrency(approvedPeriodFindings, "closedAmount");
+  const resolvedAmount = openPeriod
+    ? sumAmountByCurrencyInPeriod(db, openPeriod.id, approvedAllFindingsInRange, "closed")
+    : sumAmountByCurrency(approvedPeriodFindings, "closedAmount");
 
   const outstanding = db.findings.filter((f) => !["RECTIFIED", "CLOSED", "REJECTED"].includes(f.status));
   const avgOutstandingAgeDays = averageCaseAgeDays(outstanding);

@@ -13,7 +13,15 @@ import type { ReportingPeriod } from "@/types";
 // The GET route annotates each period with a live transfer preview (see
 // outstandingTransferPreview() in src/lib/findings.ts) so the Lock dialog
 // can ask an informed question instead of a blind checkbox.
-type PeriodWithTransferPreview = ReportingPeriod & { outstandingTransferableCount: number; transferDestinationCode: string | null };
+type PeriodWithTransferPreview = ReportingPeriod & {
+  outstandingTransferableCount: number;
+  transferDestinationCode: string | null;
+  // Lets "Edit Period" (its own date range) disable itself once anything
+  // references it - see the PATCH route's own comment for why that's the
+  // line drawn (reference numbers/dedupe keys/every period-scoped stat
+  // already keyed off the current dates).
+  findingCount: number;
+};
 
 function startOfMonthLocal(d: Date): string {
   const y = d.getFullYear();
@@ -101,6 +109,63 @@ export default function ReportingPeriodsPage() {
       setWindowError(err instanceof ApiError ? err.message : "Failed to update submission window");
     } finally {
       setWindowBusy(false);
+    }
+  }
+
+  // Editing the period's own date range - only ever offered when
+  // findingCount is 0 (see the type's own comment); a distinct dialog from
+  // the submission-window one above since the precondition differs.
+  const [periodEditTarget, setPeriodEditTarget] = useState<PeriodWithTransferPreview | null>(null);
+  const [periodEditForm, setPeriodEditForm] = useState({ startsAt: "", endsAt: "", submissionStartsAt: "", submissionEndsAt: "" });
+  const [periodEditReason, setPeriodEditReason] = useState("");
+  const [periodEditError, setPeriodEditError] = useState<string | null>(null);
+  const [periodEditBusy, setPeriodEditBusy] = useState(false);
+
+  function openPeriodEditDialog(p: PeriodWithTransferPreview) {
+    setPeriodEditForm({
+      startsAt: toDatetimeLocal(p.startsAt),
+      endsAt: toDatetimeLocal(p.endsAt),
+      submissionStartsAt: toDatetimeLocal(p.submissionStartsAt),
+      submissionEndsAt: toDatetimeLocal(p.submissionEndsAt),
+    });
+    setPeriodEditReason("");
+    setPeriodEditError(null);
+    setPeriodEditTarget(p);
+  }
+
+  function handlePeriodEditStartsAtChange(value: string) {
+    setPeriodEditForm((f) => ({
+      ...f,
+      startsAt: value,
+      submissionStartsAt: f.submissionStartsAt === f.startsAt ? value : f.submissionStartsAt,
+    }));
+  }
+  function handlePeriodEditEndsAtChange(value: string) {
+    setPeriodEditForm((f) => ({
+      ...f,
+      endsAt: value,
+      submissionEndsAt: f.submissionEndsAt === f.endsAt ? value : f.submissionEndsAt,
+    }));
+  }
+
+  async function confirmPeriodEdit() {
+    if (!periodEditTarget) return;
+    setPeriodEditError(null);
+    setPeriodEditBusy(true);
+    try {
+      await apiSend(`/api/admin/reporting-periods/${periodEditTarget.id}`, "PATCH", {
+        startsAt: periodEditForm.startsAt,
+        endsAt: periodEditForm.endsAt,
+        submissionStartsAt: periodEditForm.submissionStartsAt,
+        submissionEndsAt: periodEditForm.submissionEndsAt,
+        reason: periodEditReason,
+      });
+      setPeriodEditTarget(null);
+      await load();
+    } catch (err) {
+      setPeriodEditError(err instanceof ApiError ? err.message : "Failed to update period dates");
+    } finally {
+      setPeriodEditBusy(false);
     }
   }
 
@@ -283,7 +348,23 @@ export default function ReportingPeriodsPage() {
               {!loading &&
                 periods.map((p) => (
                   <tr key={p.id}>
-                    <td className="px-4 py-2 font-medium text-slate-900">{p.code}</td>
+                    <td className="px-4 py-2 font-medium text-slate-900">
+                      {p.code}
+                      <div className="mt-0.5">
+                        {p.findingCount === 0 ? (
+                          <button type="button" onClick={() => openPeriodEditDialog(p)} className="text-xs font-normal text-blue-800 hover:underline">
+                            Edit Period
+                          </button>
+                        ) : (
+                          <span
+                            className="text-xs font-normal text-slate-300"
+                            title={`Can't change this period's date range - ${p.findingCount} finding(s) already reference it`}
+                          >
+                            Edit Period
+                          </span>
+                        )}
+                      </div>
+                    </td>
                     <td className="px-4 py-2 text-xs text-slate-500">
                       {formatDateTime(p.startsAt)} — {formatDateTime(p.endsAt)}
                       <div className="mt-0.5 text-slate-400">
@@ -423,6 +504,67 @@ export default function ReportingPeriodsPage() {
               </Button>
               <Button disabled={windowBusy || windowReason.trim().length < 5} onClick={confirmWindow}>
                 {windowBusy ? "Saving..." : "Save"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {periodEditTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+          <div className="w-full max-w-sm rounded-lg bg-white p-5 shadow-xl">
+            <h2 className="text-sm font-semibold text-slate-900">Edit {periodEditTarget.code}&apos;s date range</h2>
+            <p className="mt-2 text-sm text-slate-600">
+              Only possible because nothing references {periodEditTarget.code} yet. Changing the start date may change
+              this period&apos;s code (e.g. moving it into a different month).
+            </p>
+            <div className="mt-3">
+              <Label htmlFor="period-edit-starts">Starts at (date &amp; time)</Label>
+              <Input
+                id="period-edit-starts"
+                type="datetime-local"
+                value={periodEditForm.startsAt}
+                onChange={(e) => handlePeriodEditStartsAtChange(e.target.value)}
+              />
+            </div>
+            <div className="mt-3">
+              <Label htmlFor="period-edit-ends">Ends at (date &amp; time)</Label>
+              <Input
+                id="period-edit-ends"
+                type="datetime-local"
+                value={periodEditForm.endsAt}
+                onChange={(e) => handlePeriodEditEndsAtChange(e.target.value)}
+              />
+            </div>
+            <div className="mt-3">
+              <Label htmlFor="period-edit-sub-starts">Submission window starts at</Label>
+              <Input
+                id="period-edit-sub-starts"
+                type="datetime-local"
+                value={periodEditForm.submissionStartsAt}
+                onChange={(e) => setPeriodEditForm({ ...periodEditForm, submissionStartsAt: e.target.value })}
+              />
+            </div>
+            <div className="mt-3">
+              <Label htmlFor="period-edit-sub-ends">Submission window ends at</Label>
+              <Input
+                id="period-edit-sub-ends"
+                type="datetime-local"
+                value={periodEditForm.submissionEndsAt}
+                onChange={(e) => setPeriodEditForm({ ...periodEditForm, submissionEndsAt: e.target.value })}
+              />
+            </div>
+            <div className="mt-3">
+              <Label htmlFor="period-edit-reason">Reason</Label>
+              <Input id="period-edit-reason" autoFocus value={periodEditReason} onChange={(e) => setPeriodEditReason(e.target.value)} />
+            </div>
+            {periodEditError && <p className="mt-2 text-sm text-red-600">{periodEditError}</p>}
+            <div className="mt-4 flex justify-end gap-2">
+              <Button variant="secondary" onClick={() => setPeriodEditTarget(null)}>
+                Cancel
+              </Button>
+              <Button disabled={periodEditBusy || periodEditReason.trim().length < 5} onClick={confirmPeriodEdit}>
+                {periodEditBusy ? "Saving..." : "Save"}
               </Button>
             </div>
           </div>

@@ -1,5 +1,5 @@
 import { Card, CardHeader } from "@/components/ui/Card";
-import { findingCaseTotals, computePerformance, computeEligibleCaseCounts, type PerformanceScope } from "@/lib/findings";
+import { findingCaseTotalsInPeriod, computePerformance, computeEligibleCaseCounts, type PerformanceScope } from "@/lib/findings";
 import { TrendChart } from "@/components/dashboard/charts/TrendChart";
 import type { Database } from "@/types";
 
@@ -32,7 +32,14 @@ export function MonthlyTrend({ db, scope }: { db: Database; scope: Omit<Performa
     (f) => (!scope.branchId || f.branchId === scope.branchId) && (!scope.districtId || f.districtId === scope.districtId)
   );
 
-  const totals = periods.map((p) => findingCaseTotals(scopedFindings.filter((f) => f.periodId === p.id)));
+  // Period-residency-aware (see findingCaseTotalsInPeriod()'s doc comment
+  // in src/lib/findings.ts), not a raw f.periodId === p.id filter - a
+  // finding partially rectified in one month and transferred to the next
+  // would otherwise vanish from the month it actually left (0 cases shown
+  // there) and dump its full lifetime caseCount into the month it arrived
+  // in (overcounting there), which is exactly the kind of month-to-month
+  // spike/dip this trend chart exists to show honestly.
+  const totals = periods.map((p) => findingCaseTotalsInPeriod(db, p.id, scopedFindings));
   const performance = periods.map((p) => computePerformance(db, { ...scope, periodId: p.id }));
   const eligible = periods.map((p) => computeEligibleCaseCounts(db, { ...scope, periodId: p.id }));
 

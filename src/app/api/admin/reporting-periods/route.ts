@@ -18,7 +18,13 @@ export async function GET() {
   // settings.view.
   const periods = [...db.reportingPeriods].sort((a, b) => b.code.localeCompare(a.code)).map((p) => {
     const preview = outstandingTransferPreview(db, p);
-    return { ...p, outstandingTransferableCount: preview.count, transferDestinationCode: preview.destinationCode };
+    // Lets the admin UI disable "Edit Period" (its own date range) once
+    // anything references it - editing startsAt/endsAt is only safe while
+    // a period is genuinely empty (see the PATCH route's own comment for
+    // why: reference numbers, dedupe keys, and every period-scoped stat
+    // already keyed off the old dates would silently go stale otherwise).
+    const findingCount = db.findings.filter((f) => f.periodId === p.id).length;
+    return { ...p, outstandingTransferableCount: preview.count, transferDestinationCode: preview.destinationCode, findingCount };
   });
   return NextResponse.json({ reportingPeriods: periods, autoTransferOnLock: db.settings.autoTransferOnLock });
 }

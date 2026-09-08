@@ -1,4 +1,4 @@
-import { computeEligibleCaseCounts, caseAgeDays } from "@/lib/findings";
+import { computeEligibleCaseCounts, caseAgeDays, findingsResidentInPeriod, isHoApproved } from "@/lib/findings";
 import { formatNumber } from "@/lib/format";
 import type { Database, Branch, District, ReportingPeriod, ClassifiedCategory, BranchCoverageNote, Finding, Source } from "@/types";
 
@@ -76,8 +76,14 @@ export interface UncoveredBranchRow {
 }
 
 export function getUncoveredBranches(db: Database, periodId: string): UncoveredBranchRow[] {
+  // A branch that submitted a finding, part of which was rectified before
+  // the rest transferred onward, genuinely was covered this period - a raw
+  // f.periodId === periodId check would call it "uncovered" the moment
+  // that finding transfers away, which is wrong (see
+  // findingsResidentInPeriod()'s own doc comment).
+  const coveredBranchIds = new Set(findingsResidentInPeriod(db, periodId, db.findings).map((r) => r.finding.branchId));
   return activeBranches(db)
-    .filter((b) => !db.findings.some((f) => f.branchId === b.id && f.periodId === periodId))
+    .filter((b) => !coveredBranchIds.has(b.id))
     .map((b) => ({
       branch: b,
       district: db.districts.find((d) => d.id === b.districtId),
@@ -119,9 +125,18 @@ export function getCategoryDetailByDistrict(
   const categories = activeCategories(db);
   const rows: CategoryDetailRow[] = activeDistricts(db).map((district) => {
     const perCategory = categories.map((category) => {
-      const findings = db.findings.filter((f) => f.districtId === district.id && f.periodId === periodId && f.categoryId === category.id);
-      const total = findings.reduce((sum, f) => sum + f.caseCount, 0);
-      const rectified = findings.reduce((sum, f) => sum + f.rectifiedCases, 0);
+      // isHoApproved() gate - a finding still in DISTRICT_REVIEW/HO_REVIEW
+      // (or REJECTED/RETURNED) isn't official yet and shouldn't count
+      // toward a district's reported totals before anyone's actually
+      // approved it, same gate every dashboard "official" figure applies.
+      const candidates = db.findings.filter((f) => f.districtId === district.id && f.categoryId === category.id && isHoApproved(f));
+      // Period-scoped (eligibleCases/closedCases), not the finding's live
+      // lifetime caseCount/rectifiedCases - a transferred finding must
+      // count toward exactly one period's total, never zero or two (see
+      // findingsResidentInPeriod()'s doc comment).
+      const resident = findingsResidentInPeriod(db, periodId, candidates);
+      const total = resident.reduce((sum, r) => sum + r.slice.eligibleCases, 0);
+      const rectified = resident.reduce((sum, r) => sum + r.slice.closedCases, 0);
       return { category, total, rectified, outstanding: total - rectified };
     });
     const totalCases = perCategory.reduce((sum, c) => sum + c.total, 0);
@@ -189,19 +204,23 @@ export function getMonthlySummaryReport(
   const categories = activeCategories(db);
   const uncovered = getUncoveredBranches(db, periodId);
   const rows: MonthlySummaryRow[] = activeDistricts(db).map((district) => {
-    const districtFindings = db.findings.filter((f) => f.districtId === district.id && f.periodId === periodId);
+    // Period-scoped residency (see findingsResidentInPeriod()'s doc
+    // comment) - not a raw f.periodId === periodId filter, which would
+    // drop a finding's slice of this period the moment it transfers away.
+    // isHoApproved() gate on top, same as every other "official" figure.
+    const districtResident = findingsResidentInPeriod(db, periodId, db.findings.filter((f) => f.districtId === district.id && isHoApproved(f)));
     const perCategory = categories.map((category) => {
-      const findings = districtFindings.filter((f) => f.categoryId === category.id);
-      const total = findings.reduce((sum, f) => sum + f.caseCount, 0);
-      const rectified = findings.reduce((sum, f) => sum + f.rectifiedCases, 0);
+      const catResident = districtResident.filter((r) => r.finding.categoryId === category.id);
+      const total = catResident.reduce((sum, r) => sum + r.slice.eligibleCases, 0);
+      const rectified = catResident.reduce((sum, r) => sum + r.slice.closedCases, 0);
       return { category, outstanding: total - rectified };
     });
     const totalOutstanding = perCategory.reduce((sum, c) => sum + c.outstanding, 0);
-    const totalCases = districtFindings.reduce((sum, f) => sum + f.caseCount, 0);
+    const totalCases = districtResident.reduce((sum, r) => sum + r.slice.eligibleCases, 0);
     const officialCounts = computeEligibleCaseCounts(db, { districtId: district.id, periodId });
     const totalBranches = districtBranchCount(db, district.id);
     const notDispatched = uncovered.filter((u) => u.district?.id === district.id).length;
-    const amountInvolved = districtFindings.reduce((sum, f) => sum + f.amount, 0);
+    const amountInvolved = districtResident.reduce((sum, r) => sum + r.slice.eligibleAmount, 0);
     return {
       district,
       totalBranches,
@@ -292,13 +311,13 @@ export function getMonthlyDistrictSeries(db: Database): { otherCases: DistrictPe
   }
 
   // "Various internal Audit report" — every one of this district's
-  // findings (any period, not REJECTED) that does NOT fall into the
+  // HO-approved-or-later findings (any period) that does NOT fall into the
   // official ScoringRule's category+source bucket. If no active
-  // ScoringRule exists, this bucket defaults to ALL findings (all of them
-  // are "various" in that case, since nothing is official). Lifetime, not
-  // period-scoped - see this block's own doc comment above for why.
+  // ScoringRule exists, this bucket defaults to ALL such findings (all of
+  // them are "various" in that case, since nothing is official). Lifetime,
+  // not period-scoped - see this block's own doc comment above for why.
   const various: DistrictVariousRow[] = districts.map((district) => {
-    const allFindings = db.findings.filter((f) => f.districtId === district.id && f.status !== "REJECTED");
+    const allFindings = db.findings.filter((f) => f.districtId === district.id && isHoApproved(f));
     let variousTotal = 0;
     let variousRectified = 0;
     if (!rule) {
@@ -479,8 +498,11 @@ export function getWeeklyExecutiveSummary(
   const districts = activeDistricts(db);
 
   function cumulativeAsOf(categoryId: string, districtId: string, asOfDate: string): { totalCases: number; rectifiedCases: number } {
+    // isHoApproved() gate, same as every other "official" figure - a
+    // still-in-review or rejected finding shouldn't move this week's
+    // reported balance before it's actually cleared approval.
     const findings = db.findings.filter(
-      (f) => f.categoryId === categoryId && f.districtId === districtId && f.status !== "REJECTED" && f.findingDate <= asOfDate
+      (f) => f.categoryId === categoryId && f.districtId === districtId && isHoApproved(f) && f.findingDate <= asOfDate
     );
     return {
       totalCases: findings.reduce((sum, f) => sum + f.caseCount, 0),
@@ -524,11 +546,30 @@ export function getWeeklyExecutiveSummary(
 export function getDistrictRankingAllCases(db: Database, periodIds?: string[]): { rows: DistrictRankingRow[]; totalRow: Omit<DistrictRankingRow, "district"> } {
   const rows = activeDistricts(db)
     .map((district) => {
-      const findings = db.findings.filter(
-        (f) => f.districtId === district.id && f.status !== "REJECTED" && (!periodIds || periodIds.length === 0 || periodIds.includes(f.periodId))
-      );
-      const totalCases = findings.reduce((sum, f) => sum + f.caseCount, 0);
-      const rectifiedCases = findings.reduce((sum, f) => sum + f.rectifiedCases, 0);
+      // isHoApproved() gate - a finding still short of HO approval (or
+      // rejected/returned) isn't official yet and shouldn't count toward
+      // this ranking, same gate #6/every dashboard "official" figure uses.
+      const candidates = db.findings.filter((f) => f.districtId === district.id && isHoApproved(f));
+      let totalCases: number;
+      let rectifiedCases: number;
+      if (periodIds && periodIds.length > 0) {
+        // Sum each selected period's own residency slice (see
+        // findingsResidentInPeriod()'s doc comment) rather than a raw
+        // periodIds.includes(f.periodId) filter, so a finding that
+        // transferred between two selected periods is credited to each
+        // one's own share, not dropped from the one it left.
+        totalCases = 0;
+        rectifiedCases = 0;
+        for (const pid of periodIds) {
+          const resident = findingsResidentInPeriod(db, pid, candidates);
+          totalCases += resident.reduce((sum, r) => sum + r.slice.eligibleCases, 0);
+          rectifiedCases += resident.reduce((sum, r) => sum + r.slice.closedCases, 0);
+        }
+      } else {
+        // No period filter - lifetime totals, unchanged from before.
+        totalCases = candidates.reduce((sum, f) => sum + f.caseCount, 0);
+        rectifiedCases = candidates.reduce((sum, f) => sum + f.rectifiedCases, 0);
+      }
       return {
         district,
         totalBranches: districtBranchCount(db, district.id),
@@ -583,24 +624,36 @@ export function getCategoryPerformanceSummary(
   const districts = activeDistricts(db);
   const previousPeriodId = periodId ? previousReportingPeriodId(db, periodId) : null;
 
+  // Period-scoped residency (see findingsResidentInPeriod()'s doc comment)
+  // when a period is given, so a transferred finding counts toward exactly
+  // one period's total here too - unchanged (live caseCount/rectifiedCases)
+  // in "all periods" mode, same as before this fix.
+  function periodTotals(candidates: Finding[], forPeriodId: string | null): { total: number; rectified: number } {
+    if (!forPeriodId) {
+      return { total: candidates.reduce((s, f) => s + f.caseCount, 0), rectified: candidates.reduce((s, f) => s + f.rectifiedCases, 0) };
+    }
+    const resident = findingsResidentInPeriod(db, forPeriodId, candidates);
+    return { total: resident.reduce((s, r) => s + r.slice.eligibleCases, 0), rectified: resident.reduce((s, r) => s + r.slice.closedCases, 0) };
+  }
+
   function grossPercentageFor(categoryId: string, forPeriodId: string | null): number | null {
-    const findings = db.findings.filter((f) => f.categoryId === categoryId && f.status !== "REJECTED" && (!forPeriodId || f.periodId === forPeriodId));
-    const total = findings.reduce((sum, f) => sum + f.caseCount, 0);
+    // isHoApproved() gate, same as every other "official" figure here.
+    const candidates = db.findings.filter((f) => f.categoryId === categoryId && isHoApproved(f));
+    const { total, rectified } = periodTotals(candidates, forPeriodId);
     if (total === 0) return null;
-    const rectified = findings.reduce((sum, f) => sum + f.rectifiedCases, 0);
     return (rectified / total) * 100;
   }
 
   const rows: CategoryPerformanceRow[] = activeCategories(db).map((category) => {
-    const findings = db.findings.filter((f) => f.categoryId === category.id && f.status !== "REJECTED" && (!periodId || f.periodId === periodId));
-    const totalCases = findings.reduce((sum, f) => sum + f.caseCount, 0);
-    const rectifiedCases = findings.reduce((sum, f) => sum + f.rectifiedCases, 0);
+    const candidates = db.findings.filter((f) => f.categoryId === category.id && isHoApproved(f));
+    const { total: totalCases, rectified: rectifiedCases } = periodTotals(candidates, periodId ?? null);
     const districtPcts = districts
       .map((d) => {
-        const districtFindings = findings.filter((f) => f.districtId === d.id);
-        const dTotal = districtFindings.reduce((sum, f) => sum + f.caseCount, 0);
+        const { total: dTotal, rectified: dRectified } = periodTotals(
+          candidates.filter((f) => f.districtId === d.id),
+          periodId ?? null
+        );
         if (dTotal === 0) return null;
-        const dRectified = districtFindings.reduce((sum, f) => sum + f.rectifiedCases, 0);
         return (dRectified / dTotal) * 100;
       })
       .filter((p): p is number => p !== null);
@@ -649,11 +702,15 @@ export function getDistrictSnapshotAsOf(
   const rule = db.scoringRules.find((r) => r.active);
   const rows = activeDistricts(db)
     .map((district) => {
+      // isHoApproved() gate - this snapshot presents itself as the official
+      // scored figure as of a cutoff date (see this function's own doc
+      // comment), so it needs the same gate computeEligibleCaseCounts()
+      // itself applies, not just a REJECTED exclusion.
       const findings = db.findings.filter(
         (f) =>
           f.districtId === district.id &&
           f.periodId === periodId &&
-          f.status !== "REJECTED" &&
+          isHoApproved(f) &&
           f.findingDate <= asOfDate &&
           (!rule || (rule.categories.includes(f.categoryId) && rule.sources.includes(f.sourceId)))
       );

@@ -2,9 +2,9 @@ import Link from "next/link";
 import type { Database } from "@/types";
 import type { SessionData } from "@/lib/session";
 import { findBranchManager, findBranchSubManager, findBranchController } from "@/lib/org";
-import { computePerformance, computeEligibleCaseCounts, queueStatusesForSession, findingCaseTotals, transferTotals, isHoApproved } from "@/lib/findings";
+import { computePerformance, computeEligibleCaseCounts, queueStatusesForSession, findingCaseTotals, findingCaseTotalsInPeriod, transferTotals, isHoApproved } from "@/lib/findings";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
-import { sumAmountByCurrency, sumOutstandingByCurrency } from "@/lib/currency";
+import { sumAmountByCurrency, sumOutstandingByCurrency, sumAmountByCurrencyInPeriod, sumOutstandingByCurrencyInPeriod } from "@/lib/currency";
 import { formatDateTime, formatNumber } from "@/lib/format";
 import { inDateRange, type DateRange } from "@/lib/dateRange";
 import { applyDashboardFilters, EMPTY_DASHBOARD_FILTERS, ALL_PERIODS_VALUE, type DashboardFilters } from "@/lib/dashboardFilters";
@@ -92,7 +92,15 @@ export function BranchDashboard({
     : openPeriod
       ? branchAllFindings.filter((f) => f.periodId === openPeriod.id)
       : [];
-  const { totalFindings, totalCases, rectifiedFindings, rectifiedCases } = findingCaseTotals(periodFindings);
+  // Period-residency-aware (findingCaseTotalsInPeriod()), not a raw
+  // periodFindings sum - a finding partially rectified here and then
+  // transferred must still count its slice of cases/rectification toward
+  // this period, not vanish from it (see the function's own doc comment).
+  // "All periods"/no-scope modes have no single period to walk a transfer
+  // chain against, so they keep the plain findingCaseTotals() over
+  // periodFindings, unchanged from before this existed.
+  const { totalFindings, totalCases, rectifiedFindings, rectifiedCases } =
+    !allPeriodsSelected && openPeriod ? findingCaseTotalsInPeriod(db, openPeriod.id, branchAllFindings) : findingCaseTotals(periodFindings);
   // Every StatCard/table below that reports an "official" figure (as
   // opposed to FindingStatusDistribution's deliberately broader
   // in-flight-workflow view - RiskDistribution/CategoryDistribution both
@@ -115,12 +123,26 @@ export function BranchDashboard({
   const eligibleCounts = hasPeriodScope
     ? computeEligibleCaseCounts(db, { branchId: branch.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id })
     : null;
-  const totalAmount = sumAmountByCurrency(approvedPeriodFindings, "amount");
-  const outstandingAmount = sumOutstandingByCurrency(approvedPeriodFindings);
+  // Period-residency-aware (see sumAmountByCurrencyInPeriod()'s doc
+  // comment in src/lib/currency.ts) - a finding partially rectified here
+  // and then transferred must have its amount split between this period
+  // and wherever it went, not attributed wholesale to just one of them.
+  const approvedBranchAllFindings = branchAllFindings.filter(isHoApproved);
+  const totalAmount =
+    !allPeriodsSelected && openPeriod
+      ? sumAmountByCurrencyInPeriod(db, openPeriod.id, approvedBranchAllFindings, "eligible")
+      : sumAmountByCurrency(approvedPeriodFindings, "amount");
+  const outstandingAmount =
+    !allPeriodsSelected && openPeriod
+      ? sumOutstandingByCurrencyInPeriod(db, openPeriod.id, approvedBranchAllFindings)
+      : sumOutstandingByCurrency(approvedPeriodFindings);
   // Resolved Amount counts only formally CLOSED amount, never merely
   // rectified-but-unclosed - same "a controller's sign-off is what makes it
   // official" reasoning as findingCaseTotals()'s own closed-only gate.
-  const resolvedAmount = sumAmountByCurrency(approvedPeriodFindings, "closedAmount");
+  const resolvedAmount =
+    !allPeriodsSelected && openPeriod
+      ? sumAmountByCurrencyInPeriod(db, openPeriod.id, approvedBranchAllFindings, "closed")
+      : sumAmountByCurrency(approvedPeriodFindings, "closedAmount");
 
   const otherCaseFindings = otherCase ? approvedPeriodFindings.filter((f) => f.categoryId === otherCase.id) : [];
   const otherCaseTotal = otherCaseFindings.reduce((sum, f) => sum + f.caseCount, 0);

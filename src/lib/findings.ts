@@ -224,6 +224,54 @@ export function findingCaseTotals(findings: Finding[]): {
 }
 
 /**
+ * findingCaseTotals(), scoped to one specific reporting period via
+ * residency (findingsResidentInPeriod()) instead of a raw
+ * `f.periodId === periodId` filter - every dashboard's "Total Findings /
+ * Total Cases / Rectified" StatCards used that raw filter until this
+ * existed, which silently drops a finding's slice of a period the moment
+ * it transfers away (see findingsResidentInPeriod()'s own doc comment).
+ * `candidates` should already have every *other* scope/filter applied
+ * (branch/district/date-range/dashboard filters) but NOT the period
+ * filter - same division of labor as findingsResidentInPeriod() itself.
+ *
+ * The counting rule this produces, worked through both transfer shapes:
+ *   - Full transfer (nothing rectified before it left): this period's
+ *     totalCases is 0 for that finding (nothing stayed), all of it lands
+ *     in totalCases wherever it arrived instead - never both, never
+ *     neither.
+ *   - Partial transfer (some cases rectified before the rest moved on):
+ *     this period's totalCases is exactly the cases that *didn't*
+ *     transfer (caseCount - casesTransferred), and rectifiedCases counts
+ *     whatever of those was actually formally closed here - the
+ *     transferred remainder shows up in totalCases wherever it went, not
+ *     here.
+ * `totalFindings` still counts the finding once for every period it was
+ * ever resident in (a partially-rectified-then-transferred finding is
+ * "kept" in both its origin and destination period's Total Findings, each
+ * for the portion of work that genuinely happened there) - it is not a
+ * global per-finding count, the same way Total Cases isn't either.
+ * `rectifiedFindings` counts a finding as rectified *for this period* only
+ * once every case attributable to this period has actually been closed
+ * (slice.closedCases >= slice.eligibleCases, with at least one eligible
+ * case) - a finding that transferred out with only some cases closed here
+ * isn't "rectified" for this period's own tally, even if it's fully
+ * closed today somewhere downstream.
+ */
+export function findingCaseTotalsInPeriod(
+  db: Database,
+  periodId: string,
+  candidates: Finding[]
+): { totalFindings: number; totalCases: number; rectifiedFindings: number; rectifiedCases: number } {
+  const resident = findingsResidentInPeriod(db, periodId, candidates.filter(isHoApproved));
+  return {
+    totalFindings: resident.length,
+    totalCases: resident.reduce((sum, r) => sum + r.slice.eligibleCases, 0),
+    rectifiedFindings: resident.filter((r) => r.slice.eligibleCases > 0 && r.slice.closedCases >= r.slice.eligibleCases).length,
+    rectifiedCases: resident.reduce((sum, r) => sum + r.slice.closedCases, 0),
+  };
+}
+
+/**
  * Same findings-vs-cases split for transfers. `casesTransferred` on each
  * FindingTransfer row is the outstanding balance actually carried forward
  * (see transferFinding() above) - summing it gives the real case count
@@ -551,45 +599,63 @@ export interface PerformanceScope {
 }
 
 /**
- * How many of a finding's cases were actually eligible during `periodId`,
- * walking its transfer chain (each hop's `casesTransferred` is exactly what
- * was outstanding - and therefore eligible - the moment it arrived in the
- * next period). Returns null if the finding was never resident in that
- * period at all. This is what lets a period keep its own eligible total
- * even after the finding transfers away, instead of losing it the moment
- * `finding.periodId` moves on (master.txt §8: "do not double-count the same
- * continuing case in old and new periods" - each hop's cases belong to
- * exactly one period's eligible total, never two).
+ * A finding's residency in one specific period, walking its transfer chain:
+ * how many cases/how much amount actually belonged there (see
+ * findingCasesEligibleInPeriod()'s doc comment for why "eligible" means
+ * "never double-counted"), and - the piece that also drives
+ * findingsResidentInPeriod() below - which FindingTransfer row (if any)
+ * carried it out of this period. `exitTransfer` is null exactly when the
+ * finding is still resident here today (`finding.periodId === periodId`);
+ * non-null means this period is now historical for this finding, and
+ * `exitTransfer.toPeriodId` is where it went. Returns null if the finding
+ * was never resident in this period at all.
  */
-function findingCasesEligibleInPeriod(db: Database, finding: Finding, periodId: string): number | null {
+function findingResidencyInPeriod(
+  db: Database,
+  finding: Finding,
+  periodId: string
+): { eligibleCases: number; eligibleAmount: number; exitTransfer: FindingTransfer | null } | null {
   const transfers = [...db.findingTransfers]
     .filter((t) => t.findingId === finding.id)
     .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
   if (transfers.length === 0) {
-    return finding.periodId === periodId ? finding.caseCount : null;
+    return finding.periodId === periodId ? { eligibleCases: finding.caseCount, eligibleAmount: finding.amount, exitTransfer: null } : null;
   }
   if (transfers[0].fromPeriodId === periodId) {
     // Only the portion that never transferred out belongs to the origin
-    // period - casesTransferred (see transferFinding()) is exactly what was
-    // still outstanding, and therefore carried forward, at that moment.
-    // Crediting the origin period the *full* caseCount here (the previous
-    // behavior) would count a transferred CASE as "eligible but never
-    // rectified" against the period it left - i.e. a case transfer would
-    // drag down that period's performance for something that isn't a
-    // rectification failure there. Performance must never be moved by a
-    // transferred case, in either direction, in the period it left.
-    return finding.caseCount - transfers[0].casesTransferred;
+    // period - casesTransferred/amountTransferred (see transferFinding())
+    // is exactly what was still outstanding, and therefore carried
+    // forward, at that moment. Crediting the origin period the *full*
+    // caseCount/amount here (the previous behavior) would count a
+    // transferred case as "eligible but never rectified" against the
+    // period it left - i.e. a case transfer would drag down that period's
+    // performance for something that isn't a rectification failure there.
+    // Performance must never be moved by a transferred case, in either
+    // direction, in the period it left.
+    return {
+      eligibleCases: finding.caseCount - transfers[0].casesTransferred,
+      eligibleAmount: finding.amount - transfers[0].amountTransferred,
+      exitTransfer: transfers[0],
+    };
   }
   const hopIndex = transfers.findIndex((t) => t.toPeriodId === periodId);
   if (hopIndex === -1) return null;
   // Same reasoning for an intermediate hop (a finding transferred more than
   // once): this period is only credited what arrived minus whatever moved
-  // on again via the *next* transfer, never the finding's full caseCount.
-  const arrived = transfers[hopIndex].casesTransferred;
+  // on again via the *next* transfer, never the finding's full caseCount/amount.
+  const arrivedHop = transfers[hopIndex];
   const nextTransfer = transfers[hopIndex + 1];
-  const left = nextTransfer ? nextTransfer.casesTransferred : 0;
-  return arrived - left;
+  return {
+    eligibleCases: arrivedHop.casesTransferred - (nextTransfer?.casesTransferred ?? 0),
+    eligibleAmount: arrivedHop.amountTransferred - (nextTransfer?.amountTransferred ?? 0),
+    exitTransfer: nextTransfer ?? null,
+  };
+}
+
+/** Thin wrapper over findingResidencyInPeriod() for the one existing caller (computeEligibleCaseCounts) that only ever needed the case count. */
+function findingCasesEligibleInPeriod(db: Database, finding: Finding, periodId: string): number | null {
+  return findingResidencyInPeriod(db, finding, periodId)?.eligibleCases ?? null;
 }
 
 /**
@@ -610,6 +676,68 @@ function closedInPeriod(db: Database, finding: Finding, periodId: string): { cas
     cases: closures.reduce((sum, c) => sum + c.closedCases, 0),
     amount: closures.reduce((sum, c) => sum + c.closedAmount, 0),
   };
+}
+
+/**
+ * One finding's own slice of one period - what browsing/reporting/exporting
+ * *that period* should show for this finding, instead of its live/current
+ * aggregate fields. `isCurrentPeriod` false means this period is now
+ * historical for this finding (it has since transferred onward to
+ * `transferredOutToCode`) - callers should render that entry read-only, not
+ * offer the live workflow actions a current-period row would.
+ */
+export interface FindingPeriodSlice {
+  eligibleCases: number;
+  eligibleAmount: number;
+  closedCases: number;
+  closedAmount: number;
+  isCurrentPeriod: boolean;
+  transferredOutToCode: string | null;
+}
+
+function findingSliceInPeriod(db: Database, finding: Finding, periodId: string): FindingPeriodSlice | null {
+  const residency = findingResidencyInPeriod(db, finding, periodId);
+  if (residency === null) return null;
+  const closed = closedInPeriod(db, finding, periodId);
+  const destination = residency.exitTransfer ? db.reportingPeriods.find((p) => p.id === residency.exitTransfer!.toPeriodId) : undefined;
+  return {
+    eligibleCases: residency.eligibleCases,
+    eligibleAmount: residency.eligibleAmount,
+    closedCases: closed.cases,
+    closedAmount: closed.amount,
+    isCurrentPeriod: residency.exitTransfer === null,
+    transferredOutToCode: destination?.code ?? null,
+  };
+}
+
+/**
+ * Every finding from `candidates` that was ever resident in `periodId` -
+ * its current residents (`f.periodId === periodId`, the old behavior)
+ * PLUS any finding that has since transferred away, each paired with its
+ * own slice of that period (see FindingPeriodSlice). This is what makes a
+ * period's finding list/report/export match what computePerformance()
+ * already credits it with (master.txt §8: "do not double-count" means
+ * "attribute to exactly one period", not "stop showing once it moves on") -
+ * without it, a finding that was partially rectified in period A and then
+ * transferred to B simply vanishes from A's records the moment it moves,
+ * even though real work genuinely happened there.
+ *
+ * `candidates` should already have every *other* filter applied
+ * (district/branch/category/date range/etc.) - this only adds the period
+ * test on top, same division of labor as the plain `f.periodId === periodId`
+ * filter it replaces.
+ */
+export function findingsResidentInPeriod(
+  db: Database,
+  periodId: string,
+  candidates: Finding[]
+): Array<{ finding: Finding; slice: FindingPeriodSlice }> {
+  const out: Array<{ finding: Finding; slice: FindingPeriodSlice }> = [];
+  for (const f of candidates) {
+    const slice = findingSliceInPeriod(db, f, periodId);
+    if (slice) out.push({ finding: f, slice });
+  }
+  return out;
 }
 
 /**

@@ -262,6 +262,16 @@ function buildSeedDatabase(): Database {
       rootCause: false,
       evidenceNote: false,
     },
+    // "Other (type in)" allowed on every list-driven dropdown by default -
+    // matches today's behavior, so turning this into a setting doesn't
+    // silently lock any field down.
+    allowOtherValueFields: {
+      operationArea: true,
+      irregularityType: true,
+      priority: true,
+      riskLevel: true,
+      currency: true,
+    },
     updatedAt: now,
   };
 
@@ -314,6 +324,10 @@ function buildSeedDatabase(): Database {
     permissionKey("findings", "delete"),
     permissionKey("findings", "submit"),
     permissionKey("findings", "ho-review"),
+    // Eligible to be picked as a Bank-Wide Approval approver (Settings.
+    // hoApproval.approverUserIds) - matches the seeded
+    // hoApproval.approverUserIds default (user-ho-controller) below.
+    permissionKey("findings", "bank-approval"),
     permissionKey("findings", "close"),
     permissionKey("findings", "ho-return-rectification"),
     permissionKey("findings", "comment"),
@@ -344,8 +358,14 @@ function buildSeedDatabase(): Database {
     // correction - two separate permissions (see verify-rectification/
     // route.ts and return-rectification/route.ts) so a role can be granted
     // one without the other; District Controller gets both by default.
+    // district-return-rectification alone already gives the full
+    // unrestricted return behavior return-rectification.ts's own doc
+    // comment describes - the plain, un-prefixed findings.return-
+    // rectification permission is kept in the registry only for backward
+    // compatibility with any pre-existing custom role that was configured
+    // before the district/HO split (see normalizeDb()'s own migration for
+    // it), not something a fresh install's seeded roles need to also hold.
     permissionKey("findings", "verify-rectification"),
-    permissionKey("findings", "return-rectification"),
     permissionKey("findings", "district-return-rectification"),
     permissionKey("findings", "close"),
     // "Transfer outstanding cases" (icfms.txt).
@@ -817,6 +837,20 @@ function normalizeDb(db: Database): { db: Database; changed: boolean } {
       }
     }
   }
+  if (!db.settings.allowOtherValueFields) {
+    // "Other (type in)" was unconditionally available on every one of
+    // these dropdowns before this became configurable - true-by-default
+    // preserves that for a pre-existing install rather than silently
+    // locking any field down to its configured list.
+    db.settings.allowOtherValueFields = {
+      operationArea: true,
+      irregularityType: true,
+      priority: true,
+      riskLevel: true,
+      currency: true,
+    };
+    changed = true;
+  }
   for (const p of db.reportingPeriods) {
     if (!p.startsAt || !p.endsAt) {
       // Predates the date-range field: default to the calendar month
@@ -907,9 +941,20 @@ function normalizeDb(db: Database): { db: Database; changed: boolean } {
   // approve and the return-for-correction action). Any role already
   // holding the combined permission keeps returning for correction too,
   // exactly as it could before the split - only a deliberate edit through
-  // /admin/roles should ever separate them from here on.
+  // /admin/roles should ever separate them from here on. Skipped for a
+  // role that already holds either of the newer district/HO-scoped return
+  // permissions directly (a fresh install's seeded roles, or any role an
+  // admin has already migrated onto the split model) - that combination
+  // means it was never actually in the old pre-split shape this backfill
+  // exists for, so it shouldn't re-grant the legacy permission alongside
+  // permissions that already supersede it.
   for (const r of db.roles) {
-    if (r.permissions.includes(permissionKey("findings", "verify-rectification")) && !r.permissions.includes(permissionKey("findings", "return-rectification"))) {
+    if (
+      r.permissions.includes(permissionKey("findings", "verify-rectification")) &&
+      !r.permissions.includes(permissionKey("findings", "return-rectification")) &&
+      !r.permissions.includes(permissionKey("findings", "district-return-rectification")) &&
+      !r.permissions.includes(permissionKey("findings", "ho-return-rectification"))
+    ) {
       r.permissions = [...r.permissions, permissionKey("findings", "return-rectification")];
       changed = true;
     }
@@ -939,6 +984,24 @@ function normalizeDb(db: Database): { db: Database; changed: boolean } {
       }
     }
   }
+  // findings.bank-approval is a genuinely new permission (the bank-approval
+  // route previously only checked requireUser() plus explicit
+  // Settings.hoApproval.approverUserIds membership) - deliberately NOT
+  // auto-backfilled onto whichever role a currently-configured approver
+  // holds. Settings.hoApproval.approverUserIds is live, ongoing admin
+  // configuration (an admin can add/remove someone from it at any time as
+  // part of normal operation), not a fixed structural fact about the
+  // database's shape the way the legacy return-rectification permission
+  // above is - a backfill keyed off it would have to run on every single
+  // readDb() call (normalizeDb() has no other way to know "already
+  // migrated" from "still needs it"), which would silently re-grant this
+  // permission forever afterward, making it impossible for an admin to
+  // ever actually revoke it from a role while that role's user remains an
+  // approver. Same convention already documented in the login route for
+  // any new registry permission: an existing Administrator (who always
+  // keeps roles.manage) checks the new box the same as for any role,
+  // exactly once, the same way anyone upgrading needs to for any other
+  // brand-new page/action added to PAGE_REGISTRY.
   // edit/delete/submit are new companions to findings.create for any
   // BANK-scope role (HO Controller) - previously a bank-registered finding
   // saved as a draft (submit: false) could never be edited, submitted, or

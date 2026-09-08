@@ -45,7 +45,29 @@ const updateSchema = z.object({
   // gets real static typing on Settings.similarFindingFields, which a
   // runtime-only check against that array's keys couldn't.
   similarFindingFields: z
-    .array(z.enum(["branchId", "categoryId", "operationArea", "irregularityType", "periodId", "sourceId", "departmentId", "riskLevel"]))
+    .array(
+      z.enum([
+        "districtId",
+        "branchId",
+        "sourceId",
+        "departmentId",
+        "categoryId",
+        "periodId",
+        "findingDate",
+        "operationArea",
+        "irregularityType",
+        "amount",
+        "currency",
+        "caseCount",
+        "riskLevel",
+        "priority",
+        "title",
+        "description",
+        "recommendation",
+        "rootCause",
+        "evidenceNote",
+      ])
+    )
     .min(1, "Select at least one field for the duplicate-suggestion check"),
   // Keep in sync with REQUIRABLE_FINDING_FIELDS (src/types/index.ts) -
   // same literal-keys-object convention as similarFindingFields above, one
@@ -66,6 +88,14 @@ const updateSchema = z.object({
     recommendation: z.boolean(),
     rootCause: z.boolean(),
     evidenceNote: z.boolean(),
+  }),
+  // Keep in sync with OTHER_VALUE_ALLOWED_FIELDS (src/types/index.ts).
+  allowOtherValueFields: z.object({
+    operationArea: z.boolean(),
+    irregularityType: z.boolean(),
+    priority: z.boolean(),
+    riskLevel: z.boolean(),
+    currency: z.boolean(),
   }),
 });
 

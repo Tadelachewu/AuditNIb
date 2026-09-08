@@ -25,6 +25,7 @@ export type PermissionAction =
   | "submit"
   | "district-review"
   | "ho-review"
+  | "bank-approval"
   | "rectify"
   | "verify-rectification"
   | "return-rectification"
@@ -88,6 +89,19 @@ export const PAGE_REGISTRY: PageDefinition[] = [
       { action: "submit", label: "Submit" },
       { action: "district-review", label: "District Approve / Reject / Return" },
       { action: "ho-review", label: "HO Approve / Reject / Return" },
+      // The Bank-Wide Approval stage (Settings.hoApproval.required) - a
+      // dedicated permission distinct from ho-review, since a bank-
+      // registered finding that goes through this stage skipped
+      // district/HO review entirely (see submitFinding()'s
+      // registeredByBankScope branch). Deliberately narrower than
+      // ho-review even though the same role often holds both: this is
+      // ONE additional gate on top of Settings.hoApproval.approverUserIds
+      // (see bank-approval/route.ts) - a role must hold this permission
+      // AND the specific user must be hand-picked into approverUserIds,
+      // rather than the endpoint being reachable by anyone whose id
+      // happens to be in that list regardless of what they're otherwise
+      // permitted to do.
+      { action: "bank-approval", label: "Bank-Wide Approve / Reject / Return" },
       { action: "rectify", label: "Record Rectification" },
       // The District Controller's gate on a recorded rectification, before
       // it's closable by anyone (including HO) - approve it as correct.
@@ -98,7 +112,10 @@ export const PAGE_REGISTRY: PageDefinition[] = [
       // correction - split out from "verify-rectification" so a role can
       // hold one without the other (e.g. a reviewer who can only approve,
       // never bounce work back, or vice versa).
-      { action: "return-rectification", label: "Return Rectification for Correction (Legacy)" },
+      {
+        action: "return-rectification",
+        label: "Return Rectification for Correction (Legacy - kept for backward compatibility; use the District/HO-specific ones below for new roles)",
+      },
       { action: "district-return-rectification", label: "District: Return Rectification for Correction" },
       { action: "ho-return-rectification", label: "HO: Return Rectification for Correction (after District verification)" },
       { action: "close", label: "Close (Verify)" },

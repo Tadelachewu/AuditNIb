@@ -128,6 +128,7 @@ export default async function FindingDetailPage({ params }: { params: Promise<{ 
       priorityLevels={db.settings.priorityLevels}
       irregularityTypes={db.settings.irregularityTypes}
       requiredFields={db.settings.requiredFindingFields}
+      allowOther={db.settings.allowOtherValueFields}
       editSources={db.sources.filter((s) => s.active)}
       editDepartments={db.departments.filter((d) => d.active)}
       editCategories={db.categories.filter((c) => c.active)}
@@ -213,11 +214,18 @@ export default async function FindingDetailPage({ params }: { params: Promise<{ 
         canHoReturnRectification,
         canResubmitRectification: has("rectify") && finding.status === "RECTIFICATION_RETURNED",
         // Settings.hoApproval's single approval step for a bank-registered
-        // finding - gated to the specific assigned approver(s), not a
-        // permission (see bank-approval/route.ts).
+        // finding - both gates required, matching bank-approval/route.ts's
+        // own server-side check: the permission (an eligible role) and the
+        // specific assigned approver (Settings.hoApproval.approverUserIds).
+        // Purely a UI convenience showing/hiding these buttons - the real
+        // enforcement is server-side in that route regardless of what
+        // renders here.
         canBankApprove:
-          finding.status === "PENDING_BANK_APPROVAL" && db.settings.hoApproval.approverUserIds.includes(user.userId!),
+          has("bank-approval") &&
+          finding.status === "PENDING_BANK_APPROVAL" &&
+          db.settings.hoApproval.approverUserIds.includes(user.userId!),
         canBankReturnReview:
+          has("bank-approval") &&
           finding.status === "PENDING_BANK_APPROVAL" &&
           db.settings.hoApproval.approverUserIds.includes(user.userId!) &&
           finding.createdBy !== user.userId,

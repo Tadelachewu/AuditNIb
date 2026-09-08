@@ -29,6 +29,13 @@ export interface FindingRow {
   districtVerifiedAmount: number;
   closedCases: number;
   closedAmount: number;
+  // Set when this row is a period filter's *historical* residency for a
+  // finding that has since transferred onward (see
+  // findingsResidentInPeriod() in src/lib/findings.ts) - it's this period's
+  // own past record, not the finding's live current state, so it's never
+  // eligible for a bulk action here.
+  isHistorical: boolean;
+  transferredOutToCode: string | null;
 }
 
 export interface BulkPermissions {
@@ -68,17 +75,18 @@ function isClosable(f: FindingRow): boolean {
 }
 
 function eligibleFor(kind: BulkActionKind, rows: FindingRow[], perms: BulkPermissions): FindingRow[] {
+  const actionable = rows.filter((f) => !f.isHistorical);
   switch (kind) {
     case "approve":
     case "reject":
     case "return-review":
-      return rows.filter((f) => REVIEW_STATUSES.includes(f.status) && canReview(f.status, perms));
+      return actionable.filter((f) => REVIEW_STATUSES.includes(f.status) && canReview(f.status, perms));
     case "verify":
-      return rows.filter((f) => perms.canVerifyRectification && isVerifiable(f));
+      return actionable.filter((f) => perms.canVerifyRectification && isVerifiable(f));
     case "return-rectification":
-      return rows.filter((f) => perms.canReturnRectification && RECTIFICATION_STATUSES.includes(f.status));
+      return actionable.filter((f) => perms.canReturnRectification && RECTIFICATION_STATUSES.includes(f.status));
     case "close":
-      return rows.filter((f) => perms.canClose && isClosable(f));
+      return actionable.filter((f) => perms.canClose && isClosable(f));
   }
 }
 
@@ -140,10 +148,11 @@ export function FindingsTable({ rows, permissions, emptyText }: { rows: FindingR
     permissions.canReturnRectification ||
     permissions.canClose;
 
-  const allSelected = rows.length > 0 && rows.every((f) => selected.has(f.id));
+  const actionableRows = rows.filter((f) => !f.isHistorical);
+  const allSelected = actionableRows.length > 0 && actionableRows.every((f) => selected.has(f.id));
 
   function toggleAll() {
-    setSelected(allSelected ? new Set() : new Set(rows.map((f) => f.id)));
+    setSelected(allSelected ? new Set() : new Set(actionableRows.map((f) => f.id)));
   }
 
   function toggleOne(id: string) {
@@ -263,7 +272,14 @@ export function FindingsTable({ rows, permissions, emptyText }: { rows: FindingR
               <tr key={f.id} className={`hover:bg-slate-50 ${selected.has(f.id) ? "bg-blue-50/40" : ""}`}>
                 {canBulkAct && (
                   <td className="px-4 py-2">
-                    <input type="checkbox" checked={selected.has(f.id)} onChange={() => toggleOne(f.id)} aria-label={`Select ${f.reference}`} />
+                    <input
+                      type="checkbox"
+                      checked={selected.has(f.id)}
+                      onChange={() => toggleOne(f.id)}
+                      disabled={f.isHistorical}
+                      title={f.isHistorical ? "Historical record for this period - not actionable here." : undefined}
+                      aria-label={`Select ${f.reference}`}
+                    />
                   </td>
                 )}
                 <td className="px-4 py-2">
@@ -281,7 +297,16 @@ export function FindingsTable({ rows, permissions, emptyText }: { rows: FindingR
                   {f.currency} {formatNumber(f.amount)}
                 </td>
                 <td className="px-4 py-2">
-                  <FindingStatusBadge status={f.status} />
+                  {f.isHistorical ? (
+                    <span
+                      className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500"
+                      title="This period's own record for this finding - it has since transferred on. Its current status lives under the period it transferred to."
+                    >
+                      Transferred → {f.transferredOutToCode ?? "—"}
+                    </span>
+                  ) : (
+                    <FindingStatusBadge status={f.status} />
+                  )}
                 </td>
                 <td className="px-4 py-2 text-xs text-slate-400">{formatDateTime(f.updatedAt)}</td>
               </tr>

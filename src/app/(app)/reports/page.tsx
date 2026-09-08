@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 import { readDb } from "@/lib/db";
 import { findingsInScope } from "@/lib/findings-scope";
-import { computePerformance } from "@/lib/findings";
+import { computePerformance, findingsResidentInPeriod, type FindingPeriodSlice } from "@/lib/findings";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
 import { paginate, parsePage } from "@/lib/pagination";
 import { formatDateTime, formatNumber } from "@/lib/format";
@@ -50,7 +50,6 @@ export default async function ReportsPage({
   const dateFrom = get("dateFrom");
   const dateTo = get("dateTo");
 
-  if (periodId) findings = findings.filter((f) => f.periodId === periodId);
   if (districtId) findings = findings.filter((f) => f.districtId === districtId);
   if (branchId) findings = findings.filter((f) => f.branchId === branchId);
   if (sourceId) findings = findings.filter((f) => f.sourceId === sourceId);
@@ -65,7 +64,22 @@ export default async function ReportsPage({
   if (dateFrom) findings = findings.filter((f) => f.findingDate >= dateFrom);
   if (dateTo) findings = findings.filter((f) => f.findingDate <= dateTo);
 
-  findings = [...findings].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  // A period filter now includes a finding that has since transferred out
+  // of it (paired with that period's own slice of its cases/amount), not
+  // just findings still currently in it - see findingsResidentInPeriod()'s
+  // doc comment. `findings` stays the flat list for the aggregates below
+  // that don't need the slice (risk breakdown, transfers-in-scope);
+  // `resident` carries the slice for the ones that do (findings table,
+  // category breakdown - both must use the period-scoped numbers instead
+  // of the finding's live lifetime totals, or a transferred finding would
+  // be double-counted once in its origin period and again in its
+  // destination period).
+  type ResidentFinding = { finding: Finding; slice: FindingPeriodSlice | null };
+  let resident: ResidentFinding[] = periodId
+    ? findingsResidentInPeriod(db, periodId, findings)
+    : findings.map((f) => ({ finding: f, slice: null }));
+  resident = [...resident].sort((a, b) => b.finding.updatedAt.localeCompare(a.finding.updatedAt));
+  findings = resident.map((r) => r.finding);
 
   const district = db.districts.find((d) => d.id === user.districtId);
   const branch = db.branches.find((b) => b.id === user.branchId);
@@ -96,9 +110,13 @@ export default async function ReportsPage({
   const categoryBreakdown = db.categories
     .filter((c) => c.active)
     .map((c) => {
-      const catFindings = findings.filter((f) => f.categoryId === c.id);
-      const total = catFindings.reduce((sum, f) => sum + f.caseCount, 0);
-      const rectified = catFindings.reduce((sum, f) => sum + f.rectifiedCases, 0);
+      const catEntries = resident.filter((r) => r.finding.categoryId === c.id);
+      // Period-scoped (slice.eligibleCases/closedCases) when a period is
+      // filtered, so a transferred finding's cases count toward exactly one
+      // period's total here too - unchanged (live caseCount/rectifiedCases)
+      // when no period is selected, same as before this fix.
+      const total = catEntries.reduce((sum, r) => sum + (r.slice ? r.slice.eligibleCases : r.finding.caseCount), 0);
+      const rectified = catEntries.reduce((sum, r) => sum + (r.slice ? r.slice.closedCases : r.finding.rectifiedCases), 0);
       return { category: c, total, rectified, outstanding: total - rectified };
     });
 
@@ -126,7 +144,7 @@ export default async function ReportsPage({
     const qs = q.toString();
     return qs ? `/reports?${qs}` : "/reports";
   }
-  const findingsPage = paginate(findings, parsePage(get("page")));
+  const findingsPage = paginate(resident, parsePage(get("page")));
   const transfersPage = paginate(transfers, parsePage(get("transfersPage")));
 
   return (
@@ -193,25 +211,39 @@ export default async function ReportsPage({
                   </td>
                 </tr>
               )}
-              {findingsPage.items.map((f) => (
-                <tr key={f.id}>
-                  <td className="px-4 py-2 font-mono text-xs text-slate-700">{f.reference}</td>
-                  <td className="px-4 py-2 text-slate-900">{f.title}</td>
-                  <td className="px-4 py-2 text-slate-600">{branchName(f.branchId)}</td>
-                  <td className="px-4 py-2 text-slate-600">{departmentName(f.departmentId)}</td>
-                  <td className="px-4 py-2 text-slate-600">{categoryName(f.categoryId)}</td>
-                  <td className="px-4 py-2 text-slate-600">{sourceName(f.sourceId)}</td>
-                  <td className="px-4 py-2 text-slate-900">
-                    {f.currency} {formatNumber(f.amount)}
-                  </td>
-                  <td className="px-4 py-2 text-slate-900">
-                    {f.currency} {formatNumber(f.amount - f.rectifiedAmount)}
-                  </td>
-                  <td className="px-4 py-2">
-                    <FindingStatusBadge status={f.status} />
-                  </td>
-                </tr>
-              ))}
+              {findingsPage.items.map(({ finding: f, slice }) => {
+                const amount = slice ? slice.eligibleAmount : f.amount;
+                const outstanding = slice ? slice.eligibleAmount - slice.closedAmount : f.amount - f.rectifiedAmount;
+                const isHistorical = slice ? !slice.isCurrentPeriod : false;
+                return (
+                  <tr key={f.id}>
+                    <td className="px-4 py-2 font-mono text-xs text-slate-700">{f.reference}</td>
+                    <td className="px-4 py-2 text-slate-900">{f.title}</td>
+                    <td className="px-4 py-2 text-slate-600">{branchName(f.branchId)}</td>
+                    <td className="px-4 py-2 text-slate-600">{departmentName(f.departmentId)}</td>
+                    <td className="px-4 py-2 text-slate-600">{categoryName(f.categoryId)}</td>
+                    <td className="px-4 py-2 text-slate-600">{sourceName(f.sourceId)}</td>
+                    <td className="px-4 py-2 text-slate-900">
+                      {f.currency} {formatNumber(amount)}
+                    </td>
+                    <td className="px-4 py-2 text-slate-900">
+                      {f.currency} {formatNumber(outstanding)}
+                    </td>
+                    <td className="px-4 py-2">
+                      {isHistorical ? (
+                        <span
+                          className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500"
+                          title="This period's own record for this finding - it has since transferred on."
+                        >
+                          Transferred → {slice?.transferredOutToCode ?? "—"}
+                        </span>
+                      ) : (
+                        <FindingStatusBadge status={f.status} />
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

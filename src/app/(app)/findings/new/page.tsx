@@ -36,6 +36,7 @@ export default async function NewFindingPage() {
         priorityLevels={db.settings.priorityLevels}
         irregularityTypes={db.settings.irregularityTypes}
         requiredFields={db.settings.requiredFindingFields}
+        allowOther={db.settings.allowOtherValueFields}
         fixedDistrict={user.orgScope === "BRANCH" && district ? { id: district.id, name: district.name } : undefined}
         fixedBranch={user.orgScope === "BRANCH" && branch ? { id: branch.id, name: branch.name } : undefined}
       />

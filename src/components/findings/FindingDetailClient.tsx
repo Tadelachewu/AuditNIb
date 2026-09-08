@@ -27,6 +27,7 @@ import type {
   District,
   Branch,
   RequirableFindingField,
+  OtherValueAllowedField,
 } from "@/types";
 
 interface Lookups {
@@ -82,6 +83,7 @@ export function FindingDetailClient({
   priorityLevels,
   irregularityTypes,
   requiredFields,
+  allowOther,
   editSources,
   editDepartments,
   editCategories,
@@ -109,6 +111,7 @@ export function FindingDetailClient({
   priorityLevels: string[];
   irregularityTypes: string[];
   requiredFields: Record<RequirableFindingField, boolean>;
+  allowOther: Record<OtherValueAllowedField, boolean>;
   // All for the inline edit form (NewFindingForm in edit mode) - same
   // reference data the registration form itself uses.
   editSources: Source[];
@@ -476,6 +479,7 @@ export function FindingDetailClient({
               priorityLevels={priorityLevels}
               irregularityTypes={irregularityTypes}
               requiredFields={requiredFields}
+              allowOther={allowOther}
               fixedDistrict={fixedDistrict}
               fixedBranch={fixedBranch}
               onCancel={() => setEditing(false)}
@@ -1279,18 +1283,50 @@ export function FindingDetailClient({
       <Card>
         <CardHeader title="Transition History" />
         <div className="divide-y divide-slate-100">
-          {transitions.map((t) => (
-            <div key={t.id} className="flex items-center justify-between px-4 py-2 text-sm">
+          {transitions.map((t) => {
+            // Return/reject events (sent back for correction, or rejected
+            // outright) get their reason behind a "View Reason" button
+            // instead of shown inline - these are exactly the events
+            // someone reviewing this finding's history most needs to
+            // actually read (why was this bounced back?), so they're
+            // called out rather than blending into the same gray inline
+            // text every other transition's reason uses. Colored to match
+            // FindingStatusBadge's own severity convention (amber for a
+            // recoverable return, red for the one truly terminal REJECTED).
+            const isReturnEvent = ["RETURNED", "REJECTED", "RECTIFICATION_RETURNED"].includes(t.toStatus);
+            const header = (
               <span className="text-slate-600">
                 <span className="font-medium text-slate-900">{t.userName}</span> {t.action.replaceAll("_", " ").toLowerCase()}{" "}
                 <span className="text-slate-400">
                   ({t.fromStatus.replaceAll("_", " ")} → {t.toStatus.replaceAll("_", " ")})
                 </span>
-                {t.reason && <span className="text-slate-500"> — {t.reason}</span>}
+                {t.reason && !isReturnEvent && <span className="text-slate-500"> — {t.reason}</span>}
               </span>
-              <span className="text-xs text-slate-400">{formatDateTime(t.createdAt)}</span>
-            </div>
-          ))}
+            );
+            if (isReturnEvent && t.reason) {
+              const buttonTone = t.toStatus === "REJECTED" ? "bg-red-700 hover:bg-red-800" : "bg-amber-600 hover:bg-amber-700";
+              return (
+                <details key={t.id} className="group px-4 py-2 text-sm">
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-3 marker:content-none">
+                    {header}
+                    <span className="flex shrink-0 items-center gap-2">
+                      <span className={`rounded-md px-2.5 py-1 text-xs font-bold text-white transition-colors ${buttonTone}`}>
+                        View Reason
+                      </span>
+                      <span className="text-xs text-slate-400">{formatDateTime(t.createdAt)}</span>
+                    </span>
+                  </summary>
+                  <p className="mt-1.5 border-t border-slate-100 pt-1.5 text-sm text-slate-600">{t.reason}</p>
+                </details>
+              );
+            }
+            return (
+              <div key={t.id} className="flex items-center justify-between px-4 py-2 text-sm">
+                {header}
+                <span className="text-xs text-slate-400">{formatDateTime(t.createdAt)}</span>
+              </div>
+            );
+          })}
         </div>
       </Card>
       {dialog}

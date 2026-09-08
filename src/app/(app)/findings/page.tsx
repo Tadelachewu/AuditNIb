@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 import { readDb } from "@/lib/db";
 import { findingsInScope } from "@/lib/findings-scope";
-import { queueStatusesForSession } from "@/lib/findings";
+import { queueStatusesForSession, findingsResidentInPeriod, type FindingPeriodSlice } from "@/lib/findings";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
 import { paginate, parsePage } from "@/lib/pagination";
 import { inDateRange } from "@/lib/dateRange";
@@ -41,7 +41,6 @@ export default async function FindingsPage({
   const dateFrom = get("dateFrom");
   const dateTo = get("dateTo");
 
-  if (periodId) findings = findings.filter((f) => f.periodId === periodId);
   if (districtId) findings = findings.filter((f) => f.districtId === districtId);
   if (branchId) findings = findings.filter((f) => f.branchId === branchId);
   if (sourceId) findings = findings.filter((f) => f.sourceId === sourceId);
@@ -59,16 +58,27 @@ export default async function FindingsPage({
   // by each finding's own findingDate, same convention as the Reports page.
   if (dateFrom || dateTo) findings = findings.filter((f) => inDateRange({ from: dateFrom || undefined, to: dateTo || undefined }, f.findingDate));
 
-  const isQueued = queueStatusesForSession(user, db);
-  if (queueOnly) findings = findings.filter(isQueued);
+  // A period filter no longer means "still currently in that period" -
+  // findingsResidentInPeriod() also surfaces a finding that transferred out
+  // of it, paired with that period's own slice of its cases/amount, so
+  // period A's list still shows the work that genuinely happened there
+  // (see the function's own doc comment). Without a period filter, nothing
+  // changes - every finding still shows once, using its live fields.
+  type ResidentFinding = { finding: Finding; slice: FindingPeriodSlice | null };
+  let resident: ResidentFinding[] = periodId
+    ? findingsResidentInPeriod(db, periodId, findings)
+    : findings.map((f) => ({ finding: f, slice: null }));
 
-  findings = [...findings].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  const isQueued = queueStatusesForSession(user, db);
+  if (queueOnly) resident = resident.filter((r) => (r.slice === null || r.slice.isCurrentPeriod) && isQueued(r.finding));
+
+  resident = [...resident].sort((a, b) => b.finding.updatedAt.localeCompare(a.finding.updatedAt));
 
   // Server-side pagination: only the current page's rows are ever
   // rendered/sent to the client, no matter how large the filtered result
   // set grows - the Findings table is the one dataset in this app with
   // genuinely unbounded growth (every registered finding, forever).
-  const { items: pageFindings, page, pageSize, totalPages, total } = paginate(findings, parsePage(get("page")));
+  const { items: pageResident, page, pageSize, totalPages, total } = paginate(resident, parsePage(get("page")));
   function hrefFor(targetPage: number) {
     const q = new URLSearchParams();
     for (const [key, value] of Object.entries(params)) {
@@ -112,7 +122,7 @@ export default async function FindingsPage({
     canClose: hasPermission(user.permissions, permissionKey("findings", "close")),
   };
 
-  const rows: FindingRow[] = pageFindings.map((f) => ({
+  const rows: FindingRow[] = pageResident.map(({ finding: f, slice }) => ({
     id: f.id,
     reference: f.reference,
     title: f.title,
@@ -122,15 +132,22 @@ export default async function FindingsPage({
     sourceName: sourceName(f.sourceId),
     riskLevel: f.riskLevel,
     currency: f.currency,
-    amount: f.amount,
+    amount: slice ? slice.eligibleAmount : f.amount,
     status: f.status,
     updatedAt: f.updatedAt,
     rectifiedCases: f.rectifiedCases,
     rectifiedAmount: f.rectifiedAmount,
     districtVerifiedCases: f.districtVerifiedCases,
     districtVerifiedAmount: f.districtVerifiedAmount,
-    closedCases: f.closedCases,
-    closedAmount: f.closedAmount,
+    closedCases: slice ? slice.closedCases : f.closedCases,
+    closedAmount: slice ? slice.closedAmount : f.closedAmount,
+    // A period filter can surface a finding that has since transferred
+    // away from it (see findingsResidentInPeriod()) - that entry is this
+    // period's own history, not something actionable here any more, so
+    // FindingsTable must neither offer bulk actions on it nor show its
+    // live current status (which belongs to whatever period it's in now).
+    isHistorical: slice ? !slice.isCurrentPeriod : false,
+    transferredOutToCode: slice?.transferredOutToCode ?? null,
   }));
 
   return (

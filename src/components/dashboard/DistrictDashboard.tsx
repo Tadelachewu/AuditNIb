@@ -1,8 +1,8 @@
 import Link from "next/link";
 import type { Database } from "@/types";
 import type { SessionData } from "@/lib/session";
-import { computePerformance, queueStatusesForSession, findingCaseTotals, transferTotals, isHoApproved } from "@/lib/findings";
-import { sumAmountByCurrency, sumOutstandingByCurrency } from "@/lib/currency";
+import { computePerformance, queueStatusesForSession, findingCaseTotals, findingCaseTotalsInPeriod, transferTotals, isHoApproved } from "@/lib/findings";
+import { sumAmountByCurrency, sumOutstandingByCurrency, sumAmountByCurrencyInPeriod, sumOutstandingByCurrencyInPeriod } from "@/lib/currency";
 import { formatDateTime } from "@/lib/format";
 import { inDateRange, type DateRange } from "@/lib/dateRange";
 import { applyDashboardFilters, EMPTY_DASHBOARD_FILTERS, ALL_PERIODS_VALUE, type DashboardFilters } from "@/lib/dashboardFilters";
@@ -93,7 +93,12 @@ export function DistrictDashboard({
   // Total Findings/Cases/Rectified below only count HO-approved-or-later,
   // closed-only-rectified findings, same as every other dashboard - see
   // findingCaseTotals()'s own doc comment in src/lib/findings.ts.
-  const { totalFindings, totalCases, rectifiedFindings, rectifiedCases } = findingCaseTotals(periodFindings);
+  // Period-residency-aware (see findingCaseTotalsInPeriod()'s doc comment
+  // in src/lib/findings.ts) - a finding partially rectified here and then
+  // transferred still counts its slice toward this period instead of
+  // vanishing from it.
+  const { totalFindings, totalCases, rectifiedFindings, rectifiedCases } =
+    !allPeriodsSelected && openPeriod ? findingCaseTotalsInPeriod(db, openPeriod.id, districtFindingsInRange) : findingCaseTotals(periodFindings);
   // Every other "official" figure below (as opposed to
   // FindingStatusDistribution's deliberately broader in-flight-workflow
   // view - RiskDistribution applies this same isHoApproved() gate
@@ -114,12 +119,26 @@ export function DistrictDashboard({
   const performance = hasPeriodScope
     ? computePerformance(db, { districtId: district.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id })
     : null;
-  const totalAmount = sumAmountByCurrency(approvedPeriodFindings, "amount");
-  const outstandingAmount = sumOutstandingByCurrency(approvedPeriodFindings);
+  // Period-residency-aware (see sumAmountByCurrencyInPeriod()'s doc
+  // comment in src/lib/currency.ts) - a finding partially rectified here
+  // and then transferred must have its amount split between this period
+  // and wherever it went, not attributed wholesale to just one of them.
+  const approvedDistrictFindingsInRange = districtFindingsInRange.filter(isHoApproved);
+  const totalAmount =
+    !allPeriodsSelected && openPeriod
+      ? sumAmountByCurrencyInPeriod(db, openPeriod.id, approvedDistrictFindingsInRange, "eligible")
+      : sumAmountByCurrency(approvedPeriodFindings, "amount");
+  const outstandingAmount =
+    !allPeriodsSelected && openPeriod
+      ? sumOutstandingByCurrencyInPeriod(db, openPeriod.id, approvedDistrictFindingsInRange)
+      : sumOutstandingByCurrency(approvedPeriodFindings);
   // Resolved Amount counts only formally CLOSED amount, never merely
   // rectified-but-unclosed - same "a controller's sign-off is what makes it
   // official" reasoning as findingCaseTotals()'s own closed-only gate.
-  const resolvedAmount = sumAmountByCurrency(approvedPeriodFindings, "closedAmount");
+  const resolvedAmount =
+    !allPeriodsSelected && openPeriod
+      ? sumAmountByCurrencyInPeriod(db, openPeriod.id, approvedDistrictFindingsInRange, "closed")
+      : sumAmountByCurrency(approvedPeriodFindings, "closedAmount");
 
   // Performance Ranking Visibility, enabled: bank-wide, so a District
   // Controller/Director can see how their own district compares to every
