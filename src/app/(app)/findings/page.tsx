@@ -114,6 +114,8 @@ export default async function FindingsPage({
   // to specific assigned user IDs, same as the detail page - see
   // bank-approval/route.ts), so it's checked directly here too.
   const bulkPermissions = {
+    canSubmit: hasPermission(user.permissions, permissionKey("findings", "submit")),
+    currentUserId: user.userId!,
     canDistrictReview: hasPermission(user.permissions, permissionKey("findings", "district-review")),
     canHoReview: hasPermission(user.permissions, permissionKey("findings", "ho-review")),
     canBankApprove: db.settings.hoApproval.approverUserIds.includes(user.userId!),
@@ -141,6 +143,7 @@ export default async function FindingsPage({
     districtVerifiedAmount: f.districtVerifiedAmount,
     closedCases: slice ? slice.closedCases : f.closedCases,
     closedAmount: slice ? slice.closedAmount : f.closedAmount,
+    createdBy: f.createdBy,
     // A period filter can surface a finding that has since transferred
     // away from it (see findingsResidentInPeriod()) - that entry is this
     // period's own history, not something actionable here any more, so

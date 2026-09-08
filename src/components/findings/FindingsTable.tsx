@@ -29,6 +29,10 @@ export interface FindingRow {
   districtVerifiedAmount: number;
   closedCases: number;
   closedAmount: number;
+  // Who registered it - submit/route.ts requires the caller to be the
+  // finding's own creator, not just org-scope/permission, so bulk Submit
+  // has to know this per row too (see isSubmittable() below).
+  createdBy: string;
   // Set when this row is a period filter's *historical* residency for a
   // finding that has since transferred onward (see
   // findingsResidentInPeriod() in src/lib/findings.ts) - it's this period's
@@ -45,12 +49,17 @@ export interface BulkPermissions {
   canVerifyRectification: boolean;
   canReturnRectification: boolean;
   canClose: boolean;
+  canSubmit: boolean;
+  currentUserId: string;
 }
 
-type BulkActionKind = "approve" | "reject" | "return-review" | "verify" | "return-rectification" | "close";
+type BulkActionKind = "submit" | "approve" | "reject" | "return-review" | "verify" | "return-rectification" | "close";
 
 const REVIEW_STATUSES: FindingStatus[] = ["DISTRICT_REVIEW", "HO_REVIEW", "PENDING_BANK_APPROVAL"];
 const RECTIFICATION_STATUSES: FindingStatus[] = ["PARTIALLY_RECTIFIED", "RECTIFIED", "TRANSFERRED"];
+// Same set submit/route.ts itself accepts (DRAFT plus a RETURNED finding
+// bounced back for correction before ever reaching review).
+const SUBMITTABLE_STATUSES: FindingStatus[] = ["DRAFT", "RETURNED"];
 
 function reviewStageFor(status: FindingStatus): "district-review" | "ho-review" | "bank-approval" | null {
   if (status === "DISTRICT_REVIEW") return "district-review";
@@ -74,9 +83,19 @@ function isClosable(f: FindingRow): boolean {
   return Math.min(f.rectifiedCases, f.districtVerifiedCases) > f.closedCases || Math.min(f.rectifiedAmount, f.districtVerifiedAmount) > f.closedAmount;
 }
 
+// submit/route.ts requires the caller to be the finding's own creator, not
+// just org-scope/permission - same ownership rule enforced here so the
+// bulk toolbar only ever offers Submit for drafts the signed-in session
+// could actually submit one at a time.
+function isSubmittable(f: FindingRow, perms: BulkPermissions): boolean {
+  return SUBMITTABLE_STATUSES.includes(f.status) && f.createdBy === perms.currentUserId;
+}
+
 function eligibleFor(kind: BulkActionKind, rows: FindingRow[], perms: BulkPermissions): FindingRow[] {
   const actionable = rows.filter((f) => !f.isHistorical);
   switch (kind) {
+    case "submit":
+      return actionable.filter((f) => perms.canSubmit && isSubmittable(f, perms));
     case "approve":
     case "reject":
     case "return-review":
@@ -91,6 +110,7 @@ function eligibleFor(kind: BulkActionKind, rows: FindingRow[], perms: BulkPermis
 }
 
 function requestFor(kind: BulkActionKind, f: FindingRow, reason: string): { url: string; body?: unknown } {
+  if (kind === "submit") return { url: `/api/findings/${f.id}/submit` };
   if (kind === "approve" || kind === "reject" || kind === "return-review") {
     const stage = reviewStageFor(f.status)!;
     const decision = kind === "approve" ? "APPROVE" : kind === "reject" ? "REJECT" : "RETURN";
@@ -102,6 +122,7 @@ function requestFor(kind: BulkActionKind, f: FindingRow, reason: string): { url:
 }
 
 const ACTION_LABELS: Record<BulkActionKind, string> = {
+  submit: "Submit",
   approve: "Approve",
   reject: "Reject",
   "return-review": "Return",
@@ -111,6 +132,7 @@ const ACTION_LABELS: Record<BulkActionKind, string> = {
 };
 
 const ACTION_VARIANTS: Record<BulkActionKind, "primary" | "danger" | "success"> = {
+  submit: "primary",
   approve: "primary",
   reject: "danger",
   "return-review": "primary",
@@ -126,12 +148,13 @@ const ACTION_VARIANTS: Record<BulkActionKind, "primary" | "danger" | "success"> 
  * checkboxes, and a toolbar offering only the review/verify/close actions
  * the signed-in session can actually attempt on at least one selected row
  * right now. Each action still dispatches through the exact same
- * permission-gated single-finding routes the detail page uses (district-
- * review/ho-review/bank-approval/verify-rectification/return-
+ * permission-gated single-finding routes the detail page uses (submit/
+ * district-review/ho-review/bank-approval/verify-rectification/return-
  * rectification/close) - looped client-side, one request per eligible
  * finding - so there is no separate bulk business logic to keep in sync
  * with the single-finding rules (closable-amount bounds, period-locked
- * checks, org-scope checks, etc. all still apply per item).
+ * checks, org-scope checks, submit's own-creator-only rule, etc. all still
+ * apply per item).
  */
 export function FindingsTable({ rows, permissions, emptyText }: { rows: FindingRow[]; permissions: BulkPermissions; emptyText: string }) {
   const router = useRouter();
@@ -141,6 +164,7 @@ export function FindingsTable({ rows, permissions, emptyText }: { rows: FindingR
   const [summary, setSummary] = useState<string | null>(null);
 
   const canBulkAct =
+    permissions.canSubmit ||
     permissions.canDistrictReview ||
     permissions.canHoReview ||
     permissions.canBankApprove ||
@@ -165,7 +189,7 @@ export function FindingsTable({ rows, permissions, emptyText }: { rows: FindingR
   }
 
   const selectedRows = rows.filter((f) => selected.has(f.id));
-  const actionKinds: BulkActionKind[] = (["approve", "return-review", "reject", "verify", "return-rectification", "close"] as const).filter(
+  const actionKinds: BulkActionKind[] = (["submit", "approve", "return-review", "reject", "verify", "return-rectification", "close"] as const).filter(
     (kind) => eligibleFor(kind, selectedRows, permissions).length > 0
   );
 
