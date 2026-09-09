@@ -108,16 +108,15 @@ export default function ImportFindingsPage() {
       <div>
         <h1 className="text-lg font-semibold text-slate-900">Import Findings</h1>
         <p className="mt-1 text-sm text-slate-500">
-          Bulk-register findings from an Excel file. Each row&apos;s Status column decides what happens: a{" "}
-          <span className="font-medium text-slate-700">DRAFT</span> row goes through the normal live workflow, same
-          as registering one by hand — importing doesn&apos;t skip district/HO review. Any other status (
-          <span className="font-medium text-slate-700">SENT_TO_BRANCH_MANAGER</span>,{" "}
-          <span className="font-medium text-slate-700">PARTIALLY_RECTIFIED</span>,{" "}
-          <span className="font-medium text-slate-700">RECTIFIED</span>, or{" "}
-          <span className="font-medium text-slate-700">CLOSED</span>) is for backfilling a finding that&apos;s
-          already been resolved outside the system — it&apos;s fast-forwarded straight to that state, clearly marked
-          in its history as a historical import rather than a live decision. Reference numbers are always
-          system-generated, never taken from the file.
+          Bulk-backfill findings that are already resolved (or in progress) outside the system, from an Excel file.
+          Each row&apos;s Status column must be one of{" "}
+          <span className="font-medium text-slate-700">SENT_TO_BRANCH_MANAGER</span> (approved, nothing rectified
+          yet), <span className="font-medium text-slate-700">TRANSFERRED</span> (moved to a later open period with
+          an outstanding balance — requires a Transferred To Period Code), or{" "}
+          <span className="font-medium text-slate-700">CLOSED</span> (fully resolved). Every row is fast-forwarded
+          straight to that state through the same mechanism a live action would use, clearly marked in its history
+          as a historical import rather than a live decision — this isn&apos;t a way to register a brand-new finding
+          for live district/HO review. Reference numbers are always system-generated, never taken from the file.
         </p>
       </div>
 

@@ -18,7 +18,20 @@ import type { Database, Finding, FindingStatus, FindingTransfer, Branch, Reporti
 export function transferFinding(
   db: Database,
   finding: Finding,
-  opts: { toPeriodId: string; reason: string; userId: string; userName: string; method?: "MANUAL" | "AUTOMATIC" }
+  opts: {
+    toPeriodId: string;
+    reason: string;
+    userId: string;
+    userName: string;
+    method?: "MANUAL" | "AUTOMATIC";
+    // Overrides the FindingTransition/audit-log action string, default
+    // "TRANSFER" - lets a historical-import backfill (src/lib/import.ts)
+    // stamp "IMPORT_TRANSFER" instead, same "clearly marked as a
+    // historical import, not a live decision" reasoning as that file's own
+    // IMPORT_SUBMIT/IMPORT_APPROVE/IMPORT_RECTIFY/IMPORT_CLOSE actions,
+    // while still going through this exact same real transfer mechanism.
+    action?: string;
+  }
 ): void {
   const fromPeriodId = finding.periodId;
   const outstandingCases = finding.caseCount - finding.rectifiedCases;
@@ -46,7 +59,7 @@ export function transferFinding(
   finding.periodId = opts.toPeriodId;
   transitionFinding(db, finding, {
     toStatus: "TRANSFERRED",
-    action: "TRANSFER",
+    action: opts.action ?? "TRANSFER",
     userId: opts.userId,
     userName: opts.userName,
     reason: opts.reason,

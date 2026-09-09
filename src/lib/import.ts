@@ -1,21 +1,23 @@
 import ExcelJS from "exceljs";
 import { v4 as uuid } from "uuid";
-import { nextFindingReference, transitionFinding } from "@/lib/findings";
+import { nextFindingReference, transitionFinding, transferFinding } from "@/lib/findings";
 import { isDepartmentInScope } from "@/lib/org";
-import type { Database, Finding, ImportBatchRow, RequirableFindingField } from "@/types";
+import type { Database, Finding, ImportBatchRow, ReportingPeriod, RequirableFindingField } from "@/types";
 
-// What a row's Status column can declare - DRAFT is the only one that
-// still goes through the real, live workflow (district/HO review,
-// rectify, close, all clicked by a human same as today). The other four
-// are for backfilling a bank's already-resolved paper/Excel records:
-// each one fast-forwards the finding straight to that resting state via
-// the same transition machinery a live action would use (see
+// Import exists purely to backfill a bank's already-resolved paper/Excel
+// records, never to register a genuinely new finding - there's no "DRAFT,
+// goes through the live district/HO review workflow" option, deliberately.
+// Each of these three fast-forwards the finding straight to that resting
+// state via the same transition machinery a live action would use (see
 // fastForwardHistoricalImport() below), not a bare status assignment, so
 // the finding's own history/audit trail stays honest about what happened
 // and when - just stamped "Historical import" as the actor's reason
-// instead of a live human's decision. See ALLOWED_IMPORT_STATUSES' own
-// validation in validateImportRow() for what each one requires.
-const ALLOWED_IMPORT_STATUSES = ["DRAFT", "SENT_TO_BRANCH_MANAGER", "PARTIALLY_RECTIFIED", "RECTIFIED", "CLOSED"] as const;
+// instead of a live human's decision. TRANSFERRED is the one that also
+// needs a destination period (see the Transferred To Period Code column
+// below) - a transferred finding's own reporting period is wherever it
+// moved *from*, not where it currently sits. See ALLOWED_IMPORT_STATUSES'
+// own validation in validateImportRow() for what each one requires.
+const ALLOWED_IMPORT_STATUSES = ["SENT_TO_BRANCH_MANAGER", "TRANSFERRED", "CLOSED"] as const;
 type ImportStatus = (typeof ALLOWED_IMPORT_STATUSES)[number];
 
 const SHEET_NAME = "Findings";
@@ -59,17 +61,22 @@ const IMPORT_COLUMNS = [
   { key: "evidenceNote", header: "Evidence Note", required: false },
   {
     key: "status",
-    header: "Status (DRAFT / SENT_TO_BRANCH_MANAGER / PARTIALLY_RECTIFIED / RECTIFIED / CLOSED)",
+    header: "Status (SENT_TO_BRANCH_MANAGER / TRANSFERRED / CLOSED)",
     required: true,
   },
   {
     key: "rectifiedCases",
-    header: "Rectified Cases (required only if Status is PARTIALLY_RECTIFIED)",
+    header: "Rectified Cases (optional - only for a TRANSFERRED row with some progress already made)",
     required: false,
   },
   {
     key: "rectifiedAmount",
-    header: "Rectified Amount (required only if Status is PARTIALLY_RECTIFIED)",
+    header: "Rectified Amount (optional - only for a TRANSFERRED row with some progress already made)",
+    required: false,
+  },
+  {
+    key: "transferredToPeriodCode",
+    header: "Transferred To Period Code (required only if Status is TRANSFERRED)",
     required: false,
   },
   { key: "externalReference", header: "External Reference (optional)", required: false },
@@ -198,10 +205,11 @@ export async function buildImportTemplate(db: Database): Promise<Buffer> {
   refSection(
     "Status values",
     [
-      ["DRAFT", "New finding - goes through the normal live review/rectify/close workflow, same as registering one by hand."],
       ["SENT_TO_BRANCH_MANAGER", "Historical - already approved, nothing rectified yet."],
-      ["PARTIALLY_RECTIFIED", "Historical - requires Rectified Cases and Rectified Amount too."],
-      ["RECTIFIED", "Historical - fully rectified, not yet closed."],
+      [
+        "TRANSFERRED",
+        "Historical - moved to a later still-open period with an outstanding balance. Requires Transferred To Period Code; Rectified Cases/Amount are optional (how much was rectified before the transfer, if any).",
+      ],
       ["CLOSED", "Historical - fully resolved."],
     ]
   );
@@ -326,14 +334,11 @@ export function existingDedupeKeys(db: Database): Map<string, string> {
 
 /**
  * Validates one raw row against current reference data and, if valid and
- * not a duplicate, creates the Finding. A DRAFT-status row goes through
- * the exact same entry point/live workflow as a manually-registered
- * finding (master.txt §24's "does Internal Audit skip workflow" left as
- * an open decision, resolved as "no" for genuinely new findings). A row
- * declaring any other status is a historical backfill - see
- * fastForwardHistoricalImport() for how it's fast-forwarded to that
- * resting state through the same transition machinery a live action uses,
- * not a bare status assignment.
+ * not a duplicate, creates the Finding. Every row is a historical backfill
+ * (see ALLOWED_IMPORT_STATUSES' own doc comment) - see
+ * fastForwardHistoricalImport() for how it's fast-forwarded to its
+ * declared resting state through the same transition machinery a live
+ * action uses, not a bare status assignment.
  *
  * `db` must be the live mutable draft inside an updateDb() callback, not a
  * read-only snapshot: a valid row is pushed straight into `db.findings`
@@ -377,14 +382,35 @@ export function validateImportRow(
 
   const period = db.reportingPeriods.find((p) => p.code === row.periodCode?.trim());
   if (!period) return { rowNumber, outcome: "error", error: `Unknown reporting period code "${row.periodCode}"` };
-  // Only a DRAFT row is subject to the normal "locked periods don't
-  // accept new writes" rule - the whole point of a historical-status row
-  // is backfilling a fact about a period that's very possibly long since
-  // locked (that's usually *why* it's being backfilled now instead of
-  // handled live), so it isn't a "new write against a live period" in the
-  // sense assertPeriodWritable()/this same check elsewhere guards against.
-  if (status === "DRAFT" && period.status === "LOCKED" && !period.draftsAllowedWhileLocked) {
-    return { rowNumber, outcome: "error", error: `${period.code} is locked and cannot accept new draft findings` };
+  // No "locked periods don't accept new writes" check here at all - every
+  // import row is a historical backfill (see ALLOWED_IMPORT_STATUSES' own
+  // doc comment), so this is never a new write against a live period in
+  // the sense assertPeriodWritable() guards against elsewhere; a period
+  // being long since locked is usually *why* it's being backfilled now.
+
+  // TRANSFERRED needs a second, *different* period - the one it moved
+  // *into*. Reporting Period Code above stays the finding's own original
+  // period (used for its reference number, exactly like a real transfer
+  // never changes reference - see transferFinding()'s own doc comment).
+  let destinationPeriod: ReportingPeriod | undefined;
+  if (status === "TRANSFERRED") {
+    const toPeriodCode = row.transferredToPeriodCode?.trim();
+    if (!toPeriodCode) {
+      return { rowNumber, outcome: "error", error: `Status "TRANSFERRED" requires Transferred To Period Code` };
+    }
+    destinationPeriod = db.reportingPeriods.find((p) => p.code === toPeriodCode);
+    if (!destinationPeriod) {
+      return { rowNumber, outcome: "error", error: `Unknown reporting period code "${row.transferredToPeriodCode}"` };
+    }
+    if (destinationPeriod.id === period.id) {
+      return { rowNumber, outcome: "error", error: `Transferred To Period Code must differ from Reporting Period Code` };
+    }
+    // Same "destination must be open" rule the live manual-transfer route
+    // enforces (transferFinding() itself doesn't) - a TRANSFERRED finding
+    // always rests in a period still open for further action.
+    if (destinationPeriod.status !== "OPEN") {
+      return { rowNumber, outcome: "error", error: `Transferred To Period "${destinationPeriod.code}" must be open` };
+    }
   }
 
   // Each of source/department/category is only looked up (and thus only
@@ -440,30 +466,28 @@ export function validateImportRow(
     return { rowNumber, outcome: "error", error: `Invalid number of cases "${row.caseCount}" - must be a whole number of at least 1` };
   }
 
-  // Historical-status amounts: RECTIFIED/CLOSED imply full resolution (no
-  // partial-accounting columns needed for the common "yes, this was fully
-  // dealt with" case); only PARTIALLY_RECTIFIED needs the row to actually
-  // say how much, and is bound-checked the same way the live rectify
-  // route validates a real rectification entry (src/app/api/findings/[id]/
-  // rectify/route.ts) - including its "can't leave an orphaned balance"
-  // rule, since a non-itemized finding has no per-case amount to attach a
-  // leftover to. District verification isn't a separate column - a
-  // historical import is treated as already verified (whoever's importing
-  // it is attesting to its recorded state), same amount as rectified.
+  // Historical-status amounts: CLOSED implies full resolution (no partial-
+  // accounting columns needed for the common "yes, this was fully dealt
+  // with" case). TRANSFERRED's Rectified Cases/Amount are optional - how
+  // much was rectified *before* the transfer, if any - and when given are
+  // bound-checked the same way the live rectify route validates a real
+  // rectification entry (src/app/api/findings/[id]/rectify/route.ts),
+  // including its "can't leave an orphaned balance" rule, since a non-
+  // itemized finding has no per-case amount to attach a leftover to; but
+  // unlike a live PARTIALLY_RECTIFIED submission, zero/zero is valid here -
+  // a finding can transfer having had no progress at all - while equaling
+  // the full case count/amount is invalid, since that would leave nothing
+  // outstanding to transfer. District verification isn't a separate
+  // column - a historical import is treated as already verified (whoever's
+  // importing it is attesting to its recorded state), same amount as
+  // rectified.
   let rectifiedCases = 0;
   let rectifiedAmount = 0;
-  if (status === "PARTIALLY_RECTIFIED") {
+  if (status === "TRANSFERRED") {
     const rectifiedCasesRaw = row.rectifiedCases?.trim();
     const rectifiedAmountRaw = row.rectifiedAmount?.trim();
-    if (!rectifiedCasesRaw || !rectifiedAmountRaw) {
-      return {
-        rowNumber,
-        outcome: "error",
-        error: `Status "PARTIALLY_RECTIFIED" requires both Rectified Cases and Rectified Amount`,
-      };
-    }
-    rectifiedCases = Number(rectifiedCasesRaw);
-    rectifiedAmount = Number(rectifiedAmountRaw);
+    rectifiedCases = rectifiedCasesRaw ? Number(rectifiedCasesRaw) : 0;
+    rectifiedAmount = rectifiedAmountRaw ? Number(rectifiedAmountRaw) : 0;
     if (!Number.isInteger(rectifiedCases) || rectifiedCases < 0 || rectifiedCases > caseCount) {
       return {
         rowNumber,
@@ -478,35 +502,41 @@ export function validateImportRow(
         error: `Invalid rectified amount "${row.rectifiedAmount}" - must be from 0 to ${amount}`,
       };
     }
-    if (rectifiedCases === 0 && rectifiedAmount === 0) {
+    if (rectifiedCases === caseCount && rectifiedAmount === amount) {
       return {
         rowNumber,
         outcome: "error",
-        error: `Status "PARTIALLY_RECTIFIED" requires a positive rectified case count or amount - use SENT_TO_BRANCH_MANAGER if nothing has been rectified yet`,
+        error: `Rectified cases and amount can't equal the full finding (${caseCount} / ${amount}) - nothing would be outstanding to transfer; use CLOSED instead`,
       };
     }
     if (rectifiedCases === caseCount && rectifiedAmount !== amount) {
       return {
         rowNumber,
         outcome: "error",
-        error: `Rectified cases equals the full case count (${caseCount}) - rectified amount must equal the full amount (${amount}) too, or use status RECTIFIED/CLOSED instead`,
+        error: `Rectified cases equals the full case count (${caseCount}) - rectified amount must equal the full amount (${amount}) too`,
       };
     }
     if (rectifiedAmount === amount && rectifiedCases !== caseCount) {
       return {
         rowNumber,
         outcome: "error",
-        error: `Rectified amount equals the full amount (${amount}) - rectified cases must equal the full case count (${caseCount}) too, or use status RECTIFIED/CLOSED instead`,
+        error: `Rectified amount equals the full amount (${amount}) - rectified cases must equal the full case count (${caseCount}) too`,
       };
     }
-  } else if (status === "RECTIFIED" || status === "CLOSED") {
+  } else if (status === "CLOSED") {
     rectifiedCases = caseCount;
     rectifiedAmount = amount;
   }
 
+  // TRANSFERRED dedupes (and, on a live finding, is found) by its *current*
+  // period - the destination it moved into, not the origin used for its
+  // reference above - matching what existingDedupeKeys() reads off an
+  // already-transferred live finding's own (destination) periodId. Getting
+  // this backwards would mean re-uploading the same file never recognizes
+  // its own previously-imported TRANSFERRED rows as duplicates.
   const key = dedupeKey({
     branchId: branch.id,
-    periodId: period.id,
+    periodId: status === "TRANSFERRED" ? destinationPeriod!.id : period.id,
     // Fall back to "" for any of these three left blank (admin-opted-out
     // via Settings.requiredFindingFields) - same as operationArea/
     // irregularityType/currency below, which can equally be blank now.
@@ -567,25 +597,24 @@ export function validateImportRow(
   seenKeys.set(key, finding.reference);
   db.findings.push(finding);
 
-  if (status !== "DRAFT") {
-    fastForwardHistoricalImport(
-      db,
-      finding,
-      status,
-      {
-        rectifiedCases,
-        rectifiedAmount,
-        // "Verified" mirrors "rectified" for a historical import - see
-        // this function's own doc comment for why there's no separate
-        // verification column.
-        districtVerifiedCases: rectifiedCases,
-        districtVerifiedAmount: rectifiedAmount,
-        closedCases: status === "CLOSED" ? caseCount : 0,
-        closedAmount: status === "CLOSED" ? amount : 0,
-      },
-      { userId: opts.userId, userName: opts.userName }
-    );
-  }
+  fastForwardHistoricalImport(
+    db,
+    finding,
+    status,
+    {
+      rectifiedCases,
+      rectifiedAmount,
+      // "Verified" mirrors "rectified" for a historical import - see
+      // this function's own doc comment for why there's no separate
+      // verification column.
+      districtVerifiedCases: rectifiedCases,
+      districtVerifiedAmount: rectifiedAmount,
+      closedCases: status === "CLOSED" ? caseCount : 0,
+      closedAmount: status === "CLOSED" ? amount : 0,
+      toPeriodId: destinationPeriod?.id,
+    },
+    { userId: opts.userId, userName: opts.userName }
+  );
 
   return { rowNumber, outcome: "imported", findingId: finding.id, reference: finding.reference, finding };
 }
@@ -593,13 +622,14 @@ export function validateImportRow(
 /**
  * Fast-forwards a freshly-created DRAFT finding straight to `target`
  * through the same transition machinery a live action would use
- * (transitionFinding(), plus the actual RectificationEntry/FindingClosure
- * ledger rows scoring reads - src/lib/findings.ts's closedInPeriod() sums
- * FindingClosure rows, not a bare cumulative field, so a "closed" import
- * with no such row would silently score as 0 rectified/closed despite its
- * own status) - never a bare status/counter assignment, so the finding's
- * FindingTransition history and audit log stay exactly as complete and
- * honest as a live-approved, live-rectified, live-closed finding's would.
+ * (transitionFinding()/transferFinding(), plus the actual
+ * RectificationEntry/FindingClosure ledger rows scoring reads -
+ * src/lib/findings.ts's closedInPeriod() sums FindingClosure rows, not a
+ * bare cumulative field, so a "closed" import with no such row would
+ * silently score as 0 rectified/closed despite its own status) - never a
+ * bare status/counter assignment, so the finding's FindingTransition
+ * history and audit log stay exactly as complete and honest as a live-
+ * approved, live-rectified, live-closed, live-transferred finding's would.
  * Every hop is stamped with a distinct "IMPORT_*" action and the same
  * "Historical import" reason, specifically so anyone reading the trail
  * later can tell at a glance this was backfilled, not a live decision -
@@ -618,7 +648,7 @@ export function validateImportRow(
 function fastForwardHistoricalImport(
   db: Database,
   finding: Finding,
-  target: Exclude<ImportStatus, "DRAFT">,
+  target: ImportStatus,
   amounts: {
     rectifiedCases: number;
     rectifiedAmount: number;
@@ -626,6 +656,8 @@ function fastForwardHistoricalImport(
     districtVerifiedAmount: number;
     closedCases: number;
     closedAmount: number;
+    // Only set (and only used) when target === "TRANSFERRED".
+    toPeriodId?: string;
   },
   opts: { userId: string; userName: string }
 ): void {
@@ -636,31 +668,56 @@ function fastForwardHistoricalImport(
   transitionFinding(db, finding, { toStatus: "SENT_TO_BRANCH_MANAGER", action: "IMPORT_APPROVE", userId, userName, reason });
   if (target === "SENT_TO_BRANCH_MANAGER") return;
 
-  finding.rectifiedCases = amounts.rectifiedCases;
-  finding.rectifiedAmount = amounts.rectifiedAmount;
-  db.rectifications.push({
-    id: uuid(),
-    findingId: finding.id,
-    periodId: finding.periodId,
-    rectifiedCases: amounts.rectifiedCases,
-    rectifiedAmount: amounts.rectifiedAmount,
-    note: reason,
-    submittedBy: userId,
-    submittedByName: userName,
-    createdAt: finding.updatedAt,
-  });
-  transitionFinding(db, finding, {
-    toStatus: target === "PARTIALLY_RECTIFIED" ? "PARTIALLY_RECTIFIED" : "RECTIFIED",
-    action: "IMPORT_RECTIFY",
-    userId,
-    userName,
-    reason,
-  });
+  // CLOSED always has rectifiedCases/Amount set to the full caseCount/
+  // amount by validateImportRow(), so this is always true for CLOSED;
+  // for TRANSFERRED it only fires when the row declared real progress
+  // made before the transfer - a zero/zero TRANSFERRED row skips straight
+  // from SENT_TO_BRANCH_MANAGER to the transfer below, same as a live
+  // finding transferred before any rectification ever happened.
+  const hasRectifiedProgress = amounts.rectifiedCases > 0 || amounts.rectifiedAmount > 0;
+  if (hasRectifiedProgress) {
+    finding.rectifiedCases = amounts.rectifiedCases;
+    finding.rectifiedAmount = amounts.rectifiedAmount;
+    db.rectifications.push({
+      id: uuid(),
+      findingId: finding.id,
+      periodId: finding.periodId,
+      rectifiedCases: amounts.rectifiedCases,
+      rectifiedAmount: amounts.rectifiedAmount,
+      note: reason,
+      submittedBy: userId,
+      submittedByName: userName,
+      createdAt: finding.updatedAt,
+    });
+    transitionFinding(db, finding, {
+      toStatus: target === "CLOSED" ? "RECTIFIED" : "PARTIALLY_RECTIFIED",
+      action: "IMPORT_RECTIFY",
+      userId,
+      userName,
+      reason,
+    });
+    finding.districtVerifiedCases = amounts.districtVerifiedCases;
+    finding.districtVerifiedAmount = amounts.districtVerifiedAmount;
+  }
 
-  finding.districtVerifiedCases = amounts.districtVerifiedCases;
-  finding.districtVerifiedAmount = amounts.districtVerifiedAmount;
-  if (target !== "CLOSED") return;
+  if (target === "TRANSFERRED") {
+    // The real transfer mechanism - snapshots the FindingTransfer ledger
+    // row and moves finding.periodId to the destination, exactly like a
+    // live manual transfer (see transferFinding()'s own doc comment).
+    // "IMPORT_TRANSFER" (not the live "TRANSFER") keeps this hop
+    // identifiable as historical the same way every other hop here is.
+    transferFinding(db, finding, {
+      toPeriodId: amounts.toPeriodId!,
+      reason,
+      userId,
+      userName,
+      method: "MANUAL",
+      action: "IMPORT_TRANSFER",
+    });
+    return;
+  }
 
+  // Only CLOSED reaches here.
   finding.closedCases = amounts.closedCases;
   finding.closedAmount = amounts.closedAmount;
   db.findingClosures.push({
