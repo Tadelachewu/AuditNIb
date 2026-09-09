@@ -131,7 +131,8 @@ export default async function TransferredFindingsPage({
               </div>
 
               <p className="text-xs text-slate-500">
-                {r.district?.name ?? "Unknown district"} · {r.branch?.name ?? "Unknown branch"} · {r.category?.name ?? "Unknown category"} ·{" "}
+                {r.district?.name ?? "Unknown district"} · {r.branch?.name ?? "Unknown branch"} ·{" "}
+                {r.category?.name ?? (r.finding.categoryId || "Unknown category")} ·{" "}
                 {r.source?.name ?? "Unknown source"} · Risk: {r.finding.riskLevel}
               </p>
 

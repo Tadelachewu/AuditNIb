@@ -148,7 +148,11 @@ export default async function FindingDetailPage({ params }: { params: Promise<{ 
         districtName: district?.name ?? "Unknown district",
         sourceName: source?.name ?? "Unknown source",
         departmentName: department?.name ?? "Unknown department",
-        categoryName: category?.name ?? "Unknown category",
+        // finding.categoryId itself holds a typed-in "Other" value when it
+        // doesn't match a real ClassifiedCategory - display that directly
+        // rather than "Unknown category" (see OTHER_VALUE_ALLOWED_FIELDS's
+        // categoryId doc comment in types/index.ts).
+        categoryName: category?.name ?? (finding.categoryId || "Unknown category"),
         periodCode: period?.code ?? "Unknown period",
         // Used by the Transfer to Next Period card's pre-transfer summary
         // and by Transfer History rows to decode fromPeriodId/toPeriodId

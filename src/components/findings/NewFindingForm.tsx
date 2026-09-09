@@ -112,6 +112,72 @@ function SelectOrOther({
   );
 }
 
+// Same "Other (type in)" fallback as SelectOrOther, but for categoryId - a
+// real ClassifiedCategory foreign key (option value = id, label = name),
+// not a flat Settings string list, so "isCustom" is judged against the
+// category id set instead of string equality. Per Settings.
+// allowOtherValueFields.categoryId (see that field's own doc comment in
+// types/index.ts): a typed-in value is stored directly in categoryId with
+// no ClassifiedCategory record behind it - the tradeoff (no scoring-rule
+// match, no real category grouping in reports) is a deliberate admin
+// policy choice, not a bug.
+function CategorySelectOrOther({
+  id,
+  required,
+  value,
+  categories,
+  placeholder,
+  onChange,
+  allowOther = true,
+}: {
+  id: string;
+  required?: boolean;
+  value: string;
+  categories: ClassifiedCategory[];
+  placeholder: string;
+  onChange: (value: string) => void;
+  allowOther?: boolean;
+}) {
+  const initiallyCustom = value !== "" && !categories.some((c) => c.id === value);
+  const [otherMode, setOtherMode] = useState(initiallyCustom);
+  const isCustom = otherMode || (value !== "" && !categories.some((c) => c.id === value));
+  return (
+    <>
+      <Select
+        id={id}
+        required={required}
+        value={isCustom ? OTHER_SENTINEL : value}
+        onChange={(e) => {
+          if (e.target.value === OTHER_SENTINEL) {
+            setOtherMode(true);
+            onChange("");
+          } else {
+            setOtherMode(false);
+            onChange(e.target.value);
+          }
+        }}
+      >
+        <option value="">{placeholder}</option>
+        {categories.map((c) => (
+          <option key={c.id} value={c.id}>
+            {c.name}
+          </option>
+        ))}
+        {(allowOther || isCustom) && <option value={OTHER_SENTINEL}>Other (type in)</option>}
+      </Select>
+      {isCustom && (
+        <Input
+          className="mt-1.5"
+          autoFocus
+          placeholder="Enter a value not in the list above"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      )}
+    </>
+  );
+}
+
 interface Props {
   sources: Source[];
   departments: Department[];
@@ -524,19 +590,15 @@ export function NewFindingForm({
           </div>
           <div>
             <Label htmlFor="categoryId">{fieldLabel("Classified case", "categoryId")}</Label>
-            <Select
+            <CategorySelectOrOther
               id="categoryId"
               required={requiredFields.categoryId}
               value={form.categoryId}
-              onChange={(e) => setForm({ ...form, categoryId: e.target.value })}
-            >
-              <option value="">Select classified case</option>
-              {categories.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </Select>
+              categories={categories}
+              placeholder="Select classified case"
+              onChange={(value) => setForm({ ...form, categoryId: value })}
+              allowOther={allowOther.categoryId}
+            />
           </div>
 
           <div>

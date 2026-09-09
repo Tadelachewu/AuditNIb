@@ -264,13 +264,17 @@ function buildSeedDatabase(): Database {
     },
     // "Other (type in)" allowed on every list-driven dropdown by default -
     // matches today's behavior, so turning this into a setting doesn't
-    // silently lock any field down.
+    // silently lock any field down. categoryId defaults on too, even
+    // though its "Other" is a brand-new capability rather than pre-existing
+    // behavior being preserved - an admin who wants registration blocked on
+    // an incomplete category list instead can turn it off from /admin/settings.
     allowOtherValueFields: {
       operationArea: true,
       irregularityType: true,
       priority: true,
       riskLevel: true,
       currency: true,
+      categoryId: true,
     },
     updatedAt: now,
   };
@@ -848,7 +852,14 @@ function normalizeDb(db: Database): { db: Database; changed: boolean } {
       priority: true,
       riskLevel: true,
       currency: true,
+      categoryId: true,
     };
+    changed = true;
+  } else if (!("categoryId" in db.settings.allowOtherValueFields)) {
+    // An install that already had this feature from before categoryId was
+    // added needs just that one key backfilled, same true-by-default
+    // reasoning as the whole-object case above.
+    (db.settings.allowOtherValueFields as Record<string, boolean>).categoryId = true;
     changed = true;
   }
   for (const p of db.reportingPeriods) {

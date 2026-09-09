@@ -514,10 +514,32 @@ export function nextFindingReference(db: Database, branch: Branch, period: Repor
  * through transitionFinding(), which itself calls appendAuditLog() with the
  * same action string - so all three are reliably found here, in one place,
  * regardless of which path recorded them.
+ *
+ * "Scoped to *this* rectification" (see this section's own doc comment)
+ * means exactly that - only a verify/close action recorded *after* the
+ * finding's most recent RectificationEntry counts, since that's the entry
+ * currently awaiting a District/HO decision. An older verify/close, from
+ * before that entry existed, was about a *different*, already-resolved
+ * round and must never block returning this new one - without this bound,
+ * a District Controller who verified (or closed) an earlier round on a
+ * finding would be permanently locked out of ever returning any later
+ * round on that same finding, which is exactly what happens the moment a
+ * finding transfers and comes back for a second round of rectification
+ * (same district, routinely the same one Controller, verifying work that
+ * has nothing to do with what they verified before the transfer).
  */
 export function userPerformedApprovalOrVerifyAction(db: Database, findingId: string, userId: string): boolean {
   const actions = new Set(["DISTRICT_VERIFY_RECTIFICATION", "CLOSE", "PARTIAL_CLOSE"]);
-  return db.auditLogs.some((a) => a.entityType === "Finding" && a.entityId === findingId && a.userId === userId && actions.has(a.action));
+  const rectifications = db.rectifications.filter((r) => r.findingId === findingId);
+  const latestRectificationAt = rectifications.length > 0 ? Math.max(...rectifications.map((r) => new Date(r.createdAt).getTime())) : 0;
+  return db.auditLogs.some(
+    (a) =>
+      a.entityType === "Finding" &&
+      a.entityId === findingId &&
+      a.userId === userId &&
+      actions.has(a.action) &&
+      new Date(a.timestamp).getTime() > latestRectificationAt
+  );
 }
 
 /** True if the finding has never been transferred, or has a RectificationEntry recorded strictly after its most recent transfer. */

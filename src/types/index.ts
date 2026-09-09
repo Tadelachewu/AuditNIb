@@ -286,21 +286,31 @@ export const REQUIRABLE_FINDING_FIELDS = [
 ] as const;
 export type RequirableFindingField = (typeof REQUIRABLE_FINDING_FIELDS)[number]["key"];
 
-// The five Settings-configurable *list* fields on the Register Finding
-// form (operation area/irregularity type/priority/risk level/currency -
-// everything else on the form is either a real linked record with its own
-// id, like source/department/category, which can't take a typed-in value
-// at all, or already free text with nothing to be "Other" than). Whether
-// each one's dropdown also offers "Other (type in)" - a value not
+// The Settings-configurable *list* fields on the Register Finding form
+// (operation area/irregularity type/priority/risk level/currency -
+// everything else on the form besides categoryId is a real linked record
+// with its own id, like source/department, which can't take a typed-in
+// value at all, or already free text with nothing to be "Other" than).
+// Whether each one's dropdown also offers "Other (type in)" - a value not
 // currently in the admin's configured list - is itself admin policy, not
 // a fixed code-level decision, same "matter of config" philosophy as
 // REQUIRABLE_FINDING_FIELDS/SIMILAR_FINDING_FIELDS above.
+//
+// categoryId is the one exception among the id-linked fields: admin policy
+// decided its "Other" value is stored as plain text directly in
+// Finding.categoryId, with no backing ClassifiedCategory record - unlike
+// source/department, which have no escape hatch at all. That trades away
+// referential integrity for that finding (it won't match any
+// ScoringRule.categories entry, and category-grouped reports/dashboards
+// will just show the typed text as its own ad-hoc bucket) in exchange for
+// never blocking registration on the admin's list being incomplete.
 export const OTHER_VALUE_ALLOWED_FIELDS = [
   { key: "operationArea", label: "Operation area" },
   { key: "irregularityType", label: "Type of irregularity" },
   { key: "priority", label: "Priority" },
   { key: "riskLevel", label: "Risk level" },
   { key: "currency", label: "Currency" },
+  { key: "categoryId", label: "Classified case" },
 ] as const;
 export type OtherValueAllowedField = (typeof OTHER_VALUE_ALLOWED_FIELDS)[number]["key"];
 

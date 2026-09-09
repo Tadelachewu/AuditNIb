@@ -160,7 +160,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
   }
   const categoryId = input.categoryId ?? existing.categoryId;
-  if (categoryId && !db.categories.some((c) => c.id === categoryId && c.active)) {
+  // Only enforce "must be active" against a real ClassifiedCategory id - a
+  // value that doesn't match any category at all is a typed-in "Other"
+  // value (Settings.allowOtherValueFields.categoryId), stored as plain
+  // text with no backing record by design, not an invalid reference.
+  const matchedCategory = categoryId ? db.categories.find((c) => c.id === categoryId) : undefined;
+  if (matchedCategory && !matchedCategory.active) {
     return NextResponse.json({ error: "Selected classified case is not active" }, { status: 400 });
   }
 

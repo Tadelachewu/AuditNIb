@@ -53,7 +53,7 @@ export async function GET(request: Request) {
   const districtName = (id: string) => db.districts.find((d) => d.id === id)?.name ?? "";
   const sourceName = (id: string) => db.sources.find((s) => s.id === id)?.name ?? "";
   const departmentName = (id: string) => db.departments.find((d) => d.id === id)?.name ?? "";
-  const categoryName = (id: string) => db.categories.find((c) => c.id === id)?.name ?? "";
+  const categoryName = (id: string) => db.categories.find((c) => c.id === id)?.name ?? id;
   const periodCode = (id: string) => db.reportingPeriods.find((p) => p.id === id)?.code ?? "";
 
   const header = [

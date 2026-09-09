@@ -98,7 +98,9 @@ export default async function FindingsPage({
     return db.branches.find((b) => b.id === id)?.name ?? "—";
   }
   function categoryName(id: string) {
-    return db.categories.find((c) => c.id === id)?.name ?? "—";
+    // A typed-in "Other" value has no matching category record - the id
+    // field holds the free text itself in that case, so show it directly.
+    return db.categories.find((c) => c.id === id)?.name ?? (id || "—");
   }
   function sourceName(id: string) {
     return db.sources.find((s) => s.id === id)?.name ?? "—";

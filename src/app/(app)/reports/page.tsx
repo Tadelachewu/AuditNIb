@@ -90,7 +90,7 @@ export default async function ReportsPage({
   }
 
   const branchName = (id: string) => db.branches.find((b) => b.id === id)?.name ?? "—";
-  const categoryName = (id: string) => db.categories.find((c) => c.id === id)?.name ?? "—";
+  const categoryName = (id: string) => db.categories.find((c) => c.id === id)?.name ?? (id || "—");
   const sourceName = (id: string) => db.sources.find((s) => s.id === id)?.name ?? "—";
   const departmentName = (id: string) => db.departments.find((d) => d.id === id)?.name ?? "—";
 

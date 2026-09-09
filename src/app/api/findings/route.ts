@@ -181,7 +181,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Selected department is not available for this district/branch" }, { status: 400 });
     }
   }
-  if (input.categoryId && !db.categories.some((c) => c.id === input.categoryId && c.active)) {
+  // Only enforce "must be active" against a real ClassifiedCategory id - a
+  // value that doesn't match any category at all is a typed-in "Other"
+  // value (Settings.allowOtherValueFields.categoryId), stored as plain
+  // text with no backing record by design, not an invalid reference.
+  const matchedCategory = input.categoryId ? db.categories.find((c) => c.id === input.categoryId) : undefined;
+  if (matchedCategory && !matchedCategory.active) {
     return NextResponse.json({ error: "Selected classified case is not active" }, { status: 400 });
   }
   if (input.caseAmounts) {

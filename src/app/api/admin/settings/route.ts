@@ -96,6 +96,7 @@ const updateSchema = z.object({
     priority: z.boolean(),
     riskLevel: z.boolean(),
     currency: z.boolean(),
+    categoryId: z.boolean(),
   }),
 });
 
