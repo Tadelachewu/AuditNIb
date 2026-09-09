@@ -1,5 +1,6 @@
 import ExcelJS from "exceljs";
 import { v4 as uuid } from "uuid";
+import { appendAuditLog } from "@/lib/audit";
 import { nextFindingReference, transitionFinding, transferFinding } from "@/lib/findings";
 import { isDepartmentInScope } from "@/lib/org";
 import type { Database, Finding, ImportBatchRow, ReportingPeriod, RequirableFindingField } from "@/types";
@@ -620,11 +621,12 @@ export function validateImportRow(
       rectifiedAmount,
       // "Verified" mirrors "rectified" for a historical import - see
       // this function's own doc comment for why there's no separate
-      // verification column.
+      // verification column. Closed likewise mirrors rectified now (see
+      // fastForwardHistoricalImport()'s own doc comment on that) - CLOSED
+      // rows always have rectifiedCases/Amount forced to the full
+      // caseCount/amount just above, so this already covers that case too.
       districtVerifiedCases: rectifiedCases,
       districtVerifiedAmount: rectifiedAmount,
-      closedCases: status === "CLOSED" ? caseCount : 0,
-      closedAmount: status === "CLOSED" ? amount : 0,
       toPeriodId: destinationPeriod?.id,
     },
     { userId: opts.userId, userName: opts.userName }
@@ -668,8 +670,6 @@ function fastForwardHistoricalImport(
     rectifiedAmount: number;
     districtVerifiedCases: number;
     districtVerifiedAmount: number;
-    closedCases: number;
-    closedAmount: number;
     // Only set (and only used) when target === "TRANSFERRED".
     toPeriodId?: string;
   },
@@ -712,6 +712,45 @@ function fastForwardHistoricalImport(
     });
     finding.districtVerifiedCases = amounts.districtVerifiedCases;
     finding.districtVerifiedAmount = amounts.districtVerifiedAmount;
+
+    // Whatever's rectified in a historical import is treated as already
+    // closed too, not merely district-verified and sitting in a live
+    // Controller's Verify & Close queue - a backfilled record is
+    // attesting to a fact that was already fully resolved and signed off
+    // in whatever process predates this system, not a new pending
+    // District/HO review. This is exactly what a live PARTIAL_CLOSE does
+    // (close/route.ts) when the closed portion doesn't yet cover the
+    // finding's full caseCount/amount: closedCases/Amount move, but
+    // finding.status is untouched (it keeps tracking rectify/transfer
+    // progress) - transitionFinding() is only called here for the one
+    // case that's genuinely fully closed (target === "CLOSED", where
+    // rectifiedCases/Amount already equals the full caseCount/amount by
+    // construction above).
+    finding.closedCases = amounts.rectifiedCases;
+    finding.closedAmount = amounts.rectifiedAmount;
+    db.findingClosures.push({
+      id: uuid(),
+      findingId: finding.id,
+      periodId: finding.periodId,
+      closedCases: amounts.rectifiedCases,
+      closedAmount: amounts.rectifiedAmount,
+      submittedBy: userId,
+      submittedByName: userName,
+      createdAt: finding.updatedAt,
+    });
+    if (target === "CLOSED") {
+      transitionFinding(db, finding, { toStatus: "CLOSED", action: "IMPORT_CLOSE", userId, userName, reason });
+    } else {
+      appendAuditLog(db, {
+        userId,
+        userName,
+        action: "IMPORT_PARTIAL_CLOSE",
+        entityType: "Finding",
+        entityId: finding.id,
+        newValue: { closedCases: finding.closedCases, closedAmount: finding.closedAmount },
+        reason,
+      });
+    }
   }
 
   if (target === "TRANSFERRED") {
@@ -728,21 +767,5 @@ function fastForwardHistoricalImport(
       method: "MANUAL",
       action: "IMPORT_TRANSFER",
     });
-    return;
   }
-
-  // Only CLOSED reaches here.
-  finding.closedCases = amounts.closedCases;
-  finding.closedAmount = amounts.closedAmount;
-  db.findingClosures.push({
-    id: uuid(),
-    findingId: finding.id,
-    periodId: finding.periodId,
-    closedCases: amounts.closedCases,
-    closedAmount: amounts.closedAmount,
-    submittedBy: userId,
-    submittedByName: userName,
-    createdAt: finding.updatedAt,
-  });
-  transitionFinding(db, finding, { toStatus: "CLOSED", action: "IMPORT_CLOSE", userId, userName, reason });
 }
