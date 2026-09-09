@@ -30,8 +30,11 @@ export default async function CategoryPerformanceSummaryPage({
 
       <div className="no-print flex flex-wrap items-center justify-between gap-2">
         <div>
-          <Link href="/reports/templates" className="text-xs text-blue-800 hover:underline">
-            ← Report Templates
+          <Link
+            href="/reports/templates"
+            className="inline-flex items-center rounded-md bg-brand-gold px-3 py-1.5 text-sm font-bold text-slate-900 transition-colors hover:bg-brand-gold-dark"
+          >
+            ← Back
           </Link>
           <h1 className="mt-1 text-lg font-semibold text-slate-900">Category Performance Summary</h1>
           <p className="mt-1 text-sm text-slate-500">Bank-wide rectification rate per category, with the district range.</p>
