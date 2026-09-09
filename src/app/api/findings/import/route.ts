@@ -26,9 +26,16 @@ export async function GET() {
 
 // HO Internal Controller's bulk sibling of POST /api/findings (single-
 // record create) - master.txt §22: "HO Internal Controllers can
-// import/enter Internal Audit findings." Every row is validated and
-// deduplicated independently; a bad row is reported and skipped rather
-// than failing the whole file, so one typo doesn't block 500 good rows.
+// import/enter Internal Audit findings." All-or-nothing: every row is
+// validated first against a scratch clone of the database, and if even one
+// row has a real validation error, nothing is imported at all - the whole
+// file is rejected with the full row-by-row breakdown so the importer can
+// fix everything in one pass, rather than the file partially landing and
+// the importer having to re-derive which rows still need fixing from a
+// list of already-mixed-in successes. A row that's merely a *duplicate* of
+// existing data is not a validation error and does not block the file -
+// only "error" outcomes do; duplicates are still just skipped and reported
+// once the rest of the file actually commits.
 export async function POST(request: Request) {
   const auth = await requirePermission("findings.import");
   if (!auth.ok) return auth.response;
@@ -58,6 +65,35 @@ export async function POST(request: Request) {
   }
   if (parsed.rows.length > MAX_IMPORT_ROWS) {
     return NextResponse.json({ error: `This file has ${parsed.rows.length} rows - split it into batches of ${MAX_IMPORT_ROWS} or fewer` }, { status: 400 });
+  }
+
+  // Dry run against a scratch clone - never persisted - purely to find out
+  // whether the file has any real validation error before touching the
+  // real database at all. Uses a throwaway batch id since none of this
+  // clone's mutations (findings, transitions, ...) are ever written back.
+  const dryDb = structuredClone(readDb());
+  const dryRows: ImportBatchRow[] = parsed.rows.map((row, i) =>
+    validateImportRow(dryDb, row, i + 2, existingDedupeKeys(dryDb), {
+      userId: auth.session.userId!,
+      userName: auth.session.name!,
+      importBatchId: "dry-run",
+    })
+  );
+  const dryErrorCount = dryRows.filter((r) => r.outcome === "error").length;
+  if (dryErrorCount > 0) {
+    return NextResponse.json(
+      {
+        error: `This file has ${dryErrorCount} problem(s) - fix them and re-upload the whole file. Nothing was imported.`,
+        rows: dryRows.map(({ rowNumber, outcome, reference, duplicateOfReference, error }) => ({
+          rowNumber,
+          outcome,
+          reference,
+          duplicateOfReference,
+          error,
+        })),
+      },
+      { status: 400 }
+    );
   }
 
   const importBatchId = uuid();

@@ -7,7 +7,7 @@ import { formatDateTime } from "@/lib/format";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
-import type { ImportBatch } from "@/types";
+import type { ImportBatch, ImportBatchRow } from "@/types";
 
 const OUTCOME_TONE: Record<string, "green" | "amber" | "red"> = {
   imported: "green",
@@ -15,7 +15,12 @@ const OUTCOME_TONE: Record<string, "green" | "amber" | "red"> = {
   error: "red",
 };
 
-function BatchRows({ batch }: { batch: ImportBatch }) {
+// Shared by a real (already-committed) ImportBatch and by a rejected dry
+// run's row list (RejectedImportRow[]) - same shape apart from a rejected
+// row never having a findingId, which this table never displays anyway.
+type DisplayRow = Pick<ImportBatchRow, "rowNumber" | "outcome" | "reference" | "duplicateOfReference" | "error">;
+
+function BatchRowsTable({ rows }: { rows: DisplayRow[] }) {
   return (
     <div className="max-h-72 overflow-y-auto rounded-md border border-slate-100">
       <table className="w-full text-left text-xs">
@@ -27,7 +32,7 @@ function BatchRows({ batch }: { batch: ImportBatch }) {
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-50">
-          {batch.rows.map((r) => (
+          {rows.map((r) => (
             <tr key={r.rowNumber}>
               <td className="px-3 py-1.5 text-slate-500">{r.rowNumber}</td>
               <td className="px-3 py-1.5">
@@ -53,6 +58,10 @@ export default function ImportFindingsPage() {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ImportBatch | null>(null);
+  // Set instead of `result` when the whole file was rejected (any row had
+  // a real validation error) - nothing was imported, so this has no batch
+  // id/history entry behind it, just the row-by-row breakdown to fix from.
+  const [rejected, setRejected] = useState<{ error: string; rows: ImportBatchRow[] } | null>(null);
   const [expandedBatchId, setExpandedBatchId] = useState<string | null>(null);
 
   async function load() {
@@ -87,12 +96,22 @@ export default function ImportFindingsPage() {
     setUploading(true);
     setError(null);
     setResult(null);
+    setRejected(null);
     try {
       const formData = new FormData();
       formData.append("file", file);
       const res = await fetch("/api/findings/import", { method: "POST", body: formData });
       const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new ApiError(body?.error ?? "Import failed", res.status);
+      if (!res.ok) {
+        // A rejected all-or-nothing dry run carries the full row breakdown
+        // alongside the error message - a plain permission/file-shape
+        // error (wrong extension, too many rows, ...) doesn't.
+        if (Array.isArray(body?.rows)) {
+          setRejected({ error: body.error ?? "Import failed", rows: body.rows as ImportBatchRow[] });
+          return;
+        }
+        throw new ApiError(body?.error ?? "Import failed", res.status);
+      }
       setResult(body.importBatch as ImportBatch);
       setFile(null);
       await load();
@@ -133,7 +152,10 @@ export default function ImportFindingsPage() {
       </Card>
 
       <Card>
-        <CardHeader title="2. Upload the completed file" description="Rows are validated and deduplicated independently — one bad row won't block the rest." />
+        <CardHeader
+          title="2. Upload the completed file"
+          description="All-or-nothing: every row is checked first, and if even one has a real error, nothing is imported — fix every row shown below and re-upload the whole file. A row that merely already exists (duplicate) doesn't block the rest."
+        />
         <div className="flex flex-col gap-3 p-4">
           <input
             type="file"
@@ -159,14 +181,23 @@ export default function ImportFindingsPage() {
         </div>
       </Card>
 
+      {rejected && (
+        <Card className="border-red-200">
+          <CardHeader title="Import rejected — nothing was imported" description={rejected.error} />
+          <div className="p-4">
+            <BatchRowsTable rows={rejected.rows} />
+          </div>
+        </Card>
+      )}
+
       {result && (
         <Card>
           <CardHeader
             title="Import result"
-            description={`${result.fileName} — ${result.totalRows} row(s): ${result.importedCount} imported, ${result.duplicateCount} duplicate(s), ${result.errorCount} error(s)`}
+            description={`${result.fileName} — ${result.totalRows} row(s): ${result.importedCount} imported, ${result.duplicateCount} duplicate(s)`}
           />
           <div className="p-4">
-            <BatchRows batch={result} />
+            <BatchRowsTable rows={result.rows} />
           </div>
         </Card>
       )}
@@ -197,7 +228,7 @@ export default function ImportFindingsPage() {
                 </div>
                 {expandedBatchId === b.id && (
                   <div className="mt-2">
-                    <BatchRows batch={b} />
+                    <BatchRowsTable rows={b.rows} />
                   </div>
                 )}
               </div>

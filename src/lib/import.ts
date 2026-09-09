@@ -556,6 +556,20 @@ export function validateImportRow(
   }
 
   const now = new Date().toISOString();
+  // caseAgeDays() (src/lib/findings.ts) measures age from createdAt, per
+  // master.txt §8's "track case age from original finding date" - for a
+  // live registration createdAt and Finding Date are always close (the
+  // form is filled in near-realtime), but a historical import's whole
+  // point is backfilling a record whose real finding date can be months
+  // or years before the import run. Stamping createdAt with the import
+  // moment would make a genuinely old backlog item read as 0 days old on
+  // every case-age/backlog-age dashboard metric - so createdAt is backdated
+  // to the row's own Finding Date when one was given (parsed as that
+  // calendar day's midnight UTC, same as any other date-only value in this
+  // app), falling back to the import moment only when Finding Date was left
+  // blank (itself only possible when Settings.requiredFindingFields has
+  // opted it out) and there's nothing to backdate to.
+  const createdAt = findingDate ? new Date(findingDate).toISOString() : now;
   const finding: Finding = {
     id: uuid(),
     reference: nextFindingReference(db, branch, period),
@@ -590,7 +604,7 @@ export function validateImportRow(
     districtVerifiedCases: 0,
     districtVerifiedAmount: 0,
     createdBy: opts.userId,
-    createdAt: now,
+    createdAt,
     updatedAt: now,
   };
 
