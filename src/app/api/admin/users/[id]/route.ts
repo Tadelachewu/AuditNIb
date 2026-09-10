@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireToggleOrEditPermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { hashPassword } from "@/lib/auth";
+import { validatePasswordStrength } from "@/lib/passwordValidation";
 import { resolveOrgAssignment, isDepartmentExactScopeForUser } from "@/lib/org";
 import { appendAuditLog } from "@/lib/audit";
 import { toSafeUser } from "@/lib/sanitize";
@@ -39,6 +40,38 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const existing = db.users.find((u) => u.id === id);
   if (!existing) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
+  // Defense in depth, not a live restriction today: users.edit/toggle-status
+  // are seeded onto ADMIN only (BANK-scoped, so none of this fires for the
+  // only role that currently holds them - icfms.txt reserves "User
+  // creation, Role assignment... " to the Administrator alone). But
+  // permissions are dynamic, admin-editable data (PHASE2.md) - if a
+  // DISTRICT/BRANCH-scoped role is ever granted this permission, it should
+  // still only ever be able to touch a user in its own org unit, and never
+  // assign a role with broader reach than its own - the same "BRANCH/
+  // DISTRICT roles stay inside their own org unit" rule POST /api/findings
+  // and prisma import already enforce for their own resources.
+  if (auth.session.orgScope !== "BANK") {
+    const inScope = (districtId: string | null, branchId: string | null) => {
+      if (auth.session.orgScope === "BRANCH") return branchId === auth.session.branchId;
+      return districtId === auth.session.districtId;
+    };
+    if (!inScope(existing.districtId ?? null, existing.branchId ?? null)) {
+      return NextResponse.json({ error: "Outside your organizational scope" }, { status: 403 });
+    }
+    const targetRoleCode = input.role ?? existing.role;
+    const targetRole = db.roles.find((r) => r.code === targetRoleCode);
+    if (targetRole && targetRole.orgScope === "BANK") {
+      return NextResponse.json({ error: "You cannot assign a bank-wide role" }, { status: 403 });
+    }
+  }
+
+  if (input.password) {
+    const strength = validatePasswordStrength(input.password);
+    if (!strength.valid) {
+      return NextResponse.json({ error: strength.error }, { status: 400 });
+    }
+  }
+
   if (input.email && db.users.some((u) => u.id !== id && u.email?.toLowerCase() === input.email!.toLowerCase())) {
     return NextResponse.json({ error: "That email is already in use" }, { status: 409 });
   }
@@ -62,6 +95,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (assignment.error) return NextResponse.json({ error: assignment.error }, { status: 409 });
     districtId = assignment.districtId;
     branchId = assignment.branchId;
+
+    // Same non-BANK defense-in-depth as above: block moving an in-scope
+    // user's org assignment to somewhere the editor itself has no reach.
+    if (auth.session.orgScope === "BRANCH" && branchId !== auth.session.branchId) {
+      return NextResponse.json({ error: "Outside your organizational scope" }, { status: 403 });
+    }
+    if (auth.session.orgScope === "DISTRICT" && districtId !== auth.session.districtId) {
+      return NextResponse.json({ error: "Outside your organizational scope" }, { status: 403 });
+    }
   }
 
   // Re-validated whenever the department itself changes, or whenever the

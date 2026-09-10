@@ -144,6 +144,17 @@ model User {
   updatedAt         DateTime  @map("updated_at")
   lastLoginAt       DateTime? @map("last_login_at")
   mustChangePassword Boolean  @default(false) @map("must_change_password")
+  // A temporary/admin-set password is only good for 24h from when it was
+  // set (see the login route's own check) - null once the user has chosen
+  // their own password (cleared alongside mustChangePassword).
+  passwordExpiresAt DateTime? @map("password_expires_at")
+  // Bumped on every password change; embedded in the session cookie at
+  // login and compared against this column on every guarded request (see
+  // src/lib/guard.ts's requireUser()) - a mismatch means the password
+  // changed (or the account was otherwise force-logged-out) since that
+  // cookie was issued, so the session is treated as dead immediately
+  // rather than staying valid until it naturally expires.
+  sessionVersion    Int       @default(1) @map("session_version")
 
   @@map("users")
 }

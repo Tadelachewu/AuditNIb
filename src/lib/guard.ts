@@ -1,9 +1,17 @@
 import { NextResponse } from "next/server";
 import { getSession, type SessionData } from "@/lib/session";
 import { hasAnyPermission } from "@/lib/permissions/registry";
+import { prisma } from "@/lib/prismaClient";
 
 type Ok = { ok: true; session: SessionData };
 type Err = { ok: false; response: NextResponse };
+
+// A function, not a shared constant - NextResponse wraps a body stream, and
+// reusing one instance across multiple requests/responses is unsafe (the
+// stream can only be consumed once).
+function notAuthenticated(): Err {
+  return { ok: false, response: NextResponse.json({ error: "Not authenticated" }, { status: 401 }) };
+}
 
 /**
  * Server/API-side authorization check. The UI hides links and routes for
@@ -11,12 +19,33 @@ type Err = { ok: false; response: NextResponse };
  * but those are convenience only - every mutating or data-returning API
  * route must call this (or requirePermission) itself, since the client can
  * never be trusted to enforce access control.
+ *
+ * Also revokes an already-issued session cookie the moment it goes stale:
+ * a single, cheap, indexed lookup of just this one user's sessionVersion
+ * and status (not a full readDb() - most routes already do one of those
+ * separately for their own data needs, but requireUser() shouldn't force
+ * that cost on the ones that don't) compared against what the cookie
+ * itself carries. A mismatch means either the password changed since this
+ * cookie was issued (see User.sessionVersion's own doc comment) or the
+ * account was deactivated after the cookie was issued - in both cases the
+ * session is destroyed and treated as logged out, rather than staying
+ * valid until it naturally expires.
  */
 export async function requireUser(): Promise<Ok | Err> {
   const session = await getSession();
   if (!session.isLoggedIn || !session.userId) {
-    return { ok: false, response: NextResponse.json({ error: "Not authenticated" }, { status: 401 }) };
+    return notAuthenticated();
   }
+
+  const current = await prisma.user.findUnique({
+    where: { id: session.userId },
+    select: { sessionVersion: true, status: true },
+  });
+  if (!current || current.status !== "ACTIVE" || current.sessionVersion !== (session.sessionVersion ?? 1)) {
+    session.destroy();
+    return notAuthenticated();
+  }
+
   return { ok: true, session };
 }
 

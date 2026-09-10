@@ -355,7 +355,25 @@ export function validateImportRow(
   row: RawImportRow,
   rowNumber: number,
   seenKeys: Map<string, string>,
-  opts: { userId: string; userName: string; importBatchId: string }
+  opts: {
+    userId: string;
+    userName: string;
+    importBatchId: string;
+    // The importer's own org scope - mirrors POST /api/findings' identical
+    // "BRANCH/DISTRICT roles are forced to their own org unit, BANK isn't"
+    // check. findings.import is seeded onto the HO Controller role only
+    // (BANK-scoped, by design meant to import for any district/branch -
+    // icfms.txt: "Register Internal Audit findings received from the
+    // Internal Audit Department"), but permissions are dynamic, admin-
+    // editable data (see PHASE2.md) - nothing stops an admin from granting
+    // findings.import to a DISTRICT- or BRANCH-scoped role too. Without
+    // this check, that misconfiguration would let a District/Branch
+    // Controller import a finding for any OTHER district/branch just by
+    // putting a different code in the Excel file's District/Branch Code
+    // columns - a horizontal privilege escalation the single-record create
+    // path already closes off but the bulk path didn't.
+    importerScope: { orgScope: string; districtId: string | null; branchId: string | null };
+  }
 ): ImportBatchRow & { finding?: Finding } {
   const missing = IMPORT_COLUMNS.filter((c) => columnRequired(db, c) && !row[c.key]?.trim());
   if (missing.length > 0) {
@@ -379,6 +397,13 @@ export function validateImportRow(
   if (!branch) return { rowNumber, outcome: "error", error: `Unknown or inactive branch code "${row.branchCode}"` };
   if (branch.districtId !== district.id) {
     return { rowNumber, outcome: "error", error: `Branch "${row.branchCode}" does not belong to district "${row.districtCode}"` };
+  }
+
+  if (opts.importerScope.orgScope === "BRANCH" && branch.id !== opts.importerScope.branchId) {
+    return { rowNumber, outcome: "error", error: `Branch "${row.branchCode}" is outside your assigned branch` };
+  }
+  if (opts.importerScope.orgScope === "DISTRICT" && district.id !== opts.importerScope.districtId) {
+    return { rowNumber, outcome: "error", error: `District "${row.districtCode}" is outside your assigned district` };
   }
 
   const period = db.reportingPeriods.find((p) => p.code === row.periodCode?.trim());

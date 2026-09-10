@@ -27,6 +27,12 @@ export interface SessionData {
   // session like everything else it gates on. Updated in-place (without a
   // re-login) by POST /api/auth/change-password the moment it succeeds.
   mustChangePassword?: boolean;
+  // Snapshot of User.sessionVersion at login time - src/lib/guard.ts's
+  // requireUser() compares this against the current DB value on every
+  // request and force-logs-out on a mismatch. See User.sessionVersion's
+  // own doc comment for why (revoking a stateless session cookie on
+  // password change without a server-side session store).
+  sessionVersion?: number;
 }
 
 const password = process.env.IRON_SESSION_PASSWORD;

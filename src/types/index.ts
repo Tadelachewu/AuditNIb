@@ -63,6 +63,22 @@ export interface User {
   // their profile (POST /api/auth/change-password). src/proxy.ts redirects
   // every page but /profile until this clears.
   mustChangePassword?: boolean;
+  // Set alongside mustChangePassword: a temporary/admin-set password is
+  // only good for 24h - the login route rejects it outright once this
+  // passes, rather than letting someone in on a password an admin chose
+  // (and may still know) indefinitely. Cleared together with
+  // mustChangePassword once the user sets their own password.
+  passwordExpiresAt?: string | null;
+  // Bumped on every password change (see /api/auth/change-password and
+  // the admin password-reset branch of PATCH /api/admin/users/[id]) and
+  // compared against the session cookie's own copy on every guarded
+  // request (src/lib/guard.ts's requireUser()) - the standard technique
+  // for revoking an already-issued, otherwise-stateless session cookie
+  // without a server-side session store: change the password, and every
+  // *other* still-logged-in session for this user stops working on its
+  // very next request, not just whenever that cookie would have expired
+  // naturally.
+  sessionVersion: number;
 }
 
 export type SafeUser = Omit<User, "passwordHash">;

@@ -8,6 +8,7 @@
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
+    "db:seed": "tsx prisma/seed.ts",
     "tunnel": "lt --port 3000",
     "tunnel:cloudflare": "cloudflared tunnel --url http://localhost:3000"
   },
@@ -16,6 +17,7 @@
     "@prisma/client": "^7.8.0",
     "bcryptjs": "^3.0.3",
     "exceljs": "^4.4.0",
+    "ioredis": "^6.0.0",
     "iron-session": "^8.0.4",
     "lucide-react": "^1.40.0",
     "next": "16.3.2",

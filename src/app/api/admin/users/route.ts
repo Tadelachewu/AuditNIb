@@ -4,6 +4,7 @@ import { z } from "zod";
 import { requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { hashPassword } from "@/lib/auth";
+import { validatePasswordFull } from "@/lib/passwordValidation";
 import { resolveOrgAssignment, isDepartmentExactScopeForUser } from "@/lib/org";
 import { appendAuditLog } from "@/lib/audit";
 import { toSafeUser } from "@/lib/sanitize";
@@ -62,6 +63,11 @@ export async function POST(request: Request) {
   }
   const input = parsed.data;
 
+  const strength = await validatePasswordFull(input.password);
+  if (!strength.valid) {
+    return NextResponse.json({ error: strength.error }, { status: 400 });
+  }
+
   const db = await readDb();
   if (db.users.some((u) => u.username.toLowerCase() === input.username.toLowerCase())) {
     return NextResponse.json({ error: "That username is already taken" }, { status: 409 });
@@ -77,6 +83,26 @@ export async function POST(request: Request) {
   });
   if (assignment.error) {
     return NextResponse.json({ error: assignment.error }, { status: 409 });
+  }
+
+  // Defense in depth, not a live restriction today - see the identical
+  // check (and its own doc comment) in PATCH .../users/[id]/route.ts.
+  // users.create is seeded onto ADMIN only (BANK-scoped, so this never
+  // fires for the only role that currently holds it), but permissions are
+  // dynamic data - a DISTRICT/BRANCH-scoped role granted this permission
+  // later should still only be able to create a user in its own org unit,
+  // holding a role no broader than its own.
+  if (auth.session.orgScope !== "BANK") {
+    const newRole = db.roles.find((r) => r.code === input.role);
+    if (newRole && newRole.orgScope === "BANK") {
+      return NextResponse.json({ error: "You cannot assign a bank-wide role" }, { status: 403 });
+    }
+    if (auth.session.orgScope === "BRANCH" && assignment.branchId !== auth.session.branchId) {
+      return NextResponse.json({ error: "Outside your organizational scope" }, { status: 403 });
+    }
+    if (auth.session.orgScope === "DISTRICT" && assignment.districtId !== auth.session.districtId) {
+      return NextResponse.json({ error: "Outside your organizational scope" }, { status: 403 });
+    }
   }
 
   let departmentId: string | null = null;
@@ -106,8 +132,12 @@ export async function POST(request: Request) {
     updatedAt: now,
     lastLoginAt: null,
     // The admin chose this password, not the user - forced to their
-    // profile to set their own on first login (src/proxy.ts).
+    // profile to set their own on first login (src/proxy.ts), and only
+    // valid for 24h from now (see the login route's own expiry check) so
+    // an unused temporary credential doesn't stay usable indefinitely.
     mustChangePassword: true,
+    passwordExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+    sessionVersion: 1,
   };
 
   await updateDb((current) => {

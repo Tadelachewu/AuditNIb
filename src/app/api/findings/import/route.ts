@@ -71,12 +71,19 @@ export async function POST(request: Request) {
   // whether the file has any real validation error before touching the
   // real database at all. Uses a throwaway batch id since none of this
   // clone's mutations (findings, transitions, ...) are ever written back.
+  const importerScope = {
+    orgScope: auth.session.orgScope!,
+    districtId: auth.session.districtId ?? null,
+    branchId: auth.session.branchId ?? null,
+  };
+
   const dryDb = structuredClone(await readDb());
   const dryRows: ImportBatchRow[] = parsed.rows.map((row, i) =>
     validateImportRow(dryDb, row, i + 2, existingDedupeKeys(dryDb), {
       userId: auth.session.userId!,
       userName: auth.session.name!,
       importBatchId: "dry-run",
+      importerScope,
     })
   );
   const dryErrorCount = dryRows.filter((r) => r.outcome === "error").length;
@@ -101,7 +108,12 @@ export async function POST(request: Request) {
   const batch = await updateDb((current) => {
     const seenKeys = existingDedupeKeys(current);
     const rows: ImportBatchRow[] = parsed.rows.map((row, i) =>
-      validateImportRow(current, row, i + 2, seenKeys, { userId: auth.session.userId!, userName: auth.session.name!, importBatchId })
+      validateImportRow(current, row, i + 2, seenKeys, {
+        userId: auth.session.userId!,
+        userName: auth.session.name!,
+        importBatchId,
+        importerScope,
+      })
     );
 
     const importedCount = rows.filter((r) => r.outcome === "imported").length;

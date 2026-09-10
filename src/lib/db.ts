@@ -121,6 +121,8 @@ function userFromRow(r: Prisma.UserGetPayload<object>): User {
     updatedAt: iso(r.updatedAt),
     lastLoginAt: r.lastLoginAt ? iso(r.lastLoginAt) : null,
     mustChangePassword: r.mustChangePassword,
+    passwordExpiresAt: r.passwordExpiresAt ? iso(r.passwordExpiresAt) : null,
+    sessionVersion: r.sessionVersion,
   };
 }
 
@@ -601,6 +603,8 @@ function userToData(r: User) {
     updatedAt: toDate(r.updatedAt),
     lastLoginAt: toDateOrNull(r.lastLoginAt),
     mustChangePassword: r.mustChangePassword ?? false,
+    passwordExpiresAt: toDateOrNull(r.passwordExpiresAt),
+    sessionVersion: r.sessionVersion,
   };
 }
 

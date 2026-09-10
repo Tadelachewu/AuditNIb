@@ -41,18 +41,35 @@ status, every action, who can trigger it, and every side-flow (evidence,
 comments, notifications, transfer, period locking) attached to it;
 [RECTIFICATION.md](RECTIFICATION.md) is a focused deep-dive on exactly
 how `PARTIALLY_RECTIFIED` vs. `RECTIFIED` is decided and what each one
-does and doesn't allow next; and [SCENARIOS.md](SCENARIOS.md) is a full
-start-to-end test-case list covering the whole app.
+does and doesn't allow next; [SCENARIOS.md](SCENARIOS.md) is a full
+start-to-end test-case list covering the whole app; and
+[security/SECURITY.md](security/SECURITY.md) is a reference register of
+vulnerability classes previously found and fixed across the organization's
+other in-house systems — not an audit of this app, but a checklist of what
+to watch for here too.
 
 ## Getting started
 
+Prerequisites: Node.js, and a reachable PostgreSQL server (local or
+otherwise) for the connection string below.
+
 ```bash
-cp .env.example .env.local   # then set IRON_SESSION_PASSWORD to a random 32+ char string
-npm install
+cp .env.example .env.local
+# then edit .env.local:
+#   - IRON_SESSION_PASSWORD: a random string, 32+ characters
+#   - DATABASE_URL: your Postgres connection string,
+#     e.g. postgresql://user:password@localhost:5432/auditapp?schema=public
+
+npm install                # also runs `prisma generate` (see "postinstall")
+npx prisma migrate dev     # creates/updates the Postgres schema
+npx prisma db seed         # first run only, against an EMPTY database -
+                            # creates the seed admin/roles/org data (prisma/seed.ts).
+                            # Safe to re-run: it no-ops if the database already has users.
 npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000). You'll be redirected to `/login`.
+Log in with any of the [default users](#default-users--roles) below.
 
 To let someone outside this machine reach the running app (a demo, a
 quick review), see [EXPOSE_TO_INTERNET.md](EXPOSE_TO_INTERNET.md) —
@@ -61,16 +78,36 @@ corporate network.
 
 ## Data storage
 
-There is no database yet. All data lives in `data/db.json`, a single JSON
-file managed by [src/lib/db.ts](src/lib/db.ts). The file is created and
-seeded automatically the first time the app reads it, and is git-ignored, so
-each environment gets its own fresh copy. Delete `data/db.json` (or the whole
-`data/` folder) to reset to the seed data below.
+PostgreSQL, via [Prisma ORM](https://www.prisma.io/) 7 (driver-adapter
+architecture — see [prisma/schema.prisma](prisma/schema.prisma) for the full
+relational schema, one model per top-level field of the `Database` type).
+Every API route still calls `readDb()` / `updateDb()` in
+[src/lib/db.ts](src/lib/db.ts) exactly as it always has — that module diffs
+the in-memory mutation against Postgres and writes only what changed, inside
+one transaction, so no route needed rewriting when this app moved off its
+original JSON-file storage.
 
-Every read/write in the app goes through `readDb()` / `writeDb()` /
-`updateDb()` in that one file — swapping in a real database later (Postgres
-via Prisma, etc.) means reimplementing those functions only; nothing in the
-API routes or pages needs to change.
+Relevant files:
+
+- [prisma/schema.prisma](prisma/schema.prisma) — the schema and migrations
+  (`prisma/migrations/`)
+- [prisma.config.ts](prisma.config.ts) — connection info for the `prisma`
+  CLI only (`generate`/`migrate`/`studio`/`db seed`); the running app gets
+  its own connection through [src/lib/prismaClient.ts](src/lib/prismaClient.ts)'s
+  driver adapter (`@prisma/adapter-pg`)
+- [prisma/seed.ts](prisma/seed.ts) — bootstraps a brand-new, empty database
+  with the same starting admin/roles/org structure this app has always
+  shipped with (see [prisma/seedData.ts](prisma/seedData.ts)); run via
+  `npx prisma db seed` or `npm run db:seed`
+- [prisma/migrate-from-json.ts](prisma/migrate-from-json.ts) — a one-time
+  bridge script, not needed for a fresh install: copies an existing
+  installation's `data/db.json` (this app's original JSON-file storage) into
+  Postgres, preserving every id
+
+`src/generated/prisma/` (the generated Prisma Client) is git-ignored and
+rebuilt automatically by `npm install`'s `postinstall` script — never
+hand-edit it, and re-run `npx prisma generate` yourself after pulling a
+schema change if you skip a full reinstall.
 
 ## Authentication
 
