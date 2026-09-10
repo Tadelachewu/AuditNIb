@@ -22,17 +22,25 @@ type Variant = "primary" | "secondary" | "danger" | "success" | "ghost";
 // subordinate to gold - so gold reads as "the one thing to do here"
 // again rather than "every button on this page."
 const VARIANT_CLASSES: Record<Variant, string> = {
-  primary: "bg-brand-gold text-slate-900 hover:bg-brand-gold-dark disabled:bg-amber-100 disabled:text-slate-400",
+  primary: "bg-brand-gold text-on-gold hover:bg-brand-gold-dark disabled:bg-amber-100 disabled:text-slate-400",
   secondary:
     "bg-white text-slate-700 border border-slate-300 hover:bg-slate-50 hover:border-slate-400 disabled:bg-slate-50 disabled:text-slate-300 disabled:border-slate-200",
-  danger: "bg-red-600 text-white hover:bg-red-700 disabled:bg-red-300",
+  // Fixed literal hex, not the theme-remapped red-600/700/300 tokens -
+  // those flip to pale tints in dark mode (see globals.css's dark-mode
+  // block, meant for the pale-bg-plus-dark-text Badge idiom), which would
+  // leave this "solid red + white text" idiom with washed-out white-on-
+  // pale-pink. A destructive action losing its red cue this way would
+  // undermine the warning it's there for just as much as never theming it
+  // at all would - same reasoning as this variant's own comment above.
+  danger: "bg-[#dc2626] text-on-dark hover:bg-[#b91c1c] disabled:bg-[#fca5a5]",
   // For an affirmative/approve action that shouldn't read as destructive
   // (e.g. accepting a rectification as closed) - deliberately not `danger`
   // (that red cue means "this is risky"), and distinct from `primary`'s
   // gold since gold is the app's generic "do the one thing here" color,
   // not specifically "approve." Matches Badge tone="green"'s emerald hue.
-  success: "bg-emerald-600 text-white hover:bg-emerald-700 disabled:bg-emerald-300",
-  ghost: "text-slate-600 hover:bg-brand-gold hover:text-slate-900 disabled:text-slate-300",
+  // Fixed literal hex for the same reason `danger` just above is.
+  success: "bg-[#059669] text-on-dark hover:bg-[#047857] disabled:bg-[#6ee7b7]",
+  ghost: "text-slate-600 hover:bg-brand-gold hover:text-on-gold disabled:text-slate-300",
 };
 
 export function Button({

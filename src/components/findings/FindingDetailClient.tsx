@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { apiSend, ApiError } from "@/lib/api-client";
 import { formatDate, formatDateTime, formatNumber } from "@/lib/format";
@@ -450,7 +451,13 @@ export function FindingDetailClient({
     <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <h1 className="text-lg font-semibold text-slate-900">{finding.title}</h1>
+          <Link
+            href="/findings"
+            className="inline-flex items-center rounded-md bg-brand-gold px-3 py-1.5 text-sm font-bold text-on-gold transition-colors hover:bg-brand-gold-dark"
+          >
+            ← Back
+          </Link>
+          <h1 className="mt-1 text-lg font-semibold text-slate-900">{finding.title}</h1>
           <p className="mt-1 text-sm text-slate-500">
             <span className="font-mono text-xs text-slate-400">{finding.reference}</span> · {lookups.branchName} ·{" "}
             {lookups.districtName} · {lookups.periodCode}
@@ -1304,13 +1311,13 @@ export function FindingDetailClient({
               </span>
             );
             if (isReturnEvent && t.reason) {
-              const buttonTone = t.toStatus === "REJECTED" ? "bg-red-700 hover:bg-red-800" : "bg-amber-600 hover:bg-amber-700";
+              const buttonTone = t.toStatus === "REJECTED" ? "bg-[#b91c1c] hover:bg-[#991b1b]" : "bg-[#d97706] hover:bg-[#b45309]";
               return (
                 <details key={t.id} className="group px-4 py-2 text-sm">
                   <summary className="flex cursor-pointer list-none items-center justify-between gap-3 marker:content-none">
                     {header}
                     <span className="flex shrink-0 items-center gap-2">
-                      <span className={`rounded-md px-2.5 py-1 text-xs font-bold text-white transition-colors ${buttonTone}`}>
+                      <span className={`rounded-md px-2.5 py-1 text-xs font-bold text-on-dark transition-colors ${buttonTone}`}>
                         View Reason
                       </span>
                       <span className="text-xs text-slate-400">{formatDateTime(t.createdAt)}</span>

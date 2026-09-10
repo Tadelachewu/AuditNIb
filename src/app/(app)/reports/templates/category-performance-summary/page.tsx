@@ -32,7 +32,7 @@ export default async function CategoryPerformanceSummaryPage({
         <div>
           <Link
             href="/reports/templates"
-            className="inline-flex items-center rounded-md bg-brand-gold px-3 py-1.5 text-sm font-bold text-slate-900 transition-colors hover:bg-brand-gold-dark"
+            className="inline-flex items-center rounded-md bg-brand-gold px-3 py-1.5 text-sm font-bold text-on-gold transition-colors hover:bg-brand-gold-dark"
           >
             ← Back
           </Link>
@@ -41,7 +41,7 @@ export default async function CategoryPerformanceSummaryPage({
         </div>
         <div className="flex gap-2">
           <a href={`/api/report-templates/category-performance-summary/export?periodId=${periodId}`}>
-            <span className="inline-flex items-center rounded-md border border-brand-gold-dark bg-brand-gold px-3 py-1.5 text-sm font-medium text-slate-900 transition-colors hover:bg-brand-gold-dark">
+            <span className="inline-flex items-center rounded-md border border-brand-gold-dark bg-brand-gold px-3 py-1.5 text-sm font-medium text-on-gold transition-colors hover:bg-brand-gold-dark">
               Download CSV
             </span>
           </a>

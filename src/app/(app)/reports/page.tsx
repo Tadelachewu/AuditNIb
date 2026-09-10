@@ -160,7 +160,7 @@ export default async function ReportsPage({
         </div>
         <div className="flex gap-2">
           <a href={`/api/findings/export?${exportQuery.toString()}`}>
-            <span className="inline-flex items-center rounded-md border border-brand-gold-dark bg-brand-gold px-3 py-1.5 text-sm font-medium text-slate-900 transition-colors hover:bg-brand-gold-dark">
+            <span className="inline-flex items-center rounded-md border border-brand-gold-dark bg-brand-gold px-3 py-1.5 text-sm font-medium text-on-gold transition-colors hover:bg-brand-gold-dark">
               Download CSV
             </span>
           </a>

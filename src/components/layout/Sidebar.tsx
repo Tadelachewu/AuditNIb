@@ -32,8 +32,8 @@ export function Sidebar({ permissions, role }: { permissions: string[]; role: st
           className="shrink-0"
         />
         <div>
-          <p className="text-sm font-bold text-white">NIB Control360</p>
-          <p className="text-xs text-white/50">Findings Management</p>
+          <p className="text-sm font-bold text-on-dark">NIB Control360</p>
+          <p className="text-xs text-on-dark/50">Findings Management</p>
         </div>
       </div>
 
@@ -43,7 +43,7 @@ export function Sidebar({ permissions, role }: { permissions: string[]; role: st
           if (items.length === 0) return null;
           return (
             <div key={section.label}>
-              <p className="px-2 pb-1.5 text-[11px] font-semibold uppercase tracking-wide text-white/40">
+              <p className="px-2 pb-1.5 text-[11px] font-semibold uppercase tracking-wide text-on-dark/40">
                 {section.label}
               </p>
               <div className="flex flex-col gap-0.5">
@@ -58,8 +58,8 @@ export function Sidebar({ permissions, role }: { permissions: string[]; role: st
                       href={item.href}
                       className={`flex items-center gap-2 rounded-md px-2.5 py-1.5 text-sm transition-colors ${
                         isActive
-                          ? "bg-brand-gold font-medium text-slate-900"
-                          : "text-white/70 hover:bg-brand-gold hover:text-slate-900"
+                          ? "bg-brand-gold font-medium text-on-gold"
+                          : "text-on-dark/70 hover:bg-brand-gold hover:text-on-gold"
                       }`}
                     >
                       <Icon className="h-4 w-4 shrink-0" strokeWidth={1.8} />

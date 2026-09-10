@@ -112,7 +112,7 @@ export function NotificationBell() {
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="relative rounded-full p-2 text-white/70 hover:bg-white/10 hover:text-white"
+        className="relative rounded-full p-2 text-on-dark/70 hover:bg-on-dark/10 hover:text-on-dark"
         aria-label="Notifications"
       >
         <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
@@ -123,7 +123,7 @@ export function NotificationBell() {
           />
         </svg>
         {unreadCount > 0 && (
-          <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-medium text-white">
+          <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#dc2626] px-1 text-[10px] font-medium text-on-dark">
             {unreadCount > 9 ? "9+" : unreadCount}
           </span>
         )}
@@ -178,7 +178,7 @@ export function NotificationBell() {
                           type="button"
                           onClick={() => handlePostComment(n)}
                           disabled={postingComment}
-                          className="rounded-md bg-brand-gold px-2 py-1 text-xs font-medium text-slate-900 hover:bg-brand-gold-dark disabled:opacity-60"
+                          className="rounded-md bg-brand-gold px-2 py-1 text-xs font-medium text-on-gold hover:bg-brand-gold-dark disabled:opacity-60"
                         >
                           {postingComment ? "Posting..." : "Post Comment & View"}
                         </button>

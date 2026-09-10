@@ -224,7 +224,7 @@ export default function ScoringRulesPage() {
                   onClick={() => toggleMulti("categories", c.id)}
                   className={`rounded-full px-2.5 py-1 text-xs ring-1 ring-inset ${
                     form.categories.includes(c.id)
-                      ? "bg-blue-900 text-white ring-blue-900"
+                      ? "bg-[#1e3a8a] text-on-dark ring-[#1e3a8a]"
                       : "bg-white text-slate-600 ring-slate-300"
                   }`}
                 >
@@ -244,7 +244,7 @@ export default function ScoringRulesPage() {
                   onClick={() => toggleMulti("sources", s.id)}
                   className={`rounded-full px-2.5 py-1 text-xs ring-1 ring-inset ${
                     form.sources.includes(s.id)
-                      ? "bg-blue-900 text-white ring-blue-900"
+                      ? "bg-[#1e3a8a] text-on-dark ring-[#1e3a8a]"
                       : "bg-white text-slate-600 ring-slate-300"
                   }`}
                 >
@@ -373,7 +373,7 @@ export default function ScoringRulesPage() {
                               })
                             }
                             className={`rounded-full px-2.5 py-1 text-xs ring-1 ring-inset ${
-                              editDraft.categories.includes(c.id) ? "bg-blue-900 text-white ring-blue-900" : "bg-white text-slate-600 ring-slate-300"
+                              editDraft.categories.includes(c.id) ? "bg-[#1e3a8a] text-on-dark ring-[#1e3a8a]" : "bg-white text-slate-600 ring-slate-300"
                             }`}
                           >
                             {c.name}
@@ -395,7 +395,7 @@ export default function ScoringRulesPage() {
                               }))
                             }
                             className={`rounded-full px-2.5 py-1 text-xs ring-1 ring-inset ${
-                              editDraft.sources.includes(s.id) ? "bg-blue-900 text-white ring-blue-900" : "bg-white text-slate-600 ring-slate-300"
+                              editDraft.sources.includes(s.id) ? "bg-[#1e3a8a] text-on-dark ring-[#1e3a8a]" : "bg-white text-slate-600 ring-slate-300"
                             }`}
                           >
                             {s.name}

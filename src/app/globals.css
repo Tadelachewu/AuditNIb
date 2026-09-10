@@ -6,7 +6,9 @@
   /* Sampled from public/Nib_International_Bank.png - the gold of the
      logo's lower half / the brown of its upper half. --brand-gold-dark is
      a ~15% darkened gold, used only for the hover/press state of buttons
-     whose resting state is already --brand-gold. */
+     whose resting state is already --brand-gold. Brand colors are fixed
+     across both themes on purpose - they're identity, not a surface that
+     should adapt - so none of them appear in the dark-mode blocks below. */
   --brand-gold: #feb914;
   --brand-gold-dark: #d89d11;
   --brand-brown: #8a4d21;
@@ -16,6 +18,30 @@
      it's meant to set off, so this is hand-darkened toward black rather
      than a plain CSS filter on --brand-brown. */
   --brand-sidebar: #2e2419;
+  /* Fixed dark text for anything sitting directly on --brand-gold (Button's
+     `primary` variant, the sidebar's active/hover nav item, "View"/"Back"
+     links styled to look like a gold button, ...). Deliberately NOT part of
+     the slate-900 dark-mode remap below: slate-900 flips to a near-white in
+     dark mode (correct for body text), but text on a gold background must
+     stay dark in *both* themes for contrast, or it'd go near-white-on-gold
+     the moment dark mode is on. Every such spot uses text-on-gold instead
+     of text-slate-900. */
+  --on-gold: #171717;
+  /* Fixed white for anything sitting on a background that's *itself*
+     already theme-invariant: the sidebar/topbar chrome (bg-brand-sidebar,
+     never remapped - see above) and every "solid vivid color + white text"
+     pill/badge/button (Button's danger/success variants, a notification
+     count badge, a selected-chip control, ...). Plain text-white/bg-white
+     can't be reused for this the way on-gold reuses nothing: --color-white
+     itself IS remapped below (bg-white is pervasively used as an adaptive
+     card/modal/dropdown surface elsewhere and must keep flipping), and
+     Tailwind's opacity variants (text-white/70 etc.) compile to
+     color-mix(..., var(--color-white) ...) - so the moment --color-white
+     flips to a dark surface color, every text-white/NN on the
+     already-dark sidebar goes dark-on-dark. text-on-dark is the fixed
+     escape hatch for exactly those spots; --color-white stays free to
+     keep adapting everywhere else. */
+  --on-dark: #ffffff;
 }
 
 @theme inline {
@@ -25,8 +51,135 @@
   --color-brand-gold-dark: var(--brand-gold-dark);
   --color-brand-brown: var(--brand-brown);
   --color-brand-sidebar: var(--brand-sidebar);
+  --color-on-gold: var(--on-gold);
+  --color-on-dark: var(--on-dark);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+}
+
+/* ---------------------------------------------------------------------
+   Dark mode: three states, per the user's own choice (light/dark/system).
+   ThemeToggle.tsx writes "light"/"dark" to localStorage and stamps
+   data-theme on <html>; "system" clears both, leaving only the OS-level
+   prefers-color-scheme query below to decide. An explicit choice always
+   wins over the OS setting, in both directions, which is why the same
+   variables are redefined twice: once inside the media query (guarded so
+   an explicit *light* choice overrides a dark OS setting) and once again
+   under [data-theme="dark"] (so an explicit *dark* choice overrides a
+   light OS setting the media query alone would never touch).
+
+   Every variable here is one of Tailwind's own default palette tokens
+   (see the "global palette remapping" approach) - redefining it is enough
+   to re-theme every existing bg-slate-900/text-white/border-red-200/etc.
+   utility class already used across the app, with no component file
+   touched. Each family is a straight mirror of Tailwind's own light-mode
+   values (50<->900, 100<->800, 200<->700, 300<->600, 400<->500) so the
+   *semantic* weight of a shade (e.g. "900 is the strongest text color")
+   stays identical in both themes - only its literal color flips. --brand-*
+   and --on-gold are deliberately absent from both blocks: they're brand
+   identity, not theme-adaptive surface color, and text-on-gold's whole
+   point is to never flip. --color-white gets its own dark value rather
+   than reusing slate-50's, since a handful of components rely on white
+   reading as the most-raised surface, one step lighter than a slate-100
+   card - flattening that hierarchy would lose the effect dark mode is
+   supposed to preserve.
+   --------------------------------------------------------------------- */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --background: #0b1220;
+    --foreground: #e7e9ee;
+
+    --color-white: #1b2540;
+
+    --color-slate-50: #0f172a;
+    --color-slate-100: #1e293b;
+    --color-slate-200: #334155;
+    --color-slate-300: #475569;
+    --color-slate-400: #64748b;
+    --color-slate-500: #94a3b8;
+    --color-slate-600: #cbd5e1;
+    --color-slate-700: #e2e8f0;
+    --color-slate-800: #f1f5f9;
+    --color-slate-900: #f8fafc;
+
+    --color-amber-50: #78350f;
+    --color-amber-100: #92400e;
+    --color-amber-200: #b45309;
+    --color-amber-300: #d97706;
+    --color-amber-600: #fcd34d;
+    --color-amber-700: #fde68a;
+    --color-amber-800: #fef3c7;
+    --color-amber-900: #fffbeb;
+
+    --color-blue-50: #1e3a8a;
+    --color-blue-100: #1e40af;
+    --color-blue-200: #1d4ed8;
+    --color-blue-600: #93c5fd;
+    --color-blue-700: #bfdbfe;
+    --color-blue-800: #dbeafe;
+    --color-blue-900: #eff6ff;
+
+    --color-emerald-50: #064e3b;
+    --color-emerald-200: #047857;
+    --color-emerald-300: #059669;
+    --color-emerald-600: #6ee7b7;
+    --color-emerald-700: #a7f3d0;
+
+    --color-red-50: #7f1d1d;
+    --color-red-200: #b91c1c;
+    --color-red-300: #dc2626;
+    --color-red-600: #fca5a5;
+    --color-red-700: #fecaca;
+    --color-red-800: #fee2e2;
+  }
+}
+
+:root[data-theme="dark"] {
+  --background: #0b1220;
+  --foreground: #e7e9ee;
+
+  --color-white: #1b2540;
+
+  --color-slate-50: #0f172a;
+  --color-slate-100: #1e293b;
+  --color-slate-200: #334155;
+  --color-slate-300: #475569;
+  --color-slate-400: #64748b;
+  --color-slate-500: #94a3b8;
+  --color-slate-600: #cbd5e1;
+  --color-slate-700: #e2e8f0;
+  --color-slate-800: #f1f5f9;
+  --color-slate-900: #f8fafc;
+
+  --color-amber-50: #78350f;
+  --color-amber-100: #92400e;
+  --color-amber-200: #b45309;
+  --color-amber-300: #d97706;
+  --color-amber-600: #fcd34d;
+  --color-amber-700: #fde68a;
+  --color-amber-800: #fef3c7;
+  --color-amber-900: #fffbeb;
+
+  --color-blue-50: #1e3a8a;
+  --color-blue-100: #1e40af;
+  --color-blue-200: #1d4ed8;
+  --color-blue-600: #93c5fd;
+  --color-blue-700: #bfdbfe;
+  --color-blue-800: #dbeafe;
+  --color-blue-900: #eff6ff;
+
+  --color-emerald-50: #064e3b;
+  --color-emerald-200: #047857;
+  --color-emerald-300: #059669;
+  --color-emerald-600: #6ee7b7;
+  --color-emerald-700: #a7f3d0;
+
+  --color-red-50: #7f1d1d;
+  --color-red-200: #b91c1c;
+  --color-red-300: #dc2626;
+  --color-red-600: #fca5a5;
+  --color-red-700: #fecaca;
+  --color-red-800: #fee2e2;
 }
 
 body {

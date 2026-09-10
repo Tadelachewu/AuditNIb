@@ -97,7 +97,7 @@ export function AdminDashboard({ user, db }: { user: SessionData; db: Database }
               <Link
                 key={link.href}
                 href={link.href}
-                className="rounded-md px-2.5 py-1.5 text-sm text-slate-600 transition-colors hover:bg-brand-gold hover:text-slate-900"
+                className="rounded-md px-2.5 py-1.5 text-sm text-slate-600 transition-colors hover:bg-brand-gold hover:text-on-gold"
               >
                 {link.label}
               </Link>
