@@ -7,6 +7,7 @@ import { formatDateTime } from "@/lib/format";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
+import { ImportGuide } from "@/components/findings/ImportGuide";
 import type { ImportBatch, ImportBatchRow } from "@/types";
 
 const OUTCOME_TONE: Record<string, "green" | "amber" | "red"> = {
@@ -138,6 +139,8 @@ export default function ImportFindingsPage() {
           for live district/HO review. Reference numbers are always system-generated, never taken from the file.
         </p>
       </div>
+
+      <ImportGuide />
 
       <Card>
         <CardHeader

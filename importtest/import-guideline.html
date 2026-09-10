@@ -1,0 +1,544 @@
+<title>Findings Import Register</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Serif:wght@500;600;700&family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+  :root{
+    --paper:#f4f5f0;
+    --paper-raised:#ffffff;
+    --ink:#16213b;
+    --steel:#4b5872;
+    --steel-soft:#7c8699;
+    --gold:#b8901f;
+    --gold-ink:#6b530e;
+    --rule:#dad8cb;
+    --rule-soft:#e8e6da;
+    --ok:#2f7a4f;
+    --ok-bg:#e7f3ea;
+    --transit:#2a5c8a;
+    --transit-bg:#e8eff6;
+    --warn:#a5670c;
+    --warn-bg:#f6ecdc;
+    --danger:#a9382f;
+    --danger-bg:#f7e9e7;
+    --code-bg:#eceade;
+    --shadow: 0 1px 2px rgba(22,33,59,.06), 0 6px 20px -8px rgba(22,33,59,.18);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --paper:#12182a;
+      --paper-raised:#182238;
+      --ink:#eceef4;
+      --steel:#b6bdcd;
+      --steel-soft:#8b93a8;
+      --gold:#d8ac3f;
+      --gold-ink:#f3d489;
+      --rule:#2c3550;
+      --rule-soft:#232c46;
+      --ok:#5fb87f;
+      --ok-bg:#173226;
+      --transit:#6ea2d6;
+      --transit-bg:#152a3f;
+      --warn:#d9a24f;
+      --warn-bg:#3a2c14;
+      --danger:#e08a80;
+      --danger-bg:#3a1e1c;
+      --code-bg:#1d2540;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 30px -10px rgba(0,0,0,.5);
+    }
+  }
+  :root[data-theme="dark"]{
+    --paper:#12182a;
+    --paper-raised:#182238;
+    --ink:#eceef4;
+    --steel:#b6bdcd;
+    --steel-soft:#8b93a8;
+    --gold:#d8ac3f;
+    --gold-ink:#f3d489;
+    --rule:#2c3550;
+    --rule-soft:#232c46;
+    --ok:#5fb87f;
+    --ok-bg:#173226;
+    --transit:#6ea2d6;
+    --transit-bg:#152a3f;
+    --warn:#d9a24f;
+    --warn-bg:#3a2c14;
+    --danger:#e08a80;
+    --danger-bg:#3a1e1c;
+    --code-bg:#1d2540;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 30px -10px rgba(0,0,0,.5);
+  }
+
+  *{ box-sizing:border-box; }
+  body{
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'Public Sans', ui-sans-serif, system-ui, sans-serif;
+    font-size:15px;
+    line-height:1.6;
+  }
+  h1,h2,h3,h4{
+    font-family:'IBM Plex Serif', Georgia, serif;
+    color:var(--ink);
+    text-wrap:balance;
+    margin:0;
+  }
+  code, .mono, .num, th.mono-h{
+    font-family:'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace;
+    font-variant-numeric:tabular-nums;
+  }
+  a{ color:var(--transit); }
+  ::selection{ background:var(--gold); color:var(--ink); }
+
+  .frame{
+    max-width:1180px;
+    margin:0 auto;
+    padding:0 clamp(16px,4vw,40px) 80px;
+  }
+
+  /* ---------- Masthead ---------- */
+  .masthead{
+    border-bottom:1px solid var(--rule);
+    padding:28px clamp(16px,4vw,40px) 22px;
+    display:flex;
+    flex-wrap:wrap;
+    align-items:flex-end;
+    justify-content:space-between;
+    gap:16px;
+    background:
+      linear-gradient(var(--paper),var(--paper));
+  }
+  .masthead .brand{
+    display:flex;
+    align-items:center;
+    gap:12px;
+  }
+  .seal{
+    width:44px;height:44px;border-radius:50%;
+    border:1.5px solid var(--gold);
+    display:flex;align-items:center;justify-content:center;
+    font-family:'IBM Plex Serif',serif;
+    font-weight:700;font-size:15px;color:var(--gold-ink);
+    flex:none;
+    position:relative;
+  }
+  .seal::before{
+    content:"";
+    position:absolute; inset:4px;
+    border:1px dotted var(--gold);
+    border-radius:50%;
+    opacity:.6;
+  }
+  .masthead-title{ display:flex; flex-direction:column; gap:2px; }
+  .masthead-title .eyebrow{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:11px; letter-spacing:.14em; text-transform:uppercase;
+    color:var(--steel-soft);
+  }
+  .masthead-title h1{ font-size:26px; font-weight:600; }
+  .doc-meta{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:11.5px;
+    color:var(--steel);
+    text-align:right;
+    line-height:1.65;
+  }
+  .doc-meta .k{ color:var(--steel-soft); }
+
+  /* ---------- Layout: rail + content ---------- */
+  .layout{
+    display:grid;
+    grid-template-columns:220px minmax(0,1fr);
+    gap:clamp(20px,4vw,56px);
+    padding-top:32px;
+  }
+  @media (max-width:860px){
+    .layout{ grid-template-columns:1fr; }
+    .rail{ display:none; }
+  }
+  .rail{ position:sticky; top:24px; align-self:start; }
+  .rail-label{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:10.5px; letter-spacing:.14em; text-transform:uppercase;
+    color:var(--steel-soft);
+    margin:0 0 10px;
+  }
+  .rail nav{ display:flex; flex-direction:column; }
+  .rail a{
+    text-decoration:none;
+    color:var(--steel);
+    font-size:13.5px;
+    padding:7px 0 7px 14px;
+    border-left:2px solid var(--rule);
+    transition:color .15s, border-color .15s;
+  }
+  .rail a:hover{ color:var(--ink); border-color:var(--gold); }
+  .rail .idx{ color:var(--steel-soft); margin-right:7px; }
+
+  main{ min-width:0; display:flex; flex-direction:column; gap:56px; }
+  section{ scroll-margin-top:24px; }
+  .section-head{
+    display:flex; align-items:baseline; gap:12px;
+    border-bottom:1px solid var(--rule);
+    padding-bottom:10px; margin-bottom:18px;
+  }
+  .section-head .tag{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:11px; color:var(--gold-ink); background:var(--code-bg);
+    border:1px solid var(--rule); border-radius:3px;
+    padding:2px 7px; flex:none;
+  }
+  .section-head h2{ font-size:20px; font-weight:600; }
+  .lede{ color:var(--steel); max-width:66ch; margin:0 0 16px; }
+  p{ margin:0 0 12px; max-width:70ch; }
+  p:last-child{ margin-bottom:0; }
+
+  /* ---------- Ledger table ---------- */
+  .ledger-wrap{
+    overflow-x:auto;
+    border:1px solid var(--rule);
+    border-radius:6px;
+    background:var(--paper-raised);
+    box-shadow:var(--shadow);
+  }
+  table.ledger{
+    width:100%;
+    border-collapse:collapse;
+    font-size:13.5px;
+    min-width:640px;
+  }
+  table.ledger th{
+    text-align:left;
+    font-family:'IBM Plex Mono',monospace;
+    font-size:10.5px; letter-spacing:.08em; text-transform:uppercase;
+    color:var(--steel-soft);
+    padding:10px 14px;
+    border-bottom:1px solid var(--rule);
+    background:var(--rule-soft);
+    white-space:nowrap;
+  }
+  table.ledger td{
+    padding:10px 14px;
+    border-bottom:1px solid var(--rule-soft);
+    vertical-align:top;
+  }
+  table.ledger tr:last-child td{ border-bottom:none; }
+  table.ledger td.colname{ font-family:'IBM Plex Mono',monospace; font-size:12.5px; white-space:nowrap; }
+  table.ledger td .note{ color:var(--steel); font-size:12.5px; }
+
+  .req{ display:inline-block; font-size:11px; font-weight:600; padding:1px 7px; border-radius:3px; white-space:nowrap; }
+  .req.always{ background:var(--danger-bg); color:var(--danger); }
+  .req.config{ background:var(--warn-bg); color:var(--warn); }
+  .req.cond{ background:var(--transit-bg); color:var(--transit); }
+  .req.opt{ background:var(--rule-soft); color:var(--steel); }
+
+  /* ---------- Status cards ---------- */
+  .status-grid{
+    display:grid;
+    grid-template-columns:repeat(3,minmax(0,1fr));
+    gap:16px;
+  }
+  @media (max-width:860px){ .status-grid{ grid-template-columns:1fr; } }
+  .status-card{
+    background:var(--paper-raised);
+    border:1px solid var(--rule);
+    border-radius:8px;
+    box-shadow:var(--shadow);
+    padding:18px 18px 16px;
+    display:flex; flex-direction:column; gap:10px;
+    position:relative;
+  }
+  .status-card::before{
+    content:"";
+    position:absolute; top:0; left:16px; right:16px; height:3px;
+    border-radius:0 0 3px 3px;
+  }
+  .status-card.sbm::before{ background:var(--transit); }
+  .status-card.trf::before{ background:var(--warn); }
+  .status-card.cls::before{ background:var(--ok); }
+  .status-name{ font-family:'IBM Plex Mono',monospace; font-size:13px; font-weight:600; letter-spacing:.01em; }
+  .status-card.sbm .status-name{ color:var(--transit); }
+  .status-card.trf .status-name{ color:var(--warn); }
+  .status-card.cls .status-name{ color:var(--ok); }
+  .status-card h3{ font-size:15.5px; font-weight:600; font-family:'Public Sans',sans-serif; }
+  .status-card ul{ margin:0; padding-left:18px; font-size:13px; color:var(--steel); display:flex; flex-direction:column; gap:5px; }
+  .status-card .example{
+    margin-top:auto;
+    background:var(--code-bg);
+    border:1px solid var(--rule);
+    border-radius:5px;
+    padding:9px 10px;
+    font-family:'IBM Plex Mono',monospace;
+    font-size:11px;
+    line-height:1.7;
+    color:var(--ink);
+  }
+  .status-card .example .k{ color:var(--steel-soft); }
+
+  /* ---------- Checklist ---------- */
+  .check-grid{
+    display:grid;
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:12px 20px;
+  }
+  @media (max-width:700px){ .check-grid{ grid-template-columns:1fr; } }
+  .check-item{
+    display:flex; gap:10px;
+    padding:12px 0;
+    border-top:1px solid var(--rule-soft);
+  }
+  .check-item .mark{
+    flex:none; width:20px; height:20px; border-radius:50%;
+    border:1.5px solid var(--gold);
+    display:flex; align-items:center; justify-content:center;
+    font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--gold-ink);
+    margin-top:1px;
+  }
+  .check-item p{ margin:0; font-size:13.5px; }
+  .check-item strong{ display:block; font-size:13.5px; margin-bottom:2px; color:var(--ink); }
+
+  /* ---------- Outcome pills ---------- */
+  .pill{
+    display:inline-block; font-family:'IBM Plex Mono',monospace;
+    font-size:11px; font-weight:600; padding:2px 8px; border-radius:20px;
+    white-space:nowrap;
+  }
+  .pill.imported{ background:var(--ok-bg); color:var(--ok); }
+  .pill.duplicate{ background:var(--warn-bg); color:var(--warn); }
+  .pill.error{ background:var(--danger-bg); color:var(--danger); }
+
+  .callout{
+    border:1px solid var(--rule);
+    border-left:3px solid var(--gold);
+    background:var(--code-bg);
+    border-radius:0 6px 6px 0;
+    padding:12px 16px;
+    font-size:13.5px;
+    margin:16px 0;
+  }
+  .callout strong{ color:var(--gold-ink); }
+
+  .foot{
+    margin-top:64px;
+    padding-top:16px;
+    border-top:1px solid var(--rule);
+    font-family:'IBM Plex Mono',monospace;
+    font-size:11px;
+    color:var(--steel-soft);
+    display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px;
+  }
+
+  h2 .num{ color:var(--gold-ink); font-family:'IBM Plex Mono',monospace; font-size:15px; margin-right:2px; }
+</style>
+
+<div class="masthead">
+  <div class="brand">
+    <div class="seal">N360</div>
+    <div class="masthead-title">
+      <span class="eyebrow">Internal Control Division — Reference No. IC-IMP-01</span>
+      <h1>Findings Import Register</h1>
+    </div>
+  </div>
+  <div class="doc-meta">
+    <div><span class="k">Applies to:</span> Bulk Excel import (/findings/import)</div>
+    <div><span class="k">Audience:</span> HO Internal Controllers, Administrators</div>
+    <div><span class="k">Effect:</span> Backfill only — never live review</div>
+  </div>
+</div>
+
+<div class="frame">
+  <div class="layout">
+    <aside class="rail">
+      <p class="rail-label">Contents</p>
+      <nav>
+        <a href="#purpose"><span class="idx">§1</span>Purpose &amp; Scope</a>
+        <a href="#mapping"><span class="idx">§2</span>Manual vs. Import</a>
+        <a href="#columns"><span class="idx">§3</span>Column Register</a>
+        <a href="#statuses"><span class="idx">§4</span>Status Guide</a>
+        <a href="#mechanics"><span class="idx">§5</span>How Validation Works</a>
+        <a href="#checklist"><span class="idx">§6</span>Before You Upload</a>
+        <a href="#tests"><span class="idx">§7</span>Test Cases</a>
+      </nav>
+    </aside>
+
+    <main>
+
+      <section id="purpose">
+        <div class="section-head"><span class="tag">§1</span><h2>Purpose &amp; Scope</h2></div>
+        <p class="lede">
+          The Excel importer exists for one purpose: bringing an already-resolved or already-in-progress finding
+          from a bank record predating this system into it, in bulk. It is <strong>not</strong> a faster way to
+          register a brand-new finding — a genuinely new finding is always entered one at a time through
+          <em>Register Finding</em>, where it goes through District Review and HO Review exactly as the workflow requires.
+        </p>
+        <p>
+          Every row you import is fast-forwarded straight to the status you declare — through the same underlying
+          mechanism a live approval, rectification, or transfer uses — and is permanently marked in its history as a
+          <strong>historical import</strong>, never as a live decision. This keeps the audit trail honest: anyone opening
+          the finding later can see at a glance that it was backfilled, and by whom.
+        </p>
+      </section>
+
+      <section id="mapping">
+        <div class="section-head"><span class="tag">§2</span><h2>Manual Registration vs. Import</h2></div>
+        <p class="lede">
+          If you already register findings by hand on the <em>Register Finding</em> screen, the import template
+          asks for almost exactly the same information, in the same order — just as one spreadsheet row instead
+          of one form. Two things exist only on the form, and two exist only in the template.
+        </p>
+        <div class="ledger-wrap">
+          <table class="ledger">
+            <thead><tr><th>On the registration form</th><th>In the import file</th><th>Note</th></tr></thead>
+            <tbody>
+              <tr><td>District / Branch dropdowns</td><td class="colname">District Code / Branch Code</td><td class="note">Same codes shown on the form, typed instead of picked.</td></tr>
+              <tr><td>Reporting period dropdown</td><td class="colname">Reporting Period Code</td><td class="note">e.g. <code>2026-09</code></td></tr>
+              <tr><td>Every field from Source through Evidence Note</td><td class="colname">Same 12 columns, same order</td><td class="note">See the full register in §3.</td></tr>
+              <tr><td><em>(new findings are always Draft)</em></td><td class="colname">Status column</td><td class="note">Only exists in the import file — see §4.</td></tr>
+              <tr><td><em>(entered on the live Rectify screen, later)</em></td><td class="colname">Rectified Cases / Amount</td><td class="note">Only for a <strong>Transferred</strong> row — see §4.</td></tr>
+              <tr><td>Itemized case amounts (optional checkbox)</td><td>— not available —</td><td class="note">Import always produces the plain, non-itemized shape. See §6.</td></tr>
+              <tr><td>Root Cause field</td><td>— not available —</td><td class="note">Leave blank; add it later from the finding's own page if needed.</td></tr>
+              <tr><td><em>(system-generated on save)</em></td><td>Reference number</td><td class="note">Never taken from your file, on either path.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="columns">
+        <div class="section-head"><span class="tag">§3</span><h2>Column Register</h2></div>
+        <p class="lede">
+          Download the template from the Import screen before every session — the exact wording of "required" columns
+          tracks the Admin's current <em>Required Fields</em> setting, and the Reference Data sheet lists every code
+          currently valid. Columns marked <span class="req config">Admin setting</span> below are required or optional
+          depending on that setting at the time you download.
+        </p>
+        <div class="ledger-wrap">
+          <table class="ledger">
+            <thead><tr><th>#</th><th>Column</th><th>Required</th><th>Format / example</th><th>Notes</th></tr></thead>
+            <tbody>
+              <tr><td class="num">1</td><td class="colname">District Code</td><td><span class="req always">Always</span></td><td class="mono">D01</td><td class="note">Must be an active district.</td></tr>
+              <tr><td class="num">2</td><td class="colname">Branch Code</td><td><span class="req always">Always</span></td><td class="mono">B001</td><td class="note">Must belong to the District Code on the same row.</td></tr>
+              <tr><td class="num">3</td><td class="colname">Reporting Period Code</td><td><span class="req always">Always</span></td><td class="mono">2026-09</td><td class="note">The finding's <em>own</em> original period — for a Transferred row, this is where it started, not where it ended up.</td></tr>
+              <tr><td class="num">4</td><td class="colname">Source Code</td><td><span class="req config">Admin setting</span></td><td class="mono">IC / IA</td><td class="note">Internal Control / Internal Audit, or whatever the bank has configured.</td></tr>
+              <tr><td class="num">5</td><td class="colname">Department Code</td><td><span class="req config">Admin setting</span></td><td class="mono">OPS</td><td class="note">Must be available to the row's district/branch (bank-wide departments always qualify).</td></tr>
+              <tr><td class="num">6</td><td class="colname">Classified Category Code</td><td><span class="req config">Admin setting</span></td><td class="mono">ATM_MISMATCH</td><td class="note">From the Reference Data sheet's category list.</td></tr>
+              <tr><td class="num">7</td><td class="colname">Title</td><td><span class="req config">Admin setting</span></td><td>Short, specific — this is what shows in every list.</td><td class="note">Not part of duplicate matching, so wording can vary freely.</td></tr>
+              <tr><td class="num">8</td><td class="colname">Finding Date</td><td><span class="req config">Admin setting</span></td><td class="mono">YYYY-MM-DD</td><td class="note">The real, original date — used to backdate the record's case age. See §5.</td></tr>
+              <tr><td class="num">9</td><td class="colname">Operation Area</td><td><span class="req config">Admin setting</span></td><td>Teller Counter, Vault, …</td><td class="note">Must match the configured list exactly.</td></tr>
+              <tr><td class="num">10</td><td class="colname">Type of Irregularity</td><td><span class="req config">Admin setting</span></td><td>Cash Shortage, Fraud, …</td><td class="note">Must match the configured list exactly.</td></tr>
+              <tr><td class="num">11</td><td class="colname">Amount</td><td><span class="req always">Always</span></td><td class="mono">61,000</td><td class="note">≥ 0. The finding's full amount, not any outstanding remainder.</td></tr>
+              <tr><td class="num">12</td><td class="colname">Currency</td><td><span class="req config">Admin setting</span></td><td class="mono">ETB</td><td class="note">Must be one of the bank's configured currencies.</td></tr>
+              <tr><td class="num">13</td><td class="colname">Number of Cases</td><td><span class="req always">Always</span></td><td class="mono">3</td><td class="note">Whole number, at least 1. The finding's full case count.</td></tr>
+              <tr><td class="num">14</td><td class="colname">Risk Level</td><td><span class="req config">Admin setting</span></td><td>Low / Medium / High / Critical</td><td class="note"></td></tr>
+              <tr><td class="num">15</td><td class="colname">Priority</td><td><span class="req config">Admin setting</span></td><td>Low / Medium / High / Urgent</td><td class="note"></td></tr>
+              <tr><td class="num">16</td><td class="colname">Description</td><td><span class="req config">Admin setting</span></td><td>Free text</td><td class="note"></td></tr>
+              <tr><td class="num">17</td><td class="colname">Recommendation</td><td><span class="req opt">Optional</span></td><td>Free text</td><td class="note"></td></tr>
+              <tr><td class="num">18</td><td class="colname">Evidence Note</td><td><span class="req opt">Optional</span></td><td>Free text</td><td class="note">A note only — no file attachment via import.</td></tr>
+              <tr><td class="num">19</td><td class="colname">Status</td><td><span class="req always">Always</span></td><td class="mono">SENT_TO_BRANCH_MANAGER<br>TRANSFERRED<br>CLOSED</td><td class="note">See the full guide in §4. Case-insensitive, but spelled exactly.</td></tr>
+              <tr><td class="num">20</td><td class="colname">Rectified Cases</td><td><span class="req cond">Transferred only</span></td><td class="mono">1</td><td class="note">How much was fixed <em>before</em> the transfer. Leave blank for zero progress. Ignored for the other two statuses.</td></tr>
+              <tr><td class="num">21</td><td class="colname">Rectified Amount</td><td><span class="req cond">Transferred only</span></td><td class="mono">6,000</td><td class="note">Must move together with Rectified Cases — see §4.</td></tr>
+              <tr><td class="num">22</td><td class="colname">Transferred To Period Code</td><td><span class="req cond">Transferred only</span></td><td class="mono">2026-10</td><td class="note">The period it moved <em>into</em>. Must be open, and later than Reporting Period Code.</td></tr>
+              <tr><td class="num">23</td><td class="colname">External Reference</td><td><span class="req opt">Optional</span></td><td>Your own legacy file/ledger number</td><td class="note">Purely informational — never used for matching or numbering.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="callout"><strong>Legend —</strong> <span class="req always">Always</span> required on every row · <span class="req config">Admin setting</span> required only if the Admin has switched that field on under Required Fields · <span class="req cond">Conditional</span> required only for one specific Status · <span class="req opt">Optional</span> never required.</div>
+      </section>
+
+      <section id="statuses">
+        <div class="section-head"><span class="tag">§4</span><h2>Status Guide</h2></div>
+        <p class="lede">Pick the status that matches the finding's real, current state in the old process you're backfilling from — not a status you'd like it to reach later. All three skip District Review and HO Review entirely; that step already happened, historically.</p>
+        <div class="status-grid">
+          <div class="status-card sbm">
+            <span class="status-name">SENT_TO_BRANCH_MANAGER</span>
+            <h3>Approved. Nothing fixed yet.</h3>
+            <ul>
+              <li>The finding cleared review and was sent to the branch, but no correction has been recorded at all.</li>
+              <li>Ignores Rectified Cases/Amount and Transferred To Period Code even if you fill them in.</li>
+              <li>Lands the finding exactly where a freshly-approved live finding would sit.</li>
+            </ul>
+            <div class="example"><span class="k">Status</span> SENT_TO_BRANCH_MANAGER<br><span class="k">Rectified Cases</span> (blank)<br><span class="k">Transferred To…</span> (blank)</div>
+          </div>
+          <div class="status-card trf">
+            <span class="status-name">TRANSFERRED</span>
+            <h3>Moved forward, still outstanding.</h3>
+            <ul>
+              <li>The period it started in closed out with a balance still unresolved, so it was carried into a later, still-open period.</li>
+              <li><strong>Requires</strong> Transferred To Period Code — a real, open period, later than Reporting Period Code.</li>
+              <li>Rectified Cases/Amount are optional: how much (if anything) was fixed <em>before</em> it moved. Zero is fine; the full amount is not — that would mean nothing was left to transfer.</li>
+              <li>Whatever portion you do declare rectified is also treated as already closed — no controller has to re-close a fact you're attesting already happened.</li>
+            </ul>
+            <div class="example"><span class="k">Status</span> TRANSFERRED<br><span class="k">Rectified Cases</span> 1 of 3<br><span class="k">Transferred To…</span> 2026-10</div>
+          </div>
+          <div class="status-card cls">
+            <span class="status-name">CLOSED</span>
+            <h3>Fully resolved.</h3>
+            <ul>
+              <li>Every case, and the full amount, was corrected and formally closed in the old process.</li>
+              <li>No Rectified Cases/Amount column needed — the importer fills the full case count and amount in for you.</li>
+              <li>Nothing is left outstanding; there is nothing further to do on this finding.</li>
+            </ul>
+            <div class="example"><span class="k">Status</span> CLOSED<br><span class="k">Rectified Cases</span> (not needed)<br><span class="k">Transferred To…</span> (blank)</div>
+          </div>
+        </div>
+      </section>
+
+      <section id="mechanics">
+        <div class="section-head"><span class="tag">§5</span><h2>How Validation Works</h2></div>
+        <p class="lede">Four rules apply to the whole file, not just one row at a time — understanding them explains most of what the result screen will show you.</p>
+        <div class="check-grid">
+          <div class="check-item"><span class="mark">1</span><p><strong>The whole file succeeds or none of it does.</strong> Every row is checked first. If even one row has a real error, nothing in the file is imported — fix every row shown and re-upload the whole thing. A row that's merely a duplicate doesn't block the rest; only a genuine error does.</p></div>
+          <div class="check-item"><span class="mark">2</span><p><strong>Duplicates are judged on data, not wording.</strong> Branch, period, source, department, category, finding date, operation area, irregularity type, currency, amount, and case count together decide a match — Title and Description can differ freely and it's still flagged the same finding.</p></div>
+          <div class="check-item"><span class="mark">3</span><p><strong>Reference numbers are never yours to set.</strong> The system always generates them from the branch and the finding's <em>original</em> Reporting Period Code — even for a Transferred row, whose reference reflects where it started, not where it ended up.</p></div>
+          <div class="check-item"><span class="mark">4</span><p><strong>Finding Date drives the finding's recorded age.</strong> Case-age figures on every dashboard are measured from it, not from today's import — so a genuinely old backlog item reads as old, not as brand new.</p></div>
+        </div>
+      </section>
+
+      <section id="checklist">
+        <div class="section-head"><span class="tag">§6</span><h2>Before You Upload</h2></div>
+        <div class="check-grid">
+          <div class="check-item"><span class="mark">✓</span><p><strong>Download a fresh template each session.</strong> Required columns and valid codes can change; an old file's header still parses, but its Reference Data sheet may not reflect today's lists.</p></div>
+          <div class="check-item"><span class="mark">✓</span><p><strong>Codes are exact, not close.</strong> A district/branch/source/department/category/currency/risk/priority/area/type must match the Reference Data sheet's spelling exactly.</p></div>
+          <div class="check-item"><span class="mark">✓</span><p><strong>Amount and Number of Cases are the finding's whole totals</strong> — not whatever's still outstanding. Outstanding is derived automatically from Status and Rectified Cases/Amount.</p></div>
+          <div class="check-item"><span class="mark">✓</span><p><strong>Transferred needs two different, real periods</strong> — its own origin period, and a currently-open destination period that comes after it in time.</p></div>
+          <div class="check-item"><span class="mark">✓</span><p><strong>No itemized case amounts.</strong> If your legacy record has a genuine per-case dollar breakdown, that detail can't be preserved through import — only the combined total can.</p></div>
+          <div class="check-item"><span class="mark">✓</span><p><strong>No Root Cause column.</strong> Add it afterward from the finding's own detail page if it's needed.</p></div>
+          <div class="check-item"><span class="mark">✓</span><p><strong>This is not a live-review shortcut.</strong> A finding that genuinely needs District/HO review belongs on Register Finding, one at a time — never in this file.</p></div>
+          <div class="check-item"><span class="mark">✓</span><p><strong>Read every row of the result, not just the totals.</strong> On a rejected file, the same row-by-row table tells you exactly which rows to fix before your next upload.</p></div>
+        </div>
+      </section>
+
+      <section id="tests">
+        <div class="section-head"><span class="tag">§7</span><h2>Test Cases</h2></div>
+        <p class="lede">A worked set covering every outcome the importer can produce. Use it to sanity-check your own file, or as a training file in a non-production environment before a real import run.</p>
+        <div class="ledger-wrap">
+          <table class="ledger">
+            <thead><tr><th>#</th><th>Scenario</th><th>Status</th><th>Key values</th><th>Expected result</th></tr></thead>
+            <tbody>
+              <tr><td class="num">1</td><td>Straightforward approval, nothing fixed</td><td class="mono">SENT_TO_BRANCH_MANAGER</td><td class="note">All required fields filled</td><td><span class="pill imported">imported</span></td></tr>
+              <tr><td class="num">2</td><td>Optional fields left blank (Dept/Date/Description off in settings)</td><td class="mono">SENT_TO_BRANCH_MANAGER</td><td class="note">Department Code, Finding Date blank</td><td><span class="pill imported">imported</span></td></tr>
+              <tr><td class="num">3</td><td>Transferred with no progress before the move</td><td class="mono">TRANSFERRED</td><td class="note">Rectified Cases/Amount blank; To 2026-10</td><td><span class="pill imported">imported</span></td></tr>
+              <tr><td class="num">4</td><td>Transferred with partial progress before the move</td><td class="mono">TRANSFERRED</td><td class="note">1 of 3 cases, 6,000 of 18,000; To 2026-10</td><td><span class="pill imported">imported</span></td></tr>
+              <tr><td class="num">5</td><td>Fully resolved, single case</td><td class="mono">CLOSED</td><td class="note">—</td><td><span class="pill imported">imported</span></td></tr>
+              <tr><td class="num">6</td><td>Identical branch/period/source/dept/category/date/area/type/currency/amount/cases as an earlier row</td><td class="mono">any</td><td class="note">Only Title differs</td><td><span class="pill duplicate">duplicate</span></td></tr>
+              <tr><td class="num">7</td><td>Branch code doesn't exist</td><td class="mono">any</td><td class="note"><code>B999</code></td><td><span class="pill error">error</span> — Unknown or inactive branch code</td></tr>
+              <tr><td class="num">8</td><td>Branch belongs to a different district than stated</td><td class="mono">any</td><td class="note">D02 + B001 (B001 is under D01)</td><td><span class="pill error">error</span> — Branch does not belong to district</td></tr>
+              <tr><td class="num">9</td><td>Negative amount</td><td class="mono">any</td><td class="note"><code>-500</code></td><td><span class="pill error">error</span> — Invalid amount</td></tr>
+              <tr><td class="num">10</td><td>Category code doesn't exist</td><td class="mono">any</td><td class="note"><code>BADCODE</code></td><td><span class="pill error">error</span> — Unknown or inactive classified category code</td></tr>
+              <tr><td class="num">11</td><td>Required Title left blank</td><td class="mono">any</td><td class="note">Title admin-required, blank</td><td><span class="pill error">error</span> — Missing required value(s): Title</td></tr>
+              <tr><td class="num">12</td><td>Transferred with no destination given</td><td class="mono">TRANSFERRED</td><td class="note">Transferred To Period Code blank</td><td><span class="pill error">error</span> — requires Transferred To Period Code</td></tr>
+              <tr><td class="num">13</td><td>Transferred to its own origin period</td><td class="mono">TRANSFERRED</td><td class="note">Reporting Period = Transferred To</td><td><span class="pill error">error</span> — must differ from Reporting Period Code</td></tr>
+              <tr><td class="num">14</td><td>Transferred but fully rectified already</td><td class="mono">TRANSFERRED</td><td class="note">Rectified Cases = Number of Cases <em>and</em> Rectified Amount = Amount</td><td><span class="pill error">error</span> — nothing would be outstanding; use CLOSED instead</td></tr>
+              <tr><td class="num">15</td><td>Rectified Cases full but Amount isn't (or vice versa)</td><td class="mono">TRANSFERRED</td><td class="note">3 of 3 cases, but 4,000 of 18,000</td><td><span class="pill error">error</span> — the two must reach full together</td></tr>
+              <tr><td class="num">16</td><td>Unrecognized status spelling</td><td class="mono"><code>SENT-TO-BRANCH</code></td><td class="note">Typo / wrong value</td><td><span class="pill error">error</span> — must be one of the three listed statuses</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="callout"><strong>Reminder —</strong> because validation is all-or-nothing, mixing a #7-style error row into an otherwise-clean file rejects the entire upload, including rows 1–6. Fix it, then re-upload the whole file.</div>
+      </section>
+
+      <div class="foot">
+        <span>NIB Control360 — Internal Control Division</span>
+        <span>Findings Import Register · IC-IMP-01</span>
+      </div>
+    </main>
+  </div>
+</div>
