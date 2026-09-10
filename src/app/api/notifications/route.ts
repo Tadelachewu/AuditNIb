@@ -17,14 +17,14 @@ export async function GET() {
   const auth = await requireUser();
   if (!auth.ok) return auth.response;
 
-  const peek = readDb();
+  const peek = await readDb();
   const settings = peek.settings.rectificationReminders;
   const scanDue =
     settings.enabled &&
     (!settings.lastCheckedAt || Date.now() - new Date(settings.lastCheckedAt).getTime() >= REMINDER_SCAN_COOLDOWN_MS);
 
   const db = scanDue
-    ? updateDb((current) => {
+    ? await updateDb((current) => {
         checkRectificationReminders(current);
         return current;
       })

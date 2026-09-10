@@ -20,12 +20,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const auth = await requireToggleOrEditPermission("sources", parsed.data, "active");
   if (!auth.ok) return auth.response;
 
-  const db = readDb();
+  const db = await readDb();
   const existing = db.sources.find((s) => s.id === id);
   if (!existing) return NextResponse.json({ error: "Source not found" }, { status: 404 });
   const before = { name: existing.name, active: existing.active };
 
-  const updated = updateDb((current) => {
+  const updated = await updateDb((current) => {
     const s = current.sources.find((x) => x.id === id)!;
     if (parsed.data.name !== undefined) s.name = parsed.data.name;
     if (parsed.data.active !== undefined) s.active = parsed.data.active;
@@ -54,7 +54,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   if (!auth.ok) return auth.response;
   const { id } = await params;
 
-  const db = readDb();
+  const db = await readDb();
   const existing = db.sources.find((s) => s.id === id);
   if (!existing) return NextResponse.json({ error: "Source not found" }, { status: 404 });
 
@@ -66,7 +66,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
     );
   }
 
-  updateDb((current) => {
+  await updateDb((current) => {
     current.sources = current.sources.filter((s) => s.id !== id);
     appendAuditLog(current, {
       userId: auth.session.userId!,

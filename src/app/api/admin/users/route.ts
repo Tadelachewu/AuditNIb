@@ -23,7 +23,7 @@ export async function GET(request: Request) {
   if (!auth.ok) return auth.response;
 
   const { searchParams } = new URL(request.url);
-  const db = readDb();
+  const db = await readDb();
   const sorted = [...db.users].sort((a, b) => a.name.localeCompare(b.name));
 
   const orgScopeFilter = searchParams.get("orgScope");
@@ -62,7 +62,7 @@ export async function POST(request: Request) {
   }
   const input = parsed.data;
 
-  const db = readDb();
+  const db = await readDb();
   if (db.users.some((u) => u.username.toLowerCase() === input.username.toLowerCase())) {
     return NextResponse.json({ error: "That username is already taken" }, { status: 409 });
   }
@@ -110,7 +110,7 @@ export async function POST(request: Request) {
     mustChangePassword: true,
   };
 
-  updateDb((current) => {
+  await updateDb((current) => {
     current.users.push(user);
     appendAuditLog(current, {
       userId: auth.session.userId!,

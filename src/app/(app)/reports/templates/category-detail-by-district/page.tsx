@@ -20,7 +20,7 @@ export default async function CategoryDetailByDistrictPage({
   if (!user) redirect("/login");
   if (!hasPermission(user.permissions, permissionKey("report-templates", "category-detail-by-district"))) redirect("/reports/templates");
 
-  const db = readDb();
+  const db = await readDb();
   const params = await searchParams;
   const openPeriod = db.reportingPeriods.find((p) => p.status === "OPEN");
   const periodId = (typeof params.periodId === "string" && params.periodId) || openPeriod?.id || db.reportingPeriods[0]?.id || "";

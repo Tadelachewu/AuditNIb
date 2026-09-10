@@ -37,7 +37,7 @@ export default async function ReportsPage({
   const params = await searchParams;
   const get = (key: string) => (typeof params[key] === "string" ? (params[key] as string) : "");
 
-  const db = readDb();
+  const db = await readDb();
   let findings: Finding[] = findingsInScope(db, user);
 
   const periodId = get("periodId");

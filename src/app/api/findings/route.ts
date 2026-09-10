@@ -12,7 +12,7 @@ export async function GET(request: Request) {
   const auth = await requirePermission("findings.view");
   if (!auth.ok) return auth.response;
 
-  const db = readDb();
+  const db = await readDb();
   let findings = findingsInScope(db, auth.session);
 
   // Query filters only ever narrow the scoped set above - never widen it -
@@ -93,7 +93,7 @@ export async function POST(request: Request) {
   }
   const input = parsed.data;
 
-  const db = readDb();
+  const db = await readDb();
 
   const requiredFieldError = assertRequiredFindingFieldsPresent(db, {
     title: input.title,
@@ -244,7 +244,7 @@ export async function POST(request: Request) {
     updatedAt: now,
   };
 
-  updateDb((current) => {
+  await updateDb((current) => {
     current.findings.push(finding);
     if (input.caseAmounts) {
       const cases: FindingCase[] = input.caseAmounts.map((amount, i) => ({
@@ -266,6 +266,7 @@ export async function POST(request: Request) {
     }
   });
 
-  const created = readDb().findings.find((f) => f.id === finding.id)!;
+  const createdDb = await readDb();
+  const created = createdDb.findings.find((f) => f.id === finding.id)!;
   return NextResponse.json({ finding: created }, { status: 201 });
 }

@@ -20,12 +20,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const auth = await requireToggleOrEditPermission("districts", parsed.data);
   if (!auth.ok) return auth.response;
 
-  const db = readDb();
+  const db = await readDb();
   const existing = db.districts.find((d) => d.id === id);
   if (!existing) return NextResponse.json({ error: "District not found" }, { status: 404 });
   const before = { name: existing.name, status: existing.status };
 
-  const updated = updateDb((current) => {
+  const updated = await updateDb((current) => {
     const d = current.districts.find((x) => x.id === id)!;
     if (parsed.data.name !== undefined) d.name = parsed.data.name;
     if (parsed.data.status !== undefined) d.status = parsed.data.status;
@@ -55,7 +55,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   if (!auth.ok) return auth.response;
   const { id } = await params;
 
-  const db = readDb();
+  const db = await readDb();
   const existing = db.districts.find((d) => d.id === id);
   if (!existing) return NextResponse.json({ error: "District not found" }, { status: 404 });
 
@@ -71,7 +71,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
     );
   }
 
-  updateDb((current) => {
+  await updateDb((current) => {
     current.districts = current.districts.filter((d) => d.id !== id);
     appendAuditLog(current, {
       userId: auth.session.userId!,

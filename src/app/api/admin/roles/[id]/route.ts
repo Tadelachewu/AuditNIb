@@ -39,7 +39,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
   }
 
-  const db = readDb();
+  const db = await readDb();
   const existing = db.roles.find((r) => r.id === id);
   if (!existing) return NextResponse.json({ error: "Role not found" }, { status: 404 });
 
@@ -75,7 +75,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     status: existing.status,
   };
 
-  const updated = updateDb((current) => {
+  const updated = await updateDb((current) => {
     const r = current.roles.find((x) => x.id === id)!;
     if (input.name !== undefined) r.name = input.name;
     if (input.description !== undefined) r.description = input.description;
@@ -116,7 +116,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   if (!auth.ok) return auth.response;
   const { id } = await params;
 
-  const db = readDb();
+  const db = await readDb();
   const existing = db.roles.find((r) => r.id === id);
   if (!existing) return NextResponse.json({ error: "Role not found" }, { status: 404 });
 
@@ -132,7 +132,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
     );
   }
 
-  updateDb((current) => {
+  await updateDb((current) => {
     current.roles = current.roles.filter((r) => r.id !== id);
     appendAuditLog(current, {
       userId: auth.session.userId!,

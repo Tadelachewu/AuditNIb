@@ -18,7 +18,7 @@ export default async function DistrictRankingAllCasesPage({
   if (!user) redirect("/login");
   if (!hasPermission(user.permissions, permissionKey("report-templates", "district-ranking-all-cases"))) redirect("/reports/templates");
 
-  const db = readDb();
+  const db = await readDb();
   const params = await searchParams;
   const raw = params.periodIds;
   const selectedPeriodIds = raw === undefined ? [] : Array.isArray(raw) ? raw : [raw];

@@ -35,7 +35,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!auth.ok) return auth.response;
   const { id } = await params;
 
-  const db = readDb();
+  const db = await readDb();
   if (!db.settings.hoApproval.approverUserIds.includes(auth.session.userId!)) {
     return NextResponse.json({ error: "You are not assigned as an approver for this" }, { status: 403 });
   }
@@ -75,7 +75,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const periodError = assertPeriodWritable(db, existing.periodId);
   if (periodError) return NextResponse.json({ error: periodError }, { status: 409 });
 
-  const updated = updateDb((current) => {
+  const updated = await updateDb((current) => {
     const f = current.findings.find((x) => x.id === id)!;
     if (decision === "APPROVE") {
       transitionFinding(current, f, {

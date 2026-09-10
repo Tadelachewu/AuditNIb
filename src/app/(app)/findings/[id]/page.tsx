@@ -13,7 +13,7 @@ export default async function FindingDetailPage({ params }: { params: Promise<{ 
   if (!hasPermission(user.permissions, permissionKey("findings", "view"))) redirect("/dashboard");
 
   const { id } = await params;
-  const db = readDb();
+  const db = await readDb();
   const finding = db.findings.find((f) => f.id === id);
 
   if (!finding) {

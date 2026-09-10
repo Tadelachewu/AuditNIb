@@ -51,7 +51,7 @@ export async function GET(request: Request) {
   const auth = await requirePermission("findings.view");
   if (!auth.ok) return auth.response;
 
-  const db = readDb();
+  const db = await readDb();
   const fields = db.settings.similarFindingFields;
   if (fields.length === 0) return NextResponse.json({ matches: [] });
 

@@ -14,7 +14,7 @@ export default async function ProfilePage() {
   const session = await getCurrentUser();
   if (!session) redirect("/login");
 
-  const db = readDb();
+  const db = await readDb();
   const user = db.users.find((u) => u.id === session.userId);
   if (!user) redirect("/login");
 

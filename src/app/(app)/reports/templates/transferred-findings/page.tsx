@@ -27,7 +27,7 @@ export default async function TransferredFindingsPage({
   if (!user) redirect("/login");
   if (!hasPermission(user.permissions, permissionKey("report-templates", "transferred-findings"))) redirect("/reports/templates");
 
-  const db = readDb();
+  const db = await readDb();
   const params = await searchParams;
   const fromPeriodId = typeof params.fromPeriodId === "string" ? params.fromPeriodId : "";
   const toPeriodId = typeof params.toPeriodId === "string" ? params.toPeriodId : "";

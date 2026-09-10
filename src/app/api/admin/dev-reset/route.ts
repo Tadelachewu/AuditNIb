@@ -30,7 +30,7 @@ export async function GET() {
   const auth = await requireDevAdmin();
   if (!auth.ok) return auth.response;
 
-  const db = readDb();
+  const db = await readDb();
   return NextResponse.json({
     counts: {
       findings: db.findings.length,
@@ -59,7 +59,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: `Type "${CONFIRM_PHRASE}" exactly to confirm` }, { status: 400 });
   }
 
-  const summary = updateDb((current) => {
+  const summary = await updateDb((current) => {
     const result = resetRegisteredData(current);
     // The one log entry left standing that a reset ever happened - every
     // Finding-entityType entry was just dropped by the reset itself, but

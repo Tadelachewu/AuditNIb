@@ -16,7 +16,7 @@ export async function GET(request: Request) {
   const auth = await requirePermission("reports.view");
   if (!auth.ok) return auth.response;
 
-  const db = readDb();
+  const db = await readDb();
   let findings = findingsInScope(db, auth.session);
 
   const url = new URL(request.url);

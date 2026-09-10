@@ -8,7 +8,8 @@ import { appendAuditLog } from "@/lib/audit";
 export async function GET() {
   const auth = await requirePermission("scoring-adjustments.view");
   if (!auth.ok) return auth.response;
-  const adjustments = [...readDb().scoringAdjustments].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const db = await readDb();
+  const adjustments = [...db.scoringAdjustments].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   return NextResponse.json({ scoringAdjustments: adjustments });
 }
 
@@ -32,7 +33,7 @@ export async function POST(request: Request) {
   }
   const input = parsed.data;
 
-  const db = readDb();
+  const db = await readDb();
   const targetExists =
     input.targetType === "DISTRICT"
       ? db.districts.some((d) => d.id === input.targetId)
@@ -44,7 +45,7 @@ export async function POST(request: Request) {
 
   const adjustment = { id: uuid(), ...input, adjustedBy: auth.session.userId!, createdAt: new Date().toISOString() };
 
-  updateDb((current) => {
+  await updateDb((current) => {
     current.scoringAdjustments.push(adjustment);
     appendAuditLog(current, {
       userId: auth.session.userId!,

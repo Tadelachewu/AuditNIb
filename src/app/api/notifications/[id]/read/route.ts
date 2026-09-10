@@ -7,7 +7,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!auth.ok) return auth.response;
   const { id } = await params;
 
-  const updated = updateDb((current) => {
+  const updated = await updateDb((current) => {
     const n = current.notifications.find((x) => x.id === id && x.recipientUserId === auth.session.userId);
     if (n && !n.readAt) n.readAt = new Date().toISOString();
     return n ?? null;

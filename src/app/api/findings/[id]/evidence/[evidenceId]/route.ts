@@ -13,7 +13,7 @@ export async function GET(
   if (!auth.ok) return auth.response;
   const { id, evidenceId } = await params;
 
-  const db = readDb();
+  const db = await readDb();
   const existing = db.findings.find((f) => f.id === id);
   if (!existing) return NextResponse.json({ error: "Finding not found" }, { status: 404 });
 

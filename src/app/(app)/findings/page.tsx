@@ -28,7 +28,7 @@ export default async function FindingsPage({
   const get = (key: string) => (typeof params[key] === "string" ? (params[key] as string) : "");
   const queueOnly = get("queue") === "1";
 
-  const db = readDb();
+  const db = await readDb();
   let findings: Finding[] = findingsInScope(db, user);
 
   const periodId = get("periodId");

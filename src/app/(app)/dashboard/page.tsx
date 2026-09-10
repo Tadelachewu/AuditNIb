@@ -27,7 +27,7 @@ export default async function DashboardPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const user = (await getCurrentUser())!;
-  const db = readDb();
+  const db = await readDb();
   const params = await searchParams;
   const dateRange = parseDateRange(params);
   const filters = parseDashboardFilters(params);

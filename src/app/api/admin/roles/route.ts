@@ -9,7 +9,7 @@ import { PAGE_REGISTRY, isValidPermissionKey } from "@/lib/permissions/registry"
 export async function GET() {
   const auth = await requirePermission("roles.view");
   if (!auth.ok) return auth.response;
-  const db = readDb();
+  const db = await readDb();
   // ADMIN's permissions display exactly as stored, same as any other role -
   // it can be narrowed (see PATCH .../roles/[id]), so showing anything else
   // here would mask what's actually granted.
@@ -48,7 +48,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: `"${invalidKey}" is not a known permission` }, { status: 400 });
   }
 
-  const db = readDb();
+  const db = await readDb();
   if (db.roles.some((r) => r.code === input.code)) {
     return NextResponse.json({ error: "A role with that code already exists" }, { status: 409 });
   }
@@ -68,7 +68,7 @@ export async function POST(request: Request) {
     updatedAt: now,
   };
 
-  updateDb((current) => {
+  await updateDb((current) => {
     current.roles.push(role);
     appendAuditLog(current, {
       userId: auth.session.userId!,

@@ -15,7 +15,7 @@ export async function GET(request: Request) {
   const auth = await requirePermission("branches.view");
   if (!auth.ok) return auth.response;
   const { searchParams } = new URL(request.url);
-  const db = readDb();
+  const db = await readDb();
 
   const branches = [...db.branches]
     .sort((a, b) => a.name.localeCompare(b.name))
@@ -49,7 +49,7 @@ export async function POST(request: Request) {
   }
   const { code, name, districtId } = parsed.data;
 
-  const db = readDb();
+  const db = await readDb();
   if (!db.districts.some((d) => d.id === districtId)) {
     return NextResponse.json({ error: "Selected district does not exist" }, { status: 400 });
   }
@@ -60,7 +60,7 @@ export async function POST(request: Request) {
   const now = new Date().toISOString();
   const branch = { id: uuid(), code, name, districtId, status: "ACTIVE" as const, createdAt: now, updatedAt: now };
 
-  updateDb((current) => {
+  await updateDb((current) => {
     current.branches.push(branch);
     appendAuditLog(current, {
       userId: auth.session.userId!,

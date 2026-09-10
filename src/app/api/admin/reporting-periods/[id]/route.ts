@@ -76,7 +76,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const { status, reason, draftsAllowedWhileLocked, transferOverdueCases, submissionStartsAt, submissionEndsAt, startsAt, endsAt } =
     parsed.data;
 
-  const db = readDb();
+  const db = await readDb();
   const existing = db.reportingPeriods.find((p) => p.id === id);
   if (!existing) return NextResponse.json({ error: "Reporting period not found" }, { status: 404 });
   if (
@@ -133,7 +133,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const isStatusChange = status !== undefined && status !== existing.status;
 
   const now = new Date().toISOString();
-  const updated = updateDb((current) => {
+  const updated = await updateDb((current) => {
     const p = current.reportingPeriods.find((x) => x.id === id)!;
     if (isStatusChange) {
       p.status = status!;

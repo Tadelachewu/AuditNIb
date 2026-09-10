@@ -27,7 +27,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const { id } = await params;
   const body = await request.json().catch(() => null);
 
-  const db = readDb();
+  const db = await readDb();
   const existing = db.scoringRules.find((r) => r.id === id);
   if (!existing) return NextResponse.json({ error: "Scoring rule not found" }, { status: 404 });
 
@@ -44,7 +44,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid input" }, { status: 400 });
     }
 
-    const updated = updateDb((current) => {
+    const updated = await updateDb((current) => {
       if (parsed.data.active) {
         current.scoringRules.forEach((r) => {
           r.active = r.id === id;
@@ -92,7 +92,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
 
   const before = { ...existing };
-  const updated = updateDb((current) => {
+  const updated = await updateDb((current) => {
     const r = current.scoringRules.find((x) => x.id === id)!;
     Object.assign(r, parsed.data);
     appendAuditLog(current, {
@@ -117,7 +117,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   if (!auth.ok) return auth.response;
   const { id } = await params;
 
-  const db = readDb();
+  const db = await readDb();
   const existing = db.scoringRules.find((r) => r.id === id);
   if (!existing) return NextResponse.json({ error: "Scoring rule not found" }, { status: 404 });
   if (existing.everActivated) {
@@ -127,7 +127,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
     );
   }
 
-  updateDb((current) => {
+  await updateDb((current) => {
     current.scoringRules = current.scoringRules.filter((r) => r.id !== id);
     appendAuditLog(current, {
       userId: auth.session.userId!,

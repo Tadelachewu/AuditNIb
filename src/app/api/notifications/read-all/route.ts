@@ -6,7 +6,7 @@ export async function POST() {
   const auth = await requireUser();
   if (!auth.ok) return auth.response;
 
-  updateDb((current) => {
+  await updateDb((current) => {
     const now = new Date().toISOString();
     for (const n of current.notifications) {
       if (n.recipientUserId === auth.session.userId && !n.readAt) n.readAt = now;

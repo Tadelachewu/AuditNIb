@@ -35,7 +35,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const auth = await requireToggleOrEditPermission("users", input);
   if (!auth.ok) return auth.response;
 
-  const db = readDb();
+  const db = await readDb();
   const existing = db.users.find((u) => u.id === id);
   if (!existing) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
@@ -94,7 +94,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     departmentId: existing.departmentId,
   };
 
-  const updated = updateDb((current) => {
+  const updated = await updateDb((current) => {
     const u = current.users.find((x) => x.id === id)!;
     if (input.name !== undefined) u.name = input.name;
     if (input.email !== undefined) u.email = input.email;

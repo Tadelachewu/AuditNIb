@@ -366,7 +366,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
   const auth = await requirePermission(`report-templates.${action}`);
   if (!auth.ok) return auth.response;
 
-  const db = readDb();
+  const db = await readDb();
   const url = new URL(request.url);
   const csv = buildCsv(slug, db, url.searchParams);
   if (csv === null) return NextResponse.json({ error: "Unknown report template" }, { status: 404 });

@@ -13,7 +13,7 @@ export async function POST() {
   const auth = await requirePermission("settings.edit");
   if (!auth.ok) return auth.response;
 
-  const db = readDb();
+  const db = await readDb();
   const recipient = db.users.find((u) => u.id === auth.session.userId);
   if (!recipient?.email) {
     return NextResponse.json({ error: "Your account has no email address set - add one on your Profile page first." }, { status: 400 });

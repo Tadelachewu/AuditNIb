@@ -20,12 +20,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const auth = await requireToggleOrEditPermission("uncovered-reasons", parsed.data, "active");
   if (!auth.ok) return auth.response;
 
-  const db = readDb();
+  const db = await readDb();
   const existing = db.uncoveredReasons.find((r) => r.id === id);
   if (!existing) return NextResponse.json({ error: "Reason not found" }, { status: 404 });
   const before = { name: existing.name, active: existing.active };
 
-  const updated = updateDb((current) => {
+  const updated = await updateDb((current) => {
     const r = current.uncoveredReasons.find((x) => x.id === id)!;
     if (parsed.data.name !== undefined) r.name = parsed.data.name;
     if (parsed.data.active !== undefined) r.active = parsed.data.active;
@@ -53,7 +53,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   if (!auth.ok) return auth.response;
   const { id } = await params;
 
-  const db = readDb();
+  const db = await readDb();
   const existing = db.uncoveredReasons.find((r) => r.id === id);
   if (!existing) return NextResponse.json({ error: "Reason not found" }, { status: 404 });
 
@@ -65,7 +65,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
     );
   }
 
-  updateDb((current) => {
+  await updateDb((current) => {
     current.uncoveredReasons = current.uncoveredReasons.filter((r) => r.id !== id);
     appendAuditLog(current, {
       userId: auth.session.userId!,

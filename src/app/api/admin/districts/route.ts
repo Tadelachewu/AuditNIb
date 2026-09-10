@@ -9,7 +9,7 @@ import { findDistrictControllers, findDistrictDirectors } from "@/lib/org";
 export async function GET() {
   const auth = await requirePermission("districts.view");
   if (!auth.ok) return auth.response;
-  const db = readDb();
+  const db = await readDb();
 
   // Unlike a branch's manager/controller, a district can have several
   // active District Controllers/Directors (BRD: "District and Head Office
@@ -39,7 +39,7 @@ export async function POST(request: Request) {
   }
   const { code, name } = parsed.data;
 
-  const db = readDb();
+  const db = await readDb();
   if (db.districts.some((d) => d.code.toLowerCase() === code.toLowerCase())) {
     return NextResponse.json({ error: "A district with that code already exists" }, { status: 409 });
   }
@@ -47,7 +47,7 @@ export async function POST(request: Request) {
   const now = new Date().toISOString();
   const district = { id: uuid(), code, name, status: "ACTIVE" as const, createdAt: now, updatedAt: now };
 
-  updateDb((current) => {
+  await updateDb((current) => {
     current.districts.push(district);
     appendAuditLog(current, {
       userId: auth.session.userId!,

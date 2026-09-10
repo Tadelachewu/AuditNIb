@@ -12,7 +12,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
   if (!auth.ok) return auth.response;
   const { id } = await params;
 
-  const db = readDb();
+  const db = await readDb();
   const existing = db.findings.find((f) => f.id === id);
   if (!existing) return NextResponse.json({ error: "Finding not found" }, { status: 404 });
 
@@ -35,7 +35,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
   const windowError = assertPeriodOpenForSubmission(db, existing.periodId);
   if (windowError) return NextResponse.json({ error: windowError }, { status: 409 });
 
-  const updated = updateDb((current) => {
+  const updated = await updateDb((current) => {
     const f = current.findings.find((x) => x.id === id)!;
     const registeredByBankScope = auth.session.orgScope === "BANK";
     submitFinding(current, f, auth.session.userId!, auth.session.name!, { registeredByBankScope });

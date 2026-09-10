@@ -31,7 +31,7 @@ export async function POST(request: Request) {
   }
   const { branchId, periodId, reason, reasonId = null } = parsed.data;
 
-  const db = readDb();
+  const db = await readDb();
   const branch = db.branches.find((b) => b.id === branchId);
   if (!branch) return NextResponse.json({ error: "Branch not found" }, { status: 404 });
   if (!db.reportingPeriods.some((p) => p.id === periodId)) {
@@ -51,7 +51,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "This branch is outside your organizational scope." }, { status: 403 });
   }
 
-  const note = updateDb((current) =>
+  const note = await updateDb((current) =>
     upsertBranchCoverageNote(current, {
       branchId,
       periodId,

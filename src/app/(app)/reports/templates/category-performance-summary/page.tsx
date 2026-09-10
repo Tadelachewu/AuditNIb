@@ -19,7 +19,7 @@ export default async function CategoryPerformanceSummaryPage({
   if (!user) redirect("/login");
   if (!hasPermission(user.permissions, permissionKey("report-templates", "category-performance-summary"))) redirect("/reports/templates");
 
-  const db = readDb();
+  const db = await readDb();
   const params = await searchParams;
   const periodId = typeof params.periodId === "string" ? params.periodId : "";
   const { rows, totalRow, grossPercentage } = getCategoryPerformanceSummary(db, periodId || undefined);

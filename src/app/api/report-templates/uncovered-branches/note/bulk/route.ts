@@ -28,7 +28,7 @@ export async function POST(request: Request) {
   }
   const { branchIds, periodId, reason, reasonId = null } = parsed.data;
 
-  const db = readDb();
+  const db = await readDb();
   if (!db.reportingPeriods.some((p) => p.id === periodId)) {
     return NextResponse.json({ error: "Reporting period not found" }, { status: 404 });
   }
@@ -52,7 +52,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "One or more selected branches are outside your organizational scope." }, { status: 403 });
   }
 
-  const notes = updateDb((current) =>
+  const notes = await updateDb((current) =>
     branchIds.map((branchId) =>
       upsertBranchCoverageNote(current, {
         branchId,

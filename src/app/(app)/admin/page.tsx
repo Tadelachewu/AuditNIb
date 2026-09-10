@@ -10,6 +10,6 @@ export default async function AdminDashboardPage() {
     redirect("/dashboard");
   }
 
-  const db = readDb();
+  const db = await readDb();
   return <AdminDashboard user={user} db={db} />;
 }

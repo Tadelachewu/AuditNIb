@@ -1,7 +1,5 @@
-import fs from "node:fs";
-import path from "node:path";
-import { hashPassword } from "@/lib/auth";
-import { ALL_PERMISSION_KEYS, ALL_VIEW_PERMISSION_KEYS, permissionKey } from "@/lib/permissions/registry";
+import { prisma } from "@/lib/prismaClient";
+import { Prisma } from "@/generated/prisma/client";
 import type {
   Database,
   User,
@@ -10,1067 +8,965 @@ import type {
   Branch,
   Source,
   Department,
-  UncoveredReason,
   ClassifiedCategory,
+  UncoveredReason,
   ScoringRule,
+  ScoringAdjustment,
   ReportingPeriod,
+  Finding,
+  FindingTransition,
+  RectificationEntry,
+  FindingCase,
+  FindingTransfer,
+  FindingClosure,
+  ImportBatch,
+  Evidence,
+  Comment,
+  Notification,
+  AuditLogEntry,
+  BranchCoverageNote,
   Settings,
 } from "@/types";
 
 // ---------------------------------------------------------------------------
-// "Local storage" data layer.
+// "Local storage" data layer — now Postgres via Prisma (see
+// prisma/schema.prisma for the relational shape this reassembles).
 //
-// The whole app currently persists to a single JSON file on disk instead of
-// a real database, per the project plan ("use nextjs and local storage, we
-// will convert into a db later"). Every read/write goes through this module,
-// so swapping in a real database later means reimplementing the functions in
-// this file only — nothing above this layer (API routes, pages) needs to
-// change since they only ever call readDb()/writeDb()/getDb().
+// Every read/write in the app still goes through readDb()/updateDb() only,
+// same as when this was a single JSON file (see PHASE1.md §2) - nothing
+// above this layer changed: every domain helper, API route, and page still
+// just gets a plain `Database` object back and mutates it with plain
+// array pushes/filters. The two things that DID have to change, because a
+// real database makes them real for the first time:
+//
+//   1. Every call is now async - Postgres is a network round trip, the old
+//      JSON file was a blocking local read. readDb()/updateDb() return
+//      Promises now; every call site needs `await` in front of them (the
+//      one mechanical, whole-codebase change this migration required).
+//
+//   2. updateDb()'s write step is a diff, not an overwrite. The JSON-file
+//      version read the whole file, handed you the live object to mutate,
+//      and serialized the *entire* object back - there was no such thing
+//      as "only the changed rows." That doesn't map onto a real database
+//      (nor would you want it to - rewriting every Finding on Earth every
+//      time one status changes defeats the entire point of migrating).
+//      Instead, updateDb() snapshots the database before your mutator
+//      runs, diffs it against the result after, and issues targeted
+//      Prisma create/update/delete calls - only for rows that actually
+//      changed - inside one real transaction. See syncCollection() below.
+//
+//      This is a deliberate bridge, not the final idiomatic shape: a
+//      hand-written Prisma app would have each route call
+//      `prisma.finding.update(...)` directly instead of mutating a
+//      big in-memory object and diffing it afterward. That's real,
+//      valuable follow-up work, route by route, once this lands - but it
+//      doesn't have to happen before every route in the app can run on a
+//      real, correct, transactional Postgres database, which is what
+//      this file delivers today.
 // ---------------------------------------------------------------------------
 
-const DATA_DIR = path.join(process.cwd(), "data");
-const DB_FILE = path.join(DATA_DIR, "db.json");
-
-// The 10 named report templates (src/lib/reportTemplates.ts) are every bit
-// HO/District-level oversight reading as the existing Reports page - every
-// one of them ranks or compares *across* districts - so they go to exactly
-// the roles that already get reports.view by default (HO Controller,
-// District Controller, District Director, Executive). Module-level (not
-// local to buildSeedDatabase()) so normalizeDb()'s migration below can
-// reuse the exact same list when backfilling pre-existing installs.
-const reportTemplatePermissions = [
-  permissionKey("report-templates", "view"),
-  permissionKey("report-templates", "uncovered-branches"),
-  permissionKey("report-templates", "category-detail-by-district"),
-  permissionKey("report-templates", "monthly-summary"),
-  permissionKey("report-templates", "monthly-district-history"),
-  permissionKey("report-templates", "monthly-district-detail"),
-  permissionKey("report-templates", "district-ranking-other-cases"),
-  permissionKey("report-templates", "weekly-executive-summary"),
-  permissionKey("report-templates", "district-ranking-all-cases"),
-  permissionKey("report-templates", "category-performance-summary"),
-  permissionKey("report-templates", "mid-month-district-snapshot"),
-  permissionKey("report-templates", "transferred-findings"),
-];
-
-// Default canned reasons for the Uncovered Branches report - module-level
-// (not local to buildSeedDatabase()) so normalizeDb()'s migration below can
-// seed the same list for pre-existing installs, matching the "add them by
-// default" request rather than leaving older databases with an empty list.
-const defaultUncoveredReasons: Omit<UncoveredReason, "createdAt" | "updatedAt">[] = [
-  { id: "uncov-reason-1", code: "NOT_DISPATCHED", name: "Audit Not Yet Dispatched", active: true },
-  { id: "uncov-reason-2", code: "BRANCH_CLOSED", name: "Branch Temporarily Closed", active: true },
-  { id: "uncov-reason-3", code: "NEWLY_OPENED", name: "Newly Opened Branch", active: true },
-  { id: "uncov-reason-4", code: "NO_IRREGULARITY", name: "No Irregularities Identified", active: true },
-  { id: "uncov-reason-5", code: "DOCS_PENDING", name: "Awaiting Documentation from Branch", active: true },
-  { id: "uncov-reason-6", code: "STAFF_SHORTAGE", name: "Controller/Auditor Shortage", active: true },
-];
-
-function nowIso(): string {
-  return new Date().toISOString();
+// ---- date helpers: every Database type keeps timestamps as ISO strings
+// (unchanged from the JSON-file version), every Prisma column is a real
+// `DateTime` - conversion happens only here, invisible to every caller. ----
+function iso(d: Date): string {
+  return d.toISOString();
+}
+function isoOrUndef(d: Date | null): string | undefined {
+  return d ? d.toISOString() : undefined;
+}
+function toDate(s: string): Date {
+  return new Date(s);
+}
+function toDateOrNull(s: string | null | undefined): Date | null {
+  return s ? new Date(s) : null;
+}
+function u<T>(v: T | null): T | undefined {
+  return v === null ? undefined : v;
 }
 
-function buildSeedDatabase(): Database {
-  const now = nowIso();
+// =============================================================================
+// READ SIDE — one mapper per entity, Prisma row -> the exact Database shape
+// every existing caller already expects.
+// =============================================================================
 
-  const districts: District[] = [
-    { id: "district-1", code: "D01", name: "Addis Ababa District", status: "ACTIVE", createdAt: now, updatedAt: now },
-    { id: "district-2", code: "D02", name: "Adama District", status: "ACTIVE", createdAt: now, updatedAt: now },
-    { id: "district-3", code: "D03", name: "Mekelle District", status: "ACTIVE", createdAt: now, updatedAt: now },
-  ];
-
-  const branches: Branch[] = [
-    { id: "branch-1", code: "B001", name: "Bole Branch", districtId: "district-1", status: "ACTIVE", createdAt: now, updatedAt: now },
-    { id: "branch-2", code: "B002", name: "Piassa Branch", districtId: "district-1", status: "ACTIVE", createdAt: now, updatedAt: now },
-    { id: "branch-3", code: "B003", name: "Adama Main Branch", districtId: "district-2", status: "ACTIVE", createdAt: now, updatedAt: now },
-    // A second branch in district-2, so District Ranking's "branches are
-    // dynamic per district" claim has more than one district actually
-    // demonstrating it (district-3 stays at zero branches on purpose -
-    // that's its own useful edge case, an org unit with nothing under it yet).
-    { id: "branch-4", code: "B004", name: "Adama Kality Branch", districtId: "district-2", status: "ACTIVE", createdAt: now, updatedAt: now },
-  ];
-
-  const sources: Source[] = [
-    { id: "source-1", code: "IC", name: "Internal Control", active: true, createdAt: now, updatedAt: now },
-    { id: "source-2", code: "IA", name: "Internal Audit", active: true, createdAt: now, updatedAt: now },
-  ];
-
-  // Not from the BRD - a starting list an admin can extend at
-  // /admin/departments, mirroring Source's shape/lifecycle plus the same
-  // OrgScope pattern as User/RoleDefinition: most departments here are
-  // BANK-wide (available on any finding), with one DISTRICT and one
-  // BRANCH example seeded to demonstrate the narrower scopes.
-  const departments: Department[] = [
-    { id: "dept-1", code: "OPS", name: "Operations", active: true, orgScope: "BANK", districtId: null, branchId: null, createdAt: now, updatedAt: now },
-    { id: "dept-2", code: "CREDIT", name: "Credit", active: true, orgScope: "BANK", districtId: null, branchId: null, createdAt: now, updatedAt: now },
-    { id: "dept-3", code: "FINANCE", name: "Finance", active: true, orgScope: "BANK", districtId: null, branchId: null, createdAt: now, updatedAt: now },
-    { id: "dept-4", code: "IT", name: "Information Technology", active: true, orgScope: "BANK", districtId: null, branchId: null, createdAt: now, updatedAt: now },
-    { id: "dept-5", code: "HR", name: "Human Resources", active: true, orgScope: "BANK", districtId: null, branchId: null, createdAt: now, updatedAt: now },
-    { id: "dept-6", code: "LEGAL", name: "Legal & Compliance", active: true, orgScope: "BANK", districtId: null, branchId: null, createdAt: now, updatedAt: now },
-    { id: "dept-7", code: "RISK", name: "Risk Management", active: true, orgScope: "BANK", districtId: null, branchId: null, createdAt: now, updatedAt: now },
-    { id: "dept-8", code: "TREASURY", name: "Treasury", active: true, orgScope: "BANK", districtId: null, branchId: null, createdAt: now, updatedAt: now },
-    { id: "dept-9", code: "CUSTOMER_SERVICE", name: "Customer Service", active: true, orgScope: "DISTRICT", districtId: "district-1", branchId: null, createdAt: now, updatedAt: now },
-    { id: "dept-10", code: "INTERNAL_AUDIT", name: "Internal Audit", active: true, orgScope: "BRANCH", districtId: "district-1", branchId: "branch-1", createdAt: now, updatedAt: now },
-  ];
-
-  const uncoveredReasons: UncoveredReason[] = defaultUncoveredReasons.map((r) => ({ ...r, createdAt: now, updatedAt: now }));
-
-  // Names match master.txt §25's reference list exactly ("ATM Mismatch;
-  // ATM Long Outstanding; IT Case; Dormant Account; Zero Balance; CK Book;
-  // Other Case").
-  const categories: ClassifiedCategory[] = [
-    { id: "cat-1", code: "ATM_MISMATCH", name: "ATM Mismatch", scored: false, active: true, createdAt: now, updatedAt: now },
-    { id: "cat-2", code: "ATM_LONG_OS", name: "ATM Long Outstanding", scored: false, active: true, createdAt: now, updatedAt: now },
-    { id: "cat-3", code: "IT", name: "IT Case", scored: false, active: true, createdAt: now, updatedAt: now },
-    { id: "cat-4", code: "DORMANT", name: "Dormant Account", scored: false, active: true, createdAt: now, updatedAt: now },
-    { id: "cat-5", code: "ZERO_BALANCE", name: "Zero Balance", scored: false, active: true, createdAt: now, updatedAt: now },
-    { id: "cat-6", code: "CK_BOOK", name: "CK Book", scored: false, active: true, createdAt: now, updatedAt: now },
-    { id: "cat-7", code: "OTHER_CASE", name: "Other Case", scored: true, active: true, createdAt: now, updatedAt: now },
-  ];
-
-  const scoringRules: ScoringRule[] = [
-    {
-      id: "scoring-rule-1",
-      version: 1,
-      name: "Other Case Performance v1",
-      active: true,
-      everActivated: true,
-      effectiveFrom: now,
-      categories: ["cat-7"],
-      sources: ["source-1", "source-2"],
-      basis: "Rectified eligible Other Cases ÷ Total eligible Other Cases × 100",
-      formulaType: "PERCENTAGE",
-      createdBy: "user-admin",
-      createdAt: now,
-    },
-  ];
-
-  const today = new Date();
-  const seedPeriodStart = new Date(today.getFullYear(), today.getMonth(), 1, 0, 0);
-  const seedPeriodEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59);
-  // A prior, already-LOCKED period behind the current OPEN one - without
-  // one, there's nowhere for a genuine Transfer Engine example to move a
-  // finding *from* (transferFinding() moves periodId forward into an
-  // OPEN destination), and Monthly Trend/period-over-period "Highest
-  // Improvement" have only a single point to draw with just one period.
-  const prevPeriodDate = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-  const prevPeriodStart = new Date(prevPeriodDate.getFullYear(), prevPeriodDate.getMonth(), 1, 0, 0);
-  const prevPeriodEnd = new Date(prevPeriodDate.getFullYear(), prevPeriodDate.getMonth() + 1, 0, 23, 59);
-  const reportingPeriods: ReportingPeriod[] = [
-    {
-      id: "period-0",
-      year: prevPeriodDate.getFullYear(),
-      month: prevPeriodDate.getMonth() + 1,
-      code: `${prevPeriodDate.getFullYear()}-${String(prevPeriodDate.getMonth() + 1).padStart(2, "0")}`,
-      startsAt: prevPeriodStart.toISOString(),
-      endsAt: prevPeriodEnd.toISOString(),
-      // Matches the full period range at seed time - see the type's own
-      // doc comment for what narrowing this later means.
-      submissionStartsAt: prevPeriodStart.toISOString(),
-      submissionEndsAt: prevPeriodEnd.toISOString(),
-      status: "LOCKED",
-      lockedBy: "user-admin",
-      lockedAt: seedPeriodStart.toISOString(),
-      lockReason: "Prior period closed at seed time.",
-      draftsAllowedWhileLocked: true,
-      createdAt: now,
-      updatedAt: now,
-    },
-    {
-      id: "period-1",
-      year: today.getFullYear(),
-      month: today.getMonth() + 1,
-      code: `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`,
-      startsAt: seedPeriodStart.toISOString(),
-      endsAt: seedPeriodEnd.toISOString(),
-      submissionStartsAt: seedPeriodStart.toISOString(),
-      submissionEndsAt: seedPeriodEnd.toISOString(),
-      status: "OPEN",
-      lockedBy: null,
-      lockedAt: null,
-      lockReason: null,
-      draftsAllowedWhileLocked: true,
-      createdAt: now,
-      updatedAt: now,
-    },
-  ];
-
-  const settings: Settings = {
-    // master.txt §25: "ETB; USD; EUR; GBP initially; configurable."
-    currencies: ["ETB", "USD", "EUR", "GBP"],
-    riskLevels: ["Low", "Medium", "High", "Critical"],
-    // Sample areas an admin can edit at /admin/settings - not from the BRD,
-    // a reasonable starting list of real bank operational areas.
-    operationAreas: [
-      "Teller Counter",
-      "Vault",
-      "ATM Operations",
-      "Loan Processing",
-      "Account Opening",
-      "Fund Transfer",
-      "Clearing House",
-      "Reconciliation",
-      "Cybersecurity",
-      "Branch Security",
-    ],
-    priorityLevels: ["Low", "Medium", "High", "Urgent"],
-    irregularityTypes: [
-      "Cash Shortage",
-      "Cash Excess",
-      "Unauthorized Transaction",
-      "Fraud",
-      "Forgery",
-      "System Error",
-      "Policy Violation",
-      "Documentation Deficiency",
-      "Reconciliation Discrepancy",
-      "Access Control Violation",
-    ],
-    notification: { provider: "NONE", fromAddress: "" },
-    autoTransferOnLock: false,
-    rankingVisibility: { branches: true, districts: true },
-    performanceThresholds: { topPercent: 80, bottomPercent: 50 },
-    // Left off by default (see the field's own doc comment), but with a
-    // real approver already assigned - so the one seeded
-    // PENDING_BANK_APPROVAL example finding below has someone who can
-    // actually action it the moment an admin turns `required` on, rather
-    // than an empty approver list nobody could ever use.
-    hoApproval: { required: false, approverUserIds: ["user-ho-controller"] },
-    rectificationReminders: { enabled: false, thresholdDays: 7 },
-    // The exact fields the duplicate-suggestion lookup always compared on
-    // before this became configurable - kept as the default so turning the
-    // feature into a setting doesn't silently change any existing
-    // install's behavior.
-    similarFindingFields: ["branchId", "categoryId", "operationArea", "irregularityType", "periodId"],
-    // Matches exactly what was hard-required before this became
-    // configurable (everything except recommendation/rootCause/
-    // evidenceNote) - so turning this into a setting doesn't silently
-    // change behavior.
-    requiredFindingFields: {
-      title: true,
-      sourceId: true,
-      departmentId: true,
-      findingDate: true,
-      operationArea: true,
-      irregularityType: true,
-      categoryId: true,
-      currency: true,
-      riskLevel: true,
-      priority: true,
-      description: true,
-      recommendation: false,
-      rootCause: false,
-      evidenceNote: false,
-    },
-    // "Other (type in)" allowed on every list-driven dropdown by default -
-    // matches today's behavior, so turning this into a setting doesn't
-    // silently lock any field down. categoryId defaults on too, even
-    // though its "Other" is a brand-new capability rather than pre-existing
-    // behavior being preserved - an admin who wants registration blocked on
-    // an incomplete category list instead can turn it off from /admin/settings.
-    allowOtherValueFields: {
-      operationArea: true,
-      irregularityType: true,
-      priority: true,
-      riskLevel: true,
-      currency: true,
-      categoryId: true,
-    },
-    updatedAt: now,
+function roleFromRow(r: Prisma.RoleDefinitionGetPayload<object>): RoleDefinition {
+  return {
+    id: r.id,
+    code: r.code,
+    name: r.name,
+    description: u(r.description),
+    orgScope: r.orgScope,
+    branchSingleton: r.branchSingleton,
+    isSystem: r.isSystem,
+    permissions: r.permissions,
+    status: r.status,
+    createdAt: iso(r.createdAt),
+    updatedAt: iso(r.updatedAt),
   };
+}
 
-  // Roles are data (Phase 2) - this is the seed, not a hard-coded enum. Every
-  // seeded role gets a non-empty, BRD-grounded default permission set (see
-  // PHASE5.md) so an admin starts from "this is what the role should
-  // plausibly have" and adjusts from there via /admin/roles, rather than
-  // building every role's access from zero. ADMIN always gets every
-  // permission (isSystem protects it from being edited away, see
-  // src/app/api/admin/roles/[id]/route.ts).
-  //
-  // Defaults are deliberately conservative: icfms.txt reserves "User
-  // creation, Role assignment, Branch/District configuration, Category
-  // maintenance, Workflow configuration, System settings" to the
-  // Administrator alone, so no non-admin role gets create/edit/delete/
-  // toggle-status on org structure, users, or roles by default - only the
-  // view/monitoring access each role's BRD description calls for, plus
-  // (per master.txt §"District and Head Office Controllers can control
-  // periods within authorized scope") reporting-periods.lock for HO and
-  // District Controller specifically, not District Director (whose BRD
-  // description explicitly says "cannot modify findings or scores") and not
-  // Branch roles (period control is district/HO-level per the BRD).
-  const hoPermissions = [
-    permissionKey("admin-dashboard", "view"),
-    permissionKey("users", "view"),
-    permissionKey("districts", "view"),
-    permissionKey("branches", "view"),
-    permissionKey("sources", "view"),
-    permissionKey("departments", "view"),
-    permissionKey("categories", "view"),
-    permissionKey("scoring-rules", "view"),
-    permissionKey("scoring-adjustments", "view"),
-    permissionKey("reporting-periods", "view"),
-    permissionKey("reporting-periods", "lock"),
-    permissionKey("settings", "view"),
-    permissionKey("audit-log", "view"),
-    // "Register Internal Audit findings received from the Internal Audit
-    // Department" (icfms.txt) + the second-approval stage of the workflow.
-    // edit/delete/submit round out "create" the same way they do for
-    // Branch Controller below - without them HO could register a finding,
-    // save it as a draft, and then never be able to touch it again (the
-    // one-shot create-with-submit:true path doesn't need these, but a
-    // save-as-draft-for-later one does). All three are still
-    // createdBy-restricted to HO's own registrations (see
-    // [id]/route.ts and submit/route.ts) - this permission just makes
-    // that restriction reachable instead of a dead end.
-    permissionKey("findings", "view"),
-    permissionKey("findings", "create"),
-    permissionKey("findings", "edit"),
-    permissionKey("findings", "delete"),
-    permissionKey("findings", "submit"),
-    permissionKey("findings", "ho-review"),
-    // Eligible to be picked as a Bank-Wide Approval approver (Settings.
-    // hoApproval.approverUserIds) - matches the seeded
-    // hoApproval.approverUserIds default (user-ho-controller) below.
-    permissionKey("findings", "bank-approval"),
-    permissionKey("findings", "close"),
-    permissionKey("findings", "ho-return-rectification"),
-    permissionKey("findings", "comment"),
-    // master.txt §22: "HO Internal Controllers can import/enter Internal
-    // Audit findings" - the bulk sibling of the single-record "create"
-    // path just above, both landing in the exact same DRAFT-first workflow.
-    permissionKey("findings", "import"),
-    permissionKey("reports", "view"),
-    ...reportTemplatePermissions,
-    permissionKey("ho-dashboard", "view"),
-  ];
-  const districtControllerPermissions = [
-    permissionKey("districts", "view"),
-    permissionKey("branches", "view"),
-    permissionKey("sources", "view"),
-    permissionKey("departments", "view"),
-    permissionKey("categories", "view"),
-    permissionKey("scoring-rules", "view"),
-    permissionKey("scoring-adjustments", "view"),
-    permissionKey("reporting-periods", "view"),
-    permissionKey("reporting-periods", "lock"),
-    // "Review branch submissions... Approve or return findings" (icfms.txt);
-    // closure is their verification duty per master.txt §"Verification".
-    permissionKey("findings", "view"),
-    permissionKey("findings", "district-review"),
-    // The gate on a Branch Manager's recorded rectification, before it
-    // reaches HO (or is closable at all): approve it, or return it for
-    // correction - two separate permissions (see verify-rectification/
-    // route.ts and return-rectification/route.ts) so a role can be granted
-    // one without the other; District Controller gets both by default.
-    // district-return-rectification alone already gives the full
-    // unrestricted return behavior return-rectification.ts's own doc
-    // comment describes - the plain, un-prefixed findings.return-
-    // rectification permission is kept in the registry only for backward
-    // compatibility with any pre-existing custom role that was configured
-    // before the district/HO split (see normalizeDb()'s own migration for
-    // it), not something a fresh install's seeded roles need to also hold.
-    permissionKey("findings", "verify-rectification"),
-    permissionKey("findings", "district-return-rectification"),
-    permissionKey("findings", "close"),
-    // "Transfer outstanding cases" (icfms.txt).
-    permissionKey("findings", "transfer"),
-    permissionKey("findings", "comment"),
-    permissionKey("reports", "view"),
-    ...reportTemplatePermissions,
-    permissionKey("district-dashboard", "view"),
-  ];
-  const districtDirectorPermissions = [
-    permissionKey("districts", "view"),
-    permissionKey("branches", "view"),
-    permissionKey("sources", "view"),
-    permissionKey("departments", "view"),
-    permissionKey("categories", "view"),
-    permissionKey("scoring-rules", "view"),
-    permissionKey("scoring-adjustments", "view"),
-    permissionKey("reporting-periods", "view"),
-    // View only - icfms.txt is explicit: "Cannot modify findings or scores."
-    permissionKey("findings", "view"),
-    // The one mutating exception: proposal.txt §6 - "District Directors
-    // shall have view and comment access" - explicitly authorized, unlike
-    // modifying a finding or its score.
-    permissionKey("findings", "comment"),
-    permissionKey("reports", "view"),
-    ...reportTemplatePermissions,
-    permissionKey("district-dashboard", "view"),
-  ];
-  const branchControllerPermissions = [
-    permissionKey("branch-dashboard", "view"),
-    permissionKey("sources", "view"),
-    permissionKey("departments", "view"),
-    permissionKey("categories", "view"),
-    permissionKey("reporting-periods", "view"),
-    // "Register findings, Edit draft findings, Submit findings, Verify
-    // rectifications" (icfms.txt).
-    permissionKey("findings", "view"),
-    permissionKey("findings", "create"),
-    permissionKey("findings", "edit"),
-    permissionKey("findings", "delete"),
-    permissionKey("findings", "submit"),
-    permissionKey("findings", "rectify"),
-    // "Upload optional evidence... Verify rectifications" (icfms.txt).
-    permissionKey("findings", "evidence"),
-    permissionKey("findings", "comment"),
-  ];
-  const branchManagerPermissions = [
-    permissionKey("branch-dashboard", "view"),
-    permissionKey("categories", "view"),
-    permissionKey("reporting-periods", "view"),
-    // "Record corrective actions... Enter rectified case counts" (icfms.txt).
-    permissionKey("findings", "view"),
-    permissionKey("findings", "rectify"),
-    // "Upload optional supporting evidence... Respond to comments" (icfms.txt).
-    permissionKey("findings", "evidence"),
-    permissionKey("findings", "comment"),
-  ];
+function userFromRow(r: Prisma.UserGetPayload<object>): User {
+  return {
+    id: r.id,
+    name: r.name,
+    username: r.username,
+    email: r.email,
+    passwordHash: r.passwordHash,
+    role: r.role,
+    status: r.status,
+    districtId: r.districtId,
+    branchId: r.branchId,
+    departmentId: u(r.departmentId),
+    createdAt: iso(r.createdAt),
+    updatedAt: iso(r.updatedAt),
+    lastLoginAt: r.lastLoginAt ? iso(r.lastLoginAt) : null,
+    mustChangePassword: r.mustChangePassword,
+  };
+}
 
-  const roles: RoleDefinition[] = [
-    {
-      id: "role-admin",
-      code: "ADMIN",
-      name: "Administrator",
-      description: "Full bank-wide access to every module, including Roles & Permissions.",
-      orgScope: "BANK",
-      branchSingleton: false,
-      isSystem: true,
-      permissions: ALL_PERMISSION_KEYS,
-      status: "ACTIVE",
-      createdAt: now,
-      updatedAt: now,
-    },
-    {
-      id: "role-ho-controller",
-      code: "HO_CONTROLLER",
-      name: "Head Office Internal Controller",
-      description: "Second approval/review, Internal Audit entry, bank-wide reporting.",
-      orgScope: "BANK",
-      branchSingleton: false,
-      isSystem: true,
-      permissions: hoPermissions,
-      status: "ACTIVE",
-      createdAt: now,
-      updatedAt: now,
-    },
-    {
-      id: "role-district-controller",
-      code: "DISTRICT_CONTROLLER",
-      name: "District Internal Controller",
-      description: "Review/approve/reject/return, district reporting-period control.",
-      orgScope: "DISTRICT",
-      branchSingleton: false,
-      isSystem: true,
-      permissions: districtControllerPermissions,
-      status: "ACTIVE",
-      createdAt: now,
-      updatedAt: now,
-    },
-    {
-      id: "role-district-director",
-      code: "DISTRICT_DIRECTOR",
-      name: "District Director",
-      description: "District oversight, performance and reporting; cannot modify findings or scores.",
-      orgScope: "DISTRICT",
-      branchSingleton: false,
-      isSystem: true,
-      permissions: districtDirectorPermissions,
-      status: "ACTIVE",
-      createdAt: now,
-      updatedAt: now,
-    },
-    {
-      id: "role-branch-controller",
-      code: "BRANCH_CONTROLLER",
-      name: "Branch Internal Controller",
-      description: "Register/submit findings, verify rectifications for one branch.",
-      orgScope: "BRANCH",
-      branchSingleton: true,
-      isSystem: true,
-      permissions: branchControllerPermissions,
-      status: "ACTIVE",
-      createdAt: now,
-      updatedAt: now,
-    },
-    {
-      id: "role-branch-manager",
-      code: "BRANCH_MANAGER",
-      name: "Branch Manager",
-      description: "Record corrective actions and rectification progress for one branch.",
-      orgScope: "BRANCH",
-      branchSingleton: true,
-      isSystem: true,
-      permissions: branchManagerPermissions,
-      status: "ACTIVE",
-      createdAt: now,
-      updatedAt: now,
-    },
-    {
-      id: "role-branch-sub-manager",
-      code: "BRANCH_SUB_MANAGER",
-      name: "Branch Sub-Manager",
-      description: "Deputy for the Branch Manager - identical responsibilities for one branch.",
-      orgScope: "BRANCH",
-      // One deputy per branch, same singleton convention as Manager/
-      // Controller - not a BRD-mandated role (hence isSystem: false, so an
-      // admin can delete it outright if unwanted, unlike the core seven),
-      // but seeded with the Branch Manager's exact permission set so it
-      // starts genuinely equivalent rather than needing manual setup.
-      branchSingleton: true,
-      isSystem: false,
-      permissions: branchManagerPermissions,
-      status: "ACTIVE",
-      createdAt: now,
-      updatedAt: now,
-    },
-    {
-      id: "role-executive",
-      code: "EXECUTIVE_READONLY",
-      name: "Executive (Read-only)",
-      description: "Read-only oversight dashboards and reports across the bank.",
-      orgScope: "BANK",
-      branchSingleton: false,
-      isSystem: true,
-      // ALL_VIEW_PERMISSION_KEYS only ever grabs each page's literal "view"
-      // action - it covers report-templates.view (the hub) automatically,
-      // but not the 10 individually-named template actions, so those need
-      // adding explicitly here (same array every other reporting role uses;
-      // deduped since report-templates.view appears in both).
-      permissions: [...new Set([...ALL_VIEW_PERMISSION_KEYS, ...reportTemplatePermissions])],
-      status: "ACTIVE",
-      createdAt: now,
-      updatedAt: now,
-    },
-  ];
+function districtFromRow(r: Prisma.DistrictGetPayload<object>): District {
+  return { id: r.id, code: r.code, name: r.name, status: r.status, createdAt: iso(r.createdAt), updatedAt: iso(r.updatedAt) };
+}
 
-  const users: User[] = [
-    {
-      id: "user-admin",
-      name: "System Administrator",
-      username: "admin",
-      email: "admin@nib-control360.local",
-      passwordHash: hashPassword("Admin@123"),
-      role: "ADMIN",
-      status: "ACTIVE",
-      districtId: null,
-      branchId: null,
-      createdAt: now,
-      updatedAt: now,
-      lastLoginAt: null,
-    },
-    {
-      id: "user-ho-controller",
-      name: "Selam Tesfaye",
-      username: "ho.controller",
-      email: "selam.tesfaye@nib-control360.local",
-      passwordHash: hashPassword("Ho@12345"),
-      role: "HO_CONTROLLER",
-      status: "ACTIVE",
-      districtId: null,
-      branchId: null,
-      createdAt: now,
-      updatedAt: now,
-      lastLoginAt: null,
-    },
-    {
-      id: "user-district-controller",
-      name: "Dawit Bekele",
-      username: "district.controller",
-      email: "dawit.bekele@nib-control360.local",
-      passwordHash: hashPassword("District@123"),
-      role: "DISTRICT_CONTROLLER",
-      status: "ACTIVE",
-      districtId: "district-1",
-      branchId: null,
-      createdAt: now,
-      updatedAt: now,
-      lastLoginAt: null,
-    },
-    {
-      id: "user-district-director",
-      name: "Hana Girma",
-      username: "district.director",
-      email: "hana.girma@nib-control360.local",
-      passwordHash: hashPassword("Director@123"),
-      role: "DISTRICT_DIRECTOR",
-      status: "ACTIVE",
-      districtId: "district-1",
-      branchId: null,
-      createdAt: now,
-      updatedAt: now,
-      lastLoginAt: null,
-    },
-    {
-      id: "user-branch-controller",
-      name: "Mekdes Alemu",
-      username: "branch.controller",
-      email: "mekdes.alemu@nib-control360.local",
-      passwordHash: hashPassword("Branch@123"),
-      role: "BRANCH_CONTROLLER",
-      status: "ACTIVE",
-      districtId: "district-1",
-      branchId: "branch-1",
-      createdAt: now,
-      updatedAt: now,
-      lastLoginAt: null,
-    },
-    {
-      id: "user-branch-manager",
-      name: "Yonas Kebede",
-      username: "branch.manager",
-      email: "yonas.kebede@nib-control360.local",
-      passwordHash: hashPassword("Manager@123"),
-      role: "BRANCH_MANAGER",
-      status: "ACTIVE",
-      districtId: "district-1",
-      branchId: "branch-1",
-      createdAt: now,
-      updatedAt: now,
-      lastLoginAt: null,
-    },
-    {
-      id: "user-executive",
-      name: "Executive Office",
-      username: "executive",
-      email: "executive@nib-control360.local",
-      passwordHash: hashPassword("Executive@123"),
-      role: "EXECUTIVE_READONLY",
-      status: "ACTIVE",
-      districtId: null,
-      branchId: null,
-      createdAt: now,
-      updatedAt: now,
-      lastLoginAt: null,
-    },
-  ];
+function branchFromRow(r: Prisma.BranchGetPayload<object>): Branch {
+  return {
+    id: r.id,
+    code: r.code,
+    name: r.name,
+    districtId: r.districtId,
+    status: r.status,
+    createdAt: iso(r.createdAt),
+    updatedAt: iso(r.updatedAt),
+  };
+}
 
-  const db: Database = {
-    users,
+function sourceFromRow(r: Prisma.SourceGetPayload<object>): Source {
+  return { id: r.id, code: r.code, name: r.name, active: r.active, createdAt: iso(r.createdAt), updatedAt: iso(r.updatedAt) };
+}
+
+function departmentFromRow(r: Prisma.DepartmentGetPayload<object>): Department {
+  return {
+    id: r.id,
+    code: r.code,
+    name: r.name,
+    active: r.active,
+    orgScope: r.orgScope,
+    districtId: r.districtId,
+    branchId: r.branchId,
+    createdAt: iso(r.createdAt),
+    updatedAt: iso(r.updatedAt),
+  };
+}
+
+function categoryFromRow(r: Prisma.ClassifiedCategoryGetPayload<object>): ClassifiedCategory {
+  return {
+    id: r.id,
+    code: r.code,
+    name: r.name,
+    scored: r.scored,
+    active: r.active,
+    createdAt: iso(r.createdAt),
+    updatedAt: iso(r.updatedAt),
+  };
+}
+
+function uncoveredReasonFromRow(r: Prisma.UncoveredReasonGetPayload<object>): UncoveredReason {
+  return { id: r.id, code: r.code, name: r.name, active: r.active, createdAt: iso(r.createdAt), updatedAt: iso(r.updatedAt) };
+}
+
+function scoringRuleFromRow(r: Prisma.ScoringRuleGetPayload<object>): ScoringRule {
+  return {
+    id: r.id,
+    version: r.version,
+    name: r.name,
+    active: r.active,
+    everActivated: r.everActivated,
+    effectiveFrom: iso(r.effectiveFrom),
+    categories: r.categories,
+    sources: r.sources,
+    basis: r.basis,
+    formulaType: r.formulaType,
+    createdBy: r.createdBy,
+    createdAt: iso(r.createdAt),
+  };
+}
+
+function scoringAdjustmentFromRow(r: Prisma.ScoringAdjustmentGetPayload<object>): ScoringAdjustment {
+  return {
+    id: r.id,
+    targetType: r.targetType,
+    targetId: r.targetId,
+    periodId: r.periodId,
+    value: r.value,
+    reason: r.reason,
+    adjustedBy: r.adjustedBy,
+    createdAt: iso(r.createdAt),
+  };
+}
+
+function periodFromRow(r: Prisma.ReportingPeriodGetPayload<object>): ReportingPeriod {
+  return {
+    id: r.id,
+    year: r.year,
+    month: r.month,
+    code: r.code,
+    startsAt: iso(r.startsAt),
+    endsAt: iso(r.endsAt),
+    submissionStartsAt: iso(r.submissionStartsAt),
+    submissionEndsAt: iso(r.submissionEndsAt),
+    status: r.status,
+    lockedBy: r.lockedBy,
+    lockedAt: r.lockedAt ? iso(r.lockedAt) : null,
+    lockReason: r.lockReason,
+    draftsAllowedWhileLocked: r.draftsAllowedWhileLocked,
+    createdAt: iso(r.createdAt),
+    updatedAt: iso(r.updatedAt),
+  };
+}
+
+function findingFromRow(r: Prisma.FindingGetPayload<object>): Finding {
+  return {
+    id: r.id,
+    reference: r.reference,
+    title: r.title,
+    sourceId: r.sourceId ?? "",
+    departmentId: r.departmentId ?? "",
+    periodId: r.periodId,
+    districtId: r.districtId,
+    branchId: r.branchId,
+    findingDate: r.findingDate,
+    operationArea: r.operationArea,
+    irregularityType: r.irregularityType,
+    categoryId: r.categoryId ?? "",
+    amount: r.amount,
+    currency: r.currency,
+    caseCount: r.caseCount,
+    riskLevel: r.riskLevel,
+    priority: r.priority,
+    description: r.description,
+    recommendation: u(r.recommendation),
+    rootCause: u(r.rootCause),
+    evidenceNote: u(r.evidenceNote),
+    status: r.status,
+    rectifiedCases: r.rectifiedCases,
+    rectifiedAmount: r.rectifiedAmount,
+    closedCases: r.closedCases,
+    closedAmount: r.closedAmount,
+    districtVerifiedCases: r.districtVerifiedCases,
+    districtVerifiedAmount: r.districtVerifiedAmount,
+    externalReference: u(r.externalReference),
+    importBatchId: u(r.importBatchId),
+    lastReminderAt: isoOrUndef(r.lastReminderAt),
+    createdBy: r.createdBy,
+    createdAt: iso(r.createdAt),
+    updatedAt: iso(r.updatedAt),
+  };
+}
+
+function transitionFromRow(r: Prisma.FindingTransitionGetPayload<object>): FindingTransition {
+  return {
+    id: r.id,
+    findingId: r.findingId,
+    fromStatus: r.fromStatus,
+    toStatus: r.toStatus,
+    action: r.action,
+    userId: r.userId,
+    userName: r.userName,
+    reason: u(r.reason),
+    createdAt: iso(r.createdAt),
+  };
+}
+
+function rectificationFromRow(r: Prisma.RectificationEntryGetPayload<object>): RectificationEntry {
+  return {
+    id: r.id,
+    findingId: r.findingId,
+    periodId: r.periodId,
+    rectifiedCases: r.rectifiedCases,
+    rectifiedAmount: r.rectifiedAmount,
+    note: u(r.note),
+    submittedBy: r.submittedBy,
+    submittedByName: r.submittedByName,
+    createdAt: iso(r.createdAt),
+    caseIds: r.caseIds.length > 0 ? r.caseIds : undefined,
+  };
+}
+
+function findingCaseFromRow(r: Prisma.FindingCaseGetPayload<object>): FindingCase {
+  return {
+    id: r.id,
+    findingId: r.findingId,
+    seq: r.seq,
+    amount: r.amount,
+    description: u(r.description),
+    status: r.status,
+    rectificationId: u(r.rectificationId),
+    rectifiedAt: isoOrUndef(r.rectifiedAt),
+    rectifiedBy: u(r.rectifiedBy),
+    rectifiedByName: u(r.rectifiedByName),
+    createdAt: iso(r.createdAt),
+  };
+}
+
+function transferFromRow(r: Prisma.FindingTransferGetPayload<object>): FindingTransfer {
+  return {
+    id: r.id,
+    findingId: r.findingId,
+    fromPeriodId: r.fromPeriodId,
+    toPeriodId: r.toPeriodId,
+    casesTransferred: r.casesTransferred,
+    amountTransferred: r.amountTransferred,
+    originalCaseCount: r.originalCaseCount,
+    originalAmount: r.originalAmount,
+    caseAgeAtTransferDays: r.caseAgeAtTransferDays,
+    reason: r.reason,
+    createdBy: r.createdBy,
+    createdByName: r.createdByName,
+    createdAt: iso(r.createdAt),
+    method: r.method,
+  };
+}
+
+function closureFromRow(r: Prisma.FindingClosureGetPayload<object>): FindingClosure {
+  return {
+    id: r.id,
+    findingId: r.findingId,
+    periodId: r.periodId,
+    closedCases: r.closedCases,
+    closedAmount: r.closedAmount,
+    submittedBy: r.submittedBy,
+    submittedByName: r.submittedByName,
+    createdAt: iso(r.createdAt),
+  };
+}
+
+function importBatchFromRow(r: Prisma.ImportBatchGetPayload<object>): ImportBatch {
+  return {
+    id: r.id,
+    fileName: r.fileName,
+    importedBy: r.importedBy,
+    importedByName: r.importedByName,
+    totalRows: r.totalRows,
+    importedCount: r.importedCount,
+    duplicateCount: r.duplicateCount,
+    errorCount: r.errorCount,
+    rows: r.rows as unknown as ImportBatch["rows"],
+    createdAt: iso(r.createdAt),
+  };
+}
+
+function evidenceFromRow(r: Prisma.EvidenceGetPayload<object>): Evidence {
+  return {
+    id: r.id,
+    findingId: r.findingId,
+    commentId: r.commentId,
+    fileName: r.fileName,
+    mimeType: r.mimeType,
+    size: r.size,
+    storagePath: r.storagePath,
+    uploadedBy: r.uploadedBy,
+    uploadedByName: r.uploadedByName,
+    createdAt: iso(r.createdAt),
+  };
+}
+
+function commentFromRow(r: Prisma.CommentGetPayload<object>): Comment {
+  return {
+    id: r.id,
+    findingId: r.findingId,
+    parentCommentId: r.parentCommentId,
+    authorId: r.authorId,
+    authorName: r.authorName,
+    text: r.text,
+    createdAt: iso(r.createdAt),
+  };
+}
+
+function notificationFromRow(r: Prisma.NotificationGetPayload<object>): Notification {
+  return {
+    id: r.id,
+    recipientUserId: r.recipientUserId,
+    type: r.type,
+    title: r.title,
+    message: r.message,
+    entityType: r.entityType,
+    entityId: r.entityId,
+    readAt: r.readAt ? iso(r.readAt) : null,
+    createdAt: iso(r.createdAt),
+  };
+}
+
+function auditLogFromRow(r: Prisma.AuditLogEntryGetPayload<object>): AuditLogEntry {
+  return {
+    id: r.id,
+    userId: r.userId,
+    userName: r.userName,
+    action: r.action,
+    entityType: r.entityType,
+    entityId: r.entityId,
+    oldValue: r.oldValue ?? undefined,
+    newValue: r.newValue ?? undefined,
+    reason: u(r.reason),
+    timestamp: iso(r.timestamp),
+  };
+}
+
+function coverageNoteFromRow(r: Prisma.BranchCoverageNoteGetPayload<object>): BranchCoverageNote {
+  return {
+    id: r.id,
+    branchId: r.branchId,
+    periodId: r.periodId,
+    reason: r.reason,
+    reasonId: r.reasonId,
+    recordedBy: r.recordedBy,
+    recordedByName: r.recordedByName,
+    createdAt: iso(r.createdAt),
+    updatedAt: iso(r.updatedAt),
+  };
+}
+
+function settingsFromRow(r: Prisma.SettingsGetPayload<object>): Settings {
+  return {
+    currencies: r.currencies,
+    riskLevels: r.riskLevels,
+    operationAreas: r.operationAreas,
+    priorityLevels: r.priorityLevels,
+    irregularityTypes: r.irregularityTypes,
+    notification: r.notification as unknown as Settings["notification"],
+    autoTransferOnLock: r.autoTransferOnLock,
+    rankingVisibility: r.rankingVisibility as unknown as Settings["rankingVisibility"],
+    performanceThresholds: r.performanceThresholds as unknown as Settings["performanceThresholds"],
+    hoApproval: r.hoApproval as unknown as Settings["hoApproval"],
+    rectificationReminders: r.rectificationReminders as unknown as Settings["rectificationReminders"],
+    similarFindingFields: r.similarFindingFields as Settings["similarFindingFields"],
+    requiredFindingFields: r.requiredFindingFields as unknown as Settings["requiredFindingFields"],
+    allowOtherValueFields: r.allowOtherValueFields as unknown as Settings["allowOtherValueFields"],
+    updatedAt: iso(r.updatedAt),
+    updatedBy: u(r.updatedBy),
+  };
+}
+
+const SETTINGS_ID = "singleton";
+
+export async function readDb(): Promise<Database> {
+  const [
     roles,
+    users,
     districts,
     branches,
     sources,
     departments,
-    uncoveredReasons,
     categories,
+    uncoveredReasons,
     scoringRules,
-    scoringAdjustments: [],
+    scoringAdjustments,
     reportingPeriods,
-    findings: [],
-    findingTransitions: [],
-    rectifications: [],
-    findingTransfers: [],
-    findingClosures: [],
-    importBatches: [],
-    findingCases: [],
-    // A fresh seed's ADMIN role is already ALL_PERMISSION_KEYS, so every
-    // key starts "already synced" - nothing to backfill until a future
-    // registry addition, exactly the scenario syncAdminPermissions() below
-    // exists for.
-    permissionRegistrySyncedKeys: [...ALL_PERMISSION_KEYS],
-    evidence: [],
-    comments: [],
-    notifications: [],
-    settings,
-    auditLogs: [],
-    branchCoverageNotes: [],
+    findings,
+    findingTransitions,
+    rectifications,
+    findingCases,
+    findingTransfers,
+    findingClosures,
+    importBatches,
+    evidence,
+    comments,
+    notifications,
+    auditLogs,
+    branchCoverageNotes,
+    settingsRow,
+  ] = await Promise.all([
+    prisma.roleDefinition.findMany(),
+    prisma.user.findMany(),
+    prisma.district.findMany(),
+    prisma.branch.findMany(),
+    prisma.source.findMany(),
+    prisma.department.findMany(),
+    prisma.classifiedCategory.findMany(),
+    prisma.uncoveredReason.findMany(),
+    prisma.scoringRule.findMany(),
+    prisma.scoringAdjustment.findMany(),
+    prisma.reportingPeriod.findMany(),
+    prisma.finding.findMany(),
+    prisma.findingTransition.findMany(),
+    prisma.rectificationEntry.findMany(),
+    prisma.findingCase.findMany(),
+    prisma.findingTransfer.findMany(),
+    prisma.findingClosure.findMany(),
+    prisma.importBatch.findMany(),
+    prisma.evidence.findMany(),
+    prisma.comment.findMany(),
+    prisma.notification.findMany(),
+    prisma.auditLogEntry.findMany(),
+    prisma.branchCoverageNote.findMany(),
+    prisma.settings.findUnique({ where: { id: SETTINGS_ID } }),
+  ]);
+
+  if (!settingsRow) {
+    throw new Error(
+      "No Settings row found (expected id='singleton') - run prisma/migrate-from-json.ts (or seed a default Settings row) before starting the app."
+    );
+  }
+
+  return {
+    roles: roles.map(roleFromRow),
+    users: users.map(userFromRow),
+    districts: districts.map(districtFromRow),
+    branches: branches.map(branchFromRow),
+    sources: sources.map(sourceFromRow),
+    departments: departments.map(departmentFromRow),
+    categories: categories.map(categoryFromRow),
+    uncoveredReasons: uncoveredReasons.map(uncoveredReasonFromRow),
+    scoringRules: scoringRules.map(scoringRuleFromRow),
+    scoringAdjustments: scoringAdjustments.map(scoringAdjustmentFromRow),
+    reportingPeriods: reportingPeriods.map(periodFromRow),
+    findings: findings.map(findingFromRow),
+    findingTransitions: findingTransitions.map(transitionFromRow),
+    rectifications: rectifications.map(rectificationFromRow),
+    findingCases: findingCases.map(findingCaseFromRow),
+    findingTransfers: findingTransfers.map(transferFromRow),
+    findingClosures: findingClosures.map(closureFromRow),
+    importBatches: importBatches.map(importBatchFromRow),
+    evidence: evidence.map(evidenceFromRow),
+    comments: comments.map(commentFromRow),
+    notifications: notifications.map(notificationFromRow),
+    auditLogs: auditLogs.map(auditLogFromRow),
+    branchCoverageNotes: branchCoverageNotes.map(coverageNoteFromRow),
+    settings: settingsFromRow(settingsRow),
+    permissionRegistrySyncedKeys: settingsRow.permissionRegistrySyncedKeys,
   };
-
-  return db;
 }
 
-function ensureDataFile(): void {
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
+// =============================================================================
+// WRITE SIDE — diff each collection (by id) between the pre-mutation
+// snapshot and the post-mutation state, and issue only the create/update/
+// delete calls actually needed. See this file's own top doc comment for
+// why this exists instead of a targeted Prisma call per route.
+// =============================================================================
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyDelegate = { create: (args: any) => Promise<unknown>; update: (args: any) => Promise<unknown>; delete: (args: any) => Promise<unknown> };
+
+async function syncCollection<Row extends { id: string }>(
+  delegate: AnyDelegate,
+  before: Row[],
+  after: Row[],
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  toData: (row: Row) => any
+): Promise<void> {
+  const beforeById = new Map(before.map((r) => [r.id, r]));
+  const afterById = new Map(after.map((r) => [r.id, r]));
+
+  for (const id of beforeById.keys()) {
+    if (!afterById.has(id)) {
+      await delegate.delete({ where: { id } });
+    }
   }
-  if (!fs.existsSync(DB_FILE)) {
-    const seeded = buildSeedDatabase();
-    fs.writeFileSync(DB_FILE, JSON.stringify(seeded, null, 2), "utf-8");
+  for (const [id, row] of afterById) {
+    const prev = beforeById.get(id);
+    if (!prev) {
+      await delegate.create({ data: { id, ...toData(row) } });
+    } else if (JSON.stringify(prev) !== JSON.stringify(row)) {
+      await delegate.update({ where: { id }, data: toData(row) });
+    }
   }
 }
 
-// A PAGE_REGISTRY addition (a new page, or a new action on an existing
-// page - like this very change adding findings.import and
-// scoring-rules.edit/delete) must never silently strip access from an
-// already-seeded ADMIN role; only a deliberate edit through /admin/roles
-// should ever narrow it (see PATCH .../admin/roles/[id] - ADMIN can be
-// narrowed there on purpose, unlike before). Each key is granted at most
-// once, ever: recorded in permissionRegistrySyncedKeys the moment it's
-// synced, so a later intentional uncheck of that same key is never
-// silently reverted. Returns whether it changed anything.
-function syncAdminPermissions(db: Database): boolean {
-  const admin = db.roles.find((r) => r.code === "ADMIN");
-  if (!admin) return false;
-  const synced = new Set(db.permissionRegistrySyncedKeys);
-  const newKeys = ALL_PERMISSION_KEYS.filter((k) => !synced.has(k));
-  if (newKeys.length === 0) return false;
-
-  const granted = new Set(admin.permissions);
-  newKeys.forEach((k) => granted.add(k));
-  admin.permissions = [...granted];
-  db.permissionRegistrySyncedKeys = [...synced, ...newKeys];
-  return true;
+function roleToData(r: RoleDefinition) {
+  return {
+    code: r.code,
+    name: r.name,
+    description: r.description ?? null,
+    orgScope: r.orgScope,
+    branchSingleton: r.branchSingleton,
+    isSystem: r.isSystem,
+    permissions: r.permissions,
+    status: r.status,
+    createdAt: toDate(r.createdAt),
+    updatedAt: toDate(r.updatedAt),
+  };
 }
 
-// db.json has no migration system - it's read as-is, so a field added to
-// the schema after some findings already exist on disk needs an explicit
-// default here, or every read of an older record throws on the missing
-// property (e.g. db.findingClosures.push(...) on `undefined`). Returns
-// whether anything was actually backfilled, so the caller can decide
-// whether the fix is worth persisting immediately.
-function normalizeDb(db: Database): { db: Database; changed: boolean } {
-  let changed = false;
-  if (!db.findingClosures) {
-    db.findingClosures = [];
-    changed = true;
-  }
-  if (!db.importBatches) {
-    db.importBatches = [];
-    changed = true;
-  }
-  if (!db.permissionRegistrySyncedKeys) {
-    // Unknown history: assume nothing has been synced yet, so
-    // syncAdminPermissions() below backfills every current key once.
-    db.permissionRegistrySyncedKeys = [];
-    changed = true;
-  }
-  if (!db.findingCases) {
-    db.findingCases = [];
-    changed = true;
-  }
-  if (!db.branchCoverageNotes) {
-    db.branchCoverageNotes = [];
-    changed = true;
-  }
-  if (!db.uncoveredReasons) {
-    // Unlike branchCoverageNotes (genuinely empty until someone records
-    // one), this is reference/config data the admin expects to already be
-    // populated - seed the same defaults a fresh install gets, editable
-    // afterward at /admin/uncovered-reasons like any other reference list.
-    db.uncoveredReasons = defaultUncoveredReasons.map((r) => ({ ...r, createdAt: nowIso(), updatedAt: nowIso() }));
-    changed = true;
-  }
-  for (const n of db.branchCoverageNotes) {
-    if (n.reasonId === undefined) {
-      // Predates the canned-reason list - every existing note was
-      // necessarily free text, so it's treated the same as a fresh
-      // "Other" selection: reasonId null, reason text unchanged.
-      n.reasonId = null;
-      changed = true;
-    }
-  }
-  if (db.settings.autoTransferOnLock === undefined) {
-    db.settings.autoTransferOnLock = false;
-    changed = true;
-  }
-  if (!db.settings.rankingVisibility) {
-    db.settings.rankingVisibility = { branches: true, districts: true };
-    changed = true;
-  }
-  if (!db.settings.rectificationReminders) {
-    // Off by default for pre-existing installs - an Admin opts in
-    // explicitly at /admin/settings rather than suddenly starting to page
-    // people who never expected it.
-    db.settings.rectificationReminders = { enabled: false, thresholdDays: 7 };
-    changed = true;
-  }
-  if (!db.settings.performanceThresholds) {
-    db.settings.performanceThresholds = { topPercent: 80, bottomPercent: 50 };
-    changed = true;
-  }
-  if (!db.settings.hoApproval) {
-    // Off by default for pre-existing installs, same reasoning as
-    // rectificationReminders above - a bank-registered finding keeps
-    // routing straight to the branch (no approval step) until an Admin
-    // deliberately turns this on and assigns approver(s).
-    db.settings.hoApproval = { required: false, approverUserIds: [] };
-    changed = true;
-  }
-  if (!db.settings.similarFindingFields) {
-    // The fields the duplicate-suggestion lookup always compared on before
-    // this became configurable - preserves existing behavior for a
-    // pre-existing install rather than silently disabling the feature.
-    db.settings.similarFindingFields = ["branchId", "categoryId", "operationArea", "irregularityType", "periodId"];
-    changed = true;
-  }
-  if (!db.settings.requiredFindingFields) {
-    // Matches exactly what was hard-required before this became
-    // configurable - preserves existing behavior for a pre-existing
-    // install rather than silently making anything optional (or
-    // required) that wasn't already.
-    db.settings.requiredFindingFields = {
-      title: true,
-      sourceId: true,
-      departmentId: true,
-      findingDate: true,
-      operationArea: true,
-      irregularityType: true,
-      categoryId: true,
-      currency: true,
-      riskLevel: true,
-      priority: true,
-      description: true,
-      recommendation: false,
-      rootCause: false,
-      evidenceNote: false,
-    };
-    changed = true;
-  } else {
-    // An install that already had this feature from an earlier pass
-    // (only operationArea/irregularityType/priority/description/
-    // recommendation/rootCause/evidenceNote) needs the newly-added keys
-    // backfilled individually, same true-by-default reasoning as above -
-    // each of these seven was hard-required before it became
-    // configurable, so `true` is the only value that doesn't silently
-    // change existing behavior.
-    const additions: Record<string, boolean> = {
-      title: true,
-      sourceId: true,
-      departmentId: true,
-      findingDate: true,
-      categoryId: true,
-      currency: true,
-      riskLevel: true,
-    };
-    for (const [key, value] of Object.entries(additions)) {
-      if (!(key in db.settings.requiredFindingFields)) {
-        (db.settings.requiredFindingFields as Record<string, boolean>)[key] = value;
-        changed = true;
-      }
-    }
-  }
-  if (!db.settings.allowOtherValueFields) {
-    // "Other (type in)" was unconditionally available on every one of
-    // these dropdowns before this became configurable - true-by-default
-    // preserves that for a pre-existing install rather than silently
-    // locking any field down to its configured list.
-    db.settings.allowOtherValueFields = {
-      operationArea: true,
-      irregularityType: true,
-      priority: true,
-      riskLevel: true,
-      currency: true,
-      categoryId: true,
-    };
-    changed = true;
-  } else if (!("categoryId" in db.settings.allowOtherValueFields)) {
-    // An install that already had this feature from before categoryId was
-    // added needs just that one key backfilled, same true-by-default
-    // reasoning as the whole-object case above.
-    (db.settings.allowOtherValueFields as Record<string, boolean>).categoryId = true;
-    changed = true;
-  }
-  for (const p of db.reportingPeriods) {
-    if (!p.startsAt || !p.endsAt) {
-      // Predates the date-range field: default to the calendar month
-      // year/month already encoded, so existing periods keep behaving
-      // exactly as before (nothing reads startsAt/endsAt for anything
-      // that already worked off year/month/code).
-      const start = new Date(p.year, p.month - 1, 1, 0, 0);
-      const end = new Date(p.year, p.month, 0, 23, 59);
-      p.startsAt = start.toISOString();
-      p.endsAt = end.toISOString();
-      changed = true;
-    }
-    if (p.draftsAllowedWhileLocked === undefined) {
-      // Predates the flag - default true (matches the new default), so
-      // pre-existing locked periods don't suddenly become a harder stop
-      // than they were before this field existed.
-      p.draftsAllowedWhileLocked = true;
-      changed = true;
-    }
-    if (!p.submissionStartsAt || !p.submissionEndsAt) {
-      // Predates the submission-window field: default to the period's own
-      // full startsAt/endsAt, so a pre-existing period's submission
-      // behavior doesn't narrow the moment this field is introduced.
-      p.submissionStartsAt = p.startsAt;
-      p.submissionEndsAt = p.endsAt;
-      changed = true;
-    }
-  }
-  for (const t of db.findingTransfers) {
-    if (!t.method) {
-      // Every transfer predating this field was necessarily a manual one -
-      // automatic transfer didn't exist yet to have produced any.
-      t.method = "MANUAL";
-      changed = true;
-    }
-    if (t.originalCaseCount === undefined || t.originalAmount === undefined || t.caseAgeAtTransferDays === undefined) {
-      // Predates these fields: best-effort backfill from the finding's
-      // current totals (caseCount/amount don't change over a finding's
-      // life in the normal flow, so this is exact for anything that
-      // hasn't been hand-edited) and its age as of *now* rather than as
-      // of the original transfer, which is the closest available proxy.
-      const f = db.findings.find((x) => x.id === t.findingId);
-      t.originalCaseCount = f?.caseCount ?? t.casesTransferred;
-      t.originalAmount = f?.amount ?? t.amountTransferred;
-      t.caseAgeAtTransferDays = f ? Math.floor((Date.now() - new Date(f.createdAt).getTime()) / 86_400_000) : 0;
-      changed = true;
-    }
-  }
-  for (const f of db.findings) {
-    if (f.closedCases === undefined) {
-      f.closedCases = 0;
-      changed = true;
-    }
-    if (f.closedAmount === undefined) {
-      f.closedAmount = 0;
-      changed = true;
-    }
-    if (f.districtVerifiedCases === undefined) {
-      f.districtVerifiedCases = 0;
-      changed = true;
-    }
-    if (f.districtVerifiedAmount === undefined) {
-      f.districtVerifiedAmount = 0;
-      changed = true;
-    }
-  }
-  // A rule predating this field: default to "has gone live at least once"
-  // since that history is genuinely unknown - the safe assumption, since
-  // it only blocks edit/delete (never view/activate), and a rule that
-  // truly never went live can simply be recreated instead.
-  for (const r of db.scoringRules) {
-    if (r.everActivated === undefined) {
-      r.everActivated = true;
-      changed = true;
-    }
-  }
-  for (const u of db.users) {
-    if (u.mustChangePassword === undefined) {
-      // Pre-existing users have already been using whatever password they
-      // have - only newly-created users and admin password resets should
-      // ever start out true.
-      u.mustChangePassword = false;
-      changed = true;
-    }
-  }
-  // "verify-rectification" and "return-rectification" used to be one
-  // combined permission (findings.verify-rectification gated both the
-  // approve and the return-for-correction action). Any role already
-  // holding the combined permission keeps returning for correction too,
-  // exactly as it could before the split - only a deliberate edit through
-  // /admin/roles should ever separate them from here on. Skipped for a
-  // role that already holds either of the newer district/HO-scoped return
-  // permissions directly (a fresh install's seeded roles, or any role an
-  // admin has already migrated onto the split model) - that combination
-  // means it was never actually in the old pre-split shape this backfill
-  // exists for, so it shouldn't re-grant the legacy permission alongside
-  // permissions that already supersede it.
-  for (const r of db.roles) {
-    if (
-      r.permissions.includes(permissionKey("findings", "verify-rectification")) &&
-      !r.permissions.includes(permissionKey("findings", "return-rectification")) &&
-      !r.permissions.includes(permissionKey("findings", "district-return-rectification")) &&
-      !r.permissions.includes(permissionKey("findings", "ho-return-rectification"))
-    ) {
-      r.permissions = [...r.permissions, permissionKey("findings", "return-rectification")];
-      changed = true;
-    }
-  }
-  // "return-rectification" used to be a single combined permission for
-  // both District and HO. Now it's split into two scoped permissions with
-  // different gating rules: district-return-rectification (District can
-  // return at any point before/after verification) vs ho-return-
-  // rectification (HO can only return AFTER District has first verified
-  // the rectification). Any existing role holding the combined, legacy
-  // permission gets the appropriate scoped new one based on its orgScope
-  // (DISTRICT -> district variant, BANK -> HO variant) so behavior stays
-  // the same as before the split; an admin can fine-tune from /admin/roles.
-  for (const r of db.roles) {
-    if (r.permissions.includes(permissionKey("findings", "return-rectification"))) {
-      if (r.orgScope === "DISTRICT" || r.orgScope === "BRANCH") {
-        if (!r.permissions.includes(permissionKey("findings", "district-return-rectification"))) {
-          r.permissions = [...r.permissions, permissionKey("findings", "district-return-rectification")];
-          changed = true;
-        }
-      }
-      if (r.orgScope === "BANK") {
-        if (!r.permissions.includes(permissionKey("findings", "ho-return-rectification"))) {
-          r.permissions = [...r.permissions, permissionKey("findings", "ho-return-rectification")];
-          changed = true;
-        }
-      }
-    }
-  }
-  // findings.bank-approval is a genuinely new permission (the bank-approval
-  // route previously only checked requireUser() plus explicit
-  // Settings.hoApproval.approverUserIds membership) - deliberately NOT
-  // auto-backfilled onto whichever role a currently-configured approver
-  // holds. Settings.hoApproval.approverUserIds is live, ongoing admin
-  // configuration (an admin can add/remove someone from it at any time as
-  // part of normal operation), not a fixed structural fact about the
-  // database's shape the way the legacy return-rectification permission
-  // above is - a backfill keyed off it would have to run on every single
-  // readDb() call (normalizeDb() has no other way to know "already
-  // migrated" from "still needs it"), which would silently re-grant this
-  // permission forever afterward, making it impossible for an admin to
-  // ever actually revoke it from a role while that role's user remains an
-  // approver. Same convention already documented in the login route for
-  // any new registry permission: an existing Administrator (who always
-  // keeps roles.manage) checks the new box the same as for any role,
-  // exactly once, the same way anyone upgrading needs to for any other
-  // brand-new page/action added to PAGE_REGISTRY.
-  // edit/delete/submit are new companions to findings.create for any
-  // BANK-scope role (HO Controller) - previously a bank-registered finding
-  // saved as a draft (submit: false) could never be edited, submitted, or
-  // deleted again, since only the one-shot create-with-submit:true path
-  // (which needs only findings.create) worked. Backfilled onto any
-  // existing BANK-scope role that already holds findings.create, so a
-  // stuck draft an admin already registered this way becomes reachable
-  // again without a manual /admin/roles edit.
-  for (const r of db.roles) {
-    if (r.orgScope === "BANK" && r.permissions.includes(permissionKey("findings", "create"))) {
-      const missing = [permissionKey("findings", "edit"), permissionKey("findings", "delete"), permissionKey("findings", "submit")].filter(
-        (k) => !r.permissions.includes(k)
-      );
-      if (missing.length > 0) {
-        r.permissions = [...r.permissions, ...missing];
-        changed = true;
-      }
-    }
-  }
-  // The named report templates are new - any role that already held the
-  // existing Reports page's reports.view (HO Controller, District
-  // Controller, District Director, and Executive via
-  // ALL_VIEW_PERMISSION_KEYS) picks up every template too, matching the
-  // seed's own default grant for those roles - an admin can still narrow
-  // this per-role via /admin/roles afterward.
-  for (const r of db.roles) {
-    if (r.permissions.includes(permissionKey("reports", "view"))) {
-      const missing = reportTemplatePermissions.filter((k) => !r.permissions.includes(k));
-      if (missing.length > 0) {
-        r.permissions = [...r.permissions, ...missing];
-        changed = true;
-      }
-    }
-  }
-  if (syncAdminPermissions(db)) changed = true;
-  return { db, changed };
+function userToData(r: User) {
+  return {
+    name: r.name,
+    username: r.username,
+    email: r.email ?? null,
+    passwordHash: r.passwordHash,
+    role: r.role,
+    status: r.status,
+    districtId: r.districtId ?? null,
+    branchId: r.branchId ?? null,
+    departmentId: r.departmentId ?? null,
+    createdAt: toDate(r.createdAt),
+    updatedAt: toDate(r.updatedAt),
+    lastLoginAt: toDateOrNull(r.lastLoginAt),
+    mustChangePassword: r.mustChangePassword ?? false,
+  };
 }
 
-export function readDb(): Database {
-  ensureDataFile();
-  const raw = fs.readFileSync(DB_FILE, "utf-8");
-  const { db, changed } = normalizeDb(JSON.parse(raw) as Database);
-  // Persisted immediately rather than left to the next unrelated write -
-  // syncAdminPermissions() in particular must not depend on some other
-  // action happening to save the file first.
-  if (changed) fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2), "utf-8");
-  return db;
+function districtToData(r: District) {
+  return { code: r.code, name: r.name, status: r.status, createdAt: toDate(r.createdAt), updatedAt: toDate(r.updatedAt) };
 }
 
-export function writeDb(db: Database): void {
-  ensureDataFile();
-  fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2), "utf-8");
+function branchToData(r: Branch) {
+  return {
+    code: r.code,
+    name: r.name,
+    districtId: r.districtId,
+    status: r.status,
+    createdAt: toDate(r.createdAt),
+    updatedAt: toDate(r.updatedAt),
+  };
+}
+
+function sourceToData(r: Source) {
+  return { code: r.code, name: r.name, active: r.active, createdAt: toDate(r.createdAt), updatedAt: toDate(r.updatedAt) };
+}
+
+function departmentToData(r: Department) {
+  return {
+    code: r.code,
+    name: r.name,
+    active: r.active,
+    orgScope: r.orgScope,
+    districtId: r.districtId ?? null,
+    branchId: r.branchId ?? null,
+    createdAt: toDate(r.createdAt),
+    updatedAt: toDate(r.updatedAt),
+  };
+}
+
+function categoryToData(r: ClassifiedCategory) {
+  return {
+    code: r.code,
+    name: r.name,
+    scored: r.scored,
+    active: r.active,
+    createdAt: toDate(r.createdAt),
+    updatedAt: toDate(r.updatedAt),
+  };
+}
+
+function uncoveredReasonToData(r: UncoveredReason) {
+  return { code: r.code, name: r.name, active: r.active, createdAt: toDate(r.createdAt), updatedAt: toDate(r.updatedAt) };
+}
+
+function scoringRuleToData(r: ScoringRule) {
+  return {
+    version: r.version,
+    name: r.name,
+    active: r.active,
+    everActivated: r.everActivated,
+    effectiveFrom: toDate(r.effectiveFrom),
+    categories: r.categories,
+    sources: r.sources,
+    basis: r.basis,
+    formulaType: r.formulaType,
+    createdBy: r.createdBy,
+    createdAt: toDate(r.createdAt),
+  };
+}
+
+function scoringAdjustmentToData(r: ScoringAdjustment) {
+  return {
+    targetType: r.targetType,
+    targetId: r.targetId,
+    periodId: r.periodId,
+    districtId: r.targetType === "DISTRICT" ? r.targetId : null,
+    branchId: r.targetType === "BRANCH" ? r.targetId : null,
+    value: r.value,
+    reason: r.reason,
+    adjustedBy: r.adjustedBy,
+    createdAt: toDate(r.createdAt),
+  };
+}
+
+function periodToData(r: ReportingPeriod) {
+  return {
+    year: r.year,
+    month: r.month,
+    code: r.code,
+    startsAt: toDate(r.startsAt),
+    endsAt: toDate(r.endsAt),
+    submissionStartsAt: toDate(r.submissionStartsAt),
+    submissionEndsAt: toDate(r.submissionEndsAt),
+    status: r.status,
+    lockedBy: r.lockedBy ?? null,
+    lockedAt: toDateOrNull(r.lockedAt),
+    lockReason: r.lockReason ?? null,
+    draftsAllowedWhileLocked: r.draftsAllowedWhileLocked,
+    createdAt: toDate(r.createdAt),
+    updatedAt: toDate(r.updatedAt),
+  };
+}
+
+function findingToData(r: Finding) {
+  return {
+    reference: r.reference,
+    title: r.title,
+    // "" (this app's own "left blank" convention, per
+    // Settings.requiredFindingFields) can never satisfy a foreign key -
+    // converted to a real SQL NULL here, and back to "" by
+    // findingFromRow()'s `?? ""` on the way out, so nothing outside this
+    // file ever has to know the column is nullable.
+    sourceId: r.sourceId || null,
+    departmentId: r.departmentId || null,
+    periodId: r.periodId,
+    districtId: r.districtId,
+    branchId: r.branchId,
+    findingDate: r.findingDate,
+    operationArea: r.operationArea,
+    irregularityType: r.irregularityType,
+    categoryId: r.categoryId || null,
+    amount: r.amount,
+    currency: r.currency,
+    caseCount: r.caseCount,
+    riskLevel: r.riskLevel,
+    priority: r.priority,
+    description: r.description,
+    recommendation: r.recommendation ?? null,
+    rootCause: r.rootCause ?? null,
+    evidenceNote: r.evidenceNote ?? null,
+    status: r.status,
+    rectifiedCases: r.rectifiedCases,
+    rectifiedAmount: r.rectifiedAmount,
+    closedCases: r.closedCases,
+    closedAmount: r.closedAmount,
+    districtVerifiedCases: r.districtVerifiedCases,
+    districtVerifiedAmount: r.districtVerifiedAmount,
+    externalReference: r.externalReference ?? null,
+    importBatchId: r.importBatchId ?? null,
+    lastReminderAt: toDateOrNull(r.lastReminderAt),
+    createdBy: r.createdBy,
+    createdAt: toDate(r.createdAt),
+    updatedAt: toDate(r.updatedAt),
+  };
+}
+
+function transitionToData(r: FindingTransition) {
+  return {
+    findingId: r.findingId,
+    fromStatus: r.fromStatus,
+    toStatus: r.toStatus,
+    action: r.action,
+    userId: r.userId,
+    userName: r.userName,
+    reason: r.reason ?? null,
+    createdAt: toDate(r.createdAt),
+  };
+}
+
+function rectificationToData(r: RectificationEntry) {
+  return {
+    findingId: r.findingId,
+    periodId: r.periodId,
+    rectifiedCases: r.rectifiedCases,
+    rectifiedAmount: r.rectifiedAmount,
+    note: r.note ?? null,
+    submittedBy: r.submittedBy,
+    submittedByName: r.submittedByName,
+    createdAt: toDate(r.createdAt),
+    caseIds: r.caseIds ?? [],
+  };
+}
+
+function findingCaseToData(r: FindingCase) {
+  return {
+    findingId: r.findingId,
+    seq: r.seq,
+    amount: r.amount,
+    description: r.description ?? null,
+    status: r.status,
+    rectificationId: r.rectificationId ?? null,
+    rectifiedAt: toDateOrNull(r.rectifiedAt),
+    rectifiedBy: r.rectifiedBy ?? null,
+    rectifiedByName: r.rectifiedByName ?? null,
+    createdAt: toDate(r.createdAt),
+  };
+}
+
+function transferToData(r: FindingTransfer) {
+  return {
+    findingId: r.findingId,
+    fromPeriodId: r.fromPeriodId,
+    toPeriodId: r.toPeriodId,
+    casesTransferred: r.casesTransferred,
+    amountTransferred: r.amountTransferred,
+    originalCaseCount: r.originalCaseCount,
+    originalAmount: r.originalAmount,
+    caseAgeAtTransferDays: r.caseAgeAtTransferDays,
+    reason: r.reason,
+    createdBy: r.createdBy,
+    createdByName: r.createdByName,
+    createdAt: toDate(r.createdAt),
+    method: r.method,
+  };
+}
+
+function closureToData(r: FindingClosure) {
+  return {
+    findingId: r.findingId,
+    periodId: r.periodId,
+    closedCases: r.closedCases,
+    closedAmount: r.closedAmount,
+    submittedBy: r.submittedBy,
+    submittedByName: r.submittedByName,
+    createdAt: toDate(r.createdAt),
+  };
+}
+
+function importBatchToData(r: ImportBatch) {
+  return {
+    fileName: r.fileName,
+    importedBy: r.importedBy,
+    importedByName: r.importedByName,
+    totalRows: r.totalRows,
+    importedCount: r.importedCount,
+    duplicateCount: r.duplicateCount,
+    errorCount: r.errorCount,
+    rows: r.rows as object,
+    createdAt: toDate(r.createdAt),
+  };
+}
+
+function evidenceToData(r: Evidence) {
+  return {
+    findingId: r.findingId,
+    commentId: r.commentId ?? null,
+    fileName: r.fileName,
+    mimeType: r.mimeType,
+    size: r.size,
+    storagePath: r.storagePath,
+    uploadedBy: r.uploadedBy,
+    uploadedByName: r.uploadedByName,
+    createdAt: toDate(r.createdAt),
+  };
+}
+
+function commentToData(r: Comment) {
+  return {
+    findingId: r.findingId,
+    parentCommentId: r.parentCommentId ?? null,
+    authorId: r.authorId,
+    authorName: r.authorName,
+    text: r.text,
+    createdAt: toDate(r.createdAt),
+  };
+}
+
+function notificationToData(r: Notification) {
+  return {
+    recipientUserId: r.recipientUserId,
+    type: r.type,
+    title: r.title,
+    message: r.message,
+    entityType: r.entityType,
+    entityId: r.entityId,
+    readAt: toDateOrNull(r.readAt),
+    createdAt: toDate(r.createdAt),
+  };
+}
+
+function auditLogToData(r: AuditLogEntry) {
+  return {
+    userId: r.userId,
+    userName: r.userName,
+    action: r.action,
+    entityType: r.entityType,
+    entityId: r.entityId,
+    oldValue: (r.oldValue ?? Prisma.DbNull) as Prisma.InputJsonValue,
+    newValue: (r.newValue ?? Prisma.DbNull) as Prisma.InputJsonValue,
+    reason: r.reason ?? null,
+    timestamp: toDate(r.timestamp),
+  };
+}
+
+function coverageNoteToData(r: BranchCoverageNote) {
+  return {
+    branchId: r.branchId,
+    periodId: r.periodId,
+    reason: r.reason,
+    reasonId: r.reasonId,
+    recordedBy: r.recordedBy,
+    recordedByName: r.recordedByName,
+    createdAt: toDate(r.createdAt),
+    updatedAt: toDate(r.updatedAt),
+  };
+}
+
+async function persistChanges(before: Database, after: Database): Promise<void> {
+  await prisma.$transaction(
+    async (tx) => {
+      // Reference/org data first (nothing meaningful depends on ordering
+      // beyond what foreign keys already enforce at the database level -
+      // this order just keeps parents ahead of children for clarity).
+      await syncCollection(tx.roleDefinition, before.roles, after.roles, roleToData);
+      await syncCollection(tx.district, before.districts, after.districts, districtToData);
+      await syncCollection(tx.branch, before.branches, after.branches, branchToData);
+      await syncCollection(tx.source, before.sources, after.sources, sourceToData);
+      await syncCollection(tx.department, before.departments, after.departments, departmentToData);
+      await syncCollection(tx.classifiedCategory, before.categories, after.categories, categoryToData);
+      await syncCollection(tx.uncoveredReason, before.uncoveredReasons, after.uncoveredReasons, uncoveredReasonToData);
+      await syncCollection(tx.user, before.users, after.users, userToData);
+      await syncCollection(tx.scoringRule, before.scoringRules, after.scoringRules, scoringRuleToData);
+      await syncCollection(tx.reportingPeriod, before.reportingPeriods, after.reportingPeriods, periodToData);
+      await syncCollection(tx.scoringAdjustment, before.scoringAdjustments, after.scoringAdjustments, scoringAdjustmentToData);
+      await syncCollection(tx.importBatch, before.importBatches, after.importBatches, importBatchToData);
+      await syncCollection(tx.finding, before.findings, after.findings, findingToData);
+      await syncCollection(tx.findingTransition, before.findingTransitions, after.findingTransitions, transitionToData);
+      await syncCollection(tx.rectificationEntry, before.rectifications, after.rectifications, rectificationToData);
+      await syncCollection(tx.findingCase, before.findingCases, after.findingCases, findingCaseToData);
+      await syncCollection(tx.findingTransfer, before.findingTransfers, after.findingTransfers, transferToData);
+      await syncCollection(tx.findingClosure, before.findingClosures, after.findingClosures, closureToData);
+      await syncCollection(tx.comment, before.comments, after.comments, commentToData);
+      await syncCollection(tx.evidence, before.evidence, after.evidence, evidenceToData);
+      await syncCollection(tx.notification, before.notifications, after.notifications, notificationToData);
+      await syncCollection(tx.auditLogEntry, before.auditLogs, after.auditLogs, auditLogToData);
+      await syncCollection(tx.branchCoverageNote, before.branchCoverageNotes, after.branchCoverageNotes, coverageNoteToData);
+
+      // Settings is a genuine singleton (always id="singleton") plus
+      // permissionRegistrySyncedKeys, which the Database shape carries as
+      // its own top-level array but which lives on the same row in
+      // Postgres - always upserted together, only when either changed.
+      const settingsChanged =
+        JSON.stringify(before.settings) !== JSON.stringify(after.settings) ||
+        JSON.stringify(before.permissionRegistrySyncedKeys) !== JSON.stringify(after.permissionRegistrySyncedKeys);
+      if (settingsChanged) {
+        const s = after.settings;
+        const data = {
+          currencies: s.currencies,
+          riskLevels: s.riskLevels,
+          operationAreas: s.operationAreas,
+          priorityLevels: s.priorityLevels,
+          irregularityTypes: s.irregularityTypes,
+          notification: s.notification as object,
+          autoTransferOnLock: s.autoTransferOnLock,
+          rankingVisibility: s.rankingVisibility as object,
+          performanceThresholds: s.performanceThresholds as object,
+          hoApproval: s.hoApproval as object,
+          rectificationReminders: s.rectificationReminders as object,
+          similarFindingFields: s.similarFindingFields,
+          requiredFindingFields: s.requiredFindingFields as object,
+          allowOtherValueFields: s.allowOtherValueFields as object,
+          permissionRegistrySyncedKeys: after.permissionRegistrySyncedKeys,
+          updatedAt: toDate(s.updatedAt),
+          updatedBy: s.updatedBy ?? null,
+        };
+        await tx.settings.upsert({ where: { id: SETTINGS_ID }, create: { id: SETTINGS_ID, ...data }, update: data });
+      }
+    },
+    // Historical-import and bulk-registration routes touch many rows in
+    // one call; Prisma's interactive-transaction default timeout (5s) is
+    // too tight for that under the row-by-row diff strategy above.
+    { timeout: 30_000 }
+  );
 }
 
 /** Read-modify-write helper to avoid repeating the read/mutate/write dance. */
-export function updateDb<T>(mutator: (db: Database) => T): T {
-  const db = readDb();
-  const result = mutator(db);
-  writeDb(db);
+export async function updateDb<T>(mutator: (db: Database) => T): Promise<T> {
+  const before = await readDb();
+  const after: Database = JSON.parse(JSON.stringify(before));
+  const result = mutator(after);
+  await persistChanges(before, after);
   return result;
 }

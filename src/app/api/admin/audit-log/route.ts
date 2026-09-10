@@ -12,7 +12,8 @@ export async function GET(request: Request) {
   const auth = await requirePermission("audit-log.view");
   if (!auth.ok) return auth.response;
   const { searchParams } = new URL(request.url);
+  const db = await readDb();
   // Newest first; already inserted at the head in src/lib/audit.ts.
-  const result = paginate(readDb().auditLogs, parsePage(searchParams.get("page") ?? undefined), 50);
+  const result = paginate(db.auditLogs, parsePage(searchParams.get("page") ?? undefined), 50);
   return NextResponse.json({ auditLogs: result.items, total: result.total, page: result.page, pageSize: result.pageSize, totalPages: result.totalPages });
 }

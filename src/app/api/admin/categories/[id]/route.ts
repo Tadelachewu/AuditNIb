@@ -21,12 +21,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const auth = await requireToggleOrEditPermission("categories", parsed.data, "active");
   if (!auth.ok) return auth.response;
 
-  const db = readDb();
+  const db = await readDb();
   const existing = db.categories.find((c) => c.id === id);
   if (!existing) return NextResponse.json({ error: "Category not found" }, { status: 404 });
   const before = { name: existing.name, scored: existing.scored, active: existing.active };
 
-  const updated = updateDb((current) => {
+  const updated = await updateDb((current) => {
     const c = current.categories.find((x) => x.id === id)!;
     if (parsed.data.name !== undefined) c.name = parsed.data.name;
     if (parsed.data.scored !== undefined) c.scored = parsed.data.scored;
@@ -55,7 +55,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   if (!auth.ok) return auth.response;
   const { id } = await params;
 
-  const db = readDb();
+  const db = await readDb();
   const existing = db.categories.find((c) => c.id === id);
   if (!existing) return NextResponse.json({ error: "Category not found" }, { status: 404 });
 
@@ -67,7 +67,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
     );
   }
 
-  updateDb((current) => {
+  await updateDb((current) => {
     current.categories = current.categories.filter((c) => c.id !== id);
     appendAuditLog(current, {
       userId: auth.session.userId!,

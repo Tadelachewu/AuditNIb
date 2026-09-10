@@ -26,7 +26,7 @@ export async function POST(request: Request) {
   }
   const { currentPassword, newPassword } = parsed.data;
 
-  const db = readDb();
+  const db = await readDb();
   const existing = db.users.find((u) => u.id === auth.session.userId);
   if (!existing) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
@@ -34,7 +34,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Current password is incorrect" }, { status: 400 });
   }
 
-  updateDb((current) => {
+  await updateDb((current) => {
     const u = current.users.find((x) => x.id === existing.id)!;
     u.passwordHash = hashPassword(newPassword);
     u.mustChangePassword = false;

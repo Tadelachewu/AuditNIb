@@ -17,7 +17,7 @@ export default async function SourcesPage() {
   // same defense-in-depth convention src/app/(app)/findings/page.tsx uses.
   if (!hasPermission(user.permissions, permissionKey("sources", "view"))) redirect("/dashboard");
 
-  const db = readDb();
+  const db = await readDb();
 
   return (
     <div>

@@ -13,7 +13,7 @@ export default async function UncoveredReasonsPage() {
   // route - same defense-in-depth convention every /admin page here uses.
   if (!hasPermission(user.permissions, permissionKey("uncovered-reasons", "view"))) redirect("/dashboard");
 
-  const db = readDb();
+  const db = await readDb();
 
   return (
     <div>

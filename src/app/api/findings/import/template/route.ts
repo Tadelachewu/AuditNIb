@@ -11,7 +11,7 @@ export async function GET() {
   const auth = await requirePermission("findings.import");
   if (!auth.ok) return auth.response;
 
-  const db = readDb();
+  const db = await readDb();
   const buffer = await buildImportTemplate(db);
 
   return new NextResponse(new Uint8Array(buffer), {

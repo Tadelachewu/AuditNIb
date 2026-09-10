@@ -21,7 +21,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const auth = await requireToggleOrEditPermission("branches", parsed.data);
   if (!auth.ok) return auth.response;
 
-  const db = readDb();
+  const db = await readDb();
   const existing = db.branches.find((b) => b.id === id);
   if (!existing) return NextResponse.json({ error: "Branch not found" }, { status: 404 });
   if (parsed.data.districtId && !db.districts.some((d) => d.id === parsed.data.districtId)) {
@@ -29,7 +29,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
   const before = { name: existing.name, districtId: existing.districtId, status: existing.status };
 
-  const updated = updateDb((current) => {
+  const updated = await updateDb((current) => {
     const b = current.branches.find((x) => x.id === id)!;
     if (parsed.data.name !== undefined) b.name = parsed.data.name;
     if (parsed.data.districtId !== undefined) b.districtId = parsed.data.districtId;
@@ -59,7 +59,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   if (!auth.ok) return auth.response;
   const { id } = await params;
 
-  const db = readDb();
+  const db = await readDb();
   const existing = db.branches.find((b) => b.id === id);
   if (!existing) return NextResponse.json({ error: "Branch not found" }, { status: 404 });
 
@@ -71,7 +71,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
     );
   }
 
-  updateDb((current) => {
+  await updateDb((current) => {
     current.branches = current.branches.filter((b) => b.id !== id);
     appendAuditLog(current, {
       userId: auth.session.userId!,

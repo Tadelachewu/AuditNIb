@@ -38,7 +38,7 @@ export default async function WeeklyExecutiveSummaryPage({
   if (!user) redirect("/login");
   if (!hasPermission(user.permissions, permissionKey("report-templates", "weekly-executive-summary"))) redirect("/reports/templates");
 
-  const db = readDb();
+  const db = await readDb();
   const params = await searchParams;
   const thisWeekDate = (typeof params.thisWeekDate === "string" && params.thisWeekDate) || weekEndDate(0);
   const lastWeekDate = (typeof params.lastWeekDate === "string" && params.lastWeekDate) || weekEndDate(1);

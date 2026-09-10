@@ -7,7 +7,8 @@ import { appendAuditLog } from "@/lib/audit";
 export async function GET() {
   const auth = await requirePermission("settings.view");
   if (!auth.ok) return auth.response;
-  return NextResponse.json({ settings: readDb().settings });
+  const db = await readDb();
+  return NextResponse.json({ settings: db.settings });
 }
 
 const updateSchema = z.object({
@@ -109,7 +110,7 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid input" }, { status: 400 });
   }
 
-  const db = readDb();
+  const db = await readDb();
   const before = db.settings;
 
   // "if there is approval it should be the bank wide user" - every
@@ -128,7 +129,7 @@ export async function PATCH(request: Request) {
     }
   }
 
-  const updated = updateDb((current) => {
+  const updated = await updateDb((current) => {
     current.settings = {
       ...parsed.data,
       updatedAt: new Date().toISOString(),

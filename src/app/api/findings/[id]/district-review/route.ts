@@ -32,7 +32,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
   const { decision, reason } = parsed.data;
 
-  const db = readDb();
+  const db = await readDb();
   const existing = db.findings.find((f) => f.id === id);
   if (!existing) return NextResponse.json({ error: "Finding not found" }, { status: 404 });
 
@@ -60,7 +60,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const periodError = assertPeriodWritable(db, existing.periodId);
   if (periodError) return NextResponse.json({ error: periodError }, { status: 409 });
 
-  const updated = updateDb((current) => {
+  const updated = await updateDb((current) => {
     const f = current.findings.find((x) => x.id === id)!;
     if (decision === "APPROVE") {
       districtApproveFinding(current, f, auth.session.userId!, auth.session.name!);

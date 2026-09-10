@@ -9,7 +9,7 @@ import { outstandingTransferPreview } from "@/lib/findings";
 export async function GET() {
   const auth = await requirePermission("reporting-periods.view");
   if (!auth.ok) return auth.response;
-  const db = readDb();
+  const db = await readDb();
   // outstandingTransferableCount/transferDestinationCode let the Lock
   // dialog ask an informed "transfer N outstanding cases to <period>?"
   // question (see autoTransferOnLock()'s doc comment) without a second
@@ -75,7 +75,7 @@ export async function POST(request: Request) {
   const month = start.getMonth() + 1;
   const code = `${year}-${String(month).padStart(2, "0")}`;
 
-  const db = readDb();
+  const db = await readDb();
   if (db.reportingPeriods.some((p) => p.code === code)) {
     return NextResponse.json({ error: "That reporting period already exists" }, { status: 409 });
   }
@@ -104,7 +104,7 @@ export async function POST(request: Request) {
     updatedAt: now,
   };
 
-  updateDb((current) => {
+  await updateDb((current) => {
     current.reportingPeriods.push(period);
     appendAuditLog(current, {
       userId: auth.session.userId!,

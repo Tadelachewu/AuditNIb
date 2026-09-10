@@ -8,7 +8,8 @@ import { appendAuditLog } from "@/lib/audit";
 export async function GET() {
   const auth = await requirePermission("sources.view");
   if (!auth.ok) return auth.response;
-  return NextResponse.json({ sources: readDb().sources });
+  const db = await readDb();
+  return NextResponse.json({ sources: db.sources });
 }
 
 const createSchema = z.object({
@@ -24,7 +25,7 @@ export async function POST(request: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid input" }, { status: 400 });
   }
-  const db = readDb();
+  const db = await readDb();
   if (db.sources.some((s) => s.code.toLowerCase() === parsed.data.code.toLowerCase())) {
     return NextResponse.json({ error: "A source with that code already exists" }, { status: 409 });
   }
@@ -32,7 +33,7 @@ export async function POST(request: Request) {
   const now = new Date().toISOString();
   const source = { id: uuid(), ...parsed.data, active: true, createdAt: now, updatedAt: now };
 
-  updateDb((current) => {
+  await updateDb((current) => {
     current.sources.push(source);
     appendAuditLog(current, {
       userId: auth.session.userId!,

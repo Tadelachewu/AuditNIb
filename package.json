@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "postinstall": "prisma generate",
     "dev": "next dev --webpack",
     "build": "next build --webpack",
     "start": "next start",
@@ -11,12 +12,15 @@
     "tunnel:cloudflare": "cloudflared tunnel --url http://localhost:3000"
   },
   "dependencies": {
+    "@prisma/adapter-pg": "^7.8.0",
+    "@prisma/client": "^7.8.0",
     "bcryptjs": "^3.0.3",
     "exceljs": "^4.4.0",
     "iron-session": "^8.0.4",
     "lucide-react": "^1.40.0",
     "next": "16.3.2",
     "nodemailer": "^9.1.0",
+    "prisma": "^7.8.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "uuid": "^14.0.2",
@@ -31,10 +35,16 @@
     "@types/react-dom": "^19",
     "@types/uuid": "^10.0.0",
     "cloudflared": "^0.7.3",
+    "dotenv": "^17.4.2",
     "eslint": "^9",
     "eslint-config-next": "16.3.2",
     "localtunnel": "^2.0.2",
     "tailwindcss": "^4",
+    "tsx": "^4.23.13",
     "typescript": "^5"
+  },
+  "allowScripts": {
+    "@prisma/engines@7.8.0": true,
+    "prisma@7.8.0": true
   }
 }

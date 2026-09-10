@@ -22,7 +22,7 @@ export default async function UncoveredBranchesPage({
   if (!user) redirect("/login");
   if (!hasPermission(user.permissions, permissionKey("report-templates", "uncovered-branches"))) redirect("/reports/templates");
 
-  const db = readDb();
+  const db = await readDb();
   const params = await searchParams;
   const openPeriod = db.reportingPeriods.find((p) => p.status === "OPEN");
   const periodId = (typeof params.periodId === "string" && params.periodId) || openPeriod?.id || db.reportingPeriods[0]?.id || "";

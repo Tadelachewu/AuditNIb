@@ -14,7 +14,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   if (!auth.ok) return auth.response;
   const { id } = await params;
 
-  const db = readDb();
+  const db = await readDb();
   const finding = db.findings.find((f) => f.id === id);
   if (!finding) return NextResponse.json({ error: "Finding not found" }, { status: 404 });
 
@@ -83,7 +83,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
   const input = parsed.data;
 
-  const db = readDb();
+  const db = await readDb();
   const existing = db.findings.find((f) => f.id === id);
   if (!existing) return NextResponse.json({ error: "Finding not found" }, { status: 404 });
 
@@ -211,7 +211,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const referenceNeedsRegeneration = branchId !== existing.branchId || periodId !== existing.periodId;
 
   const before = { ...existing };
-  const updated = updateDb((current) => {
+  const updated = await updateDb((current) => {
     const f = current.findings.find((x) => x.id === id)!;
     Object.assign(f, input, { districtId, branchId, periodId, sourceId, departmentId, categoryId });
     if (referenceNeedsRegeneration) {
@@ -242,7 +242,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   if (!auth.ok) return auth.response;
   const { id } = await params;
 
-  const db = readDb();
+  const db = await readDb();
   const existing = db.findings.find((f) => f.id === id);
   if (!existing) return NextResponse.json({ error: "Finding not found" }, { status: 404 });
 
@@ -261,7 +261,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   const periodError = assertPeriodWritable(db, existing.periodId, existing.status);
   if (periodError) return NextResponse.json({ error: periodError }, { status: 409 });
 
-  updateDb((current) => {
+  await updateDb((current) => {
     current.findings = current.findings.filter((f) => f.id !== id);
     current.findingTransitions = current.findingTransitions.filter((t) => t.findingId !== id);
     current.findingCases = current.findingCases.filter((c) => c.findingId !== id);

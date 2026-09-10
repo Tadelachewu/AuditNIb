@@ -19,7 +19,7 @@ export async function GET() {
   const auth = await requirePermission("findings.import");
   if (!auth.ok) return auth.response;
 
-  const db = readDb();
+  const db = await readDb();
   const batches = [...db.importBatches].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   return NextResponse.json({ importBatches: batches });
 }
@@ -71,7 +71,7 @@ export async function POST(request: Request) {
   // whether the file has any real validation error before touching the
   // real database at all. Uses a throwaway batch id since none of this
   // clone's mutations (findings, transitions, ...) are ever written back.
-  const dryDb = structuredClone(readDb());
+  const dryDb = structuredClone(await readDb());
   const dryRows: ImportBatchRow[] = parsed.rows.map((row, i) =>
     validateImportRow(dryDb, row, i + 2, existingDedupeKeys(dryDb), {
       userId: auth.session.userId!,
@@ -98,7 +98,7 @@ export async function POST(request: Request) {
 
   const importBatchId = uuid();
 
-  const batch = updateDb((current) => {
+  const batch = await updateDb((current) => {
     const seenKeys = existingDedupeKeys(current);
     const rows: ImportBatchRow[] = parsed.rows.map((row, i) =>
       validateImportRow(current, row, i + 2, seenKeys, { userId: auth.session.userId!, userName: auth.session.name!, importBatchId })

@@ -60,7 +60,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
   const input = parsed.data;
 
-  const db = readDb();
+  const db = await readDb();
   const existing = db.findings.find((f) => f.id === id);
   if (!existing) return NextResponse.json({ error: "Finding not found" }, { status: 404 });
 
@@ -178,7 +178,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     );
   }
 
-  const updated = updateDb((current) => {
+  const updated = await updateDb((current) => {
     const f = current.findings.find((x) => x.id === id)!;
     const now = new Date().toISOString();
 

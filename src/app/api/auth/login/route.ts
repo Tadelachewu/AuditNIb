@@ -19,7 +19,7 @@ export async function POST(request: Request) {
   }
   const { username, password } = parsed.data;
 
-  const db = readDb();
+  const db = await readDb();
   const user = db.users.find((u) => u.username.toLowerCase() === username.toLowerCase());
 
   if (!user || !verifyPassword(password, user.passwordHash)) {
@@ -35,7 +35,7 @@ export async function POST(request: Request) {
   }
 
   const loginTime = new Date().toISOString();
-  updateDb((current) => {
+  await updateDb((current) => {
     const u = current.users.find((x) => x.id === user.id);
     if (u) u.lastLoginAt = loginTime;
     appendAuditLog(current, {

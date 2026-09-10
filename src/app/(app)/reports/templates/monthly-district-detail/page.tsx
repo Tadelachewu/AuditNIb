@@ -31,7 +31,7 @@ export default async function MonthlyDistrictDetailPage({
   if (!user) redirect("/login");
   if (!hasPermission(user.permissions, permissionKey("report-templates", "monthly-district-detail"))) redirect("/reports/templates");
 
-  const db = readDb();
+  const db = await readDb();
   const params = await searchParams;
   const districtId = typeof params.districtId === "string" ? params.districtId : "";
   const activeDistricts = db.districts.filter((d) => d.status === "ACTIVE").sort((a, b) => a.name.localeCompare(b.name, "en-US"));

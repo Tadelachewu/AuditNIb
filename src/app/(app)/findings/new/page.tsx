@@ -9,7 +9,7 @@ export default async function NewFindingPage() {
   if (!user) redirect("/login");
   if (!hasPermission(user.permissions, permissionKey("findings", "create"))) redirect("/findings");
 
-  const db = readDb();
+  const db = await readDb();
   const district = db.districts.find((d) => d.id === user.districtId);
   const branch = db.branches.find((b) => b.id === user.branchId);
 

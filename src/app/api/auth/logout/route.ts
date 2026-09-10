@@ -7,10 +7,10 @@ export async function POST() {
   const session = await getSession();
 
   if (session.isLoggedIn && session.userId) {
-    const db = readDb();
+    const db = await readDb();
     const user = db.users.find((u) => u.id === session.userId);
     if (user) {
-      updateDb((current) => {
+      await updateDb((current) => {
         appendAuditLog(current, {
           userId: user.id,
           userName: user.name,

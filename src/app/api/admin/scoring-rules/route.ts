@@ -9,7 +9,8 @@ import { appendAuditLog } from "@/lib/audit";
 export async function GET() {
   const auth = await requirePermission("scoring-rules.view");
   if (!auth.ok) return auth.response;
-  const rules = [...readDb().scoringRules].sort((a, b) => b.version - a.version);
+  const db = await readDb();
+  const rules = [...db.scoringRules].sort((a, b) => b.version - a.version);
   return NextResponse.json({ scoringRules: rules });
 }
 
@@ -47,7 +48,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "You can create a scoring rule but not activate it" }, { status: 403 });
   }
 
-  const db = readDb();
+  const db = await readDb();
   const nextVersion = db.scoringRules.reduce((max, r) => Math.max(max, r.version), 0) + 1;
   const now = new Date().toISOString();
 
@@ -66,7 +67,7 @@ export async function POST(request: Request) {
     createdAt: now,
   };
 
-  updateDb((current) => {
+  await updateDb((current) => {
     if (activateNow) {
       current.scoringRules.forEach((r) => (r.active = false));
     }

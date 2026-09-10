@@ -32,7 +32,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
   if (!auth.ok) return auth.response;
   const { id } = await params;
 
-  const db = readDb();
+  const db = await readDb();
   const existing = db.findings.find((f) => f.id === id);
   if (!existing) return NextResponse.json({ error: "Finding not found" }, { status: 404 });
 
@@ -61,7 +61,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     );
   }
 
-  const updated = updateDb((current) => {
+  const updated = await updateDb((current) => {
     const f = current.findings.find((x) => x.id === id)!;
 
     const closure: FindingClosure = {

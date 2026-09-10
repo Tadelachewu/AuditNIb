@@ -24,7 +24,7 @@ export async function PATCH(request: Request) {
   }
   const { email } = parsed.data;
 
-  const db = readDb();
+  const db = await readDb();
   const existing = db.users.find((u) => u.id === auth.session.userId);
   if (!existing) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
@@ -32,7 +32,7 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "That email is already in use" }, { status: 409 });
   }
 
-  const updated = updateDb((current) => {
+  const updated = await updateDb((current) => {
     const u = current.users.find((x) => x.id === existing.id)!;
     const before = u.email;
     u.email = email;

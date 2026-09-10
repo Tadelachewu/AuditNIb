@@ -8,7 +8,8 @@ import { appendAuditLog } from "@/lib/audit";
 export async function GET() {
   const auth = await requirePermission("categories.view");
   if (!auth.ok) return auth.response;
-  return NextResponse.json({ categories: readDb().categories });
+  const db = await readDb();
+  return NextResponse.json({ categories: db.categories });
 }
 
 const createSchema = z.object({
@@ -25,7 +26,7 @@ export async function POST(request: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid input" }, { status: 400 });
   }
-  const db = readDb();
+  const db = await readDb();
   if (db.categories.some((c) => c.code.toLowerCase() === parsed.data.code.toLowerCase())) {
     return NextResponse.json({ error: "A category with that code already exists" }, { status: 409 });
   }
@@ -33,7 +34,7 @@ export async function POST(request: Request) {
   const now = new Date().toISOString();
   const category = { id: uuid(), ...parsed.data, active: true, createdAt: now, updatedAt: now };
 
-  updateDb((current) => {
+  await updateDb((current) => {
     current.categories.push(category);
     appendAuditLog(current, {
       userId: auth.session.userId!,
