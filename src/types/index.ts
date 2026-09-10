@@ -746,6 +746,11 @@ export interface AuditLogEntry {
   newValue?: unknown;
   reason?: string;
   timestamp: string;
+  // Tamper-evidence hash chain - see src/lib/audit.ts's own doc comment.
+  // Always set by appendAuditLog(); never hand-construct one of these.
+  sequence: number;
+  previousHash: string;
+  hash: string;
 }
 
 export interface Database {

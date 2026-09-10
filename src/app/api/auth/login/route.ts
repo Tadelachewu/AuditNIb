@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { readDb, updateDb } from "@/lib/db";
-import { verifyPassword } from "@/lib/auth";
+import { verifyPassword, DUMMY_PASSWORD_HASH } from "@/lib/auth";
 import { getSession } from "@/lib/session";
 import { appendAuditLog } from "@/lib/audit";
 import { toSafeUser } from "@/lib/sanitize";
@@ -82,7 +82,15 @@ export async function POST(request: Request) {
   const db = await readDb();
   const user = db.users.find((u) => u.username.toLowerCase() === username.toLowerCase());
 
-  if (!user || !verifyPassword(password, user.passwordHash)) {
+  // Always runs a bcrypt compare, even for a username that doesn't exist -
+  // otherwise this short-circuits straight past the (comparatively slow)
+  // compare below and responds measurably faster than a real username with
+  // a wrong password, letting an attacker enumerate valid usernames by
+  // response time alone rather than the (intentionally identical) error
+  // message. DUMMY_PASSWORD_HASH is a fixed, unrelated hash - never a real
+  // account's password.
+  const passwordOk = verifyPassword(password, user?.passwordHash ?? DUMMY_PASSWORD_HASH);
+  if (!user || !passwordOk) {
     await Promise.all([recordAttempt(ipKey, PER_IP_RATE_LIMIT), recordAttempt(accountKey, PER_ACCOUNT_RATE_LIMIT)]);
     const [accountFailure] = await Promise.all([
       recordFailureForLockout(usernameKey, ACCOUNT_LOCKOUT),

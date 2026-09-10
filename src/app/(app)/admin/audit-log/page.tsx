@@ -13,22 +13,42 @@ export default function AuditLogPage() {
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [pageInfo, setPageInfo] = useState({ total: 0, pageSize: 50, totalPages: 1 });
+  const [chain, setChain] = useState<{ valid: boolean; brokenAtSequence?: number } | null>(null);
 
   useEffect(() => {
     setLoading(true);
-    apiGet<{ auditLogs: AuditLogEntry[]; total: number; pageSize: number; totalPages: number }>(
-      `/api/admin/audit-log?page=${page}`
-    ).then((res) => {
+    apiGet<{
+      auditLogs: AuditLogEntry[];
+      total: number;
+      pageSize: number;
+      totalPages: number;
+      chainValid: boolean;
+      chainBrokenAtSequence?: number;
+    }>(`/api/admin/audit-log?page=${page}`).then((res) => {
       setLogs(res.auditLogs);
       setPageInfo({ total: res.total, pageSize: res.pageSize, totalPages: res.totalPages });
+      setChain({ valid: res.chainValid, brokenAtSequence: res.chainBrokenAtSequence });
       setLoading(false);
     });
   }, [page]);
 
   return (
     <div>
-      <h1 className="text-lg font-semibold text-slate-900">Audit Log</h1>
-      <p className="mt-1 text-sm text-slate-500">Immutable record of workflow, configuration and authentication events.</p>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h1 className="text-lg font-semibold text-slate-900">Audit Log</h1>
+        {chain && (
+          <Badge tone={chain.valid ? "green" : "red"}>
+            {chain.valid
+              ? "Chain verified"
+              : `Tampering detected at entry #${chain.brokenAtSequence}`}
+          </Badge>
+        )}
+      </div>
+      <p className="mt-1 text-sm text-slate-500">
+        Immutable record of workflow, configuration and authentication events - every entry is
+        cryptographically chained to the one before it, so an edit or deletion made directly in the
+        database (bypassing this app) is detectable, not just assumed impossible.
+      </p>
 
       <Card className="mt-5">
         <CardHeader title="Recent Events" description={`${pageInfo.total} total`} />

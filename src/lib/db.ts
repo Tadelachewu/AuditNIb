@@ -410,6 +410,9 @@ function auditLogFromRow(r: Prisma.AuditLogEntryGetPayload<object>): AuditLogEnt
     newValue: r.newValue ?? undefined,
     reason: u(r.reason),
     timestamp: iso(r.timestamp),
+    sequence: r.sequence,
+    previousHash: r.previousHash,
+    hash: r.hash,
   };
 }
 
@@ -560,7 +563,24 @@ async function syncCollection<Row extends { id: string }>(
 
   for (const id of beforeById.keys()) {
     if (!afterById.has(id)) {
-      await delegate.delete({ where: { id } });
+      try {
+        await delegate.delete({ where: { id } });
+      } catch (err) {
+        // P2025 ("no record found to delete") happens when this row was
+        // already removed as a side effect of deleting its parent in the
+        // SAME transaction - e.g. deleting a Finding cascades onto its own
+        // FindingTransition/RectificationEntry/FindingCase/FindingTransfer/
+        // FindingClosure/Evidence/Comment rows (all onDelete: Cascade -
+        // see schema.prisma's own doc comment on why), and this generic
+        // helper has no way to know that happened before it gets to that
+        // child collection's own syncCollection() call. The end state
+        // either way is "this row doesn't exist", which is exactly what a
+        // delete wants - not a real failure, so only this specific,
+        // already-gone case is swallowed; anything else still throws.
+        if (!(err instanceof Prisma.PrismaClientKnownRequestError) || err.code !== "P2025") {
+          throw err;
+        }
+      }
     }
   }
   for (const [id, row] of afterById) {
@@ -882,6 +902,9 @@ function auditLogToData(r: AuditLogEntry) {
     newValue: (r.newValue ?? Prisma.DbNull) as Prisma.InputJsonValue,
     reason: r.reason ?? null,
     timestamp: toDate(r.timestamp),
+    sequence: r.sequence,
+    previousHash: r.previousHash,
+    hash: r.hash,
   };
 }
 

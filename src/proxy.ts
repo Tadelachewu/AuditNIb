@@ -22,12 +22,71 @@ function pageCodeFor(pathname: string): string | null {
   return null;
 }
 
+// Larger than either of this app's own upload caps (evidence and import are
+// both 10 MB - see src/lib/evidence.ts / src/lib/import.ts's own
+// MAX_EVIDENCE_BYTES / MAX_IMPORT_BYTES) so neither is affected, but small
+// enough to reject an oversized payload aimed at a route that has no size
+// check of its own (every plain JSON POST/PATCH endpoint) before it's ever
+// read into memory by request.json().
+const MAX_API_BODY_BYTES = 11 * 1024 * 1024;
+
+const STATE_CHANGING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
+// Secondary CSRF defense on top of the session cookie's own SameSite=Lax
+// (which already blocks a forged cross-site POST from carrying the cookie
+// in any modern browser): reject a state-changing /api request whose
+// Origin (or, failing that, Referer) doesn't match its own Host. A browser
+// sets Origin itself and page JS can't override it, so a genuinely forged
+// cross-site request either carries a mismatching Origin or - for a
+// same-site, same-origin request, which is the only kind this app's own
+// frontend ever sends - matches exactly. Requests with neither header
+// (curl, server-to-server calls, most non-browser tooling) are allowed
+// through rather than blocked outright, since blocking them would reject
+// legitimate non-browser callers without stopping a real attack (a forged
+// browser request always has Origin set).
+function isCrossOriginApiRequest(request: NextRequest): boolean {
+  const host = request.headers.get("host");
+  if (!host) return false;
+
+  const origin = request.headers.get("origin");
+  if (origin) {
+    try {
+      return new URL(origin).host !== host;
+    } catch {
+      return true;
+    }
+  }
+
+  const referer = request.headers.get("referer");
+  if (referer) {
+    try {
+      return new URL(referer).host !== host;
+    } catch {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  if (pathname.startsWith("/api")) {
+    if (STATE_CHANGING_METHODS.has(request.method)) {
+      const contentLength = Number(request.headers.get("content-length") ?? "0");
+      if (contentLength > MAX_API_BODY_BYTES) {
+        return NextResponse.json({ error: "Request body too large" }, { status: 413 });
+      }
+      if (isCrossOriginApiRequest(request)) {
+        return NextResponse.json({ error: "Cross-origin request rejected" }, { status: 403 });
+      }
+    }
+    return NextResponse.next();
+  }
+
   if (
     pathname.startsWith("/_next") ||
-    pathname.startsWith("/api") ||
     pathname.startsWith("/favicon") ||
     // Static files served directly from /public (logos, icons, etc.) must
     // never require a session - besides being genuinely public, Next's own

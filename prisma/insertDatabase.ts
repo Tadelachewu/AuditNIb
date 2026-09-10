@@ -8,6 +8,7 @@
 import { Prisma } from "../src/generated/prisma/client";
 import type { PrismaClient } from "../src/generated/prisma/client";
 import type { Database } from "../src/types";
+import { buildAuditLogChainFromScratch } from "../src/lib/audit";
 
 function toDate(iso: string): Date {
   return new Date(iso);
@@ -377,8 +378,12 @@ export async function insertDatabaseIntoPostgres(prisma: PrismaClient, db: Datab
   });
   console.log(`  notifications: ${db.notifications.length}`);
 
+  // Source data predates the hash chain (see src/lib/audit.ts's own doc
+  // comment) - build it from scratch here, ordered by timestamp, rather
+  // than trusting any sequence/hash the source JSON might already carry.
+  const chainedAuditLogs = buildAuditLogChainFromScratch(db.auditLogs);
   await prisma.auditLogEntry.createMany({
-    data: db.auditLogs.map((a) => ({
+    data: chainedAuditLogs.map((a) => ({
       id: a.id,
       userId: a.userId,
       userName: a.userName,
@@ -389,6 +394,9 @@ export async function insertDatabaseIntoPostgres(prisma: PrismaClient, db: Datab
       newValue: (a.newValue ?? Prisma.DbNull) as Prisma.InputJsonValue,
       reason: a.reason ?? null,
       timestamp: toDate(a.timestamp),
+      sequence: a.sequence,
+      previousHash: a.previousHash,
+      hash: a.hash,
     })),
   });
   console.log(`  auditLogs: ${db.auditLogs.length}`);

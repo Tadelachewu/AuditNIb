@@ -50,8 +50,33 @@ to watch for here too.
 
 ## Getting started
 
-Prerequisites: Node.js, and a reachable PostgreSQL server (local or
-otherwise) for the connection string below.
+Prerequisites: Node.js, a reachable PostgreSQL server, and a reachable
+Redis (or Redis-protocol-compatible) server, for the connection strings
+below. Redis backs login/password-change rate limiting and lockout (see
+[src/lib/rateLimit.ts](src/lib/rateLimit.ts)) - the app won't start without
+`REDIS_URL` set to something it can reach.
+
+**Start Postgres and Redis** (skip whichever you already have running):
+
+```bash
+# Postgres - any of these work equally well:
+#   - a local install (pg_ctl start, or your OS's service manager)
+#   - Docker:
+docker run -d --name auditapp-postgres -e POSTGRES_USER=auditapp -e POSTGRES_PASSWORD=auditapp -e POSTGRES_DB=auditapp -p 5432:5432 postgres:16
+
+# Redis - any of these work equally well:
+#   - Docker:
+docker run -d --name auditapp-redis -p 6379:6379 redis:7
+#   - Windows: Memurai (https://www.memurai.com) - installs as a Windows
+#     service, listens on localhost:6379 out of the box, no config needed
+#   - macOS: brew install redis && brew services start redis
+#   - Linux: apt/yum install redis-server, then systemctl start redis
+```
+
+Either way, confirm it's actually reachable before moving on -
+`redis-cli ping` (or `memurai-cli ping` on Windows) should print `PONG`.
+
+**Configure and run the app:**
 
 ```bash
 cp .env.example .env.local
@@ -59,6 +84,9 @@ cp .env.example .env.local
 #   - IRON_SESSION_PASSWORD: a random string, 32+ characters
 #   - DATABASE_URL: your Postgres connection string,
 #     e.g. postgresql://user:password@localhost:5432/auditapp?schema=public
+#   - REDIS_URL: your Redis connection string,
+#     e.g. redis://localhost:6379 (add a password/TLS for anything beyond
+#     local dev - see "Redis" under Authentication below)
 
 npm install                # also runs `prisma generate` (see "postinstall")
 npx prisma migrate dev     # creates/updates the Postgres schema
@@ -113,14 +141,38 @@ schema change if you skip a full reinstall.
 
 Sessions are encrypted cookies managed by [iron-session](https://github.com/vvo/iron-session)
 (see [src/lib/session.ts](src/lib/session.ts)). Passwords are hashed with
-bcrypt. Roles are dynamic, admin-editable data (not a fixed list) and access
+bcrypt and validated server-side against complexity rules, a common-password
+blocklist, and a live Have I Been Pwned breach check (see
+[src/lib/passwordValidation.ts](src/lib/passwordValidation.ts)) on every
+change, admin creation, or admin reset. Login and password-change are both
+rate-limited and lockout-protected via Redis (see
+[src/lib/rateLimit.ts](src/lib/rateLimit.ts) and
+[security/SECURITY.md](security/SECURITY.md) for the full design). Changing
+a password bumps `User.sessionVersion`, which every request re-checks (see
+[src/lib/session.ts](src/lib/session.ts)'s `getCurrentUser()`) - this
+immediately invalidates every *other* already-open session for that account
+(and a deactivated account's open sessions), not just at next natural
+expiry. Roles are dynamic, admin-editable data (not a fixed list) and access
 is granted per page, per action — see [PHASE2.md](PHASE2.md) for the full
 design. [src/proxy.ts](src/proxy.ts) (Next's routing proxy, formerly called
 "middleware") redirects unauthenticated requests to `/login` and redirects
 away from any `/admin/<page>` the session's role doesn't hold `<page>.view`
 for; every `/api/admin/*` route re-checks the specific permission itself via
 [src/lib/guard.ts](src/lib/guard.ts), since the UI/proxy layer is a
-convenience, not the real access-control boundary.
+convenience, not the real access-control boundary. Every mutating request
+to a workflow/config entity is written to an append-only, cryptographically
+chained audit log (see [src/lib/audit.ts](src/lib/audit.ts)) - editing or
+deleting a past entry directly in the database, bypassing the app, is
+detectable (surfaced as a "Chain verified" / "Tampering detected" badge on
+`/admin/audit-log`), not just assumed impossible.
+
+**Redis**: `REDIS_URL` accepts credentials and TLS the same way Postgres's
+connection string does - `redis://:password@host:6379` or, for TLS,
+`rediss://:password@host:6380`. `redis://localhost:6379` with no
+credentials (this app's own default) is fine for local development, where
+Redis is only reachable from your own machine; anything beyond that should
+set a password (Redis `requirepass`, or your managed Redis provider's own
+auth) and use `rediss://` if the connection ever leaves a trusted network.
 
 ## Default users & roles
 

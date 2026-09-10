@@ -3,7 +3,7 @@ import { z } from "zod";
 import { requireToggleOrEditPermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { hashPassword } from "@/lib/auth";
-import { validatePasswordStrength } from "@/lib/passwordValidation";
+import { validatePasswordFull } from "@/lib/passwordValidation";
 import { resolveOrgAssignment, isDepartmentExactScopeForUser } from "@/lib/org";
 import { appendAuditLog } from "@/lib/audit";
 import { toSafeUser } from "@/lib/sanitize";
@@ -66,7 +66,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
 
   if (input.password) {
-    const strength = validatePasswordStrength(input.password);
+    const strength = await validatePasswordFull(input.password);
     if (!strength.valid) {
       return NextResponse.json({ error: strength.error }, { status: 400 });
     }
@@ -144,8 +144,16 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (input.password) {
       u.passwordHash = hashPassword(input.password);
       // Same reasoning as account creation - the admin chose this
-      // password, not the user, so it's forced through /profile again.
+      // password, not the user, so it's forced through /profile again,
+      // and only valid for 24h (see the login route's own expiry check).
       u.mustChangePassword = true;
+      u.passwordExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+      // Kills every session this user currently has open elsewhere - an
+      // admin resetting a password is very often a "this account may be
+      // compromised" action, not just routine credential hygiene, so the
+      // old password's sessions shouldn't outlive the reset itself (see
+      // User.sessionVersion's own doc comment).
+      u.sessionVersion = (u.sessionVersion ?? 1) + 1;
     }
     u.role = nextRole;
     u.districtId = districtId;

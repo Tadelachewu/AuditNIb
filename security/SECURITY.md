@@ -229,6 +229,189 @@ app's own dynamic, admin-editable permission system:
   can't assign a BANK-scoped role, matching the same rule applied to import
   above.
 
+---
+
+## Password and session hardening
+
+Requested directly, based on a description of a comparable app's own
+password/session design (bcrypt storage, a `validatePasswordFull` HIBP gate,
+`sessionVersion`-based invalidation on password change, rate-limited
+password-change endpoints, forced rotation for temporary credentials, and
+email-required-before-completing-a-forced-change) — adopted here, plus
+moving rate limiting/lockout off the in-memory store onto Redis so it
+survives restarts and works correctly across more than one instance.
+
+- **Redis-backed rate limiting/lockout**, replacing the in-memory `Map`
+  from the earlier VA-017 fix. [src/lib/redisClient.ts](../src/lib/redisClient.ts)
+  (new, `ioredis`, requires `REDIS_URL`) and a rewritten
+  [src/lib/rateLimit.ts](../src/lib/rateLimit.ts) — same function names and
+  call sites as before, now backed by real Redis keys with TTLs instead of
+  per-process memory. Every call fails open (lets the request through) if
+  Redis itself errors or times out, so a Redis outage degrades brute-force
+  protection rather than taking login down entirely. **Verified live**:
+  tripped a lockout, restarted the Node process, confirmed the lockout was
+  still in effect afterward (proving it survived the restart) - the exact
+  failure mode the in-memory version had.
+- **HIBP breach check.** [src/lib/passwordValidation.ts](../src/lib/passwordValidation.ts)
+  adds `validatePasswordFull()`: after the existing local checks pass, it
+  queries Have I Been Pwned's k-anonymity range API (only the first 5 hex
+  characters of the password's SHA-1 hash ever leave the server; the match
+  against the full hash happens locally) and rejects a match. Fails open on
+  any network error. Wired into all three password-setting endpoints
+  (change-password, admin create-user, admin reset-user). **Verified
+  live**: `Password1!` was rejected with a live call to the real HIBP API; a
+  random strong password passed.
+- **`sessionVersion`-based session invalidation.** New `User.sessionVersion`
+  column, bumped on every password change (self-service or admin reset) and
+  embedded in the session cookie at login. The check lives in one place -
+  [src/lib/session.ts](../src/lib/session.ts)'s `getCurrentUser()` - and
+  both `src/lib/guard.ts`'s `requireUser()` (every API route) and every
+  Server Component page call it, so a stale session is rejected identically
+  everywhere, not just on API routes. The same check also compares the
+  user's live `status`, so a deactivated account's already-issued session
+  stops working immediately too, not just at its next natural expiry.
+  **Verified live**: logged the same account into two separate sessions,
+  changed the password via session A, confirmed session A (rebuilt with the
+  new version) kept working while session B was immediately rejected - both
+  on a plain API call and on an actual page render.
+  - Caught and fixed a real bug during that verification: Next.js only
+    allows writing cookies from a Route Handler or Server Action, not a
+    Server Component - `session.destroy()` was crashing every page render
+    for a stale session with a 500 instead of redirecting to `/login`. Now
+    wrapped in try/catch (clearing the cookie is a courtesy there; the
+    security boundary is the version check itself, re-run on every call
+    regardless of whether the cookie was physically cleared).
+  - Also caught a second, adjacent bug the same fix exposed:
+    [dashboard/page.tsx](../src/app/(app)/dashboard/page.tsx) used a
+    non-null assertion on `getCurrentUser()` instead of checking and
+    redirecting itself, relying on the parent layout's redirect - which
+    doesn't reliably stop a sibling page from still rendering in the App
+    Router. A stale session hitting `/dashboard` specifically threw a
+    second, separate unhandled error server-side (still redirected
+    correctly to the browser, but noisy). Fixed to check and redirect the
+    same way every other page in this app already does.
+- **Rate limit + lockout on change-password.** Wrong "current password"
+  attempts now go through the same Redis-backed machinery as login (5
+  failures / 15 min lockout, keyed by user id rather than IP+username since
+  the caller is already authenticated). **Verified live**: 6th wrong
+  attempt returned 429.
+- **Forced rotation for temporary credentials.** New
+  `User.passwordExpiresAt`, set 24h out whenever `mustChangePassword` is
+  set (admin create-user, admin reset-user) and cleared when the user sets
+  their own password. The login route rejects an expired temporary
+  password outright ("Temporary password has expired. Contact an
+  administrator to reset it.") rather than letting someone in in­definitely
+  on a password an admin chose and may still know. **Verified live**: a
+  freshly admin-created account's `passwordExpiresAt` was correctly set 24h
+  out.
+- **Email required before completing a forced password change.**
+  [change-password](../src/app/api/auth/change-password/route.ts) now
+  rejects the request if `mustChangePassword` is set and the account has no
+  email on file yet, pointing the user at the Email card already on the
+  same `/profile` page - no UI change needed, since that card is already
+  rendered above the password form during a forced change. Ensures a
+  password-recovery path exists before the account settles into permanent
+  use. **Verified live**: rejected until an email was set, then succeeded.
+
+---
+
+## Deep-dive findings (self-assessment, not sourced from either document)
+
+Requested directly: "what would a security engineer's deep dive find in
+this app?" Answered by actually running `npm audit` and checking specific
+code paths rather than speculating, then fixing what came back. All fixed
+unless marked deferred below.
+
+- **Fixed — Next.js 16.3.2 had a confirmed, unauthenticated RCE** (two
+  CVEs: one on Windows-hosted servers, one in the Image Optimization API
+  via AVIF files) - and this app actually uses `next/image` (login page,
+  Sidebar), so the code path was live. Upgraded to `next@16.3.4`.
+- **Fixed — `nodemailer@9.1.0`** was vulnerable to a `resolveContent()`
+  bypass of `disableFileAccess`/`disableUrlAccess` (a different, newer
+  advisory than VA-015's ≤9.0.0 range, which this app had already cleared).
+  Patch-bumped to `9.1.1` rather than the available `10.x` major, since a
+  patch release existed that already fixed it - no need for the larger
+  version jump's behavior-change risk.
+- **Fixed — `exceljs`'s bundled `uuid`** (a buffer-bounds-check
+  vulnerability) sat directly on this app's untrusted-file-upload surface
+  (the findings import feature parses attacker-supplied `.xlsx` files).
+  `exceljs` itself hasn't released a fix (its latest, 4.4.0, still depends
+  on the vulnerable `uuid@^8.3.0`), so `package.json` now `overrides` that
+  nested resolution to the same `uuid@14.x` this app's own code already
+  uses directly.
+- **Fixed — unbounded request body size.** Evidence upload and import both
+  had their own byte caps; every plain JSON POST/PATCH route had none. A
+  single check in [src/proxy.ts](../src/proxy.ts) now rejects any `/api`
+  state-changing request whose declared `Content-Length` exceeds 11 MB
+  (just above both existing 10 MB caps) with a 413, before the body is ever
+  read into memory. Known limitation: a request that lies about or omits
+  `Content-Length` (chunked transfer) isn't caught by this - a
+  standard, non-airtight first line of defense, same as most apps use.
+  **Verified live** with a real 12 MB payload.
+- **Fixed — no CSRF token.** `SameSite=Lax` on the session cookie already
+  blocks a forged cross-site POST from carrying it in any modern browser;
+  added a second, defense-in-depth layer in the same proxy check: a
+  state-changing `/api` request whose `Origin` (or, failing that,
+  `Referer`) doesn't match its own `Host` is rejected with 403. Requests
+  with neither header (curl, non-browser tooling) are let through rather
+  than blocked, since a real forged *browser* request always carries
+  `Origin` and blocking headerless requests outright would only reject
+  legitimate non-browser callers, not stop an actual attack. **Verified
+  live**: matching origin passed, `http://evil.example.com` was rejected.
+- **Fixed — username-enumeration timing side channel on login.**
+  `!user || !verifyPassword(...)` short-circuited past the (comparatively
+  slow) bcrypt compare whenever the username didn't exist, responding
+  measurably faster than a real username with a wrong password.
+  `src/lib/auth.ts` now exports `DUMMY_PASSWORD_HASH`, a fixed unrelated
+  hash the login route compares against when there's no real user, so a
+  bcrypt-equivalent delay always runs either way.
+- **Fixed — raw SMTP error returned to the client.** `test-email` echoed
+  the exception's own message back in the response; now logged server-side
+  only, with a generic-but-actionable message to the client (admin-only
+  endpoint, but a raw transport error can still carry internal
+  hostnames/TLS details that shouldn't reach any client response).
+- **Fixed — audit log had no tamper-evidence.** Rows were plain, mutable
+  database records - editing or deleting one directly in Postgres, outside
+  the app entirely, would have been invisible. `AuditLogEntry` now carries
+  `sequence`/`previousHash`/`hash`: each entry's hash covers its own fields
+  plus the previous entry's hash (using a canonical, key-sorted JSON
+  serialization - plain `JSON.stringify` isn't safe here since `oldValue`/
+  `newValue` round-trip through a Postgres `jsonb` column, which does not
+  preserve object key order, so a naive hash computed at write time could
+  mismatch its own recomputation at read time through no fault of tampering
+  at all; this was caught and fixed during verification, not left as a
+  latent bug). `GET /api/admin/audit-log` now runs
+  `verifyAuditLogChain()` on every request and the Audit Log page shows a
+  "Chain verified" / "Tampering detected at entry #N" badge. Existing
+  history (593 pre-existing rows) was backfilled via
+  `prisma/backfill-audit-hash-chain.ts`, ordering by `timestamp` since
+  that's the only signal old rows have. **Verified live**: directly edited
+  one row's `action` field via a raw Prisma call (bypassing the app
+  entirely) and confirmed the API immediately reported
+  `chainValid: false` at the exact tampered entry; reverted and confirmed
+  it returned to `true`.
+- **Deferred — no MFA anywhere**, including ADMIN/HO_CONTROLLER. Not a
+  quick fix - needs its own design decision (TOTP vs. email/SMS OTP,
+  enrollment UX, recovery-code handling) rather than being bolted on
+  during this pass. Worth its own follow-up.
+- **Deferred — no antivirus/malware scanning on evidence uploads.**
+  MIME allowlist + magic-byte verification are real and already in place
+  (see the earlier VA-013 section), but content-safety scanning needs an
+  external service (ClamAV, a cloud AV API) this environment doesn't have
+  available to wire up and verify against.
+- **Deferred — plaintext secrets in `.env`** (SMTP password, DB
+  credentials, Redis auth if set). Standard for this app's current scale;
+  a production deployment should move these to a real secrets manager
+  rather than a code change addressing it here.
+- **Accepted, not fixed — remaining `npm audit` findings** (js-yaml,
+  valibot, mysql2, `@hono/node-server`, `@prisma/config`/`deepmerge-ts`)
+  are all transitive dependencies of Prisma's own dev tooling (`@prisma/dev`,
+  used by `prisma generate`/`prisma studio`), never part of this app's own
+  served request path. `npm audit`'s own suggested fix for all of them is
+  downgrading `prisma` to `6.19.3` - reverting this session's entire
+  Postgres/Prisma-7 migration - which is a much larger regression than the
+  actual risk (dev-CLI-only, not reachable from the running app) justifies.
+
 ## Memo Automation System (SEC-001 – SEC-022)
 
 #### SEC-001 — Access Control (Risk: High)

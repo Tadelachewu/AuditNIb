@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { getIronSession, type IronSession, type SessionOptions } from "iron-session";
+import { prisma } from "@/lib/prismaClient";
 import type { OrgScope } from "@/types";
 
 export interface SessionData {
@@ -64,9 +65,45 @@ export async function getSession(): Promise<IronSession<SessionData>> {
   return session;
 }
 
-/** Returns the logged-in session, or null if there isn't one. */
+/**
+ * Returns the logged-in session, or null if there isn't one - the single
+ * source of truth every Server Component page AND src/lib/guard.ts's
+ * requireUser() both call, so a stale session is rejected identically
+ * everywhere, not just on API routes.
+ *
+ * "Logged in" here means more than "the cookie decrypts and says so": a
+ * single, cheap, indexed lookup of just this one user's sessionVersion and
+ * status is compared against what the cookie itself carries. A mismatch
+ * means either the password changed (see User.sessionVersion's own doc
+ * comment) or the account was deactivated since this cookie was issued -
+ * in both cases the session is destroyed and treated as logged out here,
+ * rather than staying valid (and, before this check existed, actually
+ * rendering pages with live data) until it naturally expired.
+ */
 export async function getCurrentUser(): Promise<SessionData | null> {
   const session = await getSession();
   if (!session.isLoggedIn || !session.userId) return null;
+
+  const current = await prisma.user.findUnique({
+    where: { id: session.userId },
+    select: { sessionVersion: true, status: true },
+  });
+  if (!current || current.status !== "ACTIVE" || current.sessionVersion !== (session.sessionVersion ?? 1)) {
+    // Clearing the cookie here is a courtesy, not the actual security
+    // boundary - this function re-validates on every single call, so a
+    // stale cookie can never get past the check above again regardless of
+    // whether it's physically cleared. It matters because Next.js only
+    // allows writing cookies from a Route Handler or Server Action - most
+    // callers here are Server Components (page.tsx/layout.tsx), where
+    // `.destroy()` throws. Swallow that specific case; it still throws (and
+    // still clears the cookie) when this runs inside an actual API route.
+    try {
+      session.destroy();
+    } catch {
+      // Expected when called from a Server Component - see above.
+    }
+    return null;
+  }
+
   return session;
 }

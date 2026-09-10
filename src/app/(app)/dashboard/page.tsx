@@ -26,7 +26,14 @@ export default async function DashboardPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const user = (await getCurrentUser())!;
+  const user = await getCurrentUser();
+  // AppLayout (src/app/(app)/layout.tsx) already redirects when there's no
+  // user, but layouts and pages can render concurrently in the App
+  // Router - this page's own render must not assume that redirect has
+  // already taken effect by the time it runs (a stale/invalidated session
+  // - see User.sessionVersion's own doc comment - reaches this null case
+  // for real now, not just hypothetically).
+  if (!user) redirect("/login");
   const db = await readDb();
   const params = await searchParams;
   const dateRange = parseDateRange(params);

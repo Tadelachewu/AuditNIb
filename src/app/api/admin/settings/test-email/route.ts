@@ -36,8 +36,16 @@ export async function POST() {
       html: "<p>This is a test email from NIB Control360&apos;s Notification Delivery settings. If you received this, outbound email is working.</p>",
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    return NextResponse.json({ error: `Failed to send: ${message}` }, { status: 502 });
+    // Logged in full server-side only - a raw SMTP transport error can
+    // include internal hostnames, auth-failure specifics, or TLS details
+    // that shouldn't reach the client even though this endpoint is
+    // admin-only. The generic message still points at exactly what to
+    // check, without echoing the exception itself.
+    console.error("[test-email] Failed to send test email:", err);
+    return NextResponse.json(
+      { error: "Failed to send - check the server logs and your SMTP host/port/credentials." },
+      { status: 502 }
+    );
   }
 
   return NextResponse.json({ ok: true, sentTo: recipient.email });

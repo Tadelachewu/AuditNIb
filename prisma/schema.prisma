@@ -587,6 +587,19 @@ model AuditLogEntry {
   newValue   Json?    @map("new_value")
   reason     String?
   timestamp  DateTime
+  // Tamper-evidence chain (see src/lib/audit.ts's own doc comment):
+  // `sequence` is assigned by the application, not the database (it must
+  // be known before the row is ever inserted, so a DB autoincrement -
+  // only assigned at insert time - can't be used for it), and is what
+  // orders the chain, not `timestamp` (client-set, not monotonic) or
+  // insertion order (Postgres doesn't guarantee `findMany()` returns rows
+  // in insertion order without an explicit ORDER BY). `hash` covers this
+  // entry's own fields plus `previousHash`, so altering or reordering any
+  // past entry breaks every hash after it - detectable by
+  // verifyAuditLogChain() without needing a separate authority.
+  sequence     Int    @unique @map("sequence")
+  previousHash String @map("previous_hash")
+  hash         String @map("hash")
 
   @@index([entityType, entityId])
   @@map("audit_logs")
