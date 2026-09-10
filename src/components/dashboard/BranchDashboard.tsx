@@ -60,7 +60,6 @@ export function BranchDashboard({
   // read .id for filtering) - FindingsByCategoryChart, SourcePerformanceSummary.
   const periodDisplayMarker = hasPeriodScope ? (openPeriod ?? { id: ALL_PERIODS_VALUE }) : undefined;
   const activeCategories = db.categories.filter((c) => c.active);
-  const otherCase = db.categories.find((c) => c.code === "OTHER_CASE");
   const activeScoringRule = db.scoringRules.find((r) => r.active);
   const manager = branch ? findBranchManager(db, branch.id) : undefined;
   const subManager = branch ? findBranchSubManager(db, branch.id) : undefined;
@@ -144,12 +143,25 @@ export function BranchDashboard({
       ? sumAmountByCurrencyInPeriod(db, openPeriod.id, approvedBranchAllFindings, "closed")
       : sumAmountByCurrency(approvedPeriodFindings, "closedAmount");
 
-  const otherCaseFindings = otherCase ? approvedPeriodFindings.filter((f) => f.categoryId === otherCase.id) : [];
-  const otherCaseTotal = otherCaseFindings.reduce((sum, f) => sum + f.caseCount, 0);
-  // Rectified is closedCases, not raw self-reported rectifiedCases - same
-  // "unless it is closed, never count as rectified" rule computeEligibleCaseCounts()
-  // and every other Rectified figure on this dashboard already follows.
-  const otherCaseRectified = otherCaseFindings.reduce((sum, f) => sum + f.closedCases, 0);
+  // Same computeEligibleCaseCounts() call Case-Based Performance itself
+  // uses (see CaseBasedPerformance.tsx's own doc comment) - not a
+  // hand-rolled filter, and NOT literally category code "OTHER_CASE"
+  // alone the way this used to be computed (a stale hardcode from before
+  // ScoringRule.categories became admin-configurable to span more than one
+  // category - "Other Case" has only ever been the seeded example
+  // category, never a name this section should still special-case). That
+  // old version also summed each finding's full caseCount rather than its
+  // transfer-aware eligible slice, so it could both undercount (missing
+  // every other scored category) and overcount (a case that transferred
+  // out of this period) at the same time - this widget must never be able
+  // to disagree with Case-Based Performance above it, for the same period
+  // and scope, since both are meant to be the exact same headline number.
+  const scoredCounts =
+    branch && hasPeriodScope
+      ? computeEligibleCaseCounts(db, { branchId: branch.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id })
+      : null;
+  const otherCaseTotal = scoredCounts?.totalCases ?? 0;
+  const otherCaseRectified = scoredCounts?.rectifiedCases ?? 0;
 
   // A category/source filter narrows which rows those widgets even list -
   // a real narrowing of "what am I looking at," not a redefinition of the
@@ -378,10 +390,10 @@ export function BranchDashboard({
       <Card>
         <CardHeader
           title="Other Case Summary"
-          description={otherCase ? "The BRD's primary scored category" : "No \"Other Case\" category configured"}
+          description={activeScoringRule ? "The BRD's primary scored category" : "No active scoring rule configured yet"}
         />
         <div className="px-4 py-3 text-sm text-slate-600">
-          {otherCase ? (
+          {activeScoringRule ? (
             <>
               <p>
                 Total / Rectified / Outstanding:{" "}
@@ -392,7 +404,7 @@ export function BranchDashboard({
               {activeScoringRule && <p className="mt-1 text-xs text-slate-400">Live formula: {activeScoringRule.basis}</p>}
             </>
           ) : (
-            <p className="text-slate-400">Ask an administrator to configure it under Classified Categories.</p>
+            <p className="text-slate-400">Ask an administrator to configure one under Scoring Rules.</p>
           )}
         </div>
       </Card>
