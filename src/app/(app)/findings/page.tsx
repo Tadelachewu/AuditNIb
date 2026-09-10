@@ -13,7 +13,7 @@ import { Pagination } from "@/components/ui/Pagination";
 import { TimeRangeFilter } from "@/components/reports/TimeRangeFilter";
 import { FilterBar } from "@/components/dashboard/FilterBar";
 import { FindingsTable, type FindingRow } from "@/components/findings/FindingsTable";
-import type { Finding } from "@/types";
+import { FILTERABLE_FINDING_STATUSES, type Finding } from "@/types";
 
 export default async function FindingsPage({
   searchParams,
@@ -187,6 +187,7 @@ export default async function FindingsPage({
           riskLevels={db.settings.riskLevels}
           fixedDistrict={user.orgScope !== "BANK" && district ? { id: district.id, name: district.name } : undefined}
           fixedBranch={user.orgScope === "BRANCH" && branch ? { id: branch.id, name: branch.name } : undefined}
+          statusOptions={FILTERABLE_FINDING_STATUSES}
           hint="Filters apply immediately."
         />
       </div>

@@ -2,7 +2,7 @@ import { v4 as uuid } from "uuid";
 import { appendAuditLog } from "@/lib/audit";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
 import type { SessionData } from "@/lib/session";
-import { REQUIRABLE_FINDING_FIELDS } from "@/types";
+import { REQUIRABLE_FINDING_FIELDS, HO_APPROVED_OR_LATER_STATUSES } from "@/types";
 import type { Database, Finding, FindingStatus, FindingTransfer, Branch, ReportingPeriod, RequirableFindingField } from "@/types";
 
 /**
@@ -202,14 +202,11 @@ export function averageCaseAgeDays(findings: Finding[]): number | null {
 // entirely lands straight on SENT_TO_BRANCH_MANAGER (see submitFinding()'s
 // registeredByBankScope branch), which is itself the bank's own approval,
 // so it's correctly included too.
-const HO_APPROVED_OR_LATER = new Set<FindingStatus>([
-  "SENT_TO_BRANCH_MANAGER",
-  "PARTIALLY_RECTIFIED",
-  "RECTIFICATION_RETURNED",
-  "RECTIFIED",
-  "CLOSED",
-  "TRANSFERRED",
-]);
+// HO_APPROVED_OR_LATER_STATUSES lives in src/types/index.ts, not here - see
+// that constant's own doc comment for why (FilterBar.tsx, a client
+// component, needs it via src/lib/dashboardFilters.ts without pulling in
+// this file's server-only dependency chain).
+const HO_APPROVED_OR_LATER = new Set<FindingStatus>(HO_APPROVED_OR_LATER_STATUSES);
 
 /** Whether a finding has cleared HO approval (or later) - see HO_APPROVED_OR_LATER's own doc comment. */
 export function isHoApproved(f: Finding): boolean {

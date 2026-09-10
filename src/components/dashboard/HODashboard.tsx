@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { Database } from "@/types";
+import { HO_APPROVED_OR_LATER_STATUSES, type Database } from "@/types";
 import type { SessionData } from "@/lib/session";
 import { computePerformance, findingCaseTotals, findingCaseTotalsInPeriod, transferTotals, averageCaseAgeDays, isHoApproved } from "@/lib/findings";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
@@ -299,6 +299,7 @@ export function HODashboard({
         categories={db.categories.filter((c) => c.active)}
         riskLevels={db.settings.riskLevels}
         defaultPeriodId={db.reportingPeriods.find((p) => p.status === "OPEN")?.id}
+        statusOptions={HO_APPROVED_OR_LATER_STATUSES}
         hint="Filters apply immediately. Performance % always reflects the full scoring formula, not narrowed by source/category/risk/status."
       />
 

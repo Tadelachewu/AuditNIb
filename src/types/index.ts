@@ -458,6 +458,49 @@ export const FINDING_STATUSES = [
 
 export type FindingStatus = (typeof FINDING_STATUSES)[number];
 
+// The subset of FINDING_STATUSES a finding must be in to count toward any
+// dashboard's "official" figures - see src/lib/findings.ts's
+// isHoApproved()/HO_APPROVED_OR_LATER (this is that same list; defined
+// here instead so this dependency-free types file can be imported by
+// client components like FilterBar.tsx without pulling in
+// src/lib/findings.ts's own server-only dependency chain, which reaches
+// node:crypto via src/lib/audit.ts). HODashboard/DistrictDashboard/
+// BranchDashboard pass this as FilterBar's own required `statusOptions`
+// prop - an aggregate dashboard would otherwise let someone pick a status
+// that's guaranteed to zero out nearly the whole page (see that prop's own
+// doc comment).
+export const HO_APPROVED_OR_LATER_STATUSES: FindingStatus[] = [
+  "SENT_TO_BRANCH_MANAGER",
+  "PARTIALLY_RECTIFIED",
+  "RECTIFICATION_RETURNED",
+  "RECTIFIED",
+  "CLOSED",
+  "TRANSFERRED",
+];
+
+// FINDING_STATUSES minus SUBMITTED/DISTRICT_APPROVED/HO_APPROVED - the
+// three "momentary pass-through" values Finding's own doc comment below
+// describes. submitFinding()/districtApproveFinding()/hoApproveFinding()
+// (src/lib/findings.ts) each write one of these via transitionFinding()
+// and then, in the very same call, immediately transition again to the
+// status that actually sticks (DISTRICT_REVIEW/PENDING_BANK_APPROVAL/
+// SENT_TO_BRANCH_MANAGER, HO_REVIEW, and SENT_TO_BRANCH_MANAGER,
+// respectively) - so `Finding.status` can never actually equal any of the
+// three when read back from the database, even though they're real,
+// intentional rows in the FindingTransition audit trail (that's the whole
+// point of writing them at all - an honest two-step history instead of
+// one merged jump). Filtering *by* one of them on a per-record list page
+// (findings/page.tsx, reports/page.tsx's own `statusOptions`) would
+// therefore always return zero rows - a dead filter option, not a
+// meaningful one, the same class of gap HO_APPROVED_OR_LATER_STATUSES
+// already closes for dashboards. Still a legitimate value for anything
+// that's about the *transition/action*, not the finding's current resting
+// status - e.g. FindingStatusDistribution's own "Draft / In Review" bucket
+// groups these alongside DRAFT/DISTRICT_REVIEW/HO_REVIEW on purpose.
+export const FILTERABLE_FINDING_STATUSES: FindingStatus[] = FINDING_STATUSES.filter(
+  (s) => s !== "SUBMITTED" && s !== "DISTRICT_APPROVED" && s !== "HO_APPROVED"
+);
+
 // Only DRAFT and RETURNED are editable (plan doc §3.3). "SUBMITTED" and
 // "DISTRICT_APPROVED"/"HO_APPROVED" are momentary pass-through statuses -
 // see src/lib/findings.ts's transitionFinding() for why they still exist

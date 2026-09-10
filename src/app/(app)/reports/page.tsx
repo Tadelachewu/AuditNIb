@@ -14,7 +14,7 @@ import { FindingStatusBadge } from "@/components/findings/FindingStatusBadge";
 import { FilterBar } from "@/components/dashboard/FilterBar";
 import { TimeRangeFilter } from "@/components/reports/TimeRangeFilter";
 import { PrintButton } from "@/components/reports/PrintButton";
-import type { Finding } from "@/types";
+import { FILTERABLE_FINDING_STATUSES, type Finding } from "@/types";
 
 // master.txt §18's 14 named reports, covered as a small number of real,
 // data-backed views rather than 14 separate pages (see PHASE7.md): the
@@ -182,6 +182,7 @@ export default async function ReportsPage({
           riskLevels={db.settings.riskLevels}
           fixedDistrict={user.orgScope !== "BANK" && district ? { id: district.id, name: district.name } : undefined}
           fixedBranch={user.orgScope === "BRANCH" && branch ? { id: branch.id, name: branch.name } : undefined}
+          statusOptions={FILTERABLE_FINDING_STATUSES}
           hint="Filters apply immediately."
         />
       </div>

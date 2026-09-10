@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { Database } from "@/types";
+import { HO_APPROVED_OR_LATER_STATUSES, type Database } from "@/types";
 import type { SessionData } from "@/lib/session";
 import { computePerformance, queueStatusesForSession, findingCaseTotals, findingCaseTotalsInPeriod, transferTotals, isHoApproved } from "@/lib/findings";
 import { sumAmountByCurrency, sumOutstandingByCurrency, sumAmountByCurrencyInPeriod, sumOutstandingByCurrencyInPeriod } from "@/lib/currency";
@@ -255,6 +255,7 @@ export function DistrictDashboard({
         riskLevels={db.settings.riskLevels}
         defaultPeriodId={db.reportingPeriods.find((p) => p.status === "OPEN")?.id}
         fixedDistrict={{ id: district.id, name: district.name }}
+        statusOptions={HO_APPROVED_OR_LATER_STATUSES}
         hint="Filters apply immediately. Performance % always reflects the full scoring formula, not narrowed by source/category/risk/status."
       />
 

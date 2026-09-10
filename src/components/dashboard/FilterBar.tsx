@@ -2,7 +2,7 @@
 
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { Select, Label } from "@/components/ui/Field";
-import { FINDING_STATUSES, type ReportingPeriod, type District, type Branch, type Source, type ClassifiedCategory } from "@/types";
+import type { ReportingPeriod, District, Branch, Source, ClassifiedCategory, FindingStatus } from "@/types";
 import { ALL_PERIODS_VALUE, type DashboardFilters } from "@/lib/dashboardFilters";
 
 export interface FilterBarProps {
@@ -18,6 +18,26 @@ export interface FilterBarProps {
   fixedBranch?: { id: string; name: string };
   /** Small caption under the bar, e.g. explaining what these filters do. */
   hint?: string;
+  /**
+   * No default on purpose - this bar is shared by two genuinely different
+   * kinds of page, and picking a default would silently mis-serve
+   * whichever kind didn't match it. An aggregate dashboard (HO/District/
+   * Branch) only shows something for the 6 statuses isHoApproved()
+   * accepts (src/types/index.ts's HO_APPROVED_OR_LATER_STATUSES) - filtering
+   * by any other status there zeroes out nearly every widget on the page,
+   * so those dashboards pass that restricted list. A per-record list page
+   * (/findings, /reports) has no such gate - every finding, in any status,
+   * is a real row that can show up - so those pass
+   * FILTERABLE_FINDING_STATUSES instead: every FindingStatus except
+   * SUBMITTED/DISTRICT_APPROVED/HO_APPROVED, which are momentary
+   * pass-through values a finding's current status can never actually rest
+   * on (see that constant's own doc comment) - a dead filter option there
+   * too, just for a different reason than the dashboard case. Getting this
+   * backwards on either kind of page is exactly the bug this prop exists
+   * to make impossible to
+   * reintroduce by accident.
+   */
+  statusOptions: readonly FindingStatus[];
 }
 
 /**
@@ -43,6 +63,7 @@ export function FilterBar({
   fixedDistrict,
   fixedBranch,
   hint,
+  statusOptions,
 }: FilterBarProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -177,7 +198,7 @@ export function FilterBar({
           <Label htmlFor="f-status">Status</Label>
           <Select id="f-status" value={filters.status} onChange={(e) => update({ status: e.target.value })}>
             <option value="">All statuses</option>
-            {FINDING_STATUSES.map((s) => (
+            {statusOptions.map((s) => (
               <option key={s} value={s}>
                 {s.replaceAll("_", " ")}
               </option>

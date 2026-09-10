@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { Database } from "@/types";
+import { HO_APPROVED_OR_LATER_STATUSES, type Database } from "@/types";
 import type { SessionData } from "@/lib/session";
 import { findBranchManager, findBranchSubManager, findBranchController } from "@/lib/org";
 import { computePerformance, computeEligibleCaseCounts, queueStatusesForSession, findingCaseTotals, findingCaseTotalsInPeriod, transferTotals, isHoApproved } from "@/lib/findings";
@@ -291,6 +291,7 @@ export function BranchDashboard({
         defaultPeriodId={db.reportingPeriods.find((p) => p.status === "OPEN")?.id}
         fixedDistrict={district ? { id: district.id, name: district.name } : undefined}
         fixedBranch={{ id: branch.id, name: branch.name }}
+        statusOptions={HO_APPROVED_OR_LATER_STATUSES}
         hint="Filters apply immediately. Performance % always reflects the full scoring formula, not narrowed by source/category/risk/status."
       />
 
