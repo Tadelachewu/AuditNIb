@@ -110,8 +110,14 @@ export function DistrictDashboard({
   // A transfer moves periodId forward, so a transferred finding is no
   // longer in periodFindings for its *source* period - counted separately
   // from FindingTransfer records: distinct findings this district
-  // transferred out of the current period.
-  const districtFindingIds = new Set(districtFindings.map((f) => f.id));
+  // transferred out of the current period. Built from
+  // districtFindingsInRange (district-fixed, plus whatever
+  // branch/source/category/risk/status/date-range the FilterBar currently
+  // has selected), not the raw per-district set - otherwise picking a
+  // branch left this (and Recent Activity below, which shares this same
+  // set) showing every branch's transfers/activity instead of narrowing
+  // like every other stat on this page does.
+  const districtFindingIds = new Set(districtFindingsInRange.map((f) => f.id));
   const districtTransfers = hasPeriodScope
     ? db.findingTransfers.filter((t) => (allPeriodsSelected || t.fromPeriodId === openPeriod!.id) && districtFindingIds.has(t.findingId))
     : [];
@@ -297,7 +303,12 @@ export function DistrictDashboard({
         </div>
       </Card>
 
-      <CaseBasedPerformance db={db} scope={{ districtId: district.id }} openPeriod={openPeriod} allPeriods={allPeriodsSelected} />
+      <CaseBasedPerformance
+        db={db}
+        scope={{ districtId: district.id, branchId: filters.branchId || undefined }}
+        openPeriod={openPeriod}
+        allPeriods={allPeriodsSelected}
+      />
 
       {db.settings.rankingVisibility.branches && (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -393,7 +404,7 @@ export function DistrictDashboard({
       <SourcePerformanceSummary
         db={db}
         sources={sourcesInScope}
-        scope={{ districtId: district.id }}
+        scope={{ districtId: district.id, branchId: filters.branchId || undefined }}
         openPeriod={openPeriod}
         allPeriods={allPeriodsSelected}
       />
@@ -433,7 +444,7 @@ export function DistrictDashboard({
 
       <FindingsByCategoryChart findings={approvedPeriodFindings} categories={categoriesInScope} openPeriod={periodDisplayMarker} />
 
-      <MonthlyTrend db={db} scope={{ districtId: district.id }} />
+      <MonthlyTrend db={db} scope={{ districtId: district.id, branchId: filters.branchId || undefined }} />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <FindingStatusDistribution findings={districtFindingsInRange} />

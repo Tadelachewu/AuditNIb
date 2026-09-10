@@ -109,10 +109,13 @@ export function HODashboard({
     !allPeriodsSelected && openPeriod
       ? sumAmountByCurrencyInPeriod(db, openPeriod.id, approvedAllFindingsInRange, "closed")
       : sumAmountByCurrency(approvedPeriodFindings, "closedAmount");
-  // "How stale is our backlog?" bank-wide - all periods, not just the open
-  // one, since a stale finding that got transferred forward is still part
-  // of the same outstanding backlog HO needs visibility into.
-  const avgOutstandingAgeDays = averageCaseAgeDays(db.findings.filter((f) => !["RECTIFIED", "CLOSED", "REJECTED"].includes(f.status)));
+  // "How stale is our backlog?" - all periods, not just the open one, since
+  // a stale finding that got transferred forward is still part of the same
+  // outstanding backlog. Narrowed by allFindingsInRange (district/branch/
+  // source/category/risk/status/date-range), same as every other stat card
+  // here - only the period restriction is deliberately skipped ("all
+  // periods" is the point of this one).
+  const avgOutstandingAgeDays = averageCaseAgeDays(allFindingsInRange.filter((f) => !["RECTIFIED", "CLOSED", "REJECTED"].includes(f.status)));
 
   // HO Controller also holds findings.create (bank-registered Internal
   // Audit findings - icfms.txt), so the same "MY own drafts/pending
@@ -237,12 +240,20 @@ export function HODashboard({
     (f) => !["RECTIFIED", "CLOSED", "REJECTED"].includes(f.status) && highRiskTiers.has(f.riskLevel.toLowerCase())
   ).length;
 
-  // Same convention as DistrictDashboard.tsx: a transfer moves periodId
-  // forward, so a transferred finding is no longer in periodFindings for
-  // its *source* period - counted from FindingTransfer records instead,
-  // bank-wide here rather than scoped to one district.
+  // A transfer moves periodId forward, so a transferred finding is no
+  // longer in periodFindings for its *source* period - counted from
+  // FindingTransfer records instead. Narrowed to whichever findings match
+  // the current district/branch/source/category/risk/status/date-range
+  // filter (allFindingsInRange already applies all of that) the same way
+  // every other stat card on this page is - previously this ignored those
+  // filters entirely and always counted bank-wide, which is why picking a
+  // branch left "Transferred Findings/Cases" unchanged while every other
+  // number on the page dropped to match the branch.
+  const inScopeFindingIds = new Set(allFindingsInRange.map((f) => f.id));
   const bankTransfers = hasPeriodScope
-    ? db.findingTransfers.filter((t) => allPeriodsSelected || t.fromPeriodId === openPeriod!.id)
+    ? db.findingTransfers.filter(
+        (t) => (allPeriodsSelected || t.fromPeriodId === openPeriod!.id) && inScopeFindingIds.has(t.findingId)
+      )
     : [];
   // Previously this StatCard was labeled "Transferred Cases" but held this
   // distinct-finding count, not a case count - transferredCases below is
@@ -366,7 +377,12 @@ export function HODashboard({
         </Card>
       </div>
 
-      <CaseBasedPerformance db={db} scope={{}} openPeriod={openPeriod} allPeriods={allPeriodsSelected} />
+      <CaseBasedPerformance
+        db={db}
+        scope={{ districtId: filters.districtId || undefined, branchId: filters.branchId || undefined }}
+        openPeriod={openPeriod}
+        allPeriods={allPeriodsSelected}
+      />
 
       {db.settings.rankingVisibility.districts && (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -498,7 +514,13 @@ export function HODashboard({
         </>
       )}
 
-      <SourcePerformanceSummary db={db} sources={sourcesInScope} scope={{}} openPeriod={openPeriod} allPeriods={allPeriodsSelected} />
+      <SourcePerformanceSummary
+        db={db}
+        sources={sourcesInScope}
+        scope={{ districtId: filters.districtId || undefined, branchId: filters.branchId || undefined }}
+        openPeriod={openPeriod}
+        allPeriods={allPeriodsSelected}
+      />
 
       <Card>
         <CardHeader title="Findings by District" description="Top districts by finding count, current period" />
@@ -579,7 +601,7 @@ export function HODashboard({
 
       <FindingsByCategoryChart findings={approvedPeriodFindings} categories={categoriesInScope} openPeriod={periodDisplayMarker} />
 
-      <MonthlyTrend db={db} scope={{}} />
+      <MonthlyTrend db={db} scope={{ districtId: filters.districtId || undefined, branchId: filters.branchId || undefined }} />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <FindingStatusDistribution findings={allFindingsInRange} />

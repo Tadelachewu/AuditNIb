@@ -197,15 +197,17 @@ export function BranchDashboard({
     (f) => !["RECTIFIED", "CLOSED", "REJECTED"].includes(f.status) && highRiskTiers.has(f.riskLevel.toLowerCase())
   ).length;
 
-  // Same convention as DistrictDashboard/HODashboard: a transfer moves
-  // periodId forward, so a transferred finding is no longer in
-  // periodFindings for its *source* period - counted from FindingTransfer
-  // records instead, scoped to this branch.
+  // A transfer moves periodId forward, so a transferred finding is no
+  // longer in periodFindings for its *source* period - counted from
+  // FindingTransfer records instead. Narrowed by branchAllFindings (this
+  // branch, plus whatever source/category/risk/status/date-range the
+  // FilterBar currently has selected) rather than a bare branchId check -
+  // otherwise picking a source/category filter left this stat unchanged
+  // while Total Findings/Cases above it narrowed.
+  const inScopeFindingIds = new Set(branchAllFindings.map((f) => f.id));
   const branchTransfers = hasPeriodScope
     ? db.findingTransfers.filter(
-        (t) =>
-          (allPeriodsSelected || t.fromPeriodId === openPeriod!.id) &&
-          db.findings.some((f) => f.id === t.findingId && f.branchId === branch.id)
+        (t) => (allPeriodsSelected || t.fromPeriodId === openPeriod!.id) && inScopeFindingIds.has(t.findingId)
       )
     : [];
   const { transferredFindings, transferredCases } = transferTotals(branchTransfers);
@@ -243,9 +245,10 @@ export function BranchDashboard({
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
     .slice(0, 8);
 
-  const branchFindingIds = new Set(db.findings.filter((f) => f.branchId === branch.id).map((f) => f.id));
+  // Shares inScopeFindingIds with branchTransfers above - same
+  // source/category/risk/status/date-range narrowing, not just this branch.
   const recentActivity = db.findingTransitions
-    .filter((t) => branchFindingIds.has(t.findingId))
+    .filter((t) => inScopeFindingIds.has(t.findingId))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
     .slice(0, 8);
 
