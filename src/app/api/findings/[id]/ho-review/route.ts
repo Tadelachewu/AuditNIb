@@ -84,12 +84,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       // the District Controller needs to be notified at the moment of
       // the return too, not just once a resubmission happens to reach
       // them - otherwise they're not "kept in the loop" as the doc's
-      // diagram shows.
+      // diagram shows. Reject gets the same treatment as Return, not just
+      // Return: the District Controller already approved this finding at
+      // their own review stage, so HO overriding that approval - whether
+      // by sending it back for correction or by rejecting it outright -
+      // is news to them either way, not only when it's a Return.
       const recipients = new Set([f.createdBy]);
-      if (decision === "RETURN") {
-        for (const districtControllerId of usersWithFindingsPermission(current, "district-review", { districtId: f.districtId })) {
-          recipients.add(districtControllerId);
-        }
+      for (const districtControllerId of usersWithFindingsPermission(current, "district-review", { districtId: f.districtId })) {
+        recipients.add(districtControllerId);
       }
       notifyUsers(current, [...recipients], {
         type: decision === "REJECT" ? "REJECTED" : "RETURNED",

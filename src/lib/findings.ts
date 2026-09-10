@@ -66,12 +66,25 @@ export function transferFinding(
   });
 }
 
-// TRANSFERABLE_STATUSES lives on the manual transfer route and this
-// module both - duplicated rather than imported to avoid a route->lib
-// import for one array, but kept in lockstep: RECTIFICATION_RETURNED is
-// deliberately excluded from both (a pending correction request shouldn't
-// silently move to a new period out from under the return).
-const AUTO_TRANSFERABLE_STATUSES = ["SENT_TO_BRANCH_MANAGER", "PARTIALLY_RECTIFIED", "TRANSFERRED"];
+// TRANSFERABLE_STATUSES lives on the manual transfer route, this module,
+// and findings/[id]/page.tsx's own UI gate - duplicated three times rather
+// than imported, but kept in lockstep: everything short of CLOSED is
+// transferable now, by explicit instruction - a period being locked should
+// be able to sweep out *every* finding still open in some way, not just
+// the ones with a nonzero rectified/unrectified split. RECTIFIED was
+// previously excluded on the reasoning that a fully-rectified finding has
+// zero outstanding balance left to move (transferFinding()'s own
+// outstandingCases/Amount would compute to 0) - still true, but a
+// zero-balance transfer is harmless, not broken: it still moves the
+// finding's period forward and its FindingTransfer row honestly records
+// "nothing was left owing," rather than leaving a rectified-but-not-yet-
+// closed finding stranded in a period that's about to lock. RECTIFICATION_
+// RETURNED was previously excluded so a pending correction couldn't
+// silently move to a new period out from under the return - now included
+// on the same "sweep everything not-closed" reasoning; the return itself
+// (and its reason) travels with the finding across the transfer just like
+// any other in-flight state does.
+const AUTO_TRANSFERABLE_STATUSES = ["SENT_TO_BRANCH_MANAGER", "PARTIALLY_RECTIFIED", "RECTIFIED", "RECTIFICATION_RETURNED", "TRANSFERRED"];
 
 // Shared by outstandingTransferPreview() and autoTransferOnLock() so the
 // count a locking user is shown in the confirmation prompt can never drift

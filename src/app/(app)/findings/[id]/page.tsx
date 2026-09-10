@@ -66,7 +66,11 @@ export default async function FindingDetailPage({ params }: { params: Promise<{ 
 
   const has = (action: string) => hasPermission(user.permissions, permissionKey("findings", action));
 
-  const TRANSFERABLE_STATUSES = ["SENT_TO_BRANCH_MANAGER", "PARTIALLY_RECTIFIED", "TRANSFERRED"];
+  // Every non-terminal status is transferable - only CLOSED is excluded.
+  // Kept in lockstep by hand with transfer/route.ts and
+  // findings.ts's AUTO_TRANSFERABLE_STATUSES (see the latter's own doc
+  // comment for the full reasoning).
+  const TRANSFERABLE_STATUSES = ["SENT_TO_BRANCH_MANAGER", "PARTIALLY_RECTIFIED", "RECTIFIED", "RECTIFICATION_RETURNED", "TRANSFERRED"];
   const RETURNABLE_STATUSES = ["SENT_TO_BRANCH_MANAGER", "PARTIALLY_RECTIFIED", "RECTIFIED", "TRANSFERRED"];
 
   // Split return-for-correction permissions into the District-scoped and

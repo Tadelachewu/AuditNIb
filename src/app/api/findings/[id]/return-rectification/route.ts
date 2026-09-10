@@ -157,6 +157,27 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       });
     }
 
+    // HO is the last decision-maker in this chain (Branch rectifies ->
+    // District verifies -> HO can close or return) - when HO is the one
+    // returning it (hasHoOnly, the same gate that required District to
+    // have verified first, above), the District Controller who already
+    // verified this rectification needs to know their sign-off just got
+    // overridden - same "keep the middle approver in the loop" reasoning
+    // ho-review/route.ts applies to a finding-level HO Return/Reject, just
+    // one stage further down the workflow.
+    if (hasHoOnly) {
+      const districtRecipients = usersWithFindingsPermission(current, "verify-rectification", { districtId: f.districtId });
+      if (districtRecipients.length > 0) {
+        notifyUsers(current, districtRecipients, {
+          type: "RECTIFICATION_RETURNED",
+          title: `${f.reference} sent back for correction by HO`,
+          message: `${auth.session.name}: ${reason}`,
+          entityType: "Finding",
+          entityId: f.id,
+        });
+      }
+    }
+
     return f;
   });
 

@@ -6,10 +6,12 @@ import { assertFindingInScope } from "@/lib/findings-scope";
 import { transferFinding } from "@/lib/findings";
 import { notifyUsers, usersWithFindingsPermission } from "@/lib/notifications";
 
-// A finding is only ever "outstanding" (has a balance a transfer would
-// move) in these three statuses - see findings.ts's transferFinding()
-// doc comment for why this doesn't touch the source period's lock.
-const TRANSFERABLE_STATUSES = ["SENT_TO_BRANCH_MANAGER", "PARTIALLY_RECTIFIED", "TRANSFERRED"];
+// Every non-terminal status is transferable - only CLOSED is excluded.
+// See findings.ts's AUTO_TRANSFERABLE_STATUSES for the full reasoning
+// (kept in lockstep with this array by hand, not by import) and
+// transferFinding()'s own doc comment for why this doesn't touch the
+// source period's lock.
+const TRANSFERABLE_STATUSES = ["SENT_TO_BRANCH_MANAGER", "PARTIALLY_RECTIFIED", "RECTIFIED", "RECTIFICATION_RETURNED", "TRANSFERRED"];
 
 const transferSchema = z.object({
   toPeriodId: z.string().min(1),
