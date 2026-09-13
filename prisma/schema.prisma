@@ -297,6 +297,7 @@ model ScoringAdjustment {
   branch     Branch?   @relation(fields: [branchId], references: [id], onDelete: Restrict)
   value      Float
   reason     String
+  status     Status   @default(ACTIVE)
   adjustedBy String   @map("adjusted_by")
   createdAt  DateTime @map("created_at")
 

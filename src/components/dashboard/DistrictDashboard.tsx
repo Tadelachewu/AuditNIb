@@ -1,7 +1,15 @@
 import Link from "next/link";
 import { HO_APPROVED_OR_LATER_STATUSES, type Database } from "@/types";
 import type { SessionData } from "@/lib/session";
-import { computePerformance, queueStatusesForSession, findingCaseTotals, findingCaseTotalsInPeriod, transferTotals, isHoApproved } from "@/lib/findings";
+import {
+  computePerformance,
+  getActiveScoringAdjustment,
+  queueStatusesForSession,
+  findingCaseTotals,
+  findingCaseTotalsInPeriod,
+  transferTotals,
+  isHoApproved,
+} from "@/lib/findings";
 import { sumAmountByCurrency, sumOutstandingByCurrency, sumAmountByCurrencyInPeriod, sumOutstandingByCurrencyInPeriod } from "@/lib/currency";
 import { formatDateTime } from "@/lib/format";
 import { inDateRange, type DateRange } from "@/lib/dateRange";
@@ -122,9 +130,9 @@ export function DistrictDashboard({
     ? db.findingTransfers.filter((t) => (allPeriodsSelected || t.fromPeriodId === openPeriod!.id) && districtFindingIds.has(t.findingId))
     : [];
   const { transferredFindings, transferredCases } = transferTotals(districtTransfers);
-  const performance = hasPeriodScope
-    ? computePerformance(db, { districtId: district.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id })
-    : null;
+  const districtPerformanceScope = { districtId: district.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id };
+  const performance = hasPeriodScope ? computePerformance(db, districtPerformanceScope) : null;
+  const scoringAdjustment = hasPeriodScope ? getActiveScoringAdjustment(db, districtPerformanceScope) : null;
   // Period-residency-aware (see sumAmountByCurrencyInPeriod()'s doc
   // comment in src/lib/currency.ts) - a finding partially rectified here
   // and then transferred must have its amount split between this period
@@ -281,7 +289,13 @@ export function DistrictDashboard({
         <StatCard
           label="District Performance"
           value={performance !== null ? `${performance.toFixed(1)}%` : "--"}
-          hint={activeScoringRule ? `v${activeScoringRule.version} formula` : "No active scoring rule"}
+          hint={
+            scoringAdjustment
+              ? `Manually overridden - "${scoringAdjustment.reason}"`
+              : activeScoringRule
+                ? `v${activeScoringRule.version} formula`
+                : "No active scoring rule"
+          }
         />
         <StatCard label="Total Amount" value={hasPeriodScope ? totalAmount : "--"} hint="All findings" />
         <StatCard label="Resolved Amount" value={hasPeriodScope ? resolvedAmount : "--"} hint="Cumulative closed only" />

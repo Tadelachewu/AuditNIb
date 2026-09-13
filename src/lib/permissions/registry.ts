@@ -180,7 +180,12 @@ export const PAGE_REGISTRY: PageDefinition[] = [
     // src/app/api/admin/scoring-rules/[id]/route.ts, not just here.
     actions: [V, C, E, D, { action: "activate", label: "Activate / Deactivate" }],
   },
-  { code: "scoring-adjustments", label: "Scoring Adjustments", actions: [V, C] },
+  // Activate/deactivate, never delete or edit - lets an adjustment stop
+  // overriding computePerformance() (src/lib/findings.ts) without erasing
+  // the permanent record itself (adjustments can never be deleted - see
+  // PHASE3.md). See ScoringAdjustment.status's own doc comment in
+  // src/types/index.ts.
+  { code: "scoring-adjustments", label: "Scoring Adjustments", actions: [V, C, T] },
   // Delete only ever applies to a period nothing references yet (no
   // findings, scoring adjustments, rectifications, closures, or transfers
   // in or out of it - enforced in

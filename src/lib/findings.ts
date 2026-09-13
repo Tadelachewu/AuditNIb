@@ -3,7 +3,16 @@ import { appendAuditLog } from "@/lib/audit";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
 import type { SessionData } from "@/lib/session";
 import { REQUIRABLE_FINDING_FIELDS, HO_APPROVED_OR_LATER_STATUSES } from "@/types";
-import type { Database, Finding, FindingStatus, FindingTransfer, Branch, ReportingPeriod, RequirableFindingField } from "@/types";
+import type {
+  Database,
+  Finding,
+  FindingStatus,
+  FindingTransfer,
+  Branch,
+  ReportingPeriod,
+  RequirableFindingField,
+  ScoringAdjustment,
+} from "@/types";
 
 /**
  * A transfer moves the finding forward, it doesn't create a new one
@@ -852,6 +861,31 @@ export function computeEligibleCaseCounts(db: Database, scope: PerformanceScope)
 }
 
 /**
+ * The one ACTIVE ScoringAdjustment (if any) that overrides computePerformance()
+ * for this exact scope (see that function's own doc comment for why). Only
+ * ever matches a whole-target figure, never a source-narrowed breakdown
+ * (scope.sourceId set) - an adjustment is a single override value for a
+ * whole target+period, not per-source, so folding it into a per-source
+ * subdivision would silently misrepresent it. A BRANCH-targeted adjustment
+ * only matches a branch-scoped call; a DISTRICT-targeted one only matches
+ * a district-scoped call that isn't further narrowed to one specific
+ * branch inside it - matching exactly how PerformanceScope itself
+ * distinguishes the two (see computeEligibleCaseCounts() above). If more
+ * than one ACTIVE adjustment somehow matches the same scope, the most
+ * recently created one wins.
+ */
+export function getActiveScoringAdjustment(db: Database, scope: PerformanceScope): ScoringAdjustment | null {
+  if (scope.sourceId || !scope.periodId) return null;
+  const matches = db.scoringAdjustments.filter((a) => {
+    if (a.status !== "ACTIVE" || a.periodId !== scope.periodId) return false;
+    if (a.targetType === "BRANCH") return a.targetId === scope.branchId;
+    return a.targetId === scope.districtId && !scope.branchId;
+  });
+  if (matches.length === 0) return null;
+  return [...matches].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+}
+
+/**
  * The active ScoringRule's own formula (plan doc §3.8): "Rectified
  * eligible Other Cases ÷ Total eligible Other Cases × 100", generalized to
  * whatever categories/sources that rule currently includes rather than
@@ -867,8 +901,16 @@ export function computeEligibleCaseCounts(db: Database, scope: PerformanceScope)
  * actually happened in, and a destination period only gets credit for
  * work done (and closed) after the case arrived (see
  * findingCasesEligibleInPeriod() above for the matching denominator).
+ *
+ * A matching ACTIVE ScoringAdjustment (see getActiveScoringAdjustment()
+ * just above) overrides this mechanical result outright - the whole point
+ * of a manual adjustment (master.txt §9) is a human correcting a number
+ * the formula got wrong, so once one is recorded and active it wins
+ * unconditionally, computed cases or not.
  */
 export function computePerformance(db: Database, scope: PerformanceScope): number | null {
+  const adjustment = getActiveScoringAdjustment(db, scope);
+  if (adjustment) return adjustment.value;
   const counts = computeEligibleCaseCounts(db, scope);
   if (!counts) return null;
   return (counts.rectifiedCases / counts.totalCases) * 100;

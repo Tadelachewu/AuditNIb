@@ -43,7 +43,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Selected reporting period does not exist" }, { status: 400 });
   }
 
-  const adjustment = { id: uuid(), ...input, adjustedBy: auth.session.userId!, createdAt: new Date().toISOString() };
+  const adjustment = {
+    id: uuid(),
+    ...input,
+    status: "ACTIVE" as const,
+    adjustedBy: auth.session.userId!,
+    createdAt: new Date().toISOString(),
+  };
 
   await updateDb((current) => {
     current.scoringAdjustments.push(adjustment);

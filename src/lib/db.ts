@@ -204,6 +204,7 @@ function scoringAdjustmentFromRow(r: Prisma.ScoringAdjustmentGetPayload<object>)
     periodId: r.periodId,
     value: r.value,
     reason: r.reason,
+    status: r.status,
     adjustedBy: r.adjustedBy,
     createdAt: iso(r.createdAt),
   };
@@ -771,6 +772,7 @@ function scoringAdjustmentToData(r: ScoringAdjustment) {
     branchId: r.targetType === "BRANCH" ? r.targetId : null,
     value: r.value,
     reason: r.reason,
+    status: r.status,
     adjustedBy: r.adjustedBy,
     createdAt: toDate(r.createdAt),
   };

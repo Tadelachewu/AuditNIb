@@ -2,7 +2,16 @@ import Link from "next/link";
 import { HO_APPROVED_OR_LATER_STATUSES, type Database } from "@/types";
 import type { SessionData } from "@/lib/session";
 import { findBranchManager, findBranchSubManager, findBranchController } from "@/lib/org";
-import { computePerformance, computeEligibleCaseCounts, queueStatusesForSession, findingCaseTotals, findingCaseTotalsInPeriod, transferTotals, isHoApproved } from "@/lib/findings";
+import {
+  computePerformance,
+  computeEligibleCaseCounts,
+  getActiveScoringAdjustment,
+  queueStatusesForSession,
+  findingCaseTotals,
+  findingCaseTotalsInPeriod,
+  transferTotals,
+  isHoApproved,
+} from "@/lib/findings";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
 import { sumAmountByCurrency, sumOutstandingByCurrency, sumAmountByCurrencyInPeriod, sumOutstandingByCurrencyInPeriod } from "@/lib/currency";
 import { formatDateTime, formatNumber } from "@/lib/format";
@@ -113,9 +122,12 @@ export function BranchDashboard({
   const outstandingFindings = approvedPeriodFindings.filter((f) => !["RECTIFIED", "CLOSED", "REJECTED"].includes(f.status)).length;
   // periodId: undefined (allPeriodsSelected) is computePerformance()'s own
   // "lifetime, no period filter" mode - exactly what "All periods" means.
-  const performance = hasPeriodScope
-    ? computePerformance(db, { branchId: branch.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id })
-    : null;
+  const performanceScope = { branchId: branch.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id };
+  const performance = hasPeriodScope ? computePerformance(db, performanceScope) : null;
+  // Surfaced so the detail below can explain *why* the number doesn't
+  // match eligibleCounts' own math - computePerformance() returns this
+  // value outright once one is active, ignoring the mechanical formula.
+  const scoringAdjustment = hasPeriodScope ? getActiveScoringAdjustment(db, performanceScope) : null;
   // Same eligible-case counts computePerformance() itself divides to get
   // that percentage - surfaced so the StatCard can show its own math on
   // click (see StatCard's `detail` prop) instead of a bare, unexplained %.
@@ -314,9 +326,21 @@ export function BranchDashboard({
         <StatCard
           label="Branch Performance"
           value={performance !== null ? `${performance.toFixed(1)}%` : "--"}
-          hint={activeScoringRule ? `v${activeScoringRule.version} formula - click % for detail` : "No active scoring rule"}
+          hint={
+            scoringAdjustment
+              ? "Manually overridden - click % for detail"
+              : activeScoringRule
+                ? `v${activeScoringRule.version} formula - click % for detail`
+                : "No active scoring rule"
+          }
           detail={
-            performance !== null && eligibleCounts ? (
+            scoringAdjustment ? (
+              <p>
+                Manually overridden to <span className="font-medium text-slate-900">{performance!.toFixed(1)}%</span>, overriding the
+                computed formula. Reason: &quot;{scoringAdjustment.reason}&quot; (recorded {formatDateTime(scoringAdjustment.createdAt)}).
+                Deactivate it in Scoring Adjustments to revert to the computed figure.
+              </p>
+            ) : performance !== null && eligibleCounts ? (
               <>
                 <p>
                   <span className="font-medium text-slate-900">{eligibleCounts.rectifiedCases}</span> of{" "}

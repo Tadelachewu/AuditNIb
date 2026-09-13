@@ -171,6 +171,11 @@ export interface ScoringAdjustment {
   periodId: string;
   value: number;
   reason: string;
+  // Only an ACTIVE adjustment overrides computePerformance() (see
+  // src/lib/findings.ts's own doc comment) - deactivating one reverts that
+  // target+period back to the mechanical formula without deleting the
+  // record (scoring adjustments can never be deleted - see PHASE3.md).
+  status: "ACTIVE" | "INACTIVE";
   adjustedBy: string;
   createdAt: string;
 }

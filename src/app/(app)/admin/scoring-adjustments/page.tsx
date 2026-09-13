@@ -6,6 +6,8 @@ import { formatDateTime } from "@/lib/format";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input, Select, Label } from "@/components/ui/Field";
+import { Badge } from "@/components/ui/Badge";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import type { ScoringAdjustment, District, Branch, ReportingPeriod } from "@/types";
 
 const emptyForm = { targetType: "DISTRICT" as "DISTRICT" | "BRANCH", targetId: "", periodId: "", value: "", reason: "" };
@@ -19,6 +21,9 @@ export default function ScoringAdjustmentsPage() {
   const [form, setForm] = useState(emptyForm);
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [rowBusy, setRowBusy] = useState<string | null>(null);
+  const [rowError, setRowError] = useState<string | null>(null);
+  const { confirm, dialog } = useConfirm();
 
   async function load() {
     setLoading(true);
@@ -70,11 +75,41 @@ export default function ScoringAdjustmentsPage() {
     }
   }
 
+  async function toggleStatus(a: ScoringAdjustment) {
+    const activating = a.status === "INACTIVE";
+    const reason = await confirm({
+      title: activating ? "Re-activate this adjustment?" : "Deactivate this adjustment?",
+      message: activating
+        ? `${targetName(a)}'s ${periodCode(a.periodId)} performance will show ${a.value}% again, overriding the computed formula.`
+        : `${targetName(a)}'s ${periodCode(a.periodId)} performance will revert to the computed formula (or "--" if not computable).`,
+      confirmLabel: activating ? "Activate" : "Deactivate",
+      tone: activating ? "success" : "danger",
+      needsReason: true,
+    });
+    if (reason === false) return;
+
+    setRowError(null);
+    setRowBusy(a.id);
+    try {
+      await apiSend(`/api/admin/scoring-adjustments/${a.id}`, "PATCH", {
+        status: activating ? "ACTIVE" : "INACTIVE",
+        reason,
+      });
+      await load();
+    } catch (err) {
+      setRowError(err instanceof ApiError ? err.message : "Failed to update status");
+    } finally {
+      setRowBusy(null);
+    }
+  }
+
   return (
     <div>
+      {dialog}
       <h1 className="text-lg font-semibold text-slate-900">Scoring Adjustments</h1>
       <p className="mt-1 text-sm text-slate-500">
-        Manual overrides of a computed score. Every adjustment requires a reason and is written to the audit trail.
+        A manual override of a computed score - while ACTIVE, it replaces the dashboard/report figure for that exact target and period
+        outright. Every adjustment (and every activate/deactivate) requires a reason and is written to the audit trail.
       </p>
 
       <Card className="mt-5">
@@ -139,6 +174,7 @@ export default function ScoringAdjustmentsPage() {
 
       <Card className="mt-5">
         <CardHeader title="Adjustment History" description={`${adjustments.length} total`} />
+        {rowError && <p className="px-4 pt-3 text-sm text-red-600">{rowError}</p>}
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead className="border-b border-slate-100 text-xs uppercase text-slate-400">
@@ -146,21 +182,23 @@ export default function ScoringAdjustmentsPage() {
                 <th className="px-4 py-2 font-medium">Target</th>
                 <th className="px-4 py-2 font-medium">Period</th>
                 <th className="px-4 py-2 font-medium">Value</th>
+                <th className="px-4 py-2 font-medium">Status</th>
                 <th className="px-4 py-2 font-medium">Reason</th>
                 <th className="px-4 py-2 font-medium">Date</th>
+                <th className="px-4 py-2 font-medium">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {loading && (
                 <tr>
-                  <td className="px-4 py-4 text-slate-400" colSpan={5}>
+                  <td className="px-4 py-4 text-slate-400" colSpan={7}>
                     Loading...
                   </td>
                 </tr>
               )}
               {!loading && adjustments.length === 0 && (
                 <tr>
-                  <td className="px-4 py-4 text-slate-400" colSpan={5}>
+                  <td className="px-4 py-4 text-slate-400" colSpan={7}>
                     No adjustments recorded.
                   </td>
                 </tr>
@@ -173,8 +211,20 @@ export default function ScoringAdjustmentsPage() {
                     </td>
                     <td className="px-4 py-2 text-slate-600">{periodCode(a.periodId)}</td>
                     <td className="px-4 py-2 font-medium text-slate-900">{a.value}%</td>
+                    <td className="px-4 py-2">
+                      <Badge tone={a.status === "ACTIVE" ? "green" : "gray"}>{a.status === "ACTIVE" ? "Active" : "Inactive"}</Badge>
+                    </td>
                     <td className="px-4 py-2 text-slate-600">{a.reason}</td>
                     <td className="px-4 py-2 text-xs text-slate-400">{formatDateTime(a.createdAt)}</td>
+                    <td className="px-4 py-2">
+                      <Button
+                        variant={a.status === "ACTIVE" ? "danger" : "success"}
+                        disabled={rowBusy === a.id}
+                        onClick={() => toggleStatus(a)}
+                      >
+                        {a.status === "ACTIVE" ? "Deactivate" : "Activate"}
+                      </Button>
+                    </td>
                   </tr>
                 ))}
             </tbody>
