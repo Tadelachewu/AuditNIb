@@ -605,5 +605,7 @@ export function buildSeedDatabase(): Database {
     settings,
     auditLogs: [],
     branchCoverageNotes: [],
+    supportThreads: [],
+    supportMessages: [],
   };
 }

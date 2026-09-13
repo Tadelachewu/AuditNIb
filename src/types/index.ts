@@ -828,6 +828,8 @@ export interface Database {
   auditLogs: AuditLogEntry[];
   branchCoverageNotes: BranchCoverageNote[];
   uncoveredReasons: UncoveredReason[];
+  supportThreads: SupportThread[];
+  supportMessages: SupportMessage[];
 }
 
 // Admin-configurable canned reasons offered on the Uncovered Branches
@@ -867,4 +869,31 @@ export interface BranchCoverageNote {
   recordedByName: string;
   createdAt: string;
   updatedAt: string;
+}
+
+// Any logged-in user can send a support message (no permission needed);
+// anyone holding support.respond can see and reply to every thread. See
+// prisma/schema.prisma's own doc comment on SupportThread for the
+// rating/reopen flow (5 stars closes it, anything less leaves it open for
+// a follow-up message).
+export type SupportThreadStatus = "OPEN" | "RESOLVED";
+
+export interface SupportThread {
+  id: string;
+  userId: string;
+  subject: string;
+  status: SupportThreadStatus;
+  rating?: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SupportMessage {
+  id: string;
+  threadId: string;
+  senderId: string;
+  senderName: string;
+  senderIsSupport: boolean;
+  body: string;
+  createdAt: string;
 }

@@ -245,6 +245,25 @@ export default function ReportingPeriodsPage() {
     }
   }
 
+  async function deletePeriod(p: PeriodWithTransferPreview) {
+    const result = await confirm({
+      title: `Permanently delete ${p.code}?`,
+      message: `This removes ${p.code} entirely - unlike locking, this cannot be undone. Only allowed if nothing (findings, scoring adjustments, rectifications, closures, or transfers) references it.`,
+      confirmLabel: "Delete Permanently",
+      tone: "danger",
+    });
+    if (result === false) return;
+    setRowBusy(p.id);
+    try {
+      await apiSend(`/api/admin/reporting-periods/${p.id}`, "DELETE");
+      await load();
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : "Failed to delete reporting period");
+    } finally {
+      setRowBusy(null);
+    }
+  }
+
   // True when adjusting drafts-while-locked on a period that's already
   // LOCKED (no status change), rather than locking a currently-OPEN one -
   // the same dialog serves both, just with different copy/payload.
@@ -395,9 +414,19 @@ export default function ReportingPeriodsPage() {
                       {p.lockReason ? `${p.lockReason} · ${formatDateTime(p.updatedAt)}` : "—"}
                     </td>
                     <td className="px-4 py-2 text-right">
-                      <Button variant="secondary" disabled={rowBusy === p.id} onClick={() => toggleLock(p)}>
-                        {p.status === "OPEN" ? "Lock" : "Unlock"}
-                      </Button>
+                      <div className="flex justify-end gap-2">
+                        <Button variant="secondary" disabled={rowBusy === p.id} onClick={() => toggleLock(p)}>
+                          {p.status === "OPEN" ? "Lock" : "Unlock"}
+                        </Button>
+                        <Button
+                          variant="danger"
+                          disabled={rowBusy === p.id || p.findingCount > 0}
+                          title={p.findingCount > 0 ? `${p.findingCount} finding(s) reference this period` : undefined}
+                          onClick={() => deletePeriod(p)}
+                        >
+                          Delete
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 ))}

@@ -16,6 +16,13 @@ const PUBLIC_PATHS = ["/login"];
 // can never be trusted alone.
 function pageCodeFor(pathname: string): string | null {
   if (pathname === "/admin") return "admin-dashboard";
+  // /admin/support is the one exception to "<page>.view" being the sole
+  // gate: support.respond alone must also reach the inbox (see
+  // registry.ts's own doc comment on the "support" page - a respond-only
+  // role would otherwise have no way to reach the threads it can act on).
+  // Excluded here so (app)/admin/support/page.tsx's own inline check (view
+  // OR respond) is the real gate instead of this blanket "<page>.view" rule.
+  if (pathname === "/admin/support" || pathname.startsWith("/admin/support/")) return null;
   const adminMatch = pathname.match(/^\/admin\/([^/]+)/);
   if (adminMatch) return adminMatch[1];
   if (pathname === "/findings" || pathname.startsWith("/findings/")) return "findings";

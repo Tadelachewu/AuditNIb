@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireToggleOrEditPermission } from "@/lib/guard";
+import { requireToggleOrEditPermission, requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { hashPassword } from "@/lib/auth";
 import { validatePasswordFull } from "@/lib/passwordValidation";
@@ -183,4 +183,69 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   });
 
   return NextResponse.json({ user: toSafeUser(updated) });
+}
+
+// icfms.txt otherwise reserves user lifecycle to create/edit/deactivate
+// (no delete) - this only ever applies to a user with genuinely zero
+// recorded activity anywhere findings-workflow-related (never registered,
+// reviewed, rectified, transferred, closed, uploaded evidence for,
+// commented on, imported, or created a scoring rule/adjustment for
+// anything, and isn't a designated bank-approval approver). In practice
+// that's an account created by mistake minutes ago, not a real one that's
+// ever been used - once a user has done anything the BRD actually cares
+// about, deleting them would silently orphan that history (findings still
+// show a createdBy pointing at nobody, a transition still shows who
+// approved it but that id no longer resolves, ...). Deliberately NOT
+// checked: Notification.recipientUserId and AuditLogEntry.userId (as
+// actor) - both already snapshot a display name alongside the id
+// (userName), so a dangling reference there doesn't break anything shown
+// to anyone, and blocking on "this user was once notified about something"
+// or "logged in once" would make almost no account ever deletable.
+export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requirePermission("users.delete");
+  if (!auth.ok) return auth.response;
+  const { id } = await params;
+
+  const db = await readDb();
+  const existing = db.users.find((u) => u.id === id);
+  if (!existing) return NextResponse.json({ error: "User not found" }, { status: 404 });
+
+  const references: Array<{ label: string; count: number }> = [
+    { label: "finding(s) registered", count: db.findings.filter((f) => f.createdBy === id).length },
+    { label: "finding status change(s)", count: db.findingTransitions.filter((t) => t.userId === id).length },
+    { label: "rectification(s) submitted", count: db.rectifications.filter((r) => r.submittedBy === id).length },
+    { label: "itemized case(s) marked rectified", count: db.findingCases.filter((c) => c.rectifiedBy === id).length },
+    { label: "transfer(s) performed", count: db.findingTransfers.filter((t) => t.createdBy === id).length },
+    { label: "closure(s) submitted", count: db.findingClosures.filter((c) => c.submittedBy === id).length },
+    { label: "import batch(es)", count: db.importBatches.filter((b) => b.importedBy === id).length },
+    { label: "evidence file(s) uploaded", count: db.evidence.filter((e) => e.uploadedBy === id).length },
+    { label: "comment(s) authored", count: db.comments.filter((c) => c.authorId === id).length },
+    { label: "branch coverage note(s) recorded", count: db.branchCoverageNotes.filter((n) => n.recordedBy === id).length },
+    { label: "scoring rule(s) created", count: db.scoringRules.filter((r) => r.createdBy === id).length },
+    { label: "scoring adjustment(s) made", count: db.scoringAdjustments.filter((a) => a.adjustedBy === id).length },
+  ];
+  const blocking = references.find((r) => r.count > 0);
+  if (blocking) {
+    return NextResponse.json({ error: `Cannot delete: this user has ${blocking.count} ${blocking.label}. Deactivate instead.` }, { status: 409 });
+  }
+  if (db.settings.hoApproval.approverUserIds.includes(id)) {
+    return NextResponse.json(
+      { error: "Cannot delete: this user is a designated Bank-Wide Approval approver. Remove them from Settings first." },
+      { status: 409 }
+    );
+  }
+
+  await updateDb((current) => {
+    current.users = current.users.filter((u) => u.id !== id);
+    appendAuditLog(current, {
+      userId: auth.session.userId!,
+      userName: auth.session.name!,
+      action: "DELETE",
+      entityType: "User",
+      entityId: id,
+      oldValue: toSafeUser(existing),
+    });
+  });
+
+  return NextResponse.json({ ok: true });
 }

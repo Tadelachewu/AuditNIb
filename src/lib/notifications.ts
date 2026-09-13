@@ -82,6 +82,13 @@ export function notifyFindingsPermissionHolders(
   if (recipients.length > 0) notifyUsers(db, recipients, opts);
 }
 
+/** Every ACTIVE user whose role holds support.respond - not org-scoped, unlike findings notifications, since Support isn't tied to a district/branch. */
+export function usersWithSupportRespondPermission(db: Database): string[] {
+  const key = permissionKey("support", "respond");
+  const eligibleRoleCodes = new Set(db.roles.filter((r) => r.status === "ACTIVE" && r.permissions.includes(key)).map((r) => r.code));
+  return db.users.filter((u) => u.status === "ACTIVE" && eligibleRoleCodes.has(u.role)).map((u) => u.id);
+}
+
 // Findings a "rectification reminder" can ever apply to - anything still
 // awaiting the Branch Manager/Controller's action. Deliberately excludes
 // RECTIFICATION_RETURNED's own separate return-for-correction reason

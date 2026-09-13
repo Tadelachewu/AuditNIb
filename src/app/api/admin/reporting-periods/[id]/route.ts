@@ -229,3 +229,78 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   return NextResponse.json({ reportingPeriod: updated });
 }
+
+// A period can be permanently removed only once genuinely nothing
+// references it - stricter than PATCH's own startsAt/endsAt edit gate
+// above (which only checks Finding.periodId, since editing dates is
+// reversible and far less destructive than deleting the row outright).
+// Finding.periodId and ScoringAdjustment.periodId are real Postgres
+// foreign keys (onDelete: Restrict - see schema.prisma) and would block
+// this at the database level regardless, but RectificationEntry.periodId,
+// FindingClosure.periodId, and FindingTransfer.fromPeriodId/toPeriodId are
+// plain, unconstrained string columns (a finding can rectify/close/
+// transfer through several periods over its life, so those rows
+// deliberately aren't tied to Postgres's single onDelete rule the way a
+// finding's own *current* period is) - deleting a period those still
+// reference would leave that historical record pointing at a period that
+// no longer exists, silently breaking anything that displays "which
+// period was this rectification/closure/transfer for."
+export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requirePermission("reporting-periods.delete");
+  if (!auth.ok) return auth.response;
+  const { id } = await params;
+
+  const db = await readDb();
+  const existing = db.reportingPeriods.find((p) => p.id === id);
+  if (!existing) return NextResponse.json({ error: "Reporting period not found" }, { status: 404 });
+
+  const findingCount = db.findings.filter((f) => f.periodId === id).length;
+  if (findingCount > 0) {
+    return NextResponse.json(
+      { error: `Cannot delete: ${findingCount} finding(s) still reference ${existing.code}.` },
+      { status: 409 }
+    );
+  }
+  const adjustmentCount = db.scoringAdjustments.filter((a) => a.periodId === id).length;
+  if (adjustmentCount > 0) {
+    return NextResponse.json(
+      { error: `Cannot delete: ${adjustmentCount} scoring adjustment(s) still reference ${existing.code}.` },
+      { status: 409 }
+    );
+  }
+  const rectificationCount = db.rectifications.filter((r) => r.periodId === id).length;
+  if (rectificationCount > 0) {
+    return NextResponse.json(
+      { error: `Cannot delete: ${rectificationCount} rectification record(s) still reference ${existing.code}.` },
+      { status: 409 }
+    );
+  }
+  const closureCount = db.findingClosures.filter((c) => c.periodId === id).length;
+  if (closureCount > 0) {
+    return NextResponse.json(
+      { error: `Cannot delete: ${closureCount} closure record(s) still reference ${existing.code}.` },
+      { status: 409 }
+    );
+  }
+  const transferCount = db.findingTransfers.filter((t) => t.fromPeriodId === id || t.toPeriodId === id).length;
+  if (transferCount > 0) {
+    return NextResponse.json(
+      { error: `Cannot delete: ${transferCount} transfer record(s) still reference ${existing.code}.` },
+      { status: 409 }
+    );
+  }
+
+  await updateDb((current) => {
+    current.reportingPeriods = current.reportingPeriods.filter((p) => p.id !== id);
+    appendAuditLog(current, {
+      userId: auth.session.userId!,
+      userName: auth.session.name!,
+      action: "DELETE",
+      entityType: "ReportingPeriod",
+      entityId: id,
+      oldValue: existing,
+    });
+  });
+
+  return NextResponse.json({ ok: true });
+}

@@ -209,6 +209,25 @@ export default function UsersPage() {
     }
   }
 
+  async function deleteUser(user: SafeUser) {
+    const result = await confirm({
+      title: "Permanently delete user?",
+      message: `This removes "${user.name}" (${user.username}) entirely - unlike deactivating, this cannot be undone. Only allowed if this account has never registered, reviewed, rectified, transferred, closed, uploaded evidence for, or commented on anything.`,
+      confirmLabel: "Delete Permanently",
+      tone: "danger",
+    });
+    if (result === false) return;
+    setRowBusy(user.id);
+    try {
+      await apiSend(`/api/admin/users/${user.id}`, "DELETE");
+      await loadAll();
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : "Failed to delete user");
+    } finally {
+      setRowBusy(null);
+    }
+  }
+
   const isBranchScoped = selectedRole?.orgScope === "BRANCH";
   const isDistrictScoped = selectedRole?.orgScope === "DISTRICT";
   const editIsBranchScoped = editSelectedRole?.orgScope === "BRANCH";
@@ -396,6 +415,9 @@ export default function UsersPage() {
                               onClick={() => toggleStatus(u)}
                             >
                               {u.status === "ACTIVE" ? "Deactivate" : "Reactivate"}
+                            </Button>
+                            <Button variant="danger" disabled={rowBusy === u.id} onClick={() => deleteUser(u)}>
+                              Delete
                             </Button>
                           </div>
                         </td>

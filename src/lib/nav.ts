@@ -20,6 +20,8 @@ import {
   KeyRound,
   Settings,
   ScrollText,
+  LifeBuoy,
+  Inbox,
   type LucideIcon,
 } from "lucide-react";
 import { permissionKey } from "@/lib/permissions/registry";
@@ -28,8 +30,13 @@ export interface NavItem {
   label: string;
   href: string;
   icon: LucideIcon;
-  /** A "<pageCode>.view" permission key, or undefined for links every logged-in user can see. */
-  permission?: string;
+  /**
+   * A "<pageCode>.<action>" permission key, or undefined for links every
+   * logged-in user can see. An array is "any of" - e.g. Support Inbox
+   * needs support.view OR support.respond, since respond alone would
+   * otherwise leave a role with no way to reach the inbox it can act on.
+   */
+  permission?: string | string[];
   /**
    * Role codes this item is hidden for, regardless of permission - for
    * ADMIN specifically, /dashboard redirects straight to /admin (see
@@ -51,6 +58,7 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard, hideForRoles: ["ADMIN"] },
       { label: "Admin Dashboard", href: "/admin", icon: LayoutGrid, permission: permissionKey("admin-dashboard", "view") },
       { label: "My Profile", href: "/profile", icon: UserCircle },
+      { label: "Support", href: "/support", icon: LifeBuoy, permission: permissionKey("support", "create") },
     ],
   },
   {
@@ -94,11 +102,19 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: "Roles & Permissions", href: "/admin/roles", icon: KeyRound, permission: permissionKey("roles", "view") },
       { label: "Settings", href: "/admin/settings", icon: Settings, permission: permissionKey("settings", "view") },
       { label: "Audit Log", href: "/admin/audit-log", icon: ScrollText, permission: permissionKey("audit-log", "view") },
+      {
+        label: "Support Inbox",
+        href: "/admin/support",
+        icon: Inbox,
+        permission: [permissionKey("support", "view"), permissionKey("support", "respond")],
+      },
     ],
   },
 ];
 
 export function isNavItemVisible(item: NavItem, permissions: string[], role: string): boolean {
   if (item.hideForRoles?.includes(role)) return false;
-  return !item.permission || permissions.includes(item.permission);
+  if (!item.permission) return true;
+  const required = Array.isArray(item.permission) ? item.permission : [item.permission];
+  return required.some((key) => permissions.includes(key));
 }

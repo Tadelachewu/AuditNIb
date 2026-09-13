@@ -46,7 +46,8 @@ export type PermissionAction =
   | "district-ranking-all-cases"
   | "category-performance-summary"
   | "mid-month-district-snapshot"
-  | "transferred-findings";
+  | "transferred-findings"
+  | "respond";
 
 export interface PageAction {
   action: PermissionAction;
@@ -155,7 +156,13 @@ export const PAGE_REGISTRY: PageDefinition[] = [
   { code: "district-dashboard", label: "District Dashboard", actions: [V] },
   { code: "ho-dashboard", label: "HO Dashboard", actions: [V] },
   { code: "executive-dashboard", label: "Executive Dashboard", actions: [V] },
-  { code: "users", label: "Users", actions: [V, C, E, T] },
+  // Delete only ever applies to a user with zero recorded activity anywhere
+  // in the app (no findings/transitions/comments/etc. - enforced in
+  // src/app/api/admin/users/[id]/route.ts, not just here) - icfms.txt
+  // otherwise reserves user lifecycle to create/edit/deactivate, since a
+  // used account's history (audit trail, authored findings, ...)
+  // references it by id and must never be silently orphaned.
+  { code: "users", label: "Users", actions: [V, C, E, T, D] },
   { code: "districts", label: "Districts", actions: [V, C, E, T, D] },
   { code: "branches", label: "Branches", actions: [V, C, E, T, D] },
   { code: "sources", label: "Sources", actions: [V, C, E, T, D] },
@@ -174,10 +181,32 @@ export const PAGE_REGISTRY: PageDefinition[] = [
     actions: [V, C, E, D, { action: "activate", label: "Activate / Deactivate" }],
   },
   { code: "scoring-adjustments", label: "Scoring Adjustments", actions: [V, C] },
-  { code: "reporting-periods", label: "Reporting Periods", actions: [V, C, { action: "lock", label: "Lock / Unlock" }] },
+  // Delete only ever applies to a period nothing references yet (no
+  // findings, scoring adjustments, rectifications, closures, or transfers
+  // in or out of it - enforced in
+  // src/app/api/admin/reporting-periods/[id]/route.ts, not just here) -
+  // the same "append-only once used" reasoning PATCH's own startsAt/endsAt
+  // edit gate already applies, just checked against every table that can
+  // reference a period, not only Finding.periodId.
+  { code: "reporting-periods", label: "Reporting Periods", actions: [V, C, { action: "lock", label: "Lock / Unlock" }, D] },
   { code: "settings", label: "Settings", actions: [V, E] },
   { code: "audit-log", label: "Audit Log", actions: [V] },
   { code: "roles", label: "Roles & Permissions", actions: [V, { action: "manage", label: "Manage" }] },
+  // Three independent actions, not a single "everyone gets support" gate:
+  // "create" is the requester side - access to src/app/(app)/support/page.tsx
+  // and sending/continuing/rating your own thread (see POST /api/support and
+  // POST /api/support/[id]/messages|rate) - a role needs this explicitly,
+  // it is not implicit for every logged-in user. "view" and "respond"
+  // both independently reach the admin-side inbox (every user's threads,
+  // not just your own - GET /api/admin/support, the "Support Inbox" nav
+  // link (src/lib/nav.ts), and src/proxy.ts's own carve-out for
+  // /admin/support) - a respond-only role would otherwise have no way to
+  // find a thread to act on, and a view-only role is a legitimate
+  // "see what's been asked" read-only reviewer. Only "respond" additionally
+  // allows posting a reply into someone else's thread from that inbox -
+  // the one point where the two actions actually diverge, same view/action
+  // split used everywhere else in this registry.
+  { code: "support", label: "Support", actions: [V, C, { action: "respond", label: "Respond" }] },
 ];
 
 export function permissionKey(pageCode: string, action: PermissionAction | string): string {

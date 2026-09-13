@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prismaClient";
 import { Prisma } from "@/generated/prisma/client";
+import { ALL_PERMISSION_KEYS } from "@/lib/permissions/registry";
 import type {
   Database,
   User,
@@ -26,6 +27,8 @@ import type {
   AuditLogEntry,
   BranchCoverageNote,
   Settings,
+  SupportThread,
+  SupportMessage,
 } from "@/types";
 
 // ---------------------------------------------------------------------------
@@ -430,6 +433,30 @@ function coverageNoteFromRow(r: Prisma.BranchCoverageNoteGetPayload<object>): Br
   };
 }
 
+function supportThreadFromRow(r: Prisma.SupportThreadGetPayload<object>): SupportThread {
+  return {
+    id: r.id,
+    userId: r.userId,
+    subject: r.subject,
+    status: r.status,
+    rating: u(r.rating),
+    createdAt: iso(r.createdAt),
+    updatedAt: iso(r.updatedAt),
+  };
+}
+
+function supportMessageFromRow(r: Prisma.SupportMessageGetPayload<object>): SupportMessage {
+  return {
+    id: r.id,
+    threadId: r.threadId,
+    senderId: r.senderId,
+    senderName: r.senderName,
+    senderIsSupport: r.senderIsSupport,
+    body: r.body,
+    createdAt: iso(r.createdAt),
+  };
+}
+
 function settingsFromRow(r: Prisma.SettingsGetPayload<object>): Settings {
   return {
     currencies: r.currencies,
@@ -452,6 +479,41 @@ function settingsFromRow(r: Prisma.SettingsGetPayload<object>): Settings {
 }
 
 const SETTINGS_ID = "singleton";
+
+// Self-healing: whenever a code change adds a new permission key to
+// src/lib/permissions/registry.ts's PAGE_REGISTRY (e.g. adding a "delete"
+// action to a page that only had view/create/edit before), ADMIN's own
+// stored `permissions` array in Postgres does NOT automatically grow to
+// include it - permissions are plain data on a role row, not derived live
+// from the registry. Without this, every existing installation's ADMIN
+// role would silently lag behind the code until someone manually re-saved
+// it from /admin/roles. Ported from the pre-Postgres JSON-file version of
+// this file (see git history) - that version ran this on every readDb()
+// too, since the JSON file had no separate migration step either.
+// permissionRegistrySyncedKeys (on Settings) tracks which keys have
+// already been granted this way, so a key an admin deliberately revoked
+// from ADMIN doesn't get silently re-added on the next read.
+async function syncAdminPermissions(db: Database): Promise<void> {
+  const admin = db.roles.find((r) => r.code === "ADMIN");
+  if (!admin) return;
+  const synced = new Set(db.permissionRegistrySyncedKeys);
+  const newKeys = ALL_PERMISSION_KEYS.filter((k) => !synced.has(k));
+  if (newKeys.length === 0) return;
+
+  const granted = new Set(admin.permissions);
+  newKeys.forEach((k) => granted.add(k));
+  admin.permissions = [...granted];
+  db.permissionRegistrySyncedKeys = [...synced, ...newKeys];
+
+  // A direct, targeted write rather than routing through updateDb() (which
+  // would call readDb() again, recursing) - this is the one place in the
+  // app allowed to write outside that diff-sync path, for exactly this
+  // self-contained reason.
+  await prisma.$transaction([
+    prisma.roleDefinition.update({ where: { id: admin.id }, data: { permissions: admin.permissions } }),
+    prisma.settings.update({ where: { id: SETTINGS_ID }, data: { permissionRegistrySyncedKeys: db.permissionRegistrySyncedKeys } }),
+  ]);
+}
 
 export async function readDb(): Promise<Database> {
   const [
@@ -478,6 +540,8 @@ export async function readDb(): Promise<Database> {
     notifications,
     auditLogs,
     branchCoverageNotes,
+    supportThreads,
+    supportMessages,
     settingsRow,
   ] = await Promise.all([
     prisma.roleDefinition.findMany(),
@@ -503,6 +567,8 @@ export async function readDb(): Promise<Database> {
     prisma.notification.findMany(),
     prisma.auditLogEntry.findMany(),
     prisma.branchCoverageNote.findMany(),
+    prisma.supportThread.findMany(),
+    prisma.supportMessage.findMany(),
     prisma.settings.findUnique({ where: { id: SETTINGS_ID } }),
   ]);
 
@@ -512,7 +578,7 @@ export async function readDb(): Promise<Database> {
     );
   }
 
-  return {
+  const db: Database = {
     roles: roles.map(roleFromRow),
     users: users.map(userFromRow),
     districts: districts.map(districtFromRow),
@@ -536,9 +602,14 @@ export async function readDb(): Promise<Database> {
     notifications: notifications.map(notificationFromRow),
     auditLogs: auditLogs.map(auditLogFromRow),
     branchCoverageNotes: branchCoverageNotes.map(coverageNoteFromRow),
+    supportThreads: supportThreads.map(supportThreadFromRow),
+    supportMessages: supportMessages.map(supportMessageFromRow),
     settings: settingsFromRow(settingsRow),
     permissionRegistrySyncedKeys: settingsRow.permissionRegistrySyncedKeys,
   };
+
+  await syncAdminPermissions(db);
+  return db;
 }
 
 // =============================================================================
@@ -921,6 +992,28 @@ function coverageNoteToData(r: BranchCoverageNote) {
   };
 }
 
+function supportThreadToData(r: SupportThread) {
+  return {
+    userId: r.userId,
+    subject: r.subject,
+    status: r.status,
+    rating: r.rating ?? null,
+    createdAt: toDate(r.createdAt),
+    updatedAt: toDate(r.updatedAt),
+  };
+}
+
+function supportMessageToData(r: SupportMessage) {
+  return {
+    threadId: r.threadId,
+    senderId: r.senderId,
+    senderName: r.senderName,
+    senderIsSupport: r.senderIsSupport,
+    body: r.body,
+    createdAt: toDate(r.createdAt),
+  };
+}
+
 async function persistChanges(before: Database, after: Database): Promise<void> {
   await prisma.$transaction(
     async (tx) => {
@@ -950,6 +1043,10 @@ async function persistChanges(before: Database, after: Database): Promise<void> 
       await syncCollection(tx.notification, before.notifications, after.notifications, notificationToData);
       await syncCollection(tx.auditLogEntry, before.auditLogs, after.auditLogs, auditLogToData);
       await syncCollection(tx.branchCoverageNote, before.branchCoverageNotes, after.branchCoverageNotes, coverageNoteToData);
+      // Threads before messages - a message's threadId FK needs its parent
+      // thread to already exist.
+      await syncCollection(tx.supportThread, before.supportThreads, after.supportThreads, supportThreadToData);
+      await syncCollection(tx.supportMessage, before.supportMessages, after.supportMessages, supportMessageToData);
 
       // Settings is a genuine singleton (always id="singleton") plus
       // permissionRegistrySyncedKeys, which the Database shape carries as

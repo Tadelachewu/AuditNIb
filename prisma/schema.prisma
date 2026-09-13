@@ -155,6 +155,7 @@ model User {
   // cookie was issued, so the session is treated as dead immediately
   // rather than staying valid until it naturally expires.
   sessionVersion    Int       @default(1) @map("session_version")
+  supportThreads    SupportThread[]
 
   @@map("users")
 }
@@ -658,4 +659,61 @@ model Settings {
   updatedBy                   String?  @map("updated_by")
 
   @@map("settings")
+}
+
+// ---------------------------------------------------------------------------
+// Support: any logged-in user can send a support message (no permission
+// needed - same "everyone gets this" precedent as Profile's own
+// change-password/email self-service); anyone holding support.respond
+// (support.view for the admin inbox list) can see every thread and reply.
+// One thread = one back-and-forth conversation. A user rates a thread
+// (1-5) once they consider it answered - 5 stars closes it (RESOLVED);
+// anything less leaves it OPEN so the user can add a follow-up message,
+// which reopens the same conversation for another round rather than
+// starting a new thread each time.
+// ---------------------------------------------------------------------------
+
+enum SupportThreadStatus {
+  OPEN
+  RESOLVED
+}
+
+model SupportThread {
+  id        String              @id
+  userId    String              @map("user_id")
+  user      User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // The opening message's own first ~80 characters - a short label for
+  // the admin inbox list, not separately entered by the user.
+  subject   String
+  status    SupportThreadStatus @default(OPEN)
+  // Set once the user rates the conversation - null until then. Only ever
+  // written by the thread's own owner (see rate/route.ts).
+  rating    Int?
+  createdAt DateTime            @map("created_at")
+  updatedAt DateTime            @map("updated_at")
+  messages  SupportMessage[]
+
+  @@index([userId])
+  @@map("support_threads")
+}
+
+model SupportMessage {
+  id       String        @id
+  threadId String        @map("thread_id")
+  thread   SupportThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  senderId String        @map("sender_id")
+  // Denormalized, same convention as every other actor field in this app
+  // (FindingTransition.userName, Comment.authorName, ...) - the sender's
+  // display name survives even if their account is later deleted.
+  senderName      String   @map("sender_name")
+  // Whether this message came from someone holding support.respond at the
+  // time they sent it - lets the UI render "You" vs "Support" bubbles
+  // without re-deriving it from the sender's current (possibly since
+  // revoked or deleted) permissions.
+  senderIsSupport Boolean  @map("sender_is_support")
+  body            String
+  createdAt       DateTime @map("created_at")
+
+  @@index([threadId])
+  @@map("support_messages")
 }
