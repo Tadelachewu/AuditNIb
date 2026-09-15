@@ -1,10 +1,12 @@
-import type { Database } from "@/types";
+import { HO_APPROVED_OR_LATER_STATUSES, type Database } from "@/types";
 import type { SessionData } from "@/lib/session";
 import { computePerformance, findingCaseTotals, findingCaseTotalsInPeriod, transferTotals, averageCaseAgeDays, isHoApproved } from "@/lib/findings";
 import { sumAmountByCurrency, sumOutstandingByCurrency, sumAmountByCurrencyInPeriod, sumOutstandingByCurrencyInPeriod } from "@/lib/currency";
 import { inDateRange, type DateRange } from "@/lib/dateRange";
+import { applyDashboardFilters, EMPTY_DASHBOARD_FILTERS, ALL_PERIODS_VALUE, type DashboardFilters } from "@/lib/dashboardFilters";
 import { Card, CardHeader, StatCard } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
+import { FilterBar } from "@/components/dashboard/FilterBar";
 import { TimeRangeFilter } from "@/components/reports/TimeRangeFilter";
 import { RiskDistribution } from "@/components/dashboard/RiskDistribution";
 import { FindingStatusDistribution } from "@/components/dashboard/FindingStatusDistribution";
@@ -22,26 +24,54 @@ import { FindingsByCategoryChart } from "@/components/dashboard/FindingsByCatego
 // means fewer *operational* widgets (no work queue, no per-branch edit
 // links) - it doesn't mean less bank-wide financial/comparative context,
 // which is exactly what leadership needs and the widgets below add.
-export function ExecutiveDashboard({ db, dateRange = {} }: { user: SessionData; db: Database; dateRange?: DateRange }) {
-  const openPeriod = db.reportingPeriods.find((p) => p.status === "OPEN");
-  // Optional Today/Week/Month/Custom filter (TimeRangeFilter), by each
-  // finding's own findingDate - never computePerformance()'s scoring
-  // (Bank-wide/District/Branch Performance and every ranking below stay
-  // period-scored regardless) or the all-time backlog/exceptions status
-  // metrics (those describe the current backlog as it stands today, not a
-  // reporting window), same split the Reports page's own time filter uses.
-  const allFindingsInRange = db.findings.filter((f) => inDateRange(dateRange, f.findingDate));
-  const periodFindings = openPeriod ? allFindingsInRange.filter((f) => f.periodId === openPeriod.id) : [];
-  const bankPerformance = openPeriod ? computePerformance(db, { periodId: openPeriod.id }) : null;
+export function ExecutiveDashboard({
+  db,
+  dateRange = {},
+  filters = EMPTY_DASHBOARD_FILTERS,
+}: {
+  user: SessionData;
+  db: Database;
+  dateRange?: DateRange;
+  filters?: DashboardFilters;
+}) {
+  // Same FilterBar/period-picker model as HODashboard - both are BANK-
+  // scoped with no fixed district/branch, so a period picked here follows
+  // the exact same "picking a locked/past period reviews dashboard
+  // history" and "All periods" conventions HODashboard's own doc comment
+  // explains.
+  const allPeriodsSelected = filters.periodId === ALL_PERIODS_VALUE;
+  const openPeriod = allPeriodsSelected
+    ? undefined
+    : filters.periodId
+      ? db.reportingPeriods.find((p) => p.id === filters.periodId)
+      : db.reportingPeriods.find((p) => p.status === "OPEN");
+  const hasPeriodScope = allPeriodsSelected || Boolean(openPeriod);
+  // Optional Today/Week/Month/Custom filter (TimeRangeFilter) plus
+  // FilterBar's district/branch/source/category/risk/status fields, by
+  // each finding's own attributes - never computePerformance()'s scoring
+  // formula itself (Bank-wide/District/Branch Performance and every
+  // ranking below stay keyed to the full BRD-defined eligible-case set),
+  // same split HODashboard's own doc comment explains.
+  const allFindingsInRange = applyDashboardFilters(
+    db.findings.filter((f) => inDateRange(dateRange, f.findingDate)),
+    filters
+  );
+  const periodFindings = allPeriodsSelected
+    ? allFindingsInRange
+    : openPeriod
+      ? allFindingsInRange.filter((f) => f.periodId === openPeriod.id)
+      : [];
+  const bankPerformance = hasPeriodScope
+    ? computePerformance(db, { periodId: allPeriodsSelected ? undefined : openPeriod?.id })
+    : null;
   const activeScoringRule = db.scoringRules.find((r) => r.active);
   const activeSources = db.sources.filter((s) => s.active);
   // Period-residency-aware (see findingCaseTotalsInPeriod()'s doc comment
   // in src/lib/findings.ts) - a finding partially rectified here and then
   // transferred still counts its slice toward this period instead of
   // vanishing from it.
-  const { totalFindings, totalCases, rectifiedFindings, rectifiedCases } = openPeriod
-    ? findingCaseTotalsInPeriod(db, openPeriod.id, allFindingsInRange)
-    : findingCaseTotals(periodFindings);
+  const { totalFindings, totalCases, rectifiedFindings, rectifiedCases } =
+    !allPeriodsSelected && openPeriod ? findingCaseTotalsInPeriod(db, openPeriod.id, allFindingsInRange) : findingCaseTotals(periodFindings);
   // Same isHoApproved() gate as every other dashboard - Total Amount,
   // Outstanding Amount, Source Comparison, etc. shouldn't move before a
   // finding's actually cleared HO approval (FindingStatusDistribution below
@@ -49,27 +79,35 @@ export function ExecutiveDashboard({ db, dateRange = {} }: { user: SessionData; 
   // not just the "official" figures; RiskDistribution applies this same
   // gate internally now too).
   const approvedPeriodFindings = periodFindings.filter(isHoApproved);
-  const bankTransfers = openPeriod ? db.findingTransfers.filter((t) => t.fromPeriodId === openPeriod.id) : [];
+  const inScopeFindingIds = new Set(allFindingsInRange.map((f) => f.id));
+  const bankTransfers = hasPeriodScope
+    ? db.findingTransfers.filter(
+        (t) => (allPeriodsSelected || t.fromPeriodId === openPeriod!.id) && inScopeFindingIds.has(t.findingId)
+      )
+    : [];
   const { transferredFindings, transferredCases } = transferTotals(bankTransfers);
   // Period-residency-aware (see sumAmountByCurrencyInPeriod()'s doc
   // comment in src/lib/currency.ts) - a finding partially rectified here
   // and then transferred must have its amount split between this period
   // and wherever it went, not attributed wholesale to just one of them.
   const approvedAllFindingsInRange = allFindingsInRange.filter(isHoApproved);
-  const totalAmount = openPeriod
-    ? sumAmountByCurrencyInPeriod(db, openPeriod.id, approvedAllFindingsInRange, "eligible")
-    : sumAmountByCurrency(approvedPeriodFindings, "amount");
-  const outstandingAmount = openPeriod
-    ? sumOutstandingByCurrencyInPeriod(db, openPeriod.id, approvedAllFindingsInRange)
-    : sumOutstandingByCurrency(approvedPeriodFindings);
+  const totalAmount =
+    !allPeriodsSelected && openPeriod
+      ? sumAmountByCurrencyInPeriod(db, openPeriod.id, approvedAllFindingsInRange, "eligible")
+      : sumAmountByCurrency(approvedPeriodFindings, "amount");
+  const outstandingAmount =
+    !allPeriodsSelected && openPeriod
+      ? sumOutstandingByCurrencyInPeriod(db, openPeriod.id, approvedAllFindingsInRange)
+      : sumOutstandingByCurrency(approvedPeriodFindings);
   // Resolved Amount counts only formally CLOSED amount, never merely
   // rectified-but-unclosed - same "a controller's sign-off is what makes it
   // official" reasoning as findingCaseTotals()'s own closed-only gate.
-  const resolvedAmount = openPeriod
-    ? sumAmountByCurrencyInPeriod(db, openPeriod.id, approvedAllFindingsInRange, "closed")
-    : sumAmountByCurrency(approvedPeriodFindings, "closedAmount");
+  const resolvedAmount =
+    !allPeriodsSelected && openPeriod
+      ? sumAmountByCurrencyInPeriod(db, openPeriod.id, approvedAllFindingsInRange, "closed")
+      : sumAmountByCurrency(approvedPeriodFindings, "closedAmount");
 
-  const outstanding = db.findings.filter((f) => !["RECTIFIED", "CLOSED", "REJECTED"].includes(f.status));
+  const outstanding = allFindingsInRange.filter((f) => !["RECTIFIED", "CLOSED", "REJECTED"].includes(f.status));
   const avgOutstandingAgeDays = averageCaseAgeDays(outstanding);
   // Top two tiers of Settings.riskLevels, matched case-insensitively -
   // same convention as HODashboard/BranchDashboard's own High-Risk stat.
@@ -85,15 +123,36 @@ export function ExecutiveDashboard({ db, dateRange = {} }: { user: SessionData; 
 
   const { topPercent, bottomPercent } = db.settings.performanceThresholds;
 
-  const districtRanking = db.districts
-    .map((d) => ({ district: d, performance: openPeriod ? computePerformance(db, { districtId: d.id, periodId: openPeriod.id }) : null }))
+  // A district/branch/source filter narrows which rows these tables even
+  // list - a real narrowing of "what am I looking at," not a redefinition
+  // of the performance formula (computePerformance() itself is untouched) -
+  // same convention as HODashboard/DistrictDashboard's own *InScope lists.
+  const districtsInScope = filters.districtId ? db.districts.filter((d) => d.id === filters.districtId) : db.districts;
+  const branchesInScope = filters.branchId
+    ? db.branches.filter((b) => b.id === filters.branchId)
+    : filters.districtId
+      ? db.branches.filter((b) => b.districtId === filters.districtId)
+      : db.branches;
+  const sourcesInScope = filters.sourceId ? activeSources.filter((s) => s.id === filters.sourceId) : activeSources;
+  const categoriesInScope = filters.categoryId
+    ? db.categories.filter((c) => c.active && c.id === filters.categoryId)
+    : db.categories.filter((c) => c.active);
+
+  const districtRanking = districtsInScope
+    .map((d) => ({
+      district: d,
+      performance: hasPeriodScope ? computePerformance(db, { districtId: d.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id }) : null,
+    }))
     .filter((r) => r.performance !== null)
     .sort((a, b) => (b.performance ?? 0) - (a.performance ?? 0));
   const topDistricts = districtRanking.filter((r) => r.performance! >= topPercent);
   const bottomDistricts = [...districtRanking].reverse().filter((r) => r.performance! <= bottomPercent);
 
-  const branchRanking = db.branches
-    .map((b) => ({ branch: b, performance: openPeriod ? computePerformance(db, { branchId: b.id, periodId: openPeriod.id }) : null }))
+  const branchRanking = branchesInScope
+    .map((b) => ({
+      branch: b,
+      performance: hasPeriodScope ? computePerformance(db, { branchId: b.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id }) : null,
+    }))
     .filter((r) => r.performance !== null)
     .sort((a, b) => (b.performance ?? 0) - (a.performance ?? 0));
   const topBranches = branchRanking.filter((r) => r.performance! >= topPercent);
@@ -104,7 +163,7 @@ export function ExecutiveDashboard({ db, dateRange = {} }: { user: SessionData; 
   // two finding sources compare bank-wide," not just HO Controller.
   const scoredCategoryIds = new Set(activeScoringRule?.categories ?? []);
   const scoredSourceIds = new Set(activeScoringRule?.sources ?? []);
-  const sourceComparison = activeSources.map((s) => {
+  const sourceComparison = sourcesInScope.map((s) => {
     // isHoApproved(), same gate as everywhere else on this dashboard.
     const findings = approvedPeriodFindings.filter((f) => f.sourceId === s.id);
     const total = findings.reduce((sum, f) => sum + f.caseCount, 0);
@@ -131,6 +190,18 @@ export function ExecutiveDashboard({ db, dateRange = {} }: { user: SessionData; 
         <p className="mt-1 text-sm text-slate-500">Bank-wide summary, view-only</p>
       </div>
 
+      <FilterBar
+        periods={db.reportingPeriods}
+        districts={db.districts}
+        branches={db.branches}
+        sources={activeSources}
+        categories={db.categories.filter((c) => c.active)}
+        riskLevels={db.settings.riskLevels}
+        defaultPeriodId={db.reportingPeriods.find((p) => p.status === "OPEN")?.id}
+        statusOptions={HO_APPROVED_OR_LATER_STATUSES}
+        hint="Filters apply immediately. Performance % always reflects the full scoring formula, not narrowed by source/category/risk/status."
+      />
+
       <TimeRangeFilter />
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -139,26 +210,35 @@ export function ExecutiveDashboard({ db, dateRange = {} }: { user: SessionData; 
           value={bankPerformance !== null ? `${bankPerformance.toFixed(1)}%` : "--"}
           hint={activeScoringRule ? `v${activeScoringRule.version} formula` : "No active scoring rule"}
         />
-        <StatCard label="Total Findings" value={openPeriod ? totalFindings : "--"} hint={openPeriod?.code ?? "No open period"} />
-        <StatCard label="Total Cases" value={openPeriod ? totalCases : "--"} hint="Sum of case counts, bank-wide" />
-        <StatCard label="Outstanding (all periods)" value={outstanding.length} hint="Findings" />
+        <StatCard
+          label="Total Findings"
+          value={hasPeriodScope ? totalFindings : "--"}
+          hint={allPeriodsSelected ? "All periods" : (openPeriod?.code ?? "No open period")}
+        />
+        <StatCard label="Total Cases" value={hasPeriodScope ? totalCases : "--"} hint="Sum of case counts, bank-wide" />
+        <StatCard label="Outstanding (in scope)" value={outstanding.length} hint="Findings" />
         <StatCard label="High/Critical Exceptions" value={exceptions.length} hint="Outstanding, high or critical risk" />
-        <StatCard label="Rectified Findings" value={openPeriod ? rectifiedFindings : "--"} hint="Formally closed" />
-        <StatCard label="Rectified Cases" value={openPeriod ? rectifiedCases : "--"} hint="Closed, this period" />
-        <StatCard label="Outstanding Cases" value={openPeriod ? totalCases - rectifiedCases : "--"} hint="Total minus rectified, bank-wide" />
-        <StatCard label="Transferred Findings" value={openPeriod ? transferredFindings : "--"} hint="Out of this period" />
-        <StatCard label="Transferred Cases" value={openPeriod ? transferredCases : "--"} hint="Out of this period" />
-        <StatCard label="Total Amount" value={openPeriod ? totalAmount : "--"} hint="All findings, bank-wide" />
-        <StatCard label="Resolved Amount" value={openPeriod ? resolvedAmount : "--"} hint="Cumulative closed only" />
-        <StatCard label="Outstanding Amount" value={openPeriod ? outstandingAmount : "--"} hint="Still owed, bank-wide" />
+        <StatCard label="Rectified Findings" value={hasPeriodScope ? rectifiedFindings : "--"} hint="Formally closed" />
+        <StatCard label="Rectified Cases" value={hasPeriodScope ? rectifiedCases : "--"} hint="Closed, this period" />
+        <StatCard label="Outstanding Cases" value={hasPeriodScope ? totalCases - rectifiedCases : "--"} hint="Total minus rectified, bank-wide" />
+        <StatCard label="Transferred Findings" value={hasPeriodScope ? transferredFindings : "--"} hint="Out of this period" />
+        <StatCard label="Transferred Cases" value={hasPeriodScope ? transferredCases : "--"} hint="Out of this period" />
+        <StatCard label="Total Amount" value={hasPeriodScope ? totalAmount : "--"} hint="All findings, bank-wide" />
+        <StatCard label="Resolved Amount" value={hasPeriodScope ? resolvedAmount : "--"} hint="Cumulative closed only" />
+        <StatCard label="Outstanding Amount" value={hasPeriodScope ? outstandingAmount : "--"} hint="Still owed, bank-wide" />
         <StatCard
           label="Avg. Backlog Age"
           value={avgOutstandingAgeDays !== null ? `${avgOutstandingAgeDays}d` : "--"}
-          hint="Outstanding findings, all periods"
+          hint="Outstanding findings in scope"
         />
       </div>
 
-      <CaseBasedPerformance db={db} scope={{}} openPeriod={openPeriod} />
+      <CaseBasedPerformance
+        db={db}
+        scope={{ districtId: filters.districtId || undefined, branchId: filters.branchId || undefined }}
+        openPeriod={openPeriod}
+        allPeriods={allPeriodsSelected}
+      />
 
       {db.settings.rankingVisibility.districts ? (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -242,7 +322,13 @@ export function ExecutiveDashboard({ db, dateRange = {} }: { user: SessionData; 
         </Card>
       )}
 
-      <SourcePerformanceSummary db={db} sources={activeSources} scope={{}} openPeriod={openPeriod} />
+      <SourcePerformanceSummary
+        db={db}
+        sources={sourcesInScope}
+        scope={{ districtId: filters.districtId || undefined, branchId: filters.branchId || undefined }}
+        openPeriod={openPeriod}
+        allPeriods={allPeriodsSelected}
+      />
 
       <Card>
         <CardHeader
@@ -290,9 +376,13 @@ export function ExecutiveDashboard({ db, dateRange = {} }: { user: SessionData; 
         </div>
       </Card>
 
-      <FindingsByCategoryChart findings={approvedPeriodFindings} categories={db.categories.filter((c) => c.active)} openPeriod={openPeriod} />
+      <FindingsByCategoryChart
+        findings={approvedPeriodFindings}
+        categories={categoriesInScope}
+        openPeriod={hasPeriodScope ? (openPeriod ?? { id: ALL_PERIODS_VALUE }) : undefined}
+      />
 
-      <MonthlyTrend db={db} scope={{}} />
+      <MonthlyTrend db={db} scope={{ districtId: filters.districtId || undefined, branchId: filters.branchId || undefined }} />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <FindingStatusDistribution findings={allFindingsInRange} />

@@ -228,6 +228,21 @@ export function HODashboard({
     };
   });
 
+  // Bank-wide per-category breakdown - same shape as Branch/District
+  // Dashboard's own "Category Totals" card, just rolled up across every
+  // district/branch instead of one. Rectified/Rectified Amount are
+  // closedCases/closedAmount, not raw self-reported rectifiedCases/
+  // rectifiedAmount, same rule as computeEligibleCaseCounts() applies to
+  // the headline Performance %.
+  const categoryTotals = categoriesInScope.map((c) => {
+    const findings = approvedPeriodFindings.filter((f) => f.categoryId === c.id);
+    const total = findings.reduce((sum, f) => sum + f.caseCount, 0);
+    const rectified = findings.reduce((sum, f) => sum + f.closedCases, 0);
+    const amount = findings.reduce((sum, f) => sum + f.amount, 0);
+    const rectifiedAmount = findings.reduce((sum, f) => sum + f.closedAmount, 0);
+    return { category: c, total, rectified, outstanding: total - rectified, amount, rectifiedAmount, outstandingAmount: amount - rectifiedAmount };
+  });
+
   // High-risk = the top two tiers of whatever Settings.riskLevels currently
   // defines, matched case-insensitively since it's admin-configurable free
   // text, not a fixed enum - "High"/"Critical" are just the seeded names.
@@ -595,6 +610,40 @@ export function HODashboard({
                   </tr>
                 )
               )}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      <Card>
+        <CardHeader title="Category Totals" description="Every active classified case category, bank-wide, current period" />
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead className="border-b border-slate-100 text-xs uppercase text-slate-400">
+              <tr>
+                <th className="px-4 py-2 font-medium">Category</th>
+                <th className="px-4 py-2 font-medium">Total Cases</th>
+                <th className="px-4 py-2 font-medium">Rectified Cases</th>
+                <th className="px-4 py-2 font-medium">Outstanding Cases</th>
+                <th className="px-4 py-2 font-medium">Amount</th>
+                <th className="px-4 py-2 font-medium">Rectified Amount</th>
+                <th className="px-4 py-2 font-medium">Outstanding Amount</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {categoryTotals.map(({ category: c, total, rectified, outstanding, amount, rectifiedAmount, outstandingAmount }) => (
+                <tr key={c.id}>
+                  <td className="px-4 py-2 text-slate-900">
+                    {c.name} {c.scored && <Badge tone="blue">Scored</Badge>}
+                  </td>
+                  <td className="px-4 py-2 text-slate-700">{hasPeriodScope ? total : "--"}</td>
+                  <td className="px-4 py-2 text-slate-700">{hasPeriodScope ? rectified : "--"}</td>
+                  <td className="px-4 py-2 text-slate-700">{hasPeriodScope ? outstanding : "--"}</td>
+                  <td className="px-4 py-2 text-slate-700">{hasPeriodScope ? formatNumber(amount) : "--"}</td>
+                  <td className="px-4 py-2 text-slate-700">{hasPeriodScope ? formatNumber(rectifiedAmount) : "--"}</td>
+                  <td className="px-4 py-2 text-slate-700">{hasPeriodScope ? formatNumber(outstandingAmount) : "--"}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>

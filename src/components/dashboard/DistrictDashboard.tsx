@@ -11,7 +11,7 @@ import {
   isHoApproved,
 } from "@/lib/findings";
 import { sumAmountByCurrency, sumOutstandingByCurrency, sumAmountByCurrencyInPeriod, sumOutstandingByCurrencyInPeriod } from "@/lib/currency";
-import { formatDateTime } from "@/lib/format";
+import { formatDateTime, formatNumber } from "@/lib/format";
 import { inDateRange, type DateRange } from "@/lib/dateRange";
 import { applyDashboardFilters, EMPTY_DASHBOARD_FILTERS, ALL_PERIODS_VALUE, type DashboardFilters } from "@/lib/dashboardFilters";
 import { Card, CardHeader, StatCard } from "@/components/ui/Card";
@@ -207,15 +207,18 @@ export function DistrictDashboard({
   // performance-ranked table above, sorted by count rather than %.
   const findingsByBranch = [...branchRanking].sort((a, b) => b.total - a.total).slice(0, 10);
 
-  // Rectified is closedCases, not raw self-reported rectifiedCases -
-  // unless it is closed, never count as rectified, same rule as
-  // computeEligibleCaseCounts() (src/lib/findings.ts) now applies to the
-  // headline Performance %.
+  // Rectified/Rectified Amount are closedCases/closedAmount, not raw
+  // self-reported rectifiedCases/rectifiedAmount - unless it is closed,
+  // never count as rectified, same rule as computeEligibleCaseCounts()
+  // (src/lib/findings.ts) now applies to the headline Performance % - same
+  // shape as BranchDashboard's own categoryTotals.
   const categoryTotals = categoriesInScope.map((c) => {
     const findings = approvedPeriodFindings.filter((f) => f.categoryId === c.id);
     const total = findings.reduce((sum, f) => sum + f.caseCount, 0);
     const rectified = findings.reduce((sum, f) => sum + f.closedCases, 0);
-    return { category: c, total, rectified, outstanding: total - rectified };
+    const amount = findings.reduce((sum, f) => sum + f.amount, 0);
+    const rectifiedAmount = findings.reduce((sum, f) => sum + f.closedAmount, 0);
+    return { category: c, total, rectified, outstanding: total - rectified, amount, rectifiedAmount, outstandingAmount: amount - rectifiedAmount };
   });
 
   const isQueued = queueStatusesForSession(user, db);
@@ -438,18 +441,26 @@ export function DistrictDashboard({
             <thead className="border-b border-slate-100 text-xs uppercase text-slate-400">
               <tr>
                 <th className="px-4 py-2 font-medium">Category</th>
-                <th className="px-4 py-2 font-medium">Total</th>
-                <th className="px-4 py-2 font-medium">Rectified</th>
-                <th className="px-4 py-2 font-medium">Outstanding</th>
+                <th className="px-4 py-2 font-medium">Total Cases</th>
+                <th className="px-4 py-2 font-medium">Rectified Cases</th>
+                <th className="px-4 py-2 font-medium">Outstanding Cases</th>
+                <th className="px-4 py-2 font-medium">Amount</th>
+                <th className="px-4 py-2 font-medium">Rectified Amount</th>
+                <th className="px-4 py-2 font-medium">Outstanding Amount</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {categoryTotals.map(({ category: c, total, rectified, outstanding }) => (
+              {categoryTotals.map(({ category: c, total, rectified, outstanding, amount, rectifiedAmount, outstandingAmount }) => (
                 <tr key={c.id}>
-                  <td className="px-4 py-2 text-slate-900">{c.name}</td>
+                  <td className="px-4 py-2 text-slate-900">
+                    {c.name} {c.scored && <Badge tone="blue">Scored</Badge>}
+                  </td>
                   <td className="px-4 py-2 text-slate-700">{hasPeriodScope ? total : "--"}</td>
                   <td className="px-4 py-2 text-slate-700">{hasPeriodScope ? rectified : "--"}</td>
                   <td className="px-4 py-2 text-slate-700">{hasPeriodScope ? outstanding : "--"}</td>
+                  <td className="px-4 py-2 text-slate-700">{hasPeriodScope ? formatNumber(amount) : "--"}</td>
+                  <td className="px-4 py-2 text-slate-700">{hasPeriodScope ? formatNumber(rectifiedAmount) : "--"}</td>
+                  <td className="px-4 py-2 text-slate-700">{hasPeriodScope ? formatNumber(outstandingAmount) : "--"}</td>
                 </tr>
               ))}
             </tbody>

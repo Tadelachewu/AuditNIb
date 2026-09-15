@@ -54,7 +54,7 @@ export default async function DashboardPage({
 
   if (user.role === "EXECUTIVE_READONLY") {
     return has("executive-dashboard") ? (
-      <ExecutiveDashboard user={user} db={db} dateRange={dateRange} />
+      <ExecutiveDashboard user={user} db={db} dateRange={dateRange} filters={filters} />
     ) : (
       noAccessCard("Executive Dashboard")
     );
