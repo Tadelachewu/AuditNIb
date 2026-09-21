@@ -166,10 +166,15 @@ export default function UsersPage() {
   async function saveEdit(user: SafeUser) {
     setRowBusy(user.id);
     setEditError(null);
+    if (!editForm.email.trim()) {
+      setEditError("Email address is required");
+      setRowBusy(null);
+      return;
+    }
     try {
       const payload: Record<string, unknown> = {
         name: editForm.name,
-        email: editForm.email || null,
+        email: editForm.email.trim(),
         role: editForm.role,
         districtId: editForm.districtId || null,
         branchId: editForm.branchId || null,
@@ -260,10 +265,12 @@ export default function UsersPage() {
             />
           </div>
           <div>
-            <Label htmlFor="email">Email (optional)</Label>
+            <Label htmlFor="email">Email <span className="font-normal text-red-600" aria-hidden="true">*</span></Label>
             <Input
               id="email"
               type="email"
+              required
+              placeholder="someone@nibbank.com.et"
               value={form.email}
               onChange={(e) => setForm({ ...form, email: e.target.value })}
             />
@@ -352,7 +359,7 @@ export default function UsersPage() {
 
           <div className="sm:col-span-2 lg:col-span-3">
             {formError && <p className="mb-2 text-sm text-red-600">{formError}</p>}
-            <Button type="submit" disabled={submitting || !form.role}>
+            <Button type="submit" disabled={submitting || !form.role || !form.email.trim()}>
               {submitting ? "Creating..." : "Create User"}
             </Button>
           </div>
@@ -435,10 +442,12 @@ export default function UsersPage() {
                                 />
                               </div>
                               <div>
-                                <Label htmlFor="edit-email">Email (optional)</Label>
+                                <Label htmlFor="edit-email">Email <span className="font-normal text-red-600" aria-hidden="true">*</span></Label>
                                 <Input
                                   id="edit-email"
                                   type="email"
+                                  required
+                                  placeholder="someone@nibbank.com.et"
                                   value={editForm.email}
                                   onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
                                 />

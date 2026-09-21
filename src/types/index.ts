@@ -36,13 +36,16 @@ export interface User {
   id: string;
   name: string;
   username: string;
-  // Optional - existing/seeded users predate this field, and not every
-  // account needs one to log in (username/password is still the only
-  // login credential). Where notification emails actually get sent - see
-  // src/lib/mail.ts - and, unlike display name, editable by the user
-  // themself (src/app/api/auth/email/route.ts) since it carries no
-  // audit-attribution weight the way name does.
-  email?: string | null;
+  // Mandatory for every user. Used by the self-service Forgot Password
+  // flow (/forgot-password, which emails a signed reset link to this
+  // address), by notification emails (submissions, approvals,
+  // rectification requests, period-lock events, support responses), and
+  // as a reliable secondary lookup key (alongside username) for account
+  // recovery. Enforced in the DB (NOT NULL + UNIQUE) plus in every
+  // create/edit API route + form. Email is the only account-identity
+  // field a user can edit about themself (/api/auth/email) because it
+  // carries no audit-attribution weight the way display name does.
+  email: string;
   passwordHash: string;
   role: string;
   status: Status;

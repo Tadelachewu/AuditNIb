@@ -44,7 +44,7 @@ const createUserSchema = z.object({
     .string()
     .min(3, "Username must be at least 3 characters")
     .regex(/^[a-zA-Z0-9._-]+$/, "Username may only contain letters, numbers, dots, dashes and underscores"),
-  email: z.string().email("Enter a valid email address").optional(),
+  email: z.string().min(1, "Email address is required").email("Enter a valid email address"),
   password: z.string().min(8, "Password must be at least 8 characters"),
   role: z.string().min(1, "Role is required"),
   districtId: z.string().nullable().optional(),
@@ -72,7 +72,7 @@ export async function POST(request: Request) {
   if (db.users.some((u) => u.username.toLowerCase() === input.username.toLowerCase())) {
     return NextResponse.json({ error: "That username is already taken" }, { status: 409 });
   }
-  if (input.email && db.users.some((u) => u.email?.toLowerCase() === input.email!.toLowerCase())) {
+  if (db.users.some((u) => u.email.toLowerCase() === input.email.toLowerCase())) {
     return NextResponse.json({ error: "That email is already in use" }, { status: 409 });
   }
 
@@ -121,7 +121,7 @@ export async function POST(request: Request) {
     id: uuid(),
     name: input.name,
     username: input.username,
-    email: input.email || null,
+    email: input.email.trim(),
     passwordHash: hashPassword(input.password),
     role: input.role,
     status: "ACTIVE" as const,

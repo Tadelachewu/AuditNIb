@@ -160,7 +160,16 @@ model User {
   id                String    @id
   name              String
   username          String    @unique
-  email             String?
+  // Email is MANDATORY for every user. Why it can't be optional:
+  //   1. The self-service Forgot Password flow (src/app/forgot-password)
+  //      needs a deliverable address - without one, a locked-out user can
+  //      only recover via a DBA running SQL - which the NIB deploy just hit.
+  //   2. Notification emails - Findings submissions, approvals, rectification
+  //      requests, period-lock events, support answers - are all addressed
+  //      to this field; missing means silent non-delivery.
+  //   3. It's a reliable lookup key for the forgot-password "username OR
+  //      email" prompt.
+  email             String    @unique
   passwordHash      String    @map("password_hash")
   // Plain string FK to RoleDefinition.code (not .id) - matches
   // User.role's existing shape exactly (src/types/index.ts stores the

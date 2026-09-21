@@ -6,7 +6,10 @@ import { appendAuditLog } from "@/lib/audit";
 import { toSafeUser } from "@/lib/sanitize";
 
 const schema = z.object({
-  email: z.string().email("Enter a valid email address"),
+  // Email is mandatory (see User.email in src/types/index.ts + DB NOT NULL
+  // constraint). min(1) + email() so the user-facing error on a blank
+  // field is "Enter a valid email address" rather than a generic "Required".
+  email: z.string().min(1, "Enter a valid email address").email("Enter a valid email address").trim(),
 });
 
 // Unlike display name (admin-only - see ProfileClient.tsx's own doc

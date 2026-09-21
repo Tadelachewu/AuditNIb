@@ -10,7 +10,16 @@ import { toSafeUser } from "@/lib/sanitize";
 
 const updateUserSchema = z.object({
   name: z.string().min(1).optional(),
-  email: z.string().email("Enter a valid email address").nullable().optional(),
+  // Email is mandatory - we accept ".min(1)" alongside `.email()` so the
+  // error on "empty string submitted to clear the field" is "Email address
+  // is required" rather than "Enter a valid email address". We also accept
+  // undefined (not sent, don't change it) but NOT null (explicitly clear) -
+  // email must never be nullable, per the DB constraint and the forgot-
+  // password/notification flows that depend on it always existing.
+  email: z.union([
+    z.string().min(1, "Email address is required").email("Enter a valid email address"),
+    z.undefined(),
+  ]),
   role: z.string().min(1).optional(),
   districtId: z.string().nullable().optional(),
   branchId: z.string().nullable().optional(),
@@ -72,7 +81,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
   }
 
-  if (input.email && db.users.some((u) => u.id !== id && u.email?.toLowerCase() === input.email!.toLowerCase())) {
+  if (input.email !== undefined && db.users.some((u) => u.id !== id && u.email.toLowerCase() === input.email!.toLowerCase())) {
     return NextResponse.json({ error: "That email is already in use" }, { status: 409 });
   }
 
