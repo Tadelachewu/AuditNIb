@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { apiSend, ApiError } from "@/lib/api-client";
 import { Button } from "@/components/ui/Button";
@@ -71,6 +72,14 @@ export default function LoginPage() {
               onChange={(e) => setPassword(e.target.value)}
               required
             />
+            <div className="mt-1.5 text-right">
+              <Link
+                href="/forgot-password"
+                className="text-xs font-medium text-blue-700 hover:text-blue-900 hover:underline"
+              >
+                Forgot password?
+              </Link>
+            </div>
           </div>
 
           {error && <p className="mb-4 text-sm text-red-600">{error}</p>}

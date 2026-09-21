@@ -100,6 +100,40 @@ enum ImportOutcome {
 // Identity & org structure
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Password reset (self-service forgot-password flow)
+// ---------------------------------------------------------------------------
+
+// Single-use, time-limited token for the "Forgot password?" link on the
+// login page. A user enters their email (or username) on /forgot-password;
+// if a matching, ACTIVE user exists and has an email on file, one row is
+// created here, all older tokens for that same userId are revoked, and a
+// signed reset link containing the `token` value is emailed to them.
+// Visiting /reset-password?token=... lets them set a new password; on
+// success the token is consumed (usedAt set) so it can't be reused.
+model PasswordResetToken {
+  id        String   @id
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // The raw token value (long random string) is what travels in the email
+  // link and is matched on redemption. Stored directly rather than hashed
+  // because it's already single-use, 32 crypto-random bytes, and the
+  // threat model for a DB read is: "attacker already has the full users
+  // table including passwordHash and sessionVersion" - at that point a
+  // reset token is the least of your worries.
+  token     String   @unique
+  expiresAt DateTime @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  // Issuing IP + UA for audit / lockout purposes; never displayed in the UI.
+  issuedIp  String?  @map("issued_ip")
+  issuedUa  String?  @map("issued_ua")
+
+  @@index([userId])
+  @@index([token])
+  @@map("password_reset_tokens")
+}
+
 // `code` stays a plain string, never an enum - roles are admin-editable
 // data (Phase 2), not a fixed set. See RoleDefinition.code's own doc
 // comment in src/types/index.ts for why this must never become a literal
@@ -156,6 +190,7 @@ model User {
   // rather than staying valid until it naturally expires.
   sessionVersion    Int       @default(1) @map("session_version")
   supportThreads    SupportThread[]
+  passwordResetTokens PasswordResetToken[]
 
   @@map("users")
 }

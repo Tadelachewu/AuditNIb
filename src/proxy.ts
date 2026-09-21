@@ -3,7 +3,7 @@ import { getIronSession } from "iron-session";
 import { sessionOptions, type SessionData } from "@/lib/session";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
 
-const PUBLIC_PATHS = ["/login"];
+const PUBLIC_PATHS = ["/login", "/forgot-password", "/reset-password"];
 
 // Every /admin/<page> route, and every /findings route (list, new, detail
 // - all one page code regardless of sub-path), needs "<page>.view" on the
