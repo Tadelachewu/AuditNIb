@@ -51,8 +51,32 @@ const STATE_CHANGING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 // through rather than blocked outright, since blocking them would reject
 // legitimate non-browser callers without stopping a real attack (a forged
 // browser request always has Origin set).
+//
+// Behind a reverse proxy (Nginx / ALB / Cloudflare / etc.) the `Host`
+// header Next.js receives is the internal upstream address
+// (e.g. `127.0.0.1:9005`) while `Origin`/`Referer` still hold the public
+// domain (e.g. `nibprocure.nibbank.com.et`). A properly-configured proxy
+// sets `proxy_set_header Host $host;` (see Fix 1 in the deploy guide) so
+// the raw `Host` header already matches - but the X-Forwarded-Host standard
+// header is checked as well, as defense-in-depth against proxy
+// misconfiguration. First value wins: raw Host is trusted if it looks
+// "public" (not a loopback / RFC1918 address); otherwise X-Forwarded-Host
+// is used. The proxy must be the *only* thing stripping/overwriting these
+// headers - direct access to :9005 with a forged X-Forwarded-Host never
+// reaches real users over the internet, and the in-app check still blocks
+// that case because the attacker-supplied Origin/Referer would also need
+// to match whatever they put in XFH.
 function isCrossOriginApiRequest(request: NextRequest): boolean {
-  const host = request.headers.get("host");
+  let host = request.headers.get("host") ?? "";
+
+  const INTERNAL_HOST_PATTERN =
+    /^(localhost|127\.0\.0\.1|\[::1\]|10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.)/i;
+  if (!host || INTERNAL_HOST_PATTERN.test(host)) {
+    const forwardedHost = request.headers.get("x-forwarded-host");
+    if (forwardedHost) {
+      host = forwardedHost.split(",")[0].trim();
+    }
+  }
   if (!host) return false;
 
   const origin = request.headers.get("origin");

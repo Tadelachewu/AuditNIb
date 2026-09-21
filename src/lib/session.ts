@@ -43,11 +43,15 @@ if (!password || password.length < 32) {
   );
 }
 
+const isSecureContext =
+  process.env.SESSION_COOKIE_SECURE === "true" ||
+  (process.env.SESSION_COOKIE_SECURE !== "false" && process.env.NODE_ENV === "production");
+
 export const sessionOptions: SessionOptions = {
   password,
   cookieName: "nib_control360_session",
   cookieOptions: {
-    secure: process.env.NODE_ENV === "production",
+    secure: isSecureContext,
     sameSite: "lax",
     httpOnly: true,
   },
