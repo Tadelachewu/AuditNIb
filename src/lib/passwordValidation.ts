@@ -1,4 +1,8 @@
-import crypto from "node:crypto";
+// No `node:crypto` import here on purpose - this file is also imported by a
+// client component (src/app/reset-password/page.tsx, for
+// validatePasswordStrength), and webpack can't bundle `node:` URIs for the
+// browser. The breach check below uses the global Web Crypto API instead,
+// which exists in both Node and browsers.
 
 // security/ChatBot_VA_Report_Analysis.md's VA-006 ("Weak Password Policy
 // Enforcement") class: every password-setting endpoint in this app
@@ -77,7 +81,8 @@ export function validatePasswordStrength(password: string): PasswordCheckResult 
 // line of defense.
 async function isPasswordBreached(password: string): Promise<boolean> {
   try {
-    const sha1 = crypto.createHash("sha1").update(password, "utf8").digest("hex").toUpperCase();
+    const digest = await crypto.subtle.digest("SHA-1", new TextEncoder().encode(password));
+    const sha1 = Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("").toUpperCase();
     const prefix = sha1.slice(0, 5);
     const suffix = sha1.slice(5);
 
