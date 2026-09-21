@@ -4,13 +4,13 @@
   "private": true,
   "scripts": {
     "postinstall": "prisma generate",
-    "dev": "next dev --webpack",
+    "dev": "next dev -p 9005",
     "build": "next build --webpack",
-    "start": "next start",
+    "start": "next start -p 9005",
     "lint": "eslint",
     "db:seed": "tsx prisma/seed.ts",
-    "tunnel": "lt --port 3000",
-    "tunnel:cloudflare": "cloudflared tunnel --url http://localhost:3000"
+    "tunnel": "lt --port 9005",
+    "tunnel:cloudflare": "cloudflared tunnel --url http://localhost:9005"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.8.0",
