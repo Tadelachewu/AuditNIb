@@ -18,6 +18,7 @@ import { formatDateTime, formatNumber } from "@/lib/format";
 import { inDateRange, type DateRange } from "@/lib/dateRange";
 import { applyDashboardFilters, EMPTY_DASHBOARD_FILTERS, ALL_PERIODS_VALUE, type DashboardFilters } from "@/lib/dashboardFilters";
 import { Card, CardHeader, StatCard } from "@/components/ui/Card";
+import { DASHBOARD_ICONS as ICON } from "@/lib/dashboardIcons";
 import { Badge } from "@/components/ui/Badge";
 import { FilterBar } from "@/components/dashboard/FilterBar";
 import { TimeRangeFilter } from "@/components/reports/TimeRangeFilter";
@@ -311,19 +312,21 @@ export function BranchDashboard({
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatCard
+          icon={ICON.totalFindings}
           label="Total Findings"
           value={hasPeriodScope ? totalFindings : "--"}
           hint={allPeriodsSelected ? "All periods" : openPeriod ? openPeriod.code : "No open period"}
         />
-        <StatCard label="Total Cases" value={hasPeriodScope ? totalCases : "--"} hint="Sum of case counts" />
-        <StatCard label="Rectified Findings" value={hasPeriodScope ? rectifiedFindings : "--"} hint="Formally closed" />
-        <StatCard label="Rectified Cases" value={hasPeriodScope ? rectifiedCases : "--"} hint="Closed, this period" />
-        <StatCard label="Outstanding Cases" value={hasPeriodScope ? totalCases - rectifiedCases : "--"} hint="Total minus rectified" />
-        <StatCard label="Outstanding" value={hasPeriodScope ? outstandingFindings : "--"} hint="Findings" />
-        <StatCard label="Transferred Findings" value={hasPeriodScope ? transferredFindings : "--"} hint="Out of this period" />
-        <StatCard label="Transferred Cases" value={hasPeriodScope ? transferredCases : "--"} hint="Out of this period" />
-        <StatCard label="High-Risk Findings" value={hasPeriodScope ? highRiskFindings : "--"} hint="Open, top risk tiers" />
+        <StatCard icon={ICON.totalCases} label="Total Cases" value={hasPeriodScope ? totalCases : "--"} hint="Sum of case counts" />
+        <StatCard icon={ICON.rectified} label="Rectified Findings" value={hasPeriodScope ? rectifiedFindings : "--"} hint="Formally closed" />
+        <StatCard icon={ICON.rectified} label="Rectified Cases" value={hasPeriodScope ? rectifiedCases : "--"} hint="Closed, this period" />
+        <StatCard icon={ICON.outstandingCases} label="Outstanding Cases" value={hasPeriodScope ? totalCases - rectifiedCases : "--"} hint="Total minus rectified" />
+        <StatCard icon={ICON.outstanding} label="Outstanding" value={hasPeriodScope ? outstandingFindings : "--"} hint="Findings" />
+        <StatCard icon={ICON.transferred} label="Transferred Findings" value={hasPeriodScope ? transferredFindings : "--"} hint="Out of this period" />
+        <StatCard icon={ICON.transferred} label="Transferred Cases" value={hasPeriodScope ? transferredCases : "--"} hint="Out of this period" />
+        <StatCard icon={ICON.highRisk} label="High-Risk Findings" value={hasPeriodScope ? highRiskFindings : "--"} hint="Open, top risk tiers" />
         <StatCard
+          icon={ICON.performance}
           label="Branch Performance"
           value={performance !== null ? `${performance.toFixed(1)}%` : "--"}
           hint={
@@ -355,15 +358,15 @@ export function BranchDashboard({
             )
           }
         />
-        <StatCard label="Total Amount" value={hasPeriodScope ? totalAmount : "--"} hint="All findings" />
-        <StatCard label="Resolved Amount" value={hasPeriodScope ? resolvedAmount : "--"} hint="Cumulative closed only" />
-        <StatCard label="Outstanding Amount" value={hasPeriodScope ? outstandingAmount : "--"} hint="Still owed" />
-        {canRegister && <StatCard label="Draft" value={draftFindings} hint="Not yet submitted" />}
+        <StatCard icon={ICON.totalAmount} label="Total Amount" value={hasPeriodScope ? totalAmount : "--"} hint="All findings" />
+        <StatCard icon={ICON.resolvedAmount} label="Resolved Amount" value={hasPeriodScope ? resolvedAmount : "--"} hint="Cumulative closed only" />
+        <StatCard icon={ICON.outstandingAmount} label="Outstanding Amount" value={hasPeriodScope ? outstandingAmount : "--"} hint="Still owed" />
+        {canRegister && <StatCard icon={ICON.draft} label="Draft" value={draftFindings} hint="Not yet submitted" />}
         {canRegister && (
-          <StatCard label="Pending Approval" value={pendingApprovalFindings} hint="District/HO review, your registrations" />
+          <StatCard icon={ICON.pendingApproval} label="Pending Approval" value={pendingApprovalFindings} hint="District/HO review, your registrations" />
         )}
         {(canRegister || canRectify) && (
-          <StatCard label="Pending Rectification" value={pendingRectificationFindings} hint="Awaiting rectification" />
+          <StatCard icon={ICON.pendingRectification} label="Pending Rectification" value={pendingRectificationFindings} hint="Awaiting rectification" />
         )}
       </div>
 

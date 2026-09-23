@@ -3,6 +3,7 @@ import { findBranchManager, findBranchController } from "@/lib/org";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
 import { formatDateTime } from "@/lib/format";
 import { StatCard, Card, CardHeader } from "@/components/ui/Card";
+import { DASHBOARD_ICONS as ICON } from "@/lib/dashboardIcons";
 import type { SessionData } from "@/lib/session";
 import type { Database } from "@/types";
 
@@ -55,11 +56,12 @@ export function AdminDashboard({ user, db }: { user: SessionData; db: Database }
       <p className="mt-1 text-sm text-slate-500">Bank-wide configuration and user administration.</p>
 
       <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        <StatCard label="Active Users" value={activeUsers} hint={`${db.users.length} total`} />
-        <StatCard label="Districts" value={activeDistricts} hint={`${db.districts.length} total`} />
-        <StatCard label="Branches" value={activeBranches} hint={`${db.branches.length} total`} />
-        <StatCard label="Open Periods" value={openPeriods} hint={`${lockedPeriods} locked`} />
+        <StatCard icon={ICON.activeUsers} label="Active Users" value={activeUsers} hint={`${db.users.length} total`} />
+        <StatCard icon={ICON.districts} label="Districts" value={activeDistricts} hint={`${db.districts.length} total`} />
+        <StatCard icon={ICON.branches} label="Branches" value={activeBranches} hint={`${db.branches.length} total`} />
+        <StatCard icon={ICON.openPeriods} label="Open Periods" value={openPeriods} hint={`${lockedPeriods} locked`} />
         <StatCard
+          icon={ICON.activeScoringRule}
           label="Active Scoring Rule"
           value={activeScoringRule ? `v${activeScoringRule.version}` : "None"}
         />
