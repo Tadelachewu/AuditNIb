@@ -643,7 +643,14 @@ model AuditLogEntry {
   // entry's own fields plus `previousHash`, so altering or reordering any
   // past entry breaks every hash after it - detectable by
   // verifyAuditLogChain() without needing a separate authority.
-  sequence     Int    @unique @map("sequence")
+  //
+  // BIGINT (signed 64-bit, max 9,223,372,036,854,775,807) rather than
+  // INTEGER (32-bit, max ~2.1B), so the chain ceiling is effectively
+  // unreachable at any realistic write rate — see REFERENCE_ID.md §"Audit
+  // log sequence (chain number)" for the capacity math.  The app reads
+  // it into a base-10 string (JSON can't serialize native BigInt), so
+  // db.ts's mapper pair handles both directions.
+  sequence     BigInt @unique @map("sequence")
   previousHash String @map("previous_hash")
   hash         String @map("hash")
 

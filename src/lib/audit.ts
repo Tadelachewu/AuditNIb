@@ -14,7 +14,27 @@ import type { Database, AuditLogEntry } from "@/types";
 // assigned here, in application code, before the row is ever inserted -
 // a database autoincrement is only assigned at insert time, too late to
 // include in a hash computed beforehand.
+//
+// Stored as a base-10 decimal string (not a JS number) so it can hold
+// 64-bit Postgres BIGINT values without losing precision past 2^53, and
+// can grow past even 64 bits without a schema change if that's ever
+// needed.  The helpers below (cmpSeq / addSeq) keep all arithmetic
+// exact using native `bigint` under the hood.
 export const AUDIT_CHAIN_GENESIS_HASH = "0".repeat(64);
+const SEQ_ZERO = "0";
+const SEQ_ONE = "1";
+
+function parseSeq(s: string): bigint {
+  return BigInt(s);
+}
+function cmpSeq(a: string, b: string): number {
+  const ai = parseSeq(a);
+  const bi = parseSeq(b);
+  return ai < bi ? -1 : ai > bi ? 1 : 0;
+}
+function addSeq(a: string, b: string): string {
+  return (parseSeq(a) + parseSeq(b)).toString(10);
+}
 
 // Plain JSON.stringify is NOT safe to hash here: oldValue/newValue round-trip
 // through a Postgres `jsonb` column (see AuditLogEntry.oldValue/newValue in
@@ -41,7 +61,7 @@ function canonicalStringify(value: unknown): string {
 function computeEntryHash(
   previousHash: string,
   entry: {
-    sequence: number;
+    sequence: string;
     timestamp: string;
     userId: string;
     action: string;
@@ -83,15 +103,15 @@ export function appendAuditLog(
   // Order-independent - correct regardless of what order db.auditLogs
   // happens to be in, which matters since it's read fresh from Postgres
   // (see readDb() in src/lib/db.ts) with no guaranteed row order.
-  let maxSequence = 0;
+  let maxSequence = SEQ_ZERO;
   let previousHash = AUDIT_CHAIN_GENESIS_HASH;
   for (const e of db.auditLogs) {
-    if (e.sequence > maxSequence) {
+    if (cmpSeq(e.sequence, maxSequence) > 0) {
       maxSequence = e.sequence;
       previousHash = e.hash;
     }
   }
-  const sequence = maxSequence + 1;
+  const sequence = addSeq(maxSequence, SEQ_ONE);
 
   const timestamp = new Date().toISOString();
   const hash = computeEntryHash(previousHash, { ...entry, sequence, timestamp });
@@ -111,7 +131,7 @@ export function appendAuditLog(
 export interface AuditChainVerification {
   valid: boolean;
   brokenAtId?: string;
-  brokenAtSequence?: number;
+  brokenAtSequence?: string;
 }
 
 // Recomputes the chain from genesis and compares against what's stored -
@@ -120,10 +140,10 @@ export interface AuditChainVerification {
 // the full audit log; called from the admin Audit Log viewer, not on every
 // write.
 export function verifyAuditLogChain(auditLogs: AuditLogEntry[]): AuditChainVerification {
-  const sorted = [...auditLogs].sort((a, b) => a.sequence - b.sequence);
+  const sorted = [...auditLogs].sort((a, b) => cmpSeq(a.sequence, b.sequence));
 
   let expectedPrevious = AUDIT_CHAIN_GENESIS_HASH;
-  let expectedSequence = 1;
+  let expectedSequence = SEQ_ONE;
   for (const entry of sorted) {
     if (entry.sequence !== expectedSequence || entry.previousHash !== expectedPrevious) {
       return { valid: false, brokenAtId: entry.id, brokenAtSequence: entry.sequence };
@@ -133,7 +153,7 @@ export function verifyAuditLogChain(auditLogs: AuditLogEntry[]): AuditChainVerif
       return { valid: false, brokenAtId: entry.id, brokenAtSequence: entry.sequence };
     }
     expectedPrevious = entry.hash;
-    expectedSequence++;
+    expectedSequence = addSeq(expectedSequence, SEQ_ONE);
   }
   return { valid: true };
 }
@@ -152,9 +172,9 @@ type RawAuditEntry = Pick<
 export function buildAuditLogChainFromScratch(entries: RawAuditEntry[]): AuditLogEntry[] {
   const sorted = [...entries].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
   let previousHash = AUDIT_CHAIN_GENESIS_HASH;
-  let sequence = 0;
+  let sequence = SEQ_ZERO;
   return sorted.map((entry) => {
-    sequence++;
+    sequence = addSeq(sequence, SEQ_ONE);
     const hash = computeEntryHash(previousHash, { ...entry, sequence });
     const result: AuditLogEntry = { ...entry, sequence, previousHash, hash };
     previousHash = hash;

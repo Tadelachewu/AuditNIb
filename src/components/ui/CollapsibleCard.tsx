@@ -25,7 +25,7 @@ export function CollapsibleCard({
   const [open, setOpen] = useState(defaultOpen);
 
   return (
-    <div className={`rounded-lg border border-slate-200 bg-slate-100 shadow-sm ${className}`}>
+    <div className={`rounded-lg border border-slate-200 bg-white shadow-sm ${className}`}>
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}

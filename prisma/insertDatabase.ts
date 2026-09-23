@@ -381,6 +381,10 @@ export async function insertDatabaseIntoPostgres(prisma: PrismaClient, db: Datab
   // Source data predates the hash chain (see src/lib/audit.ts's own doc
   // comment) - build it from scratch here, ordered by timestamp, rather
   // than trusting any sequence/hash the source JSON might already carry.
+  //
+  // a.sequence comes back from buildAuditLogChainFromScratch() as a
+  // decimal string; the Prisma model wants a real BIGINT, so widen via
+  // BigInt() exactly here, at the storage boundary.
   const chainedAuditLogs = buildAuditLogChainFromScratch(db.auditLogs);
   await prisma.auditLogEntry.createMany({
     data: chainedAuditLogs.map((a) => ({
@@ -394,7 +398,7 @@ export async function insertDatabaseIntoPostgres(prisma: PrismaClient, db: Datab
       newValue: (a.newValue ?? Prisma.DbNull) as Prisma.InputJsonValue,
       reason: a.reason ?? null,
       timestamp: toDate(a.timestamp),
-      sequence: a.sequence,
+      sequence: BigInt(a.sequence),
       previousHash: a.previousHash,
       hash: a.hash,
     })),

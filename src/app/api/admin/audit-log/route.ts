@@ -4,6 +4,16 @@ import { readDb } from "@/lib/db";
 import { paginate, parsePage } from "@/lib/pagination";
 import { verifyAuditLogChain } from "@/lib/audit";
 
+// Compares two audit-log sequence strings (bigint-as-decimal) with "newest
+// first" semantics.  `b - a` on a number isn't safe past 2^53, so we do an
+// explicit bigint comparison via sign() — matches cmpSeq in audit.ts but
+// kept inline here to avoid pulling server-only deps into a shared helper.
+function seqDesc(a: string, b: string): number {
+  const ai = BigInt(a);
+  const bi = BigInt(b);
+  return ai < bi ? 1 : ai > bi ? -1 : 0;
+}
+
 // The audit log is append-only and grows forever - every workflow,
 // config, and auth event ever logged. Previously this returned a flat
 // slice(0, 300) with no way to see anything older; now it's genuinely
@@ -18,7 +28,7 @@ export async function GET(request: Request) {
   // array/read order, which Postgres doesn't guarantee without this
   // explicit sort (see src/lib/audit.ts's own doc comment on why sequence
   // exists at all).
-  const sorted = [...db.auditLogs].sort((a, b) => b.sequence - a.sequence);
+  const sorted = [...db.auditLogs].sort((a, b) => seqDesc(a.sequence, b.sequence));
   const result = paginate(sorted, parsePage(searchParams.get("page") ?? undefined), 50);
   // O(n) over the whole log, but only on this admin-only viewer request,
   // not on every write - confirms no past entry has been altered, deleted,

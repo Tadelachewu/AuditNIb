@@ -504,11 +504,37 @@ export function assertRequiredFindingFieldsPresent(
   return null;
 }
 
-/** "<branchCode>-<periodCode>-<seq>", sequence counted per branch+period. */
+/**
+ * "<branchCode>-<periodCode>-<seq>" — one monotonic sequence per (branch, period).
+ *
+ * Design notes (see REFERENCE_ID.md for the full spec):
+ *   - Uses MAX(parsed suffix) + 1, not COUNT + 1.  COUNT-based sequencing
+ *     collides the moment any finding in the same branch+period is deleted
+ *     (its old reference number gets "reissued" to the next creation),
+ *     which breaks the `finding.reference` UNIQUE constraint.
+ *   - 5-digit zero-padded suffix: 00001 .. 99999 per branch/period combo.
+ *     At an extreme 1000 findings/month per branch this covers ~8 years;
+ *     at the NIB's realistic rate (~50/month) it covers ~165 years per
+ *     reporting period.  After 99999 the pad naturally grows (the value
+ *     is still a valid, sortable, unique string) rather than wrapping.
+ *   - Suffix regex anchored to the end so a branch code that coincidentally
+ *     contains a "-NNNNN" suffix (e.g. a legacy code) doesn't poison the
+ *     max calculation.
+ */
 export function nextFindingReference(db: Database, branch: Branch, period: ReportingPeriod): string {
   const prefix = `${branch.code}-${period.code}`;
-  const seq = db.findings.filter((f) => f.reference.startsWith(`${prefix}-`)).length + 1;
-  return `${prefix}-${String(seq).padStart(3, "0")}`;
+  const anchor = `${prefix}-`;
+  let maxSeq = 0;
+  for (const f of db.findings) {
+    if (!f.reference.startsWith(anchor)) continue;
+    const suffix = f.reference.slice(anchor.length);
+    const n = parseInt(suffix, 10);
+    if (Number.isFinite(n) && n > maxSeq) maxSeq = n;
+  }
+  const seq = maxSeq + 1;
+  const width = 5;
+  const padded = String(seq).padStart(width, "0");
+  return `${anchor}${padded}`;
 }
 
 // ---------------------------------------------------------------------------

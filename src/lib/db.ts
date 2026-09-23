@@ -414,7 +414,7 @@ function auditLogFromRow(r: Prisma.AuditLogEntryGetPayload<object>): AuditLogEnt
     newValue: r.newValue ?? undefined,
     reason: u(r.reason),
     timestamp: iso(r.timestamp),
-    sequence: r.sequence,
+    sequence: r.sequence.toString(),
     previousHash: r.previousHash,
     hash: r.hash,
   };
@@ -975,7 +975,7 @@ function auditLogToData(r: AuditLogEntry) {
     newValue: (r.newValue ?? Prisma.DbNull) as Prisma.InputJsonValue,
     reason: r.reason ?? null,
     timestamp: toDate(r.timestamp),
-    sequence: r.sequence,
+    sequence: BigInt(r.sequence),
     previousHash: r.previousHash,
     hash: r.hash,
   };

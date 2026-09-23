@@ -1,11 +1,11 @@
 import type { ReactNode } from "react";
 
-// Page background stays bg-white (see (app)/layout.tsx) for contrast against
-// the dark sidebar/topbar - a card reads as its own surface by tinting
-// itself slightly gray (slate-100) against that white canvas, rather than
-// the page changing color around it.
+// Page background is bg-slate-100 (see (app)/layout.tsx) for contrast
+// against the dark sidebar/topbar - a card reads as its own surface by
+// standing out white against that gray canvas, rather than the page
+// changing color around it.
 export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <div className={`rounded-lg border border-slate-200 bg-slate-100 shadow-sm ${className}`}>{children}</div>;
+  return <div className={`rounded-lg border border-slate-200 bg-white shadow-sm ${className}`}>{children}</div>;
 }
 
 export function CardHeader({ title, description, action }: { title: string; description?: string; action?: ReactNode }) {

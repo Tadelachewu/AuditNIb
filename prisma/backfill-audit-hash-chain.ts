@@ -9,6 +9,11 @@
 //   npx tsx prisma/backfill-audit-hash-chain.ts
 // Safe to re-run - it always recomputes the whole chain from `timestamp`
 // order and overwrites, rather than assuming any partial prior run.
+//
+// NOTE: `sequence` is BIGINT in Postgres, so the Prisma client returns
+// native JS `bigint` values; we cast `built.sequence` accordingly on the
+// write.  buildAuditLogChainFromScratch keeps it as a decimal string for
+// JSON/sorting portability, then we widen to BigInt only at the DB edge.
 import "dotenv/config";
 import { PrismaClient } from "../src/generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
@@ -46,17 +51,23 @@ async function main() {
   for (const entry of chained) {
     await prisma.auditLogEntry.update({
       where: { id: entry.id },
-      data: { sequence: -entry.sequence },
+      data: { sequence: -BigInt(entry.sequence) },
     });
   }
   for (const entry of chained) {
     await prisma.auditLogEntry.update({
       where: { id: entry.id },
-      data: { sequence: entry.sequence, previousHash: entry.previousHash, hash: entry.hash },
+      data: {
+        sequence: BigInt(entry.sequence),
+        previousHash: entry.previousHash,
+        hash: entry.hash,
+      },
     });
   }
 
-  console.log(`Backfilled ${chained.length} entries. Highest sequence: ${chained.length}.`);
+  console.log(
+    `Backfilled ${chained.length} entries. Highest sequence: ${chained[chained.length - 1]?.sequence ?? "0"}.`
+  );
 }
 
 main()

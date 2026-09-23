@@ -13,7 +13,7 @@ export default function AuditLogPage() {
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [pageInfo, setPageInfo] = useState({ total: 0, pageSize: 50, totalPages: 1 });
-  const [chain, setChain] = useState<{ valid: boolean; brokenAtSequence?: number } | null>(null);
+  const [chain, setChain] = useState<{ valid: boolean; brokenAtSequence?: string } | null>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -23,7 +23,7 @@ export default function AuditLogPage() {
       pageSize: number;
       totalPages: number;
       chainValid: boolean;
-      chainBrokenAtSequence?: number;
+      chainBrokenAtSequence?: string;
     }>(`/api/admin/audit-log?page=${page}`).then((res) => {
       setLogs(res.auditLogs);
       setPageInfo({ total: res.total, pageSize: res.pageSize, totalPages: res.totalPages });

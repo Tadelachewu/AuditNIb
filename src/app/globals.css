@@ -12,12 +12,14 @@
   --brand-gold: #feb914;
   --brand-gold-dark: #d89d11;
   --brand-brown: #8a4d21;
-  /* A deeper, near-black version of --brand-brown for large solid
-     surfaces (the sidebar) - the logo's own swoosh brown is too bright/
-     saturated to cover a whole panel without overwhelming the gold accent
-     it's meant to set off, so this is hand-darkened toward black rather
-     than a plain CSS filter on --brand-brown. */
-  --brand-sidebar: #2e2419;
+  /* A warm, muted brown-gold for large solid surfaces (the sidebar/
+     topbar) - lightened from an earlier near-black version toward
+     --brand-gold-dark (roughly their midpoint) so the chrome reads less
+     harshly dark, while staying dark/desaturated enough that the existing
+     white nav text (--on-dark) and the bright --brand-gold active-item
+     highlight both still read clearly against it (~5.7:1 contrast with
+     white - comfortably past WCAG AA's 4.5:1 for normal text). */
+  --brand-sidebar: #836115;
   /* Fixed dark text for anything sitting directly on --brand-gold (Button's
      `primary` variant, the sidebar's active/hover nav item, "View"/"Back"
      links styled to look like a gold button, ...). Deliberately NOT part of

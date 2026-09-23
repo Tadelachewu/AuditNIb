@@ -799,7 +799,10 @@ export interface AuditLogEntry {
   timestamp: string;
   // Tamper-evidence hash chain - see src/lib/audit.ts's own doc comment.
   // Always set by appendAuditLog(); never hand-construct one of these.
-  sequence: number;
+  // Stored as a base-10 string (bigint is not JSON-serializable) and mapped
+  // to/from Postgres BIGINT at the db.ts boundary — effectively unlimited
+  // range, never wraps.  See REFERENCE_ID.md for capacity details.
+  sequence: string;
   previousHash: string;
   hash: string;
 }
