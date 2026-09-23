@@ -804,18 +804,16 @@ export function FindingDetailClient({
           <CardHeader
             title="Verify Rectification"
             description={(() => {
+              // canVerifyRectification only ever holds once real
+              // rectification exists (PARTIALLY_RECTIFIED/RECTIFIED/
+              // TRANSFERRED - never SENT_TO_BRANCH_MANAGER), at which point
+              // ordinary District Verify/Return authority applies in full
+              // even for a bank-registered finding (see
+              // return-rectification/route.ts's own doc comment for why
+              // the two travel together) - so this text never needs a
+              // bank-registered special case.
               if (permissions.canVerifyRectification) {
-                const verifyMessage = `${verifiableCases} case(s) / ${finding.currency} ${formatNumber(verifiableAmount)} rectified and awaiting your verification, before it can reach Head Office for final closure.`;
-                // A District Controller can otherwise both Verify and
-                // Return from here - except on a bank-registered finding,
-                // which never went through District Review and so gives
-                // District no standing to return its rectification either
-                // (only Head Office can - see return-rectification/route.ts's
-                // own doc comment).
-                if (finding.registeredByBankScope && !permissions.canDistrictReturnRectification) {
-                  return `${verifyMessage} This is a bank-registered finding, so only Head Office can send it back for correction.`;
-                }
-                return `${verifyMessage} Approve it, or send it back to the Branch Manager for correction.`;
+                return `${verifiableCases} case(s) / ${finding.currency} ${formatNumber(verifiableAmount)} rectified and awaiting your verification, before it can reach Head Office for final closure. Approve it, or send it back to the Branch Manager for correction.`;
               }
               if (permissions.canDistrictReturnRectification) {
                 // District: can return even at SENT_TO_BRANCH_MANAGER (zero rectified)
@@ -825,6 +823,9 @@ export function FindingDetailClient({
                 return "Recorded rectification awaiting District review. Approve it via Verify, or send it back to the Branch Manager for correction.";
               }
               if (permissions.canHoReturnRectification) {
+                if (finding.status === "SENT_TO_BRANCH_MANAGER" && finding.registeredByBankScope) {
+                  return "This bank-registered finding hasn't had any rectification recorded yet. Since it never went through District Review, only Head Office can send it back for correction at this stage.";
+                }
                 return `${finding.districtVerifiedCases} case(s) / ${finding.currency} ${formatNumber(finding.districtVerifiedAmount)} already District-verified. You can return this finding to the Branch Manager for further correction only after District verification — which this portion has already passed.`;
               }
               return "";

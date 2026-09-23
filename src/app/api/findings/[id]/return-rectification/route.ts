@@ -47,14 +47,24 @@ const returnSchema = z.object({
 //                                            especially one HO themselves created
 //                                            and approved) back for correction.
 //
-// Exception: Finding.registeredByBankScope. A bank-registered finding
-// skipped District Review entirely at the approval stage (submitFinding()'s
-// own doc comment - "there's no natural district to review a finding HO
-// itself registered"), so District has no standing to return its
-// rectification for correction either - district-return-rectification is
-// blocked outright on such a finding (legacy stays unrestricted), and in
-// exchange ho-return-rectification's own district-verification-first gate
-// is waived, since there's no District sign-off to wait on.
+// Exception: Finding.registeredByBankScope, narrowly scoped to the one
+// moment District truly has no standing at all - SENT_TO_BRANCH_MANAGER
+// with nothing rectified yet. A bank-registered finding skipped District
+// Review entirely at the approval stage (submitFinding()'s own doc
+// comment - "there's no natural district to review a finding HO itself
+// registered"), so District can't preemptively bounce it back before the
+// branch has even attempted a fix; only HO can (and HO's own district-
+// verification-first gate is waived here too, since there's nothing for
+// District to have verified yet either way). The MOMENT the branch
+// actually records a rectification, ordinary District oversight resumes
+// in full (both this route's district-return-rectification AND
+// verify-rectification elsewhere) - checking the branch's actual work is
+// District's routine job regardless of how the original finding was
+// approved, and verify/return are the two outcomes of that same review,
+// so blocking one while leaving the other intact would be incoherent
+// (District could rubber-stamp a bank-registered finding's rectification
+// as correct but not send it back if it wasn't - the riskier gap, not the
+// safer one).
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requirePermission(
     permissionKey("findings", "return-rectification"),
@@ -86,15 +96,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const hasHo = hasPermission(auth.session.permissions, permissionKey("findings", "ho-return-rectification"));
   const hasHoOnly = hasHo && !hasLegacy && !hasDistrict;
 
-  // A bank-registered finding never went through District Review (see
-  // submitFinding()'s own doc comment) - District shouldn't gain
-  // rectification-return authority over one either, by that same "no
-  // natural district reviewed this" reasoning. Only Head Office (or a
-  // role holding the unrestricted legacy permission) can return it.
-  if (existing.registeredByBankScope && hasDistrict && !hasLegacy && !hasHo) {
+  // See this file's own top-of-file doc comment - narrowly scoped to
+  // "nothing rectified yet," not the whole lifecycle.
+  const bankScopeStillUnrectified = existing.registeredByBankScope && existing.status === "SENT_TO_BRANCH_MANAGER";
+
+  if (bankScopeStillUnrectified && hasDistrict && !hasLegacy && !hasHo) {
     return NextResponse.json(
       {
-        error: "This is a bank-registered finding - only Head Office can return it for correction, not the District Controller.",
+        error:
+          "This bank-registered finding hasn't had any rectification recorded yet - only Head Office can return it for correction at this stage, not the District Controller.",
       },
       { status: 403 }
     );
@@ -107,11 +117,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   // before HO acts, and (b) automatically means HO cannot return a finding
   // still sitting at SENT_TO_BRANCH_MANAGER (zero rectified / zero
   // verified), including findings HO themselves created and approved.
-  // Waived entirely for a bank-registered finding - District was never
-  // part of this finding's chain at all (see the block above), so there's
-  // no District sign-off for HO to wait on; HO's authority here is
-  // unrestricted, the same timing District would otherwise have had.
-  if (hasHoOnly && !existing.registeredByBankScope) {
+  // Waived only for that same narrow bank-scope-and-unrectified case above -
+  // there's nothing for District to have verified yet either way, and
+  // District has no standing to act first at that exact moment. Once real
+  // rectification exists, this gate applies normally even to a
+  // bank-registered finding, since District is expected to verify it just
+  // like any other finding by that point.
+  if (hasHoOnly && !bankScopeStillUnrectified) {
     const verifiedCases = existing.districtVerifiedCases;
     const verifiedAmount = existing.districtVerifiedAmount;
     if (verifiedCases <= 0 && verifiedAmount <= 0) {
