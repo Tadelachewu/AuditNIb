@@ -12,8 +12,11 @@ export async function GET() {
   const db = await readDb();
   // ADMIN's permissions display exactly as stored, same as any other role -
   // it can be narrowed (see PATCH .../roles/[id]), so showing anything else
-  // here would mask what's actually granted.
-  const roles = db.roles;
+  // here would mask what's actually granted. Alphabetical by name - same
+  // convention as every other reference-data list in the app (districts,
+  // branches, sources, ...), and the Users page's own role picker reads
+  // from this same endpoint.
+  const roles = [...db.roles].sort((a, b) => a.name.localeCompare(b.name));
   // The registry travels with the list so the UI can render the full
   // page x action matrix without a second round trip.
   return NextResponse.json({ roles, registry: PAGE_REGISTRY });

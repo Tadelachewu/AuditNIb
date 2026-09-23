@@ -14,8 +14,10 @@ export async function GET() {
   // Unlike a branch's manager/controller, a district can have several
   // active District Controllers/Directors (BRD: "District and Head Office
   // may have multiple Internal Controllers"), so these come back as arrays
-  // of names, not a single one.
-  const districts = db.districts.map((d) => ({
+  // of names, not a single one. Alphabetical by name - same convention as
+  // /api/admin/branches, and every picker across the app that lists
+  // districts reads from this same endpoint.
+  const districts = [...db.districts].sort((a, b) => a.name.localeCompare(b.name)).map((d) => ({
     ...d,
     controllerNames: findDistrictControllers(db, d.id).map((u) => u.name),
     directorNames: findDistrictDirectors(db, d.id).map((u) => u.name),

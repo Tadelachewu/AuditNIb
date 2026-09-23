@@ -9,7 +9,10 @@ export async function GET() {
   const auth = await requirePermission("uncovered-reasons.view");
   if (!auth.ok) return auth.response;
   const db = await readDb();
-  return NextResponse.json({ uncoveredReasons: db.uncoveredReasons });
+  // Alphabetical by name - same convention as /api/admin/branches/districts,
+  // and ReasonPicker.tsx's own picklist reads from here.
+  const uncoveredReasons = [...db.uncoveredReasons].sort((a, b) => a.name.localeCompare(b.name));
+  return NextResponse.json({ uncoveredReasons });
 }
 
 const createSchema = z.object({

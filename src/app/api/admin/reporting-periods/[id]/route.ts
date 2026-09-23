@@ -23,9 +23,11 @@ const updateSchema = z
     // autoTransferOnLock()'s doc comment. Only meaningful on a genuine
     // OPEN->LOCKED transition; ignored otherwise (unlock, flag-only edit).
     transferOverdueCases: z.boolean().optional(),
-    // Narrowing the submission window (see ReportingPeriod.submissionStartsAt's
+    // Changing the submission window (see ReportingPeriod.submissionStartsAt's
     // own doc comment) is independent of lock/unlock and independent of
-    // startsAt/endsAt below - both provided together or neither.
+    // startsAt/endsAt below - both provided together or neither. It's no
+    // longer required to stay inside startsAt/endsAt (a grace period may
+    // run earlier or later than the reporting window itself).
     submissionStartsAt: z.string().min(1).optional(),
     submissionEndsAt: z.string().min(1).optional(),
     // Editing the period's own overall range - only safe while nothing
@@ -114,20 +116,6 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
   }
 
-  // The submission window is bound-checked against whatever the period's
-  // own range will actually be after this request - the just-submitted
-  // startsAt/endsAt when those are being changed too, otherwise the
-  // existing ones.
-  const effectiveStartsAt = startsAt ?? existing.startsAt;
-  const effectiveEndsAt = endsAt ?? existing.endsAt;
-  if (submissionStartsAt !== undefined) {
-    if (new Date(submissionStartsAt).getTime() < new Date(effectiveStartsAt).getTime()) {
-      return NextResponse.json({ error: "Submission window can't start before the period itself does" }, { status: 400 });
-    }
-    if (new Date(submissionEndsAt!).getTime() > new Date(effectiveEndsAt).getTime()) {
-      return NextResponse.json({ error: "Submission window can't end after the period itself does" }, { status: 400 });
-    }
-  }
   // A true status transition, vs. a flag-only touch-up on an already-LOCKED
   // period (status provided but unchanged, or omitted entirely).
   const isStatusChange = status !== undefined && status !== existing.status;

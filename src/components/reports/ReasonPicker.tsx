@@ -31,8 +31,9 @@ export function ReasonPicker({
 }) {
   // Deactivated reasons drop out of the picklist for new selections, but a
   // note already pointing at one must keep showing it - otherwise the
-  // <select> would silently fall back to its first option.
-  const options = reasons.filter((r) => r.active || r.id === value);
+  // <select> would silently fall back to its first option. Alphabetical,
+  // same as every other reference-data picker in the app.
+  const options = reasons.filter((r) => r.active || r.id === value).sort((a, b) => a.name.localeCompare(b.name));
 
   return (
     <div className={`flex flex-col gap-1.5 ${className ?? ""}`}>

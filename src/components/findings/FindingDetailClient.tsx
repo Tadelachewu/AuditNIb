@@ -7,7 +7,7 @@ import { apiSend, ApiError } from "@/lib/api-client";
 import { formatDate, formatDateTime, formatNumber } from "@/lib/format";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { Input, Label } from "@/components/ui/Field";
+import { Input, Label, FileInput } from "@/components/ui/Field";
 import { Badge } from "@/components/ui/Badge";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { FindingStatusBadge } from "@/components/findings/FindingStatusBadge";
@@ -588,12 +588,12 @@ export function FindingDetailClient({
       {!editing && (permissions.canEdit || permissions.canDelete || permissions.canSubmit) && (
         <div className="flex flex-wrap gap-2">
           {permissions.canEdit && (
-            <Button variant="secondary" onClick={() => setEditing(true)} disabled={busy}>
+            <Button variant="neutral" onClick={() => setEditing(true)} disabled={busy}>
               Edit
             </Button>
           )}
           {permissions.canSubmit && (
-            <Button onClick={handleSubmit} disabled={busy}>
+            <Button variant="info" onClick={handleSubmit} disabled={busy}>
               {finding.status === "RETURNED" ? "Resubmit" : "Submit"}
             </Button>
           )}
@@ -616,11 +616,11 @@ export function FindingDetailClient({
             }
           />
           <div className="flex gap-2 p-4">
-            <Button onClick={() => handleReview("district-review", "APPROVE")} disabled={busy}>
+            <Button variant="success" onClick={() => handleReview("district-review", "APPROVE")} disabled={busy}>
               Approve
             </Button>
             {permissions.canDistrictReturnReview && (
-              <Button variant="secondary" onClick={() => handleReview("district-review", "RETURN")} disabled={busy}>
+              <Button variant="danger" onClick={() => handleReview("district-review", "RETURN")} disabled={busy}>
                 Return
               </Button>
             )}
@@ -642,11 +642,11 @@ export function FindingDetailClient({
             }
           />
           <div className="flex gap-2 p-4">
-            <Button onClick={() => handleReview("ho-review", "APPROVE")} disabled={busy}>
+            <Button variant="success" onClick={() => handleReview("ho-review", "APPROVE")} disabled={busy}>
               Approve
             </Button>
             {permissions.canHoReturnReview && (
-              <Button variant="secondary" onClick={() => handleReview("ho-review", "RETURN")} disabled={busy}>
+              <Button variant="danger" onClick={() => handleReview("ho-review", "RETURN")} disabled={busy}>
                 Return
               </Button>
             )}
@@ -668,11 +668,11 @@ export function FindingDetailClient({
             }
           />
           <div className="flex gap-2 p-4">
-            <Button onClick={() => handleReview("bank-approval", "APPROVE")} disabled={busy}>
+            <Button variant="success" onClick={() => handleReview("bank-approval", "APPROVE")} disabled={busy}>
               Approve
             </Button>
             {permissions.canBankReturnReview && (
-              <Button variant="secondary" onClick={() => handleReview("bank-approval", "RETURN")} disabled={busy}>
+              <Button variant="danger" onClick={() => handleReview("bank-approval", "RETURN")} disabled={busy}>
                 Return
               </Button>
             )}
@@ -805,7 +805,17 @@ export function FindingDetailClient({
             title="Verify Rectification"
             description={(() => {
               if (permissions.canVerifyRectification) {
-                return `${verifiableCases} case(s) / ${finding.currency} ${formatNumber(verifiableAmount)} rectified and awaiting your verification, before it can reach Head Office for final closure. Approve it, or send it back to the Branch Manager for correction.`;
+                const verifyMessage = `${verifiableCases} case(s) / ${finding.currency} ${formatNumber(verifiableAmount)} rectified and awaiting your verification, before it can reach Head Office for final closure.`;
+                // A District Controller can otherwise both Verify and
+                // Return from here - except on a bank-registered finding,
+                // which never went through District Review and so gives
+                // District no standing to return its rectification either
+                // (only Head Office can - see return-rectification/route.ts's
+                // own doc comment).
+                if (finding.registeredByBankScope && !permissions.canDistrictReturnRectification) {
+                  return `${verifyMessage} This is a bank-registered finding, so only Head Office can send it back for correction.`;
+                }
+                return `${verifyMessage} Approve it, or send it back to the Branch Manager for correction.`;
               }
               if (permissions.canDistrictReturnRectification) {
                 // District: can return even at SENT_TO_BRANCH_MANAGER (zero rectified)
@@ -822,17 +832,17 @@ export function FindingDetailClient({
           />
           <div className="flex gap-2 p-4">
             {permissions.canVerifyRectification && (
-              <Button onClick={handleVerifyRectification} disabled={busy}>
+              <Button variant="info" onClick={handleVerifyRectification} disabled={busy}>
                 Verify
               </Button>
             )}
             {permissions.canDistrictReturnRectification && (
-              <Button onClick={handleReturnRectification} disabled={busy}>
+              <Button variant="warning" onClick={handleReturnRectification} disabled={busy}>
                 Return for Correction (District)
               </Button>
             )}
             {permissions.canHoReturnRectification && (
-              <Button onClick={handleReturnRectification} disabled={busy}>
+              <Button variant="warning" onClick={handleReturnRectification} disabled={busy}>
                 Return for Correction (HO)
               </Button>
             )}
@@ -971,7 +981,7 @@ export function FindingDetailClient({
                   <Button variant="secondary" onClick={() => setTransferring(false)} disabled={busy}>
                     Cancel
                   </Button>
-                  <Button variant="danger" onClick={handleTransfer} disabled={busy || !transferPeriodId}>
+                  <Button variant="info" onClick={handleTransfer} disabled={busy || !transferPeriodId}>
                     {busy ? "Transferring..." : "Transfer"}
                   </Button>
                 </div>
@@ -979,7 +989,7 @@ export function FindingDetailClient({
             )
           ) : (
             <div className="p-4">
-              <Button variant="secondary" onClick={() => setTransferring(true)}>
+              <Button variant="info" onClick={() => setTransferring(true)}>
                 Transfer to Next Period
               </Button>
             </div>
@@ -992,15 +1002,13 @@ export function FindingDetailClient({
           <CardHeader title="Evidence" description="Optional supporting files (PDF, PNG, JPG, XLSX, DOCX, CSV - up to 10 MB). Comment attachments are shown inline under their comment instead." />
           <div className="flex flex-col gap-2 p-4">
             {permissions.canUploadEvidence && (
-              <input
-                type="file"
+              <FileInput
                 disabled={uploadingEvidence}
                 onChange={(e) => {
                   const file = e.target.files?.[0];
                   e.target.value = "";
                   if (file) void handleEvidenceUpload(file);
                 }}
-                className="text-sm text-slate-600"
               />
             )}
             {uploadingEvidence && <p className="text-xs text-slate-400">Uploading...</p>}
@@ -1103,11 +1111,7 @@ export function FindingDetailClient({
                                 Reply
                               </Button>
                             </div>
-                            <input
-                              type="file"
-                              onChange={(e) => setReplyFile(e.target.files?.[0] ?? null)}
-                              className="text-xs text-slate-500"
-                            />
+                            <FileInput onChange={(e) => setReplyFile(e.target.files?.[0] ?? null)} />
                           </div>
                         )}
                       </div>
@@ -1127,11 +1131,7 @@ export function FindingDetailClient({
                     Post
                   </Button>
                 </div>
-                <input
-                  type="file"
-                  onChange={(e) => setCommentFile(e.target.files?.[0] ?? null)}
-                  className="text-xs text-slate-500"
-                />
+                <FileInput onChange={(e) => setCommentFile(e.target.files?.[0] ?? null)} />
               </div>
             )}
           </div>

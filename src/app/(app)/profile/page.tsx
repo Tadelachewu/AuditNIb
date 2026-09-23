@@ -54,13 +54,21 @@ export default async function ProfilePage() {
             <dd className="mt-0.5 text-slate-900">{department?.name ?? "—"}</dd>
           </div>
           <div>
+            <dt className="text-xs font-medium text-slate-500">Email</dt>
+            <dd className="mt-0.5 text-slate-900">{user.email}</dd>
+          </div>
+          <div>
+            <dt className="text-xs font-medium text-slate-500">Phone</dt>
+            <dd className="mt-0.5 text-slate-900">{user.phone ?? "—"}</dd>
+          </div>
+          <div>
             <dt className="text-xs font-medium text-slate-500">Last Login</dt>
             <dd className="mt-0.5 text-slate-900">{user.lastLoginAt ? formatDateTime(user.lastLoginAt) : "—"}</dd>
           </div>
         </dl>
       </Card>
 
-      <ProfileClient initialEmail={user.email ?? ""} forced={Boolean(user.mustChangePassword)} />
+      <ProfileClient forced={Boolean(user.mustChangePassword)} />
     </div>
   );
 }

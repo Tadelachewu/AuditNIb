@@ -392,6 +392,15 @@ export function submitFinding(
   userName: string,
   opts?: { registeredByBankScope?: boolean }
 ): void {
+  // Persisted, not just this call's own routing decision - read much later
+  // by return-rectification/route.ts to decide who can return a
+  // rectification for correction (see Finding.registeredByBankScope's own
+  // doc comment). Re-set on every call, matching this same function's own
+  // "not who originally created the finding" doc comment just below - a
+  // returned finding resubmitted later by a branch-scoped user correctly
+  // flips this back to false.
+  finding.registeredByBankScope = Boolean(opts?.registeredByBankScope);
+
   transitionFinding(db, finding, { toStatus: "SUBMITTED", action: "SUBMIT", userId, userName });
 
   if (opts?.registeredByBankScope) {

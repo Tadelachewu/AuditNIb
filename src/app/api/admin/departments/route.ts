@@ -10,7 +10,10 @@ export async function GET() {
   const auth = await requirePermission("departments.view");
   if (!auth.ok) return auth.response;
   const db = await readDb();
-  return NextResponse.json({ departments: db.departments });
+  // Alphabetical by name - same convention as /api/admin/branches/districts,
+  // and every picker across the app that lists departments reads from here.
+  const departments = [...db.departments].sort((a, b) => a.name.localeCompare(b.name));
+  return NextResponse.json({ departments });
 }
 
 const createSchema = z.object({

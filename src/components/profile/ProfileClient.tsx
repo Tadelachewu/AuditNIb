@@ -8,44 +8,26 @@ import { Button } from "@/components/ui/Button";
 import { Input, Label } from "@/components/ui/Field";
 
 /**
- * The two things a user can change about themself - password (see
- * /api/auth/change-password's own doc comment) and email (see
- * /api/auth/email's own doc comment for why it's self-service unlike
- * display name/username/role/org, which stay admin-only and read-only on
- * the Account card above this, so the audit trail's "who did this" stays
- * trustworthy). `forced` renders the page as a mandatory first step (no
- * way to navigate elsewhere until the password is changed - src/proxy.ts
- * already blocks every other page) rather than an optional settings screen.
+ * The one thing a user can change about themself - their own password (see
+ * /api/auth/change-password's own doc comment). Email and phone are
+ * admin-only (set/changed via PATCH /api/admin/users/[id], read-only here -
+ * see the Account card on (app)/profile/page.tsx), same as display name/
+ * username/role/org, since both now feed the self-service Forgot Password
+ * flow and every notification email - a user quietly changing either
+ * themself would undermine account recovery and delivery, not just the
+ * audit trail's "who did this" the other admin-only fields already protect.
+ * `forced` renders the page as a mandatory first step (no way to navigate
+ * elsewhere until the password is changed - src/proxy.ts already blocks
+ * every other page) rather than an optional settings screen.
  */
-export function ProfileClient({ initialEmail, forced }: { initialEmail: string; forced: boolean }) {
+export function ProfileClient({ forced }: { forced: boolean }) {
   const router = useRouter();
-
-  const [email, setEmail] = useState(initialEmail);
-  const [emailSaving, setEmailSaving] = useState(false);
-  const [emailError, setEmailError] = useState<string | null>(null);
-  const [emailSaved, setEmailSaved] = useState(false);
 
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordSaving, setPasswordSaving] = useState(false);
   const [passwordError, setPasswordError] = useState<string | null>(null);
-
-  async function saveEmail(e: React.FormEvent) {
-    e.preventDefault();
-    setEmailError(null);
-    setEmailSaved(false);
-    setEmailSaving(true);
-    try {
-      await apiSend("/api/auth/email", "PATCH", { email });
-      setEmailSaved(true);
-      router.refresh();
-    } catch (err) {
-      setEmailError(err instanceof ApiError ? err.message : "Failed to save changes");
-    } finally {
-      setEmailSaving(false);
-    }
-  }
 
   async function savePassword(e: React.FormEvent) {
     e.preventDefault();
@@ -84,30 +66,9 @@ export function ProfileClient({ initialEmail, forced }: { initialEmail: string; 
       )}
 
       <Card>
-        <CardHeader title="Email" description="Used for notification emails (submissions, approvals, rectifications, period events, ...)." />
-        <form onSubmit={saveEmail} className="flex flex-wrap items-end gap-3 p-4">
-          <div className="w-72">
-            <Label htmlFor="profile-email">Email address</Label>
-            <Input
-              id="profile-email"
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-          </div>
-          <Button type="submit" disabled={emailSaving || !email.trim()}>
-            {emailSaving ? "Saving..." : "Save Email"}
-          </Button>
-          {emailSaved && <p className="text-sm text-emerald-700">Saved.</p>}
-          {emailError && <p className="text-sm text-red-600">{emailError}</p>}
-        </form>
-      </Card>
-
-      <Card>
         <CardHeader
           title="Change Password"
-          description="Requires your current password. Display name, username, role, and organization assignment can only be changed by an administrator."
+          description="Requires your current password. Every other account detail - display name, username, role, organization assignment, email, and phone - can only be changed by an administrator."
         />
         <form onSubmit={savePassword} className="flex flex-col gap-3 p-4 sm:max-w-sm">
           <div>

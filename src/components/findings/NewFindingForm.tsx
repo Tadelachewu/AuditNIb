@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { apiSend, ApiError } from "@/lib/api-client";
+import { apiGet, apiSend, ApiError } from "@/lib/api-client";
 import { formatDateTime, formatNumber } from "@/lib/format";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -158,7 +158,7 @@ function CategorySelectOrOther({
         }}
       >
         <option value="">{placeholder}</option>
-        {categories.map((c) => (
+        {[...categories].sort((a, b) => a.name.localeCompare(b.name)).map((c) => (
           <option key={c.id} value={c.id}>
             {c.name}
           </option>
@@ -334,6 +334,59 @@ export function NewFindingForm({
   const caseAmountsSum = caseAmounts.reduce((sum, a) => sum + (Number(a) || 0), 0);
   const caseAmountsMatch = Math.abs(caseAmountsSum - (Number(form.amount) || 0)) < 0.01;
 
+  // A power failure, refresh, or closed tab mid-registration shouldn't
+  // lose everything typed so far - restored once on mount from
+  // /api/findings/draft-autosave (create mode only; an existing finding
+  // already has its own persisted DB row, nothing to shadow), then kept
+  // current with a debounced PUT on every change and cleared the moment a
+  // real Draft save/Submit succeeds (see save() below). `restoredBanner`
+  // is null until a draft is actually found, so the banner never flashes
+  // on a normal empty form.
+  const [restoredBanner, setRestoredBanner] = useState(false);
+  const skipNextAutosave = useRef(false);
+
+  useEffect(() => {
+    if (isEditing) return;
+    let cancelled = false;
+    apiGet<{ draft: (typeof form & { itemizeCases?: boolean; caseAmounts?: string[] }) | null }>("/api/findings/draft-autosave")
+      .then((res) => {
+        if (cancelled || !res.draft) return;
+        const { itemizeCases: draftItemize, caseAmounts: draftCaseAmounts, ...draftForm } = res.draft;
+        skipNextAutosave.current = true;
+        setForm((f) => ({ ...f, ...draftForm }));
+        if (draftItemize) setItemizeCases(true);
+        if (draftCaseAmounts) setCaseAmounts(draftCaseAmounts);
+        setRestoredBanner(true);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [isEditing]);
+
+  useEffect(() => {
+    if (isEditing) return;
+    if (skipNextAutosave.current) {
+      // The restore above just set this exact state - saving it straight
+      // back would be a redundant no-op write, not a bug, but skipping it
+      // avoids a pointless request on every page load that has a draft.
+      skipNextAutosave.current = false;
+      return;
+    }
+    const timer = setTimeout(() => {
+      apiSend("/api/findings/draft-autosave", "PATCH", { ...form, itemizeCases, caseAmounts }).catch(() => {});
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [form, itemizeCases, caseAmounts, isEditing]);
+
+  async function discardRestoredDraft() {
+    setRestoredBanner(false);
+    setForm({ ...emptyForm, districtId: fixedDistrict?.id ?? "", branchId: fixedBranch?.id ?? "" });
+    setItemizeCases(false);
+    setCaseAmounts([]);
+    await apiSend("/api/findings/draft-autosave", "DELETE").catch(() => {});
+  }
+
   // Non-blocking duplicate suggestion (create mode only) - sends every
   // candidate field the form currently has a value for (see
   // SIMILAR_FINDING_FIELDS in src/types/index.ts); the API route itself
@@ -399,8 +452,18 @@ export function NewFindingForm({
   const selectedPeriod = periods.find((p) => p.id === form.periodId);
   const periodBlocksSubmit = selectedPeriod?.status === "LOCKED";
 
+  // Alphabetical - these are free-text, admin-configured lists (Settings)
+  // with no inherent order of their own, unlike riskLevels/priorityLevels
+  // just below (deliberately left in their configured severity order).
+  const sortedOperationAreas = useMemo(() => [...operationAreas].sort((a, b) => a.localeCompare(b)), [operationAreas]);
+  const sortedIrregularityTypes = useMemo(() => [...irregularityTypes].sort((a, b) => a.localeCompare(b)), [irregularityTypes]);
+  const sortedCurrencies = useMemo(() => [...currencies].sort((a, b) => a.localeCompare(b)), [currencies]);
+
   const branchOptions = useMemo(
-    () => (form.districtId ? branches.filter((b) => b.districtId === form.districtId) : branches),
+    () =>
+      [...(form.districtId ? branches.filter((b) => b.districtId === form.districtId) : branches)].sort((a, b) =>
+        a.name.localeCompare(b.name)
+      ),
     [branches, form.districtId]
   );
 
@@ -410,12 +473,14 @@ export function NewFindingForm({
   // Department.orgScope instead of Branch.districtId.
   const departmentOptions = useMemo(
     () =>
-      departments.filter(
-        (d) =>
-          d.orgScope === "BANK" ||
-          (d.orgScope === "DISTRICT" && d.districtId === form.districtId) ||
-          (d.orgScope === "BRANCH" && d.branchId === form.branchId)
-      ),
+      departments
+        .filter(
+          (d) =>
+            d.orgScope === "BANK" ||
+            (d.orgScope === "DISTRICT" && d.districtId === form.districtId) ||
+            (d.orgScope === "BRANCH" && d.branchId === form.branchId)
+        )
+        .sort((a, b) => a.name.localeCompare(b.name)),
     [departments, form.districtId, form.branchId]
   );
 
@@ -455,6 +520,9 @@ export function NewFindingForm({
         onSaved?.();
       } else {
         const res = await apiSend<{ finding: Finding }>("/api/findings", "POST", { ...payload, submit });
+        // Either a real Draft save or a Submit just succeeded - the
+        // autosave copy's only job was to survive until this point.
+        apiSend("/api/findings/draft-autosave", "DELETE").catch(() => {});
         router.push(`/findings/${res.finding.id}`);
         router.refresh();
       }
@@ -473,6 +541,15 @@ export function NewFindingForm({
       }}
       className="flex flex-col gap-4"
     >
+        {restoredBanner && (
+          <div className="flex items-center justify-between gap-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            <span>Restored an unsaved draft from earlier (e.g. after a refresh or connection loss).</span>
+            <Button type="button" variant="secondary" onClick={discardRestoredDraft}>
+              Discard
+            </Button>
+          </div>
+        )}
+
         <div>
           <Label htmlFor="title">{fieldLabel("Finding title", "title")}</Label>
           <Input
@@ -494,7 +571,7 @@ export function NewFindingForm({
               onChange={(e) => setForm({ ...form, sourceId: e.target.value })}
             >
               <option value="">Select source</option>
-              {sources.map((s) => (
+              {[...sources].sort((a, b) => a.name.localeCompare(b.name)).map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name}
                 </option>
@@ -548,7 +625,7 @@ export function NewFindingForm({
                 onChange={(e) => setForm({ ...form, districtId: e.target.value, branchId: "", departmentId: "" })}
               >
                 <option value="">Select district</option>
-                {districts.map((d) => (
+                {[...districts].sort((a, b) => a.name.localeCompare(b.name)).map((d) => (
                   <option key={d.id} value={d.id}>
                     {d.name}
                   </option>
@@ -607,7 +684,7 @@ export function NewFindingForm({
               id="operationArea"
               required={requiredFields.operationArea}
               value={form.operationArea}
-              options={operationAreas}
+              options={sortedOperationAreas}
               placeholder="Select operation area"
               onChange={(value) => setForm({ ...form, operationArea: value })}
               allowOther={allowOther.operationArea}
@@ -619,7 +696,7 @@ export function NewFindingForm({
               id="irregularityType"
               required={requiredFields.irregularityType}
               value={form.irregularityType}
-              options={irregularityTypes}
+              options={sortedIrregularityTypes}
               placeholder="Select irregularity type"
               onChange={(value) => setForm({ ...form, irregularityType: value })}
               allowOther={allowOther.irregularityType}
@@ -632,7 +709,7 @@ export function NewFindingForm({
               id="currency"
               required={requiredFields.currency}
               value={form.currency}
-              options={currencies}
+              options={sortedCurrencies}
               placeholder="Select currency"
               onChange={(value) => setForm({ ...form, currency: value })}
               allowOther={allowOther.currency}
@@ -812,10 +889,10 @@ export function NewFindingForm({
             </>
           ) : (
             <>
-              <Button type="submit" variant="secondary" disabled={submitting !== null}>
+              <Button type="submit" variant="neutral" disabled={submitting !== null}>
                 {submitting === "draft" ? "Saving..." : "Save Draft"}
               </Button>
-              <Button type="button" disabled={submitting !== null || periodBlocksSubmit} onClick={() => save(true)}>
+              <Button type="button" variant="info" disabled={submitting !== null || periodBlocksSubmit} onClick={() => save(true)}>
                 {submitting === "submit" ? "Submitting..." : "Save & Submit"}
               </Button>
               {periodBlocksSubmit && (

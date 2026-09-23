@@ -170,6 +170,10 @@ model User {
   //   3. It's a reliable lookup key for the forgot-password "username OR
   //      email" prompt.
   email             String    @unique
+  // Optional (unlike email) - not every existing account has one on file
+  // yet. Admin-set/changed only, same as email - see User.phone's own doc
+  // comment in src/types/index.ts.
+  phone             String?
   passwordHash      String    @map("password_hash")
   // Plain string FK to RoleDefinition.code (not .id) - matches
   // User.role's existing shape exactly (src/types/index.ts stores the
@@ -424,6 +428,16 @@ model Finding {
   rootCause              String?       @map("root_cause")
   evidenceNote           String?       @map("evidence_note")
   status                 FindingStatus
+  // Set (and re-set on every resubmission) by submitFinding() to whether
+  // *that* submitting user's session.orgScope was "BANK" - see its own
+  // doc comment in src/lib/findings.ts. Persisted (not just a transient
+  // submit-time decision) because it's also read much later in the
+  // lifecycle, to decide who can return a rectification for correction
+  // (see return-rectification/route.ts) - a bank-registered finding never
+  // went through District Review, so District shouldn't gain rectification-
+  // return authority over it either, by the same "no natural district
+  // reviewed this" reasoning.
+  registeredByBankScope  Boolean       @default(false) @map("registered_by_bank_scope")
   rectifiedCases         Int           @map("rectified_cases")
   rectifiedAmount        Float         @map("rectified_amount")
   closedCases            Int           @map("closed_cases")

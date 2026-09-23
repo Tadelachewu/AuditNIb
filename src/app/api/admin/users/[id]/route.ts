@@ -20,6 +20,12 @@ const updateUserSchema = z.object({
     z.string().min(1, "Email address is required").email("Enter a valid email address"),
     z.undefined(),
   ]),
+  // Optional and nullable (unlike email) - not every account has one, and
+  // an admin can clear it back out. Loosely validated, same reasoning as
+  // POST /api/admin/users' own phone field.
+  phone: z
+    .union([z.string().trim().regex(/^[+0-9()\-.\s]{6,20}$/, "Enter a valid phone number"), z.literal(""), z.null()])
+    .optional(),
   role: z.string().min(1).optional(),
   districtId: z.string().nullable().optional(),
   branchId: z.string().nullable().optional(),
@@ -138,6 +144,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const before = {
     name: existing.name,
     email: existing.email,
+    phone: existing.phone ?? null,
     role: existing.role,
     status: existing.status,
     districtId: existing.districtId,
@@ -149,6 +156,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const u = current.users.find((x) => x.id === id)!;
     if (input.name !== undefined) u.name = input.name;
     if (input.email !== undefined) u.email = input.email;
+    if (input.phone !== undefined) u.phone = input.phone || null;
     if (input.status !== undefined) u.status = input.status;
     if (input.password) {
       u.passwordHash = hashPassword(input.password);
@@ -180,6 +188,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       newValue: {
         name: u.name,
         email: u.email,
+        phone: u.phone ?? null,
         role: u.role,
         status: u.status,
         districtId: u.districtId,

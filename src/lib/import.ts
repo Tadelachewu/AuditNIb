@@ -623,6 +623,11 @@ export function validateImportRow(
     externalReference: row.externalReference?.trim() || undefined,
     importBatchId: opts.importBatchId,
     status: "DRAFT",
+    // A historical import always targets a real district/branch through
+    // the normal chain (there's no bank-scope import path) - set for real
+    // by submitFinding() if/when this ever gets submitted through the live
+    // workflow rather than imported pre-transitioned.
+    registeredByBankScope: false,
     rectifiedCases: 0,
     rectifiedAmount: 0,
     closedCases: 0,

@@ -1,6 +1,6 @@
 import { type ButtonHTMLAttributes } from "react";
 
-type Variant = "primary" | "secondary" | "danger" | "success" | "ghost";
+type Variant = "primary" | "secondary" | "danger" | "success" | "info" | "neutral" | "warning" | "ghost";
 
 // Action buttons (Sign In, Create User, Sign Out, New Finding, and
 // similar) show the brand gold sampled from the NIB logo's lower half
@@ -40,6 +40,30 @@ const VARIANT_CLASSES: Record<Variant, string> = {
   // not specifically "approve." Matches Badge tone="green"'s emerald hue.
   // Fixed literal hex for the same reason `danger` just above is.
   success: "bg-[#059669] text-on-dark hover:bg-[#047857] disabled:bg-[#6ee7b7]",
+  // "Send this into/through the workflow" - Submit, Verify, Transfer to
+  // Next Period. Distinct from `primary`'s gold (gold means "the one
+  // generic action on this page," not specifically "this moves the
+  // record forward") and from `success` (this isn't a final approval/
+  // completion, just a step). Matches Badge tone="blue"'s hue. Fixed
+  // literal hex for the same dark-mode-washout reason `danger`/`success`
+  // above use one.
+  info: "bg-[#2563eb] text-on-dark hover:bg-[#1d4ed8] disabled:bg-[#93c5fd]",
+  // A bold action that's deliberately NOT a workflow step - Save Draft,
+  // Edit-while-DRAFT. `secondary`'s pale outline reads as subordinate/
+  // inactive sitting next to a bold `info` Submit (Edit and Submit render
+  // side by side on a DRAFT/RETURNED finding); this stays solid and
+  // clearly clickable while staying visually distinct from every
+  // workflow-transition color above. Fixed literal hex for the same
+  // dark-mode-washout reason as the others.
+  neutral: "bg-[#475569] text-on-dark hover:bg-[#334155] disabled:bg-[#cbd5e1]",
+  // "Return for Correction" on an already-approved, in-progress
+  // rectification (Verify Rectification card) - distinct from `danger`'s
+  // plain "Return"/"Reject" at the pre-approval review stages: this is a
+  // milder, mid-workflow correction request, not a hard stop/rejection of
+  // the finding itself. text-on-gold (dark text), not text-on-dark - amber
+  // is too light for white text to stay readable (~2:1 contrast; on-gold
+  // clears WCAG AA), same reasoning as text on brand-gold.
+  warning: "bg-[#f59e0b] text-on-gold hover:bg-[#d97706] disabled:bg-[#fde68a]",
   ghost: "text-slate-600 hover:bg-brand-gold hover:text-on-gold disabled:text-slate-300",
 };
 

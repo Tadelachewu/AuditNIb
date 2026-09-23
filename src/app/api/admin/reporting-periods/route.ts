@@ -31,8 +31,10 @@ export async function GET() {
 
 // year/month are derived from `startsAt` (the reporting window's own
 // start), not entered separately - one date range is the source of truth
-// instead of three overlapping fields that could disagree. The
-// submission window is a separate, narrower pair inside that range - see
+// instead of three overlapping fields that could disagree. The submission
+// window is a separate pair, independent of that range - it may run
+// earlier, later, or beyond either edge of startsAt/endsAt (e.g. a
+// grace period before/after the period itself) - see
 // ReportingPeriod.submissionStartsAt's own doc comment (src/types/index.ts).
 const createSchema = z
   .object({
@@ -47,14 +49,6 @@ const createSchema = z
   })
   .refine((v) => new Date(v.submissionEndsAt).getTime() > new Date(v.submissionStartsAt).getTime(), {
     message: "Submission window end must be after its start",
-    path: ["submissionEndsAt"],
-  })
-  .refine((v) => new Date(v.submissionStartsAt).getTime() >= new Date(v.startsAt).getTime(), {
-    message: "Submission window can't start before the period itself does",
-    path: ["submissionStartsAt"],
-  })
-  .refine((v) => new Date(v.submissionEndsAt).getTime() <= new Date(v.endsAt).getTime(), {
-    message: "Submission window can't end after the period itself does",
     path: ["submissionEndsAt"],
   });
 

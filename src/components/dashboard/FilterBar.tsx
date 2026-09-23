@@ -94,7 +94,16 @@ export function FilterBar({
     router.push(query ? `${pathname}?${query}` : pathname);
   }
 
-  const branchOptions = filters.districtId ? branches.filter((b) => b.districtId === filters.districtId) : branches;
+  // Alphabetical by name for every reference-data picker below - periods
+  // (chronological), risk levels (severity order), and statuses (workflow
+  // order) are deliberately left as given, since alphabetizing those would
+  // scramble a meaningful existing order for no benefit.
+  const sortedDistricts = [...districts].sort((a, b) => a.name.localeCompare(b.name));
+  const branchOptions = [...(filters.districtId ? branches.filter((b) => b.districtId === filters.districtId) : branches)].sort(
+    (a, b) => a.name.localeCompare(b.name)
+  );
+  const sortedSources = [...sources].sort((a, b) => a.name.localeCompare(b.name));
+  const sortedCategories = [...categories].sort((a, b) => a.name.localeCompare(b.name));
 
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
@@ -131,7 +140,7 @@ export function FilterBar({
               onChange={(e) => update({ districtId: e.target.value, branchId: "" })}
             >
               <option value="">All districts</option>
-              {districts.map((d) => (
+              {sortedDistricts.map((d) => (
                 <option key={d.id} value={d.id}>
                   {d.name}
                 </option>
@@ -162,7 +171,7 @@ export function FilterBar({
           <Label htmlFor="f-source">Source</Label>
           <Select id="f-source" value={filters.sourceId} onChange={(e) => update({ sourceId: e.target.value })}>
             <option value="">All sources</option>
-            {sources.map((s) => (
+            {sortedSources.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name}
               </option>
@@ -174,7 +183,7 @@ export function FilterBar({
           <Label htmlFor="f-category">Classified Case</Label>
           <Select id="f-category" value={filters.categoryId} onChange={(e) => update({ categoryId: e.target.value })}>
             <option value="">All categories</option>
-            {categories.map((c) => (
+            {sortedCategories.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
               </option>

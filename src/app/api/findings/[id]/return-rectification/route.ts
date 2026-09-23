@@ -46,6 +46,15 @@ const returnSchema = z.object({
 //                                            finding (nothing rectified yet,
 //                                            especially one HO themselves created
 //                                            and approved) back for correction.
+//
+// Exception: Finding.registeredByBankScope. A bank-registered finding
+// skipped District Review entirely at the approval stage (submitFinding()'s
+// own doc comment - "there's no natural district to review a finding HO
+// itself registered"), so District has no standing to return its
+// rectification for correction either - district-return-rectification is
+// blocked outright on such a finding (legacy stays unrestricted), and in
+// exchange ho-return-rectification's own district-verification-first gate
+// is waived, since there's no District sign-off to wait on.
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requirePermission(
     permissionKey("findings", "return-rectification"),
@@ -74,8 +83,22 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const hasLegacy = hasPermission(auth.session.permissions, permissionKey("findings", "return-rectification"));
   const hasDistrict = hasPermission(auth.session.permissions, permissionKey("findings", "district-return-rectification"));
-  const hasHoOnly =
-    hasPermission(auth.session.permissions, permissionKey("findings", "ho-return-rectification")) && !hasLegacy && !hasDistrict;
+  const hasHo = hasPermission(auth.session.permissions, permissionKey("findings", "ho-return-rectification"));
+  const hasHoOnly = hasHo && !hasLegacy && !hasDistrict;
+
+  // A bank-registered finding never went through District Review (see
+  // submitFinding()'s own doc comment) - District shouldn't gain
+  // rectification-return authority over one either, by that same "no
+  // natural district reviewed this" reasoning. Only Head Office (or a
+  // role holding the unrestricted legacy permission) can return it.
+  if (existing.registeredByBankScope && hasDistrict && !hasLegacy && !hasHo) {
+    return NextResponse.json(
+      {
+        error: "This is a bank-registered finding - only Head Office can return it for correction, not the District Controller.",
+      },
+      { status: 403 }
+    );
+  }
 
   // HO-scoped gate: if user holds ONLY ho-return-rectification (not the
   // legacy unrestricted one, not the District variant), they can't return
@@ -84,7 +107,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   // before HO acts, and (b) automatically means HO cannot return a finding
   // still sitting at SENT_TO_BRANCH_MANAGER (zero rectified / zero
   // verified), including findings HO themselves created and approved.
-  if (hasHoOnly) {
+  // Waived entirely for a bank-registered finding - District was never
+  // part of this finding's chain at all (see the block above), so there's
+  // no District sign-off for HO to wait on; HO's authority here is
+  // unrestricted, the same timing District would otherwise have had.
+  if (hasHoOnly && !existing.registeredByBankScope) {
     const verifiedCases = existing.districtVerifiedCases;
     const verifiedAmount = existing.districtVerifiedAmount;
     if (verifiedCases <= 0 && verifiedAmount <= 0) {

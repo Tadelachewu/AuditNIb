@@ -42,10 +42,17 @@ export interface User {
   // rectification requests, period-lock events, support responses), and
   // as a reliable secondary lookup key (alongside username) for account
   // recovery. Enforced in the DB (NOT NULL + UNIQUE) plus in every
-  // create/edit API route + form. Email is the only account-identity
-  // field a user can edit about themself (/api/auth/email) because it
-  // carries no audit-attribution weight the way display name does.
+  // create/edit API route + form. Admin-only, like display name/username/
+  // role/org - not self-service (see ProfileClient.tsx's own doc comment
+  // for why: a user quietly changing their own recovery/notification
+  // address would undermine both of those, not just audit attribution).
   email: string;
+  // Optional (not every account has one on file) - same admin-only
+  // lifecycle as email, set/changed only via PATCH /api/admin/users/[id],
+  // read-only to the user themself on their own Profile page. Currently
+  // informational only (displayed, not yet used for SMS notifications or
+  // any 2FA flow).
+  phone?: string | null;
   passwordHash: string;
   role: string;
   status: Status;
@@ -197,16 +204,16 @@ export interface ReportingPeriod {
   // performance-period lookups) already keys off them.
   startsAt: string;
   endsAt: string;
-  // The narrower window inside startsAt..endsAt during which a finding
-  // can actually be SUBMITTED (moved past DRAFT) - see
-  // assertPeriodOpenForSubmission() in src/lib/findings.ts. Independent
-  // of startsAt/endsAt (the period's own overall reporting window) and
-  // independent of status/locking - this only ever tightens the already-
-  // OPEN case, it doesn't replace the lock mechanism. Defaults to exactly
-  // matching startsAt/endsAt at creation (submission allowed for the
-  // period's entire span), but an admin can narrow it - e.g. the period
-  // covers all of September, but branches should only submit new findings
-  // in the first two weeks.
+  // The window during which a finding can actually be SUBMITTED (moved
+  // past DRAFT) - see assertPeriodOpenForSubmission() in
+  // src/lib/findings.ts. Independent of startsAt/endsAt (the period's own
+  // overall reporting window) and independent of status/locking - this
+  // only ever governs the already-OPEN case, it doesn't replace the lock
+  // mechanism. Defaults to exactly matching startsAt/endsAt at creation,
+  // but an admin can freely narrow OR widen it - e.g. only the first two
+  // weeks of September, or a grace period that starts a few days before
+  // September begins or continues after it ends. Not required to stay
+  // inside startsAt..endsAt.
   submissionStartsAt: string;
   submissionEndsAt: string;
   status: PeriodStatus;
@@ -541,6 +548,14 @@ export interface Finding {
   // in branch cabinet ref #4" - context a scanned file alone doesn't carry.
   evidenceNote?: string;
   status: FindingStatus;
+  // Set (and re-set on every resubmission) by submitFinding() in
+  // src/lib/findings.ts to whether *that* submitting user's own
+  // session.orgScope was "BANK" - see that function's own doc comment.
+  // Read much later than submit time too: return-rectification/route.ts
+  // uses it to decide who can return a rectification for correction - a
+  // bank-registered finding never went through District Review, so
+  // District shouldn't gain rectification-return authority over it either.
+  registeredByBankScope: boolean;
   // Cumulative across all RectificationEntry rows for this finding.
   // Outstanding = caseCount - rectifiedCases / amount - rectifiedAmount,
   // computed on read rather than stored, so it can never drift.

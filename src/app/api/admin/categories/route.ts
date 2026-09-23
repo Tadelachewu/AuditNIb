@@ -9,7 +9,10 @@ export async function GET() {
   const auth = await requirePermission("categories.view");
   if (!auth.ok) return auth.response;
   const db = await readDb();
-  return NextResponse.json({ categories: db.categories });
+  // Alphabetical by name ("Classified Case" in the FilterBar/finding form)
+  // - same convention as /api/admin/branches/districts.
+  const categories = [...db.categories].sort((a, b) => a.name.localeCompare(b.name));
+  return NextResponse.json({ categories });
 }
 
 const createSchema = z.object({

@@ -45,6 +45,16 @@ const createUserSchema = z.object({
     .min(3, "Username must be at least 3 characters")
     .regex(/^[a-zA-Z0-9._-]+$/, "Username may only contain letters, numbers, dots, dashes and underscores"),
   email: z.string().min(1, "Email address is required").email("Enter a valid email address"),
+  // Optional, loosely validated - international formats vary too much for
+  // a strict pattern to be worth the false rejections; just reject stray
+  // letters/junk. Admin-only, like email (see User.phone's own doc
+  // comment in src/types/index.ts).
+  phone: z
+    .string()
+    .trim()
+    .regex(/^[+0-9()\-.\s]{6,20}$/, "Enter a valid phone number")
+    .optional()
+    .or(z.literal("")),
   password: z.string().min(8, "Password must be at least 8 characters"),
   role: z.string().min(1, "Role is required"),
   districtId: z.string().nullable().optional(),
@@ -122,6 +132,7 @@ export async function POST(request: Request) {
     name: input.name,
     username: input.username,
     email: input.email.trim(),
+    phone: input.phone?.trim() || null,
     passwordHash: hashPassword(input.password),
     role: input.role,
     status: "ACTIVE" as const,

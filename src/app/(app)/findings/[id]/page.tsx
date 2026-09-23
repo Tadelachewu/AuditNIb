@@ -102,16 +102,31 @@ export default async function FindingDetailPage({ params }: { params: Promise<{ 
   const returnBlockedBySelfCheck = userPerformedApprovalOrVerifyAction(db, finding.id, user.userId!);
   const returnBlockedByPostTransfer = finding.status === "TRANSFERRED" && !hasRectificationAfterLastTransfer(db, finding);
   const returnGatesPass = !returnBlockedBySelfCheck && !returnBlockedByPostTransfer;
+  // A bank-registered finding never went through District Review (see
+  // submitFinding()'s own doc comment in src/lib/findings.ts) - District
+  // shouldn't gain rectification-return authority over one either, unless
+  // also holding the unrestricted legacy permission. Mirrors
+  // return-rectification/route.ts's own exemption exactly.
+  const districtBlockedByBankScope = finding.registeredByBankScope && !hasReturnLegacy && !hasReturnHo;
   const canDistrictReturnRectification =
-    (hasReturnLegacy || hasReturnDistrict) && RETURNABLE_STATUSES.includes(finding.status) && returnGatesPass;
+    (hasReturnLegacy || hasReturnDistrict) &&
+    !districtBlockedByBankScope &&
+    RETURNABLE_STATUSES.includes(finding.status) &&
+    returnGatesPass;
   // HO-scoped return applies only when user holds ho-return-rectification
   // WITHOUT also holding the legacy or district variant (those would already
   // be covered by canDistrictReturnRectification above and don't need a gate).
   const hasReturnHoOnly = hasReturnHo && !hasReturnLegacy && !hasReturnDistrict;
   const districtHasVerified =
     finding.districtVerifiedCases > 0 || finding.districtVerifiedAmount > 0;
+  // The district-verification-first gate is waived for a bank-registered
+  // finding - District was never part of its chain, so there's no
+  // District sign-off for HO to wait on (same exemption as the route).
   const canHoReturnRectification =
-    hasReturnHoOnly && RETURNABLE_STATUSES.includes(finding.status) && districtHasVerified && returnGatesPass;
+    hasReturnHoOnly &&
+    RETURNABLE_STATUSES.includes(finding.status) &&
+    (districtHasVerified || finding.registeredByBankScope) &&
+    returnGatesPass;
   // Backward-compatible combined boolean. The UI also reads the two new
   // scoped booleans above separately for button labeling / tooltips.
   const canReturnRectification = canDistrictReturnRectification || canHoReturnRectification;

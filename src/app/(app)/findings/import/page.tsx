@@ -7,6 +7,7 @@ import { formatDateTime } from "@/lib/format";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
+import { FileInput } from "@/components/ui/Field";
 import { ImportGuide } from "@/components/findings/ImportGuide";
 import type { ImportBatch, ImportBatchRow } from "@/types";
 
@@ -160,12 +161,7 @@ export default function ImportFindingsPage() {
           description="All-or-nothing: every row is checked first, and if even one has a real error, nothing is imported — fix every row shown below and re-upload the whole file. A row that merely already exists (duplicate) doesn't block the rest."
         />
         <div className="flex flex-col gap-3 p-4">
-          <input
-            type="file"
-            accept=".xlsx"
-            onChange={(e) => handleFileChange(e.target.files?.[0] ?? null)}
-            className="text-sm text-slate-600"
-          />
+          <FileInput accept=".xlsx" onChange={(e) => handleFileChange(e.target.files?.[0] ?? null)} />
           <p className="text-xs text-slate-400">
             {file ? (
               <>

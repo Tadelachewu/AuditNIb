@@ -233,6 +233,10 @@ export async function POST(request: Request) {
     rootCause: input.rootCause,
     evidenceNote: input.evidenceNote,
     status: "DRAFT",
+    // Not yet decided - a DRAFT hasn't been submitted, so there's no
+    // submitting session's orgScope to read yet. submitFinding() sets the
+    // real value the moment this finding is actually submitted.
+    registeredByBankScope: false,
     rectifiedCases: 0,
     rectifiedAmount: 0,
     closedCases: 0,

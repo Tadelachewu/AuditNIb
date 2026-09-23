@@ -9,7 +9,10 @@ export async function GET() {
   const auth = await requirePermission("sources.view");
   if (!auth.ok) return auth.response;
   const db = await readDb();
-  return NextResponse.json({ sources: db.sources });
+  // Alphabetical by name - same convention as /api/admin/branches/districts,
+  // and every picker across the app that lists sources reads from here.
+  const sources = [...db.sources].sort((a, b) => a.name.localeCompare(b.name));
+  return NextResponse.json({ sources });
 }
 
 const createSchema = z.object({
