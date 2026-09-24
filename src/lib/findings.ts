@@ -23,6 +23,16 @@ import type {
  * `Finding.periodId`, and a finding only ever has one live value of it, so
  * the source period's queries stop seeing it and the destination period's
  * queries start seeing it, automatically, with no separate bookkeeping.
+ *
+ * "Outstanding" here means caseCount/amount minus closedCases/closedAmount,
+ * not rectifiedCases/rectifiedAmount - a case the branch has self-reported
+ * as rectified (and District may have even verified) but HO hasn't
+ * formally closed yet is NOT done; leaving it out of the transferred
+ * total would silently understate what's actually still open (the
+ * FindingTransfer row would claim "nothing was left owing" while a real,
+ * unclosed case sits there) and orphan it from ever being counted as
+ * outstanding again post-transfer. Only a formally CLOSED case is truly
+ * finished and excluded from what moves forward.
  */
 export function transferFinding(
   db: Database,
@@ -43,8 +53,8 @@ export function transferFinding(
   }
 ): void {
   const fromPeriodId = finding.periodId;
-  const outstandingCases = finding.caseCount - finding.rectifiedCases;
-  const outstandingAmount = finding.amount - finding.rectifiedAmount;
+  const outstandingCases = finding.caseCount - finding.closedCases;
+  const outstandingAmount = finding.amount - finding.closedAmount;
 
   db.findingTransfers.push({
     id: uuid(),
@@ -82,9 +92,12 @@ export function transferFinding(
 // be able to sweep out *every* finding still open in some way, not just
 // the ones with a nonzero rectified/unrectified split. RECTIFIED was
 // previously excluded on the reasoning that a fully-rectified finding has
-// zero outstanding balance left to move (transferFinding()'s own
-// outstandingCases/Amount would compute to 0) - still true, but a
-// zero-balance transfer is harmless, not broken: it still moves the
+// nothing left to move - true only once it's also fully CLOSED
+// (transferFinding()'s own outstandingCases/Amount is closedCases/Amount-
+// based, not rectifiedCases/Amount-based, precisely so a RECTIFIED-but-
+// not-yet-closed finding still carries its real unclosed balance forward
+// instead of a false zero). A genuinely zero-balance transfer (fully
+// closed already) is still harmless, not broken: it still moves the
 // finding's period forward and its FindingTransfer row honestly records
 // "nothing was left owing," rather than leaving a rectified-but-not-yet-
 // closed finding stranded in a period that's about to lock. RECTIFICATION_

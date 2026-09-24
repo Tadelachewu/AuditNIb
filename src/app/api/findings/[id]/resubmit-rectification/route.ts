@@ -12,14 +12,15 @@ import type { FindingStatus } from "@/types";
 // recording new rectification while returned already moves the status
 // forward on its own (see RECTIFIABLE_STATUSES in rectify/route.ts); this
 // covers the case where there's nothing numeric left to add. Re-derives
-// RECTIFIED vs PARTIALLY_RECTIFIED vs SENT_TO_BRANCH_MANAGER from the
-// finding's existing (unchanged) totals, same computation the rectify
-// route itself uses - plus the one case that route never has to handle:
-// return-rectification/route.ts can now return a finding that was
-// SENT_TO_BRANCH_MANAGER with *zero* ever rectified (approved, then sent
-// back before the branch touched it at all). Landing that on
-// PARTIALLY_RECTIFIED would be a lie - nothing has been rectified - so it
-// goes back to SENT_TO_BRANCH_MANAGER instead, exactly where it was.
+// RECTIFIED vs PARTIALLY_RECTIFIED from the finding's existing (unchanged)
+// totals, same computation the rectify route itself uses. The
+// nothingRectifiedYet branch below (-> SENT_TO_BRANCH_MANAGER) is a
+// defensive fallback, not a reachable case today - return-rectification/
+// route.ts's RETURNABLE_STATUSES no longer accepts a finding with zero
+// ever rectified, so RECTIFICATION_RETURNED can no longer be reached with
+// nothing on record - but landing here with zero would be a lie
+// (PARTIALLY_RECTIFIED implies something was rectified) if that ever
+// changes, so this stays a safe default rather than assuming it can't.
 export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requirePermission("findings.rectify");
   if (!auth.ok) return auth.response;

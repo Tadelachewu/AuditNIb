@@ -120,13 +120,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (input.rectifiedCases === 0 && input.rectifiedAmount === 0) {
       return NextResponse.json({ error: "Enter at least a rectified case count or amount" }, { status: 400 });
     }
-    // A rectified case count with no amount (or an amount with no case
-    // count) doesn't represent a real rectification - the two must move
-    // together, same as the itemized path where amount is always derived
-    // from the case(s) actually picked.
-    if ((input.rectifiedCases > 0) !== (input.rectifiedAmount > 0)) {
+    // A rectified amount with no case count doesn't represent a real
+    // rectification - money resolved without any case to attach it to
+    // makes no sense. The reverse is valid, though: a case can genuinely
+    // rectify to zero monetary impact (e.g. a discrepancy that turned out
+    // to be a documentation error rather than an actual shortage), so
+    // rectifiedCases > 0 with rectifiedAmount === 0 is allowed.
+    if (input.rectifiedAmount > 0 && input.rectifiedCases === 0) {
       return NextResponse.json(
-        { error: "Enter both a rectified case count and its amount together - one can't be recorded without the other" },
+        { error: "A rectified amount must have at least one rectified case attached to it" },
         { status: 400 }
       );
     }
@@ -153,7 +155,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         { status: 400 }
       );
     }
-    if (input.rectifiedAmount === outstandingAmount && input.rectifiedCases !== outstandingCases) {
+    // Guarded by outstandingAmount > 0 - when the finding has no money
+    // left to exhaust (a zero-amount finding, or one whose amount portion
+    // was already fully accounted for by an earlier entry), rectifiedAmount
+    // is always 0 and trivially "equals" outstandingAmount(0) on every
+    // single partial entry, which would otherwise force finishing every
+    // remaining case in one go purely because there was never any money to
+    // begin with - not because this entry is genuinely the last one.
+    if (outstandingAmount > 0 && input.rectifiedAmount === outstandingAmount && input.rectifiedCases !== outstandingCases) {
       return NextResponse.json(
         {
           error: `This rectifies the full remaining amount (${outstandingAmount}) - the case count must be the full remaining ${outstandingCases} case(s), not a partial count`,

@@ -14,7 +14,7 @@ import {
 } from "@/lib/findings";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
 import { sumAmountByCurrency, sumOutstandingByCurrency, sumAmountByCurrencyInPeriod, sumOutstandingByCurrencyInPeriod } from "@/lib/currency";
-import { formatDateTime, formatNumber } from "@/lib/format";
+import { formatDateTime, formatCurrency } from "@/lib/format";
 import { inDateRange, type DateRange } from "@/lib/dateRange";
 import { applyDashboardFilters, EMPTY_DASHBOARD_FILTERS, ALL_PERIODS_VALUE, type DashboardFilters } from "@/lib/dashboardFilters";
 import { Card, CardHeader, StatCard } from "@/components/ui/Card";
@@ -464,9 +464,9 @@ export function BranchDashboard({
                   <td className="px-4 py-2 text-slate-700">{hasPeriodScope ? total : "--"}</td>
                   <td className="px-4 py-2 text-slate-700">{hasPeriodScope ? rectified : "--"}</td>
                   <td className="px-4 py-2 text-slate-700">{hasPeriodScope ? outstanding : "--"}</td>
-                  <td className="px-4 py-2 text-slate-700">{hasPeriodScope ? formatNumber(amount) : "--"}</td>
-                  <td className="px-4 py-2 text-slate-700">{hasPeriodScope ? formatNumber(rectifiedAmount) : "--"}</td>
-                  <td className="px-4 py-2 text-slate-700">{hasPeriodScope ? formatNumber(catOutstandingAmount) : "--"}</td>
+                  <td className="px-4 py-2 text-slate-700">{hasPeriodScope ? formatCurrency(amount) : "--"}</td>
+                  <td className="px-4 py-2 text-slate-700">{hasPeriodScope ? formatCurrency(rectifiedAmount) : "--"}</td>
+                  <td className="px-4 py-2 text-slate-700">{hasPeriodScope ? formatCurrency(catOutstandingAmount) : "--"}</td>
                 </tr>
               ))}
             </tbody>

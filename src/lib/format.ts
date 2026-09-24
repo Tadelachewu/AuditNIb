@@ -21,3 +21,13 @@ export function formatDate(iso: string): string {
 export function formatNumber(n: number): string {
   return n.toLocaleString(LOCALE);
 }
+
+// For a monetary amount specifically - always exactly 2 decimal places
+// (e.g. "70,000.00", not "70,000"), matching how currency is conventionally
+// written regardless of whether the value happens to be a whole number.
+// Deliberately separate from formatNumber(), which is also used throughout
+// the app for plain counts (cases, findings, branches, ...) that must never
+// grow a fake ".00" of their own.
+export function formatCurrency(n: number): string {
+  return n.toLocaleString(LOCALE, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}

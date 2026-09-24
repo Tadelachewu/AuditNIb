@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { apiSend, ApiError } from "@/lib/api-client";
-import { formatDate, formatDateTime, formatNumber } from "@/lib/format";
+import { formatDate, formatDateTime, formatNumber, formatCurrency } from "@/lib/format";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input, Label, FileInput } from "@/components/ui/Field";
@@ -154,6 +154,16 @@ export function FindingDetailClient({
 
   const outstandingCases = finding.caseCount - finding.rectifiedCases;
   const outstandingAmount = finding.amount - finding.rectifiedAmount;
+  // Distinct from outstandingCases/Amount just above (which is "how much
+  // is left for the branch to still rectify," used by the Record
+  // Rectification/Verify & Close forms) - a transfer carries forward
+  // everything not yet formally CLOSED, including a case that's already
+  // been rectified (and even District-verified) but HO hasn't closed yet.
+  // Must match transferFinding()'s own calculation in src/lib/findings.ts
+  // exactly, since this is only ever a preview of what that function is
+  // about to record.
+  const transferOutstandingCases = finding.caseCount - finding.closedCases;
+  const transferOutstandingAmount = finding.amount - finding.closedAmount;
   // A single remaining case is atomic (see rectify/route.ts's own doc
   // comment) - the non-itemized form locks to exactly 1 case / the full
   // remaining amount instead of leaving those fields freely editable, so
@@ -273,8 +283,13 @@ export function FindingDetailClient({
     if (!isItemized) {
       const cases = Number(rectifyForm.rectifiedCases || 0);
       const amount = Number(rectifyForm.rectifiedAmount || 0);
-      if ((cases > 0) !== (amount > 0)) {
-        setError("Enter both a rectified case count and its amount together - one can't be recorded without the other");
+      // A rectified amount with no case count doesn't represent a real
+      // rectification. The reverse is valid: a case can genuinely rectify
+      // to zero monetary impact (e.g. a documentation error rather than an
+      // actual shortage), so cases > 0 with amount === 0 is allowed - a
+      // zero-amount finding must still be rectifiable case by case.
+      if (amount > 0 && cases === 0) {
+        setError("A rectified amount must have at least one rectified case attached to it");
         return;
       }
       // Whenever this entry exhausts one dimension entirely (every
@@ -286,7 +301,11 @@ export function FindingDetailClient({
         );
         return;
       }
-      if (amount === outstandingAmount && cases !== outstandingCases) {
+      // Guarded by outstandingAmount > 0 - see rectify/route.ts's own doc
+      // comment: on a zero-amount finding this would otherwise fire on
+      // every partial entry purely because there was never any money to
+      // begin with, forcing every remaining case to be finished at once.
+      if (outstandingAmount > 0 && amount === outstandingAmount && cases !== outstandingCases) {
         setError(
           `This rectifies the full remaining amount (${outstandingAmount}) - the case count must be the full remaining ${outstandingCases} case(s), not a partial count`
         );
@@ -379,7 +398,7 @@ export function FindingDetailClient({
     const period = otherOpenPeriods.find((p) => p.id === transferPeriodId);
     const result = await confirm({
       title: `Transfer to ${period?.code ?? "next period"}?`,
-      message: `Moves the outstanding ${finding.currency} ${outstandingAmount.toLocaleString()} (${outstandingCases} case(s)) forward. The finding stays open under this new period.`,
+      message: `Moves the outstanding ${finding.currency} ${transferOutstandingAmount.toLocaleString()} (${transferOutstandingCases} case(s)) forward. The finding stays open under this new period.`,
       confirmLabel: "Transfer",
       tone: "danger",
       needsReason: true,
@@ -534,28 +553,28 @@ export function FindingDetailClient({
             <div>
               <dt className="text-xs text-slate-400">Amount involved</dt>
               <dd className="text-slate-900">
-                {finding.currency} {formatNumber(finding.amount)} ({finding.caseCount} case
+                {finding.currency} {formatCurrency(finding.amount)} ({finding.caseCount} case
                 {finding.caseCount === 1 ? "" : "s"})
               </dd>
             </div>
             <div>
               <dt className="text-xs text-slate-400">Outstanding</dt>
               <dd className="text-slate-900">
-                {finding.currency} {formatNumber(outstandingAmount)} ({outstandingCases} case
+                {finding.currency} {formatCurrency(outstandingAmount)} ({outstandingCases} case
                 {outstandingCases === 1 ? "" : "s"})
               </dd>
             </div>
             <div>
               <dt className="text-xs text-slate-400">District Verified</dt>
               <dd className="text-slate-900">
-                {finding.currency} {formatNumber(finding.districtVerifiedAmount)} ({finding.districtVerifiedCases} case
+                {finding.currency} {formatCurrency(finding.districtVerifiedAmount)} ({finding.districtVerifiedCases} case
                 {finding.districtVerifiedCases === 1 ? "" : "s"})
               </dd>
             </div>
             <div>
               <dt className="text-xs text-slate-400">Closed</dt>
               <dd className="text-slate-900">
-                {finding.currency} {formatNumber(finding.closedAmount)} ({finding.closedCases} case
+                {finding.currency} {formatCurrency(finding.closedAmount)} ({finding.closedCases} case
                 {finding.closedCases === 1 ? "" : "s"})
               </dd>
             </div>
@@ -620,7 +639,7 @@ export function FindingDetailClient({
               Approve
             </Button>
             {permissions.canDistrictReturnReview && (
-              <Button variant="danger" onClick={() => handleReview("district-review", "RETURN")} disabled={busy}>
+              <Button variant="warning" onClick={() => handleReview("district-review", "RETURN")} disabled={busy}>
                 Return
               </Button>
             )}
@@ -646,7 +665,7 @@ export function FindingDetailClient({
               Approve
             </Button>
             {permissions.canHoReturnReview && (
-              <Button variant="danger" onClick={() => handleReview("ho-review", "RETURN")} disabled={busy}>
+              <Button variant="warning" onClick={() => handleReview("ho-review", "RETURN")} disabled={busy}>
                 Return
               </Button>
             )}
@@ -672,7 +691,7 @@ export function FindingDetailClient({
               Approve
             </Button>
             {permissions.canBankReturnReview && (
-              <Button variant="danger" onClick={() => handleReview("bank-approval", "RETURN")} disabled={busy}>
+              <Button variant="warning" onClick={() => handleReview("bank-approval", "RETURN")} disabled={busy}>
                 Return
               </Button>
             )}
@@ -687,7 +706,7 @@ export function FindingDetailClient({
         <Card>
           <CardHeader
             title="Record Rectification"
-            description={`Outstanding: ${finding.currency} ${formatNumber(outstandingAmount)} across ${outstandingCases} case(s)`}
+            description={`Outstanding: ${finding.currency} ${formatCurrency(outstandingAmount)} across ${outstandingCases} case(s)`}
           />
           {rectifying ? (
             <div className="flex flex-col gap-3 p-4">
@@ -710,14 +729,14 @@ export function FindingDetailClient({
                           }
                           className="h-4 w-4 rounded border-slate-300"
                         />
-                        Case {fc.seq} — {finding.currency} {formatNumber(fc.amount)}
+                        Case {fc.seq} — {finding.currency} {formatCurrency(fc.amount)}
                       </label>
                     ))}
                   </div>
                   {selectedCaseIds.length > 0 && (
                     <p className="mt-1 text-xs text-slate-500">
                       Selected: {selectedCaseIds.length} case(s) / {finding.currency}{" "}
-                      {formatNumber(
+                      {formatCurrency(
                         outstandingFindingCases
                           .filter((fc) => selectedCaseIds.includes(fc.id))
                           .reduce((sum, fc) => sum + fc.amount, 0)
@@ -804,29 +823,20 @@ export function FindingDetailClient({
           <CardHeader
             title="Verify Rectification"
             description={(() => {
-              // canVerifyRectification only ever holds once real
-              // rectification exists (PARTIALLY_RECTIFIED/RECTIFIED/
-              // TRANSFERRED - never SENT_TO_BRANCH_MANAGER), at which point
-              // ordinary District Verify/Return authority applies in full
-              // even for a bank-registered finding (see
-              // return-rectification/route.ts's own doc comment for why
-              // the two travel together) - so this text never needs a
-              // bank-registered special case.
               if (permissions.canVerifyRectification) {
-                return `${verifiableCases} case(s) / ${finding.currency} ${formatNumber(verifiableAmount)} rectified and awaiting your verification, before it can reach Head Office for final closure. Approve it, or send it back to the Branch Manager for correction.`;
+                return `${verifiableCases} case(s) / ${finding.currency} ${formatCurrency(verifiableAmount)} rectified and awaiting your verification, before it can reach Head Office for final closure. Approve it, or send it back to the Branch Manager for correction.`;
               }
+              // Neither canVerifyRectification nor canDistrictReturnRectification/
+              // canHoReturnRectification can ever hold before a real
+              // rectification exists (RETURNABLE_STATUSES in
+              // (app)/findings/[id]/page.tsx excludes SENT_TO_BRANCH_MANAGER) -
+              // this card doesn't render at all until the Branch Manager has
+              // recorded something to react to.
               if (permissions.canDistrictReturnRectification) {
-                // District: can return even at SENT_TO_BRANCH_MANAGER (zero rectified)
-                if (finding.status === "SENT_TO_BRANCH_MANAGER") {
-                  return "Approved and sent to the branch, but nothing rectified yet. Send it back now if it needs correction before the branch acts on it.";
-                }
                 return "Recorded rectification awaiting District review. Approve it via Verify, or send it back to the Branch Manager for correction.";
               }
               if (permissions.canHoReturnRectification) {
-                if (finding.status === "SENT_TO_BRANCH_MANAGER" && finding.registeredByBankScope) {
-                  return "This bank-registered finding hasn't had any rectification recorded yet. Since it never went through District Review, only Head Office can send it back for correction at this stage.";
-                }
-                return `${finding.districtVerifiedCases} case(s) / ${finding.currency} ${formatNumber(finding.districtVerifiedAmount)} already District-verified. You can return this finding to the Branch Manager for further correction only after District verification — which this portion has already passed.`;
+                return `${finding.districtVerifiedCases} case(s) / ${finding.currency} ${formatCurrency(finding.districtVerifiedAmount)} already District-verified. You can return this finding to the Branch Manager for further correction only after District verification — which this portion has already passed.`;
               }
               return "";
             })()}
@@ -855,7 +865,7 @@ export function FindingDetailClient({
         <Card>
           <CardHeader
             title="Verify & Close"
-            description={`${closableCases} case(s) / ${finding.currency} ${formatNumber(closableAmount)} district-verified and ready to close. ${outstandingCases} case(s) / ${finding.currency} ${formatNumber(outstandingAmount)} still unrectified and will stay open.`}
+            description={`${closableCases} case(s) / ${finding.currency} ${formatCurrency(closableAmount)} district-verified and ready to close. ${outstandingCases} case(s) / ${finding.currency} ${formatCurrency(outstandingAmount)} still unrectified and will stay open.`}
           />
           <div className="flex gap-2 p-4">
             <Button variant="success" onClick={handleClose} disabled={busy}>
@@ -936,13 +946,13 @@ export function FindingDetailClient({
                     <div className="flex justify-between gap-2">
                       <dt className="text-slate-500">Original Amount</dt>
                       <dd className="font-medium text-slate-900">
-                        {finding.currency} {formatNumber(finding.amount)}
+                        {finding.currency} {formatCurrency(finding.amount)}
                       </dd>
                     </div>
                     <div className="flex justify-between gap-2">
                       <dt className="text-slate-500">Outstanding Amount</dt>
                       <dd className="font-medium text-amber-700">
-                        {finding.currency} {formatNumber(outstandingAmount)}
+                        {finding.currency} {formatCurrency(transferOutstandingAmount)}
                       </dd>
                     </div>
                     <div className="flex justify-between gap-2">
@@ -951,7 +961,7 @@ export function FindingDetailClient({
                     </div>
                     <div className="flex justify-between gap-2">
                       <dt className="text-slate-500">Outstanding Case Count</dt>
-                      <dd className="font-medium text-amber-700">{formatNumber(outstandingCases)}</dd>
+                      <dd className="font-medium text-amber-700">{formatNumber(transferOutstandingCases)}</dd>
                     </div>
                     <div className="flex justify-between gap-2">
                       <dt className="text-slate-500">Transfer Date</dt>
@@ -1150,7 +1160,7 @@ export function FindingDetailClient({
                 <div key={fc.id} className="flex items-center justify-between px-4 py-2 text-sm">
                   <span className="text-slate-600">
                     <span className="font-medium text-slate-900">Case {fc.seq}</span> — {finding.currency}{" "}
-                    {formatNumber(fc.amount)}
+                    {formatCurrency(fc.amount)}
                     {fc.status === "RECTIFIED" && fc.rectifiedByName && (
                       <span className="text-slate-400">
                         {" "}
@@ -1216,13 +1226,13 @@ export function FindingDetailClient({
                     <div className="flex justify-between gap-2">
                       <dt className="text-slate-500">Original Amount</dt>
                       <dd className="font-medium text-slate-800">
-                        {finding.currency} {formatNumber(t.originalAmount)}
+                        {finding.currency} {formatCurrency(t.originalAmount)}
                       </dd>
                     </div>
                     <div className="flex justify-between gap-2">
                       <dt className="text-slate-500">Outstanding Amount</dt>
                       <dd className="font-medium text-amber-700">
-                        {finding.currency} {formatNumber(t.amountTransferred)}
+                        {finding.currency} {formatCurrency(t.amountTransferred)}
                       </dd>
                     </div>
                     <div className="flex justify-between gap-2">
@@ -1261,7 +1271,7 @@ export function FindingDetailClient({
               <div key={r.id} className="flex items-center justify-between px-4 py-2 text-sm">
                 <span className="text-slate-600">
                   <span className="font-medium text-slate-900">{r.submittedByName}</span> recorded {r.rectifiedCases}{" "}
-                  case(s) / {finding.currency} {formatNumber(r.rectifiedAmount)}
+                  case(s) / {finding.currency} {formatCurrency(r.rectifiedAmount)}
                   {r.note && <span className="text-slate-400"> — {r.note}</span>}
                 </span>
                 <span className="text-xs text-slate-400">{formatDateTime(r.createdAt)}</span>
@@ -1279,7 +1289,7 @@ export function FindingDetailClient({
               <div key={c.id} className="flex items-center justify-between px-4 py-2 text-sm">
                 <span className="text-slate-600">
                   <span className="font-medium text-slate-900">{c.submittedByName}</span> verified and closed{" "}
-                  {c.closedCases} case(s) / {finding.currency} {formatNumber(c.closedAmount)}
+                  {c.closedCases} case(s) / {finding.currency} {formatCurrency(c.closedAmount)}
                 </span>
                 <span className="text-xs text-slate-400">{formatDateTime(c.createdAt)}</span>
               </div>

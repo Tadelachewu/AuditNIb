@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 import { readDb } from "@/lib/db";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
-import { formatNumber } from "@/lib/format";
+import { formatNumber, formatCurrency } from "@/lib/format";
 import { getMonthlySummaryReport } from "@/lib/reportTemplates";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -72,7 +72,7 @@ export default async function MonthlySummaryReportPage({
       <Card>
         <CardHeader
           title="Monthly Summary Report"
-          description={period ? `${period.code} - Total amount involved: ETB ${formatNumber(totalRow.totalAmount)}` : "No reporting period"}
+          description={period ? `${period.code} - Total amount involved: ETB ${formatCurrency(totalRow.totalAmount)}` : "No reporting period"}
         />
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
@@ -113,7 +113,7 @@ export default async function MonthlySummaryReportPage({
                       {formatNumber(c.outstanding)}
                     </td>
                   ))}
-                  <td className="px-2 py-2 text-center text-slate-700">{formatNumber(r.amountInvolved)}</td>
+                  <td className="px-2 py-2 text-center text-slate-700">{formatCurrency(r.amountInvolved)}</td>
                   <td className="px-2 py-2 text-center text-slate-700">{formatNumber(r.totalOutstanding)}</td>
                   <td className="px-2 py-2 text-center text-slate-700">{formatNumber(r.officialRectified)}</td>
                   <td className="px-2 py-2 text-center text-slate-700">{r.officialPerformance !== null ? `${r.officialPerformance.toFixed(1)}%` : "--"}</td>
@@ -130,7 +130,7 @@ export default async function MonthlySummaryReportPage({
                   {categories.map((c) => (
                     <td key={c.id} className="px-2 py-2" />
                   ))}
-                  <td className="px-2 py-2 text-center text-slate-900">{formatNumber(totalRow.totalAmount)}</td>
+                  <td className="px-2 py-2 text-center text-slate-900">{formatCurrency(totalRow.totalAmount)}</td>
                   <td className="px-2 py-2 text-center text-slate-900">{formatNumber(totalRow.totalOutstanding)}</td>
                   <td className="px-2 py-2 text-center text-slate-900">{formatNumber(totalRow.officialRectified)}</td>
                   <td className="px-2 py-2" />

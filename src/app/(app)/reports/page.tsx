@@ -6,7 +6,7 @@ import { findingsInScope } from "@/lib/findings-scope";
 import { computePerformance, findingsResidentInPeriod, type FindingPeriodSlice } from "@/lib/findings";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
 import { paginate, parsePage } from "@/lib/pagination";
-import { formatDateTime, formatNumber } from "@/lib/format";
+import { formatDateTime, formatNumber, formatCurrency } from "@/lib/format";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Pagination } from "@/components/ui/Pagination";
@@ -225,10 +225,10 @@ export default async function ReportsPage({
                     <td className="px-4 py-2 text-slate-600">{categoryName(f.categoryId)}</td>
                     <td className="px-4 py-2 text-slate-600">{sourceName(f.sourceId)}</td>
                     <td className="px-4 py-2 text-slate-900">
-                      {f.currency} {formatNumber(amount)}
+                      {f.currency} {formatCurrency(amount)}
                     </td>
                     <td className="px-4 py-2 text-slate-900">
-                      {f.currency} {formatNumber(outstanding)}
+                      {f.currency} {formatCurrency(outstanding)}
                     </td>
                     <td className="px-4 py-2">
                       {isHistorical ? (
@@ -374,10 +374,10 @@ export default async function ReportsPage({
                       {fromPeriod?.code ?? t.fromPeriodId} → {toPeriod?.code ?? t.toPeriodId}
                     </td>
                     <td className="px-4 py-2 text-slate-700">
-                      {currency} {formatNumber(t.originalAmount)}
+                      {currency} {formatCurrency(t.originalAmount)}
                     </td>
                     <td className="px-4 py-2 text-slate-700">
-                      {currency} {formatNumber(t.amountTransferred)}
+                      {currency} {formatCurrency(t.amountTransferred)}
                     </td>
                     <td className="px-4 py-2 text-slate-700">{formatNumber(t.originalCaseCount)}</td>
                     <td className="px-4 py-2 text-slate-700">{formatNumber(t.casesTransferred)}</td>

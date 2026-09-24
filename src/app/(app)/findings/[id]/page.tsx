@@ -71,7 +71,13 @@ export default async function FindingDetailPage({ params }: { params: Promise<{ 
   // findings.ts's AUTO_TRANSFERABLE_STATUSES (see the latter's own doc
   // comment for the full reasoning).
   const TRANSFERABLE_STATUSES = ["SENT_TO_BRANCH_MANAGER", "PARTIALLY_RECTIFIED", "RECTIFIED", "RECTIFICATION_RETURNED", "TRANSFERRED"];
-  const RETURNABLE_STATUSES = ["SENT_TO_BRANCH_MANAGER", "PARTIALLY_RECTIFIED", "RECTIFIED", "TRANSFERRED"];
+  // Deliberately excludes SENT_TO_BRANCH_MANAGER - see
+  // return-rectification/route.ts's own doc comment: "return for
+  // correction" only makes sense once there's a recorded rectification to
+  // react to. A mistake in the finding's own earlier approval belongs to
+  // District/HO Review's own Return instead, which only works while still
+  // at that review stage.
+  const RETURNABLE_STATUSES = ["PARTIALLY_RECTIFIED", "RECTIFIED", "TRANSFERRED"];
 
   // Split return-for-correction permissions into the District-scoped and
   // HO-scoped variants, matching the exact same gating logic enforced
@@ -82,10 +88,8 @@ export default async function FindingDetailPage({ params }: { params: Promise<{ 
   //   * findings.ho-return-rectification        (new, HO only)       → GATED: requires district verification first
   //
   // The HO gate (districtVerifiedCases > 0 || districtVerifiedAmount > 0)
-  // automatically prevents HO from returning a finding still sitting at
-  // SENT_TO_BRANCH_MANAGER (zero rectified / zero verified), including
-  // findings HO themselves created and approved — closing the "HO creates
-  // → HO approves → return for correction still offered" gap.
+  // enforces District's first-level gate before HO acts - HO steps in only
+  // after District has already engaged with the recorded rectification.
   const hasReturnLegacy = has("return-rectification");
   const hasReturnDistrict = has("district-return-rectification");
   const hasReturnHo = has("ho-return-rectification");
@@ -102,37 +106,21 @@ export default async function FindingDetailPage({ params }: { params: Promise<{ 
   const returnBlockedBySelfCheck = userPerformedApprovalOrVerifyAction(db, finding.id, user.userId!);
   const returnBlockedByPostTransfer = finding.status === "TRANSFERRED" && !hasRectificationAfterLastTransfer(db, finding);
   const returnGatesPass = !returnBlockedBySelfCheck && !returnBlockedByPostTransfer;
-  // A bank-registered finding never went through District Review (see
-  // submitFinding()'s own doc comment in src/lib/findings.ts), but that
-  // only leaves District with no standing at the one moment nothing has
-  // happened yet - SENT_TO_BRANCH_MANAGER with zero rectified. The moment
-  // the branch records a rectification, ordinary District oversight
-  // resumes in full (verify and return are the two outcomes of the same
-  // review - blocking one while leaving the other intact would let
-  // District rubber-stamp a bank-registered rectification as correct but
-  // not send it back if it wasn't). Mirrors
-  // return-rectification/route.ts's own exemption exactly.
-  const bankScopeStillUnrectified = finding.registeredByBankScope && finding.status === "SENT_TO_BRANCH_MANAGER";
-  const districtBlockedByBankScope = bankScopeStillUnrectified && !hasReturnLegacy && !hasReturnHo;
+  // Finding.registeredByBankScope plays no role here - District's standing
+  // to verify/return a recorded rectification is the same routine
+  // oversight job regardless of how the original finding was approved, and
+  // (per RETURNABLE_STATUSES above) there's no earlier "nothing rectified
+  // yet" stage left for a bank-scope distinction to matter at.
   const canDistrictReturnRectification =
-    (hasReturnLegacy || hasReturnDistrict) &&
-    !districtBlockedByBankScope &&
-    RETURNABLE_STATUSES.includes(finding.status) &&
-    returnGatesPass;
+    (hasReturnLegacy || hasReturnDistrict) && RETURNABLE_STATUSES.includes(finding.status) && returnGatesPass;
   // HO-scoped return applies only when user holds ho-return-rectification
   // WITHOUT also holding the legacy or district variant (those would already
   // be covered by canDistrictReturnRectification above and don't need a gate).
   const hasReturnHoOnly = hasReturnHo && !hasReturnLegacy && !hasReturnDistrict;
   const districtHasVerified =
     finding.districtVerifiedCases > 0 || finding.districtVerifiedAmount > 0;
-  // The district-verification-first gate is waived only for that same
-  // narrow bank-scope-and-unrectified case above - see the route's own
-  // doc comment for why it doesn't extend past that one moment.
   const canHoReturnRectification =
-    hasReturnHoOnly &&
-    RETURNABLE_STATUSES.includes(finding.status) &&
-    (districtHasVerified || bankScopeStillUnrectified) &&
-    returnGatesPass;
+    hasReturnHoOnly && RETURNABLE_STATUSES.includes(finding.status) && districtHasVerified && returnGatesPass;
   // Backward-compatible combined boolean. The UI also reads the two new
   // scoped booleans above separately for button labeling / tooltips.
   const canReturnRectification = canDistrictReturnRectification || canHoReturnRectification;

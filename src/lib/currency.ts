@@ -1,4 +1,4 @@
-import { formatNumber } from "@/lib/format";
+import { formatCurrency } from "@/lib/format";
 import { findingsResidentInPeriod } from "@/lib/findings";
 import type { Database, Finding } from "@/types";
 
@@ -6,7 +6,7 @@ function formatTotals(totals: Map<string, number>): string {
   if (totals.size === 0) return "--";
   return [...totals.entries()]
     .sort((a, b) => a[0].localeCompare(b[0], "en-US"))
-    .map(([currency, total]) => `${currency} ${formatNumber(total)}`)
+    .map(([currency, total]) => `${currency} ${formatCurrency(total)}`)
     .join(" · ");
 }
 

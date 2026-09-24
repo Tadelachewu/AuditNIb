@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { FindingStatusBadge } from "@/components/findings/FindingStatusBadge";
 import { apiSend, ApiError } from "@/lib/api-client";
-import { formatDateTime, formatNumber } from "@/lib/format";
+import { formatDateTime, formatCurrency } from "@/lib/format";
 import type { FindingStatus } from "@/types";
 
 export interface FindingRow {
@@ -318,7 +318,7 @@ export function FindingsTable({ rows, permissions, emptyText }: { rows: FindingR
                 <td className="px-4 py-2 text-slate-600">{f.sourceName}</td>
                 <td className="px-4 py-2 text-slate-600">{f.riskLevel}</td>
                 <td className="px-4 py-2 text-slate-900">
-                  {f.currency} {formatNumber(f.amount)}
+                  {f.currency} {formatCurrency(f.amount)}
                 </td>
                 <td className="px-4 py-2">
                   {f.isHistorical ? (

@@ -12,16 +12,17 @@ import {
 import { usersWithFindingsPermission, notifyUsers } from "@/lib/notifications";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
 
-// SENT_TO_BRANCH_MANAGER (approved, nothing rectified yet) is included
-// alongside the three post-rectification statuses - without it, a
-// Controller who approves a finding and then, before the branch has
-// rectified anything at all, realizes it needs correction has no way to
-// send it back at all: District/HO Review's own Return only works while
-// still *at* that review stage (findings/[id]/district-review,ho-review),
-// and this route previously only accepted a finding that already had a
-// recorded rectification. See resubmit-rectification/route.ts's matching
-// fix for how it recovers a finding returned from this zero-rectified state.
-const RETURNABLE_STATUSES = ["SENT_TO_BRANCH_MANAGER", "PARTIALLY_RECTIFIED", "RECTIFIED", "TRANSFERRED"];
+// Deliberately excludes SENT_TO_BRANCH_MANAGER - "return for correction"
+// only ever makes sense once the Branch Manager has actually recorded
+// something to react to. Before that, the finding is just waiting on the
+// branch; there's nothing yet for a Controller to judge as correct or not,
+// so nobody (District or HO, on any finding, bank-registered or not) can
+// return it at that stage. A mistake in the finding's own earlier approval
+// belongs to District/HO Review's own Return (findings/[id]/district-
+// review,ho-review) instead - that only works while still *at* that review
+// stage, which is exactly the point: this endpoint is about the recorded
+// rectification, not a do-over of the approval decision.
+const RETURNABLE_STATUSES = ["PARTIALLY_RECTIFIED", "RECTIFIED", "TRANSFERRED"];
 
 const returnSchema = z.object({
   reason: z.string().trim().min(5, "A reason of at least 5 characters is required"),
@@ -40,31 +41,17 @@ const returnSchema = z.object({
 //                                            verify-rectification (there must be
 //                                            at least some district-verified cases
 //                                            or amount already on the finding).
-//                                            This ensures District's first-level
-//                                            gate isn't bypassed and prevents HO
-//                                            from sending a still-SENT_TO_BRANCH
-//                                            finding (nothing rectified yet,
-//                                            especially one HO themselves created
-//                                            and approved) back for correction.
+//                                            This enforces District's first-level
+//                                            gate before HO acts - HO steps in
+//                                            only after District has already
+//                                            engaged with the recorded
+//                                            rectification, never ahead of them.
 //
-// Exception: Finding.registeredByBankScope, narrowly scoped to the one
-// moment District truly has no standing at all - SENT_TO_BRANCH_MANAGER
-// with nothing rectified yet. A bank-registered finding skipped District
-// Review entirely at the approval stage (submitFinding()'s own doc
-// comment - "there's no natural district to review a finding HO itself
-// registered"), so District can't preemptively bounce it back before the
-// branch has even attempted a fix; only HO can (and HO's own district-
-// verification-first gate is waived here too, since there's nothing for
-// District to have verified yet either way). The MOMENT the branch
-// actually records a rectification, ordinary District oversight resumes
-// in full (both this route's district-return-rectification AND
-// verify-rectification elsewhere) - checking the branch's actual work is
-// District's routine job regardless of how the original finding was
-// approved, and verify/return are the two outcomes of that same review,
-// so blocking one while leaving the other intact would be incoherent
-// (District could rubber-stamp a bank-registered finding's rectification
-// as correct but not send it back if it wasn't - the riskier gap, not the
-// safer one).
+// Finding.registeredByBankScope plays no role in this route - District's
+// standing to verify/return a recorded rectification is the same routine
+// oversight job regardless of how the original finding was approved, and
+// (per RETURNABLE_STATUSES above) there's no earlier "nothing rectified
+// yet" stage left for a bank-scope distinction to matter at.
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requirePermission(
     permissionKey("findings", "return-rectification"),
@@ -96,34 +83,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const hasHo = hasPermission(auth.session.permissions, permissionKey("findings", "ho-return-rectification"));
   const hasHoOnly = hasHo && !hasLegacy && !hasDistrict;
 
-  // See this file's own top-of-file doc comment - narrowly scoped to
-  // "nothing rectified yet," not the whole lifecycle.
-  const bankScopeStillUnrectified = existing.registeredByBankScope && existing.status === "SENT_TO_BRANCH_MANAGER";
-
-  if (bankScopeStillUnrectified && hasDistrict && !hasLegacy && !hasHo) {
-    return NextResponse.json(
-      {
-        error:
-          "This bank-registered finding hasn't had any rectification recorded yet - only Head Office can return it for correction at this stage, not the District Controller.",
-      },
-      { status: 403 }
-    );
-  }
-
   // HO-scoped gate: if user holds ONLY ho-return-rectification (not the
   // legacy unrestricted one, not the District variant), they can't return
   // until District has first verified at least some portion of a recorded
-  // rectification. This (a) enforces the District-first verification gate
-  // before HO acts, and (b) automatically means HO cannot return a finding
-  // still sitting at SENT_TO_BRANCH_MANAGER (zero rectified / zero
-  // verified), including findings HO themselves created and approved.
-  // Waived only for that same narrow bank-scope-and-unrectified case above -
-  // there's nothing for District to have verified yet either way, and
-  // District has no standing to act first at that exact moment. Once real
-  // rectification exists, this gate applies normally even to a
-  // bank-registered finding, since District is expected to verify it just
-  // like any other finding by that point.
-  if (hasHoOnly && !bankScopeStillUnrectified) {
+  // rectification - District's first-level gate isn't bypassed, HO only
+  // steps in after District has already engaged with it.
+  if (hasHoOnly) {
     const verifiedCases = existing.districtVerifiedCases;
     const verifiedAmount = existing.districtVerifiedAmount;
     if (verifiedCases <= 0 && verifiedAmount <= 0) {

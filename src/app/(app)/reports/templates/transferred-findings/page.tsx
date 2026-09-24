@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 import { readDb } from "@/lib/db";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
-import { formatNumber, formatDateTime } from "@/lib/format";
+import { formatNumber, formatDateTime, formatCurrency } from "@/lib/format";
 import { getTransferredFindings } from "@/lib/reportTemplates";
 import { Card, CardHeader, StatCard } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -98,7 +98,7 @@ export default async function TransferredFindingsPage({
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatCard label="Transfer Hops" value={rows.length} hint="Matching current filter" />
         <StatCard label="Cases Transferred" value={formatNumber(totalCasesTransferred)} hint="Sum of outstanding cases moved" />
-        <StatCard label="Amount Transferred" value={formatNumber(totalAmountTransferred)} hint="Sum of outstanding amount moved" />
+        <StatCard label="Amount Transferred" value={formatCurrency(totalAmountTransferred)} hint="Sum of outstanding amount moved" />
         <StatCard label="Still Outstanding" value={stillOutstandingCount} hint="Latest hop, not yet closed" />
       </div>
 
@@ -154,7 +154,7 @@ export default async function TransferredFindingsPage({
                     <div className="flex justify-between gap-2">
                       <dt className="text-slate-500">Original Amount</dt>
                       <dd className="font-medium text-slate-800">
-                        {r.finding.currency} {formatNumber(r.transfer.originalAmount)}
+                        {r.finding.currency} {formatCurrency(r.transfer.originalAmount)}
                       </dd>
                     </div>
                     <div className="flex justify-between gap-2">
@@ -174,7 +174,7 @@ export default async function TransferredFindingsPage({
                     <div className="flex justify-between gap-2">
                       <dt className="text-slate-500">Resolved Before Transfer (Amount)</dt>
                       <dd className="font-medium text-emerald-700">
-                        {r.finding.currency} {formatNumber(r.resolvedBeforeTransferAmount)}
+                        {r.finding.currency} {formatCurrency(r.resolvedBeforeTransferAmount)}
                       </dd>
                     </div>
                     <div className="flex justify-between gap-2">
@@ -184,7 +184,7 @@ export default async function TransferredFindingsPage({
                     <div className="flex justify-between gap-2">
                       <dt className="text-slate-500">Outstanding Amount Transferred</dt>
                       <dd className="font-medium text-amber-700">
-                        {r.finding.currency} {formatNumber(r.transfer.amountTransferred)}
+                        {r.finding.currency} {formatCurrency(r.transfer.amountTransferred)}
                       </dd>
                     </div>
                   </dl>
