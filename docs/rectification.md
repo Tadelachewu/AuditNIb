@@ -332,6 +332,35 @@ the ledger shows *when and by whom* rectification happened in aggregate; the Cas
 
 ---
 
+## 9.1 A fully-rectified finding can still be `TRANSFERRED`/`RECTIFICATION_RETURNED` — the card must check for real outstanding work, not just status
+
+`RECTIFIABLE_STATUSES` includes `TRANSFERRED` and `RECTIFICATION_RETURNED`, and neither of
+those transitions resets `rectifiedCases`/`rectifiedAmount`:
+
+- A `RECTIFIED` (100% self-reported) finding that hasn't been formally closed yet is still
+  eligible to be swept by the Transfer Engine (`TRANSFERABLE_STATUSES` includes `RECTIFIED`,
+  `workflow.md` §7.2) — `transferFinding()` only reassigns `periodId` and flips `status`; it
+  never touches `rectifiedCases`/`rectifiedAmount` (`src/lib/findings.ts:78-85`). So a
+  `TRANSFERRED` finding can perfectly well have `rectifiedCases === caseCount` and
+  `rectifiedAmount === amount` already — nothing left to rectify, even though `TRANSFERRED`
+  is a "rectifiable" status.
+- A `RECTIFICATION_RETURNED` finding can likewise already be fully rectified — `Return for
+  Correction` never resets the totals it's returning (`workflow.md` §5.4); it only flips
+  status.
+
+**Status membership alone is therefore not sufficient to gate the Record Rectification
+card.** The permission computed in `src/app/(app)/findings/[id]/page.tsx` (`canRectify`)
+now additionally requires `rectifiedCases < caseCount || rectifiedAmount < amount` — i.e.
+`!fullyRectified` — on top of the status check. Without this, the card stays open on an
+already-fully-rectified finding and every entry a user types is guaranteed to fail
+server-side with *"Rectified cases (N) cannot exceed the outstanding 0"* — a dead end, not
+a real choice. This does not strand a fully-rectified `RECTIFICATION_RETURNED` finding:
+`canResubmitRectification` is gated purely on `status === "RECTIFICATION_RETURNED"`
+(`page.tsx:245`), independent of outstanding totals, so Resubmit remains the correct,
+always-available way out of that state.
+
+---
+
 ## 10. Permission summary
 
 | Action | Permission | Who typically holds it |

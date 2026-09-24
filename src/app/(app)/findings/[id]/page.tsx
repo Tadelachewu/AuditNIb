@@ -197,9 +197,22 @@ export default async function FindingDetailPage({ params }: { params: Promise<{ 
         canHoReview: has("ho-review") && finding.status === "HO_REVIEW",
         canHoReturnReview:
           has("ho-review") && finding.status === "HO_REVIEW" && finding.createdBy !== user.userId,
+        // Status membership alone isn't enough: TRANSFERRED and
+        // RECTIFICATION_RETURNED both allow a finding that's already fully
+        // self-reported rectified (rectifiedCases/Amount == caseCount/
+        // amount) to sit in a "rectifiable" status - TRANSFERRED because a
+        // RECTIFIED-but-not-yet-CLOSED finding can still be swept forward
+        // by the Transfer Engine, RECTIFICATION_RETURNED because a return
+        // never resets the rectified totals it's returning. Without this
+        // extra check, the Record Rectification card stays open with
+        // nothing left to actually rectify - every entry gets rejected by
+        // rectify/route.ts's own bounds check ("cannot exceed the
+        // outstanding 0"), a guaranteed-fail dead end rather than a real
+        // choice.
         canRectify:
           has("rectify") &&
-          ["SENT_TO_BRANCH_MANAGER", "PARTIALLY_RECTIFIED", "TRANSFERRED", "RECTIFICATION_RETURNED"].includes(finding.status),
+          ["SENT_TO_BRANCH_MANAGER", "PARTIALLY_RECTIFIED", "TRANSFERRED", "RECTIFICATION_RETURNED"].includes(finding.status) &&
+          (finding.rectifiedCases < finding.caseCount || finding.rectifiedAmount < finding.amount),
         // Closeable whenever there's a district-verified-but-not-yet-closed
         // portion waiting, regardless of overall status - see
         // close/route.ts. Bounded by districtVerifiedCases/Amount, not just
