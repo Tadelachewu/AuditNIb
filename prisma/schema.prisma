@@ -734,7 +734,7 @@ model Settings {
   similarFindingFields        String[] @map("similar_finding_fields")
   requiredFindingFields       Json     @map("required_finding_fields")
   allowOtherValueFields       Json     @map("allow_other_value_fields")
-  reportTemplateSources       Json     @map("report_template_sources")
+  reportTemplateSources       Json     @default("{}") @map("report_template_sources")
   // App-wide font/text size/contrast - see src/lib/typography.ts.
   typography                  Json     @default("{}") @map("typography")
   permissionRegistrySyncedKeys String[] @map("permission_registry_synced_keys")
