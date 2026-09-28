@@ -215,6 +215,26 @@ interface Props {
   onCancel?: () => void;
 }
 
+/**
+ * Whether a registration form holds anything the user actually entered,
+ * compared with the form as it first opened (`pristine`: the admin
+ * defaults). The finding date is ignored - it's pre-filled with today, so
+ * a draft from yesterday would otherwise count as "input" just for having
+ * yesterday's date.
+ */
+function hasUserInput(
+  candidate: Record<string, unknown>,
+  itemizeCases: boolean,
+  caseAmounts: string[],
+  pristine: Record<string, unknown>
+): boolean {
+  if (itemizeCases || caseAmounts.some((a) => a.trim() !== "")) return true;
+  return Object.entries(candidate).some(([key, value]) => {
+    if (key === "findingDate" || typeof value !== "string") return false;
+    return value.trim() !== "" && value !== pristine[key];
+  });
+}
+
 const emptyForm = {
   title: "",
   sourceId: "",
@@ -349,6 +369,18 @@ export function NewFindingForm({
   // on a normal empty form.
   const [restoredBanner, setRestoredBanner] = useState(false);
   const skipNextAutosave = useRef(false);
+  // The form exactly as first rendered (create mode: the admin defaults -
+  // default source, first currency/risk/area/priority/type, today's date).
+  // A draft is only worth keeping - and only worth a "Restored" banner -
+  // once it holds something the user actually entered beyond these.
+  // Previously the autosave below fired ~0.8s after mount on the untouched
+  // defaults, so merely opening this page stored a "draft" and every later
+  // visit announced restoring it; Discard reset to a default-less blank,
+  // which autosaved again, so the banner kept coming back.
+  const pristineForm = useRef(form);
+  // Whether a draft copy currently exists server-side (restored, or saved
+  // this session) - so reverting back to pristine deletes it.
+  const draftStored = useRef(false);
 
   useEffect(() => {
     if (isEditing) return;
@@ -357,6 +389,13 @@ export function NewFindingForm({
       .then((res) => {
         if (cancelled || !res.draft) return;
         const { itemizeCases: draftItemize, caseAmounts: draftCaseAmounts, ...draftForm } = res.draft;
+        if (!hasUserInput(draftForm, Boolean(draftItemize), draftCaseAmounts ?? [], pristineForm.current)) {
+          // A stale default-only "draft" (e.g. from before this check
+          // existed) - nothing to restore; drop it quietly, no banner.
+          apiSend("/api/findings/draft-autosave", "DELETE").catch(() => {});
+          return;
+        }
+        draftStored.current = true;
         skipNextAutosave.current = true;
         setForm((f) => ({
           ...f,
@@ -388,14 +427,25 @@ export function NewFindingForm({
       return;
     }
     const timer = setTimeout(() => {
-      apiSend("/api/findings/draft-autosave", "PATCH", { ...form, itemizeCases, caseAmounts }).catch(() => {});
+      if (hasUserInput(form, itemizeCases, caseAmounts, pristineForm.current)) {
+        draftStored.current = true;
+        apiSend("/api/findings/draft-autosave", "PATCH", { ...form, itemizeCases, caseAmounts }).catch(() => {});
+      } else if (draftStored.current) {
+        // Back to the untouched defaults (everything typed was cleared) -
+        // nothing left worth restoring, so drop the stored copy.
+        draftStored.current = false;
+        apiSend("/api/findings/draft-autosave", "DELETE").catch(() => {});
+      }
     }, 800);
     return () => clearTimeout(timer);
   }, [form, itemizeCases, caseAmounts, isEditing]);
 
   async function discardRestoredDraft() {
     setRestoredBanner(false);
-    setForm({ ...emptyForm, districtId: fixedDistrict?.id ?? "", branchId: fixedBranch?.id ?? "" });
+    // Back to the real starting form (with its defaults), not a bare blank.
+    skipNextAutosave.current = true;
+    draftStored.current = false;
+    setForm(pristineForm.current);
     setItemizeCases(false);
     setCaseAmounts([]);
     await apiSend("/api/findings/draft-autosave", "DELETE").catch(() => {});
