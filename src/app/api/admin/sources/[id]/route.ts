@@ -7,6 +7,7 @@ import { appendAuditLog } from "@/lib/audit";
 const updateSchema = z.object({
   name: z.string().min(1).optional(),
   active: z.boolean().optional(),
+  isDefault: z.boolean().optional(),
 });
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -23,12 +24,38 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const db = await readDb();
   const existing = db.sources.find((s) => s.id === id);
   if (!existing) return NextResponse.json({ error: "Source not found" }, { status: 404 });
-  const before = { name: existing.name, active: existing.active };
+  const before = { name: existing.name, active: existing.active, isDefault: existing.isDefault };
+
+  // An inactive source can't be the one pre-filled on the registration
+  // form (that dropdown only ever offers active sources), so becoming the
+  // default and being (or becoming, in the same call) inactive are
+  // mutually exclusive.
+  const nextActive = parsed.data.active !== undefined ? parsed.data.active : existing.active;
+  if (parsed.data.isDefault === true && !nextActive) {
+    return NextResponse.json({ error: "Cannot make an inactive source the default" }, { status: 400 });
+  }
 
   const updated = await updateDb((current) => {
     const s = current.sources.find((x) => x.id === id)!;
     if (parsed.data.name !== undefined) s.name = parsed.data.name;
-    if (parsed.data.active !== undefined) s.active = parsed.data.active;
+    if (parsed.data.active !== undefined) {
+      s.active = parsed.data.active;
+      // Deactivating the current default clears it too, rather than
+      // leaving an inactive source silently marked default with nothing
+      // able to read it back out of the (active-only) dropdown.
+      if (!s.active && s.isDefault) s.isDefault = false;
+    }
+    if (parsed.data.isDefault !== undefined) {
+      if (parsed.data.isDefault) {
+        // Only one source may be default at a time - unset it on every
+        // other row in the same transaction (there's no DB constraint
+        // enforcing this, so it's on the write path to keep it true).
+        for (const other of current.sources) {
+          if (other.id !== id) other.isDefault = false;
+        }
+      }
+      s.isDefault = parsed.data.isDefault;
+    }
     s.updatedAt = new Date().toISOString();
     appendAuditLog(current, {
       userId: auth.session.userId!,
@@ -37,7 +64,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       entityType: "Source",
       entityId: s.id,
       oldValue: before,
-      newValue: { name: s.name, active: s.active },
+      newValue: { name: s.name, active: s.active, isDefault: s.isDefault },
     });
     return s;
   });

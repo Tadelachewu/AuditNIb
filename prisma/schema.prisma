@@ -247,6 +247,14 @@ model Source {
   code      String   @unique
   name      String
   active    Boolean
+  // At most one Source has this true at a time, enforced in the PATCH
+  // route (not a DB constraint - a partial unique index on `is_default`
+  // would work too, but the app-level "unset every other row first, in
+  // the same transaction" approach matches how every other single-select
+  // admin flag in this codebase is enforced). Read by the Register
+  // Finding form to pre-fill sourceId for a brand-new finding; never
+  // overrides an already-saved finding's own stored source on edit.
+  isDefault Boolean  @default(false) @map("is_default")
   createdAt DateTime @map("created_at")
   updatedAt DateTime @map("updated_at")
 
@@ -357,6 +365,12 @@ model ReportingPeriod {
   year                   Int
   month                  Int
   code                   String       @unique
+  // Optional human-readable label set at creation (or later) - `code` (a
+  // machine-derived "2026-09") is what every dropdown/report across the
+  // app still displays by default; `name` is a free-text addition shown
+  // only where a period is called out specifically, e.g. Monthly District
+  // Detail's Month column ("2026-09 (September Review)").
+  name                   String?
   startsAt               DateTime     @map("starts_at")
   endsAt                 DateTime     @map("ends_at")
   submissionStartsAt     DateTime     @map("submission_starts_at")
@@ -720,6 +734,7 @@ model Settings {
   similarFindingFields        String[] @map("similar_finding_fields")
   requiredFindingFields       Json     @map("required_finding_fields")
   allowOtherValueFields       Json     @map("allow_other_value_fields")
+  reportTemplateSources       Json     @map("report_template_sources")
   permissionRegistrySyncedKeys String[] @map("permission_registry_synced_keys")
   updatedAt                   DateTime @map("updated_at")
   updatedBy                   String?  @map("updated_by")

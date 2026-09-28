@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/Button";
 import { Input, Label } from "@/components/ui/Field";
 import { Badge } from "@/components/ui/Badge";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { usePermissions } from "@/lib/permissions/PermissionsContext";
+import { hasPermission } from "@/lib/permissions/registry";
 import type { ReportingPeriod } from "@/types";
 
 // The GET route annotates each period with a live transfer preview (see
@@ -64,11 +66,20 @@ export default function ReportingPeriodsPage() {
     endsAt: endOfMonthLocal(now),
     submissionStartsAt: startOfMonthLocal(now),
     submissionEndsAt: endOfMonthLocal(now),
+    name: "",
   });
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [rowBusy, setRowBusy] = useState<string | null>(null);
   const { confirm, dialog } = useConfirm();
+  const permissions = usePermissions();
+  const canCreate = hasPermission(permissions, "reporting-periods.create");
+  // "Edit Period"/Rename/submission-window Edit/Lock-flags-only-Edit all
+  // PATCH through the same route, which requires reporting-periods.lock
+  // for every kind of update (there's no separate "edit" action in the
+  // registry for this page) - gated identically to Lock/Unlock itself.
+  const canLock = hasPermission(permissions, "reporting-periods.lock");
+  const canDelete = hasPermission(permissions, "reporting-periods.delete");
 
   function handleStartsAtChange(value: string) {
     setForm((f) => ({ ...f, startsAt: value, submissionStartsAt: f.submissionStartsAt === f.startsAt ? value : f.submissionStartsAt }));
@@ -120,6 +131,40 @@ export default function ReportingPeriodsPage() {
   const [periodEditReason, setPeriodEditReason] = useState("");
   const [periodEditError, setPeriodEditError] = useState<string | null>(null);
   const [periodEditBusy, setPeriodEditBusy] = useState(false);
+
+  // Renaming has none of the date-range safety concerns Edit Period has
+  // (see that dialog's own comment), so it's always available regardless
+  // of findingCount - a simple inline input rather than a full dialog.
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [renameReason, setRenameReason] = useState("");
+  const [renameError, setRenameError] = useState<string | null>(null);
+  const [renameBusy, setRenameBusy] = useState(false);
+
+  function openRename(p: PeriodWithTransferPreview) {
+    setRenamingId(p.id);
+    setRenameValue(p.name ?? "");
+    setRenameReason("");
+    setRenameError(null);
+  }
+
+  async function saveRename(p: PeriodWithTransferPreview) {
+    if (renameReason.trim().length < 5) {
+      setRenameError("A reason of at least 5 characters is required");
+      return;
+    }
+    setRenameBusy(true);
+    setRenameError(null);
+    try {
+      await apiSend(`/api/admin/reporting-periods/${p.id}`, "PATCH", { name: renameValue, reason: renameReason });
+      setRenamingId(null);
+      await load();
+    } catch (err) {
+      setRenameError(err instanceof ApiError ? err.message : "Failed to rename period");
+    } finally {
+      setRenameBusy(false);
+    }
+  }
 
   function openPeriodEditDialog(p: PeriodWithTransferPreview) {
     setPeriodEditForm({
@@ -200,6 +245,7 @@ export default function ReportingPeriodsPage() {
     setSubmitting(true);
     try {
       await apiSend("/api/admin/reporting-periods", "POST", form);
+      setForm((f) => ({ ...f, name: "" }));
       await load();
     } catch (err) {
       setFormError(err instanceof ApiError ? err.message : "Failed to create reporting period");
@@ -295,6 +341,7 @@ export default function ReportingPeriodsPage() {
         always requires a reason and is audit-logged.
       </p>
 
+      {canCreate && (
       <Card className="mt-5">
         <CardHeader
           title="Open a New Period"
@@ -309,7 +356,15 @@ export default function ReportingPeriodsPage() {
             <Label htmlFor="endsAt">Ends at (date &amp; time)</Label>
             <Input id="endsAt" type="datetime-local" value={form.endsAt} onChange={(e) => handleEndsAtChange(e.target.value)} />
           </div>
-          <div />
+          <div>
+            <Label htmlFor="name">Name (optional)</Label>
+            <Input
+              id="name"
+              placeholder="e.g. September 2026 Monthly Review"
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+            />
+          </div>
           <div>
             <Label htmlFor="submissionStartsAt">Submission window starts at</Label>
             <Input
@@ -342,6 +397,7 @@ export default function ReportingPeriodsPage() {
           September, but branches should only submit in the first two weeks).
         </p>
       </Card>
+      )}
 
       <Card className="mt-5">
         <CardHeader title="All Periods" description={`${periods.length} total`} />
@@ -369,8 +425,35 @@ export default function ReportingPeriodsPage() {
                   <tr key={p.id}>
                     <td className="px-4 py-2 font-medium text-slate-900">
                       {p.code}
-                      <div className="mt-0.5">
-                        {p.findingCount === 0 ? (
+                      {renamingId === p.id ? (
+                        <div className="mt-1 flex flex-col gap-1">
+                          <Input
+                            value={renameValue}
+                            onChange={(e) => setRenameValue(e.target.value)}
+                            placeholder="e.g. September 2026 Monthly Review"
+                            className="max-w-56 text-xs"
+                          />
+                          <Input
+                            value={renameReason}
+                            onChange={(e) => setRenameReason(e.target.value)}
+                            placeholder="Reason (required, 5+ chars)"
+                            className="max-w-56 text-xs"
+                          />
+                          {renameError && <p className="text-xs text-red-600">{renameError}</p>}
+                          <div className="flex gap-2">
+                            <Button variant="secondary" onClick={() => setRenamingId(null)} disabled={renameBusy}>
+                              Cancel
+                            </Button>
+                            <Button onClick={() => saveRename(p)} disabled={renameBusy}>
+                              {renameBusy ? "Saving..." : "Save"}
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        p.name && <div className="mt-0.5 text-xs font-normal text-slate-500">{p.name}</div>
+                      )}
+                      <div className="mt-0.5 flex flex-wrap gap-2">
+                        {canLock && (p.findingCount === 0 ? (
                           <button type="button" onClick={() => openPeriodEditDialog(p)} className="text-xs font-normal text-blue-800 hover:underline">
                             Edit Period
                           </button>
@@ -381,6 +464,11 @@ export default function ReportingPeriodsPage() {
                           >
                             Edit Period
                           </span>
+                        ))}
+                        {canLock && renamingId !== p.id && (
+                          <button type="button" onClick={() => openRename(p)} className="text-xs font-normal text-blue-800 hover:underline">
+                            {p.name ? "Rename" : "Add name"}
+                          </button>
                         )}
                       </div>
                     </td>
@@ -388,9 +476,11 @@ export default function ReportingPeriodsPage() {
                       {formatDateTime(p.startsAt)} — {formatDateTime(p.endsAt)}
                       <div className="mt-0.5 text-slate-400">
                         Submissions: {formatDateTime(p.submissionStartsAt)} – {formatDateTime(p.submissionEndsAt)}{" "}
-                        <button type="button" onClick={() => openWindowDialog(p)} className="text-blue-800 hover:underline">
-                          Edit
-                        </button>
+                        {canLock && (
+                          <button type="button" onClick={() => openWindowDialog(p)} className="text-blue-800 hover:underline">
+                            Edit
+                          </button>
+                        )}
                       </div>
                     </td>
                     <td className="px-4 py-2">
@@ -400,13 +490,15 @@ export default function ReportingPeriodsPage() {
                           <Badge tone={p.draftsAllowedWhileLocked ? "blue" : "gray"} className="ml-1">
                             {p.draftsAllowedWhileLocked ? "Drafts allowed" : "Drafts blocked"}
                           </Badge>
-                          <button
-                            type="button"
-                            onClick={() => openLockDialog(p)}
-                            className="ml-1.5 text-xs text-blue-800 hover:underline"
-                          >
-                            Edit
-                          </button>
+                          {canLock && (
+                            <button
+                              type="button"
+                              onClick={() => openLockDialog(p)}
+                              className="ml-1.5 text-xs text-blue-800 hover:underline"
+                            >
+                              Edit
+                            </button>
+                          )}
                         </>
                       )}
                     </td>
@@ -415,9 +507,12 @@ export default function ReportingPeriodsPage() {
                     </td>
                     <td className="px-4 py-2 text-right">
                       <div className="flex justify-end gap-2">
+                        {canLock && (
                         <Button variant="secondary" disabled={rowBusy === p.id} onClick={() => toggleLock(p)}>
                           {p.status === "OPEN" ? "Lock" : "Unlock"}
                         </Button>
+                        )}
+                        {canDelete && (
                         <Button
                           variant="danger"
                           disabled={rowBusy === p.id || p.findingCount > 0}
@@ -426,6 +521,7 @@ export default function ReportingPeriodsPage() {
                         >
                           Delete
                         </Button>
+                        )}
                       </div>
                     </td>
                   </tr>

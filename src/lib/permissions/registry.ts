@@ -19,6 +19,7 @@ export type PermissionAction =
   | "edit"
   | "toggle-status"
   | "delete"
+  | "delete-rejected"
   | "activate"
   | "lock"
   | "manage"
@@ -78,15 +79,22 @@ export const PAGE_REGISTRY: PageDefinition[] = [
   {
     code: "findings",
     label: "Findings",
-    // "delete" only ever applies while a finding is still DRAFT (see
-    // src/app/api/findings/[id]/route.ts) - matching Users/edit-while-
-    // draft-or-returned's rule that the action set here is the ceiling,
-    // not a guarantee the action always succeeds.
+    // "delete" only ever applies while a finding is still DRAFT, and only
+    // for the finding's own creator (see src/app/api/findings/[id]/route.ts)
+    // - matching Users/edit-while-draft-or-returned's rule that the action
+    // set here is the ceiling, not a guarantee the action always succeeds.
+    // "delete-rejected" is a deliberately separate permission, not a status
+    // exception folded into "delete": REJECTED is a terminal review-stage
+    // outcome (see workflow.md), so cleaning one up is an oversight/
+    // housekeeping action typically performed by a District/HO Controller,
+    // not the original registrant - it carries no ownership requirement,
+    // only the actor's normal org-scope check (assertFindingInScope).
     actions: [
       V,
       C,
       E,
       D,
+      { action: "delete-rejected", label: "Delete Rejected Findings" },
       { action: "submit", label: "Submit" },
       { action: "district-review", label: "District Approve / Reject / Return" },
       { action: "ho-review", label: "HO Approve / Reject / Return" },

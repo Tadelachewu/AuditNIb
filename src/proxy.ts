@@ -39,6 +39,26 @@ const MAX_API_BODY_BYTES = 11 * 1024 * 1024;
 
 const STATE_CHANGING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
+// getIronSession() may attach a Set-Cookie header onto the NextResponse
+// object it receives (iron-session rotates the seal when it feels the
+// previous one is aging, even without an explicit .save() call). Proxy
+// handlers typically return a *different* response object (the result of
+// NextResponse.redirect, or a json-error NextResponse) without copying
+// that Set-Cookie over — causing the browser to never see the rotated
+// seal, which in turn can make iron-session's decrypt produce an empty
+// session on a subsequent request even though the seal still had plenty
+// of TTL left. Always copy Set-Cookie from the session response onto the
+// outgoing response when they differ.
+function forwardSessionCookies(from: NextResponse, to: NextResponse): NextResponse {
+  if (from === to) return to;
+  const setCookie = from.headers.getSetCookie();
+  if (!setCookie || setCookie.length === 0) return to;
+  for (const value of setCookie) {
+    to.headers.append("set-cookie", value);
+  }
+  return to;
+}
+
 // Secondary CSRF defense on top of the session cookie's own SameSite=Lax
 // (which already blocks a forged cross-site POST from carrying the cookie
 // in any modern browser): reject a state-changing /api request whose
@@ -137,11 +157,11 @@ export async function proxy(request: NextRequest) {
   if (!isLoggedIn && !isPublicPath) {
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("from", pathname);
-    return NextResponse.redirect(loginUrl);
+    return forwardSessionCookies(response, NextResponse.redirect(loginUrl));
   }
 
   if (isLoggedIn && isPublicPath) {
-    return NextResponse.redirect(new URL("/dashboard", request.url));
+    return forwardSessionCookies(response, NextResponse.redirect(new URL("/dashboard", request.url)));
   }
 
   // An admin-set password (initial creation or a reset) forces every page
@@ -149,12 +169,12 @@ export async function proxy(request: NextRequest) {
   // User.mustChangePassword's doc comment. Never gates /api routes (they
   // already bail out above); this only blocks navigating the UI.
   if (isLoggedIn && session.mustChangePassword && pathname !== "/profile") {
-    return NextResponse.redirect(new URL("/profile", request.url));
+    return forwardSessionCookies(response, NextResponse.redirect(new URL("/profile", request.url)));
   }
 
   const pageCode = pageCodeFor(pathname);
   if (isLoggedIn && pageCode && !hasPermission(session.permissions, permissionKey(pageCode, "view"))) {
-    return NextResponse.redirect(new URL("/dashboard", request.url));
+    return forwardSessionCookies(response, NextResponse.redirect(new URL("/dashboard", request.url)));
   }
 
   return response;

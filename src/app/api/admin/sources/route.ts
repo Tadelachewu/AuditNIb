@@ -34,7 +34,7 @@ export async function POST(request: Request) {
   }
 
   const now = new Date().toISOString();
-  const source = { id: uuid(), ...parsed.data, active: true, createdAt: now, updatedAt: now };
+  const source = { id: uuid(), ...parsed.data, active: true, isDefault: false, createdAt: now, updatedAt: now };
 
   await updateDb((current) => {
     current.sources.push(source);

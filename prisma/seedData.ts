@@ -76,8 +76,8 @@ export function buildSeedDatabase(): Database {
   ];
 
   const sources: Source[] = [
-    { id: "source-1", code: "IC", name: "Internal Control", active: true, createdAt: now, updatedAt: now },
-    { id: "source-2", code: "IA", name: "Internal Audit", active: true, createdAt: now, updatedAt: now },
+    { id: "source-1", code: "IC", name: "Internal Control", active: true, isDefault: true, createdAt: now, updatedAt: now },
+    { id: "source-2", code: "IA", name: "Internal Audit", active: true, isDefault: false, createdAt: now, updatedAt: now },
   ];
 
   // Not from the BRD - a starting list an admin can extend at
@@ -261,6 +261,7 @@ export function buildSeedDatabase(): Database {
       currency: true,
       categoryId: true,
     },
+    reportTemplateSources: {},
     updatedAt: now,
   };
 

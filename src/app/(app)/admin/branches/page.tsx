@@ -8,6 +8,8 @@ import { Input, Select, Label } from "@/components/ui/Field";
 import { StatusBadge, Badge } from "@/components/ui/Badge";
 import { Pagination } from "@/components/ui/Pagination";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { usePermissions } from "@/lib/permissions/PermissionsContext";
+import { hasPermission } from "@/lib/permissions/registry";
 import type { District, Branch } from "@/types";
 
 type BranchRow = Branch & { managerName: string | null; subManagerName: string | null; controllerName: string | null };
@@ -26,6 +28,11 @@ export default function BranchesPage() {
   const [page, setPage] = useState(1);
   const [pageInfo, setPageInfo] = useState({ total: 0, pageSize: 25, totalPages: 1 });
   const { confirm, dialog } = useConfirm();
+  const permissions = usePermissions();
+  const canCreate = hasPermission(permissions, "branches.create");
+  const canEdit = hasPermission(permissions, "branches.edit");
+  const canToggle = hasPermission(permissions, "branches.toggle-status");
+  const canDelete = hasPermission(permissions, "branches.delete");
 
   async function load() {
     setLoading(true);
@@ -130,6 +137,7 @@ export default function BranchesPage() {
         Linked to a district. Manager and Internal Controller are assigned from the Users page.
       </p>
 
+      {canCreate && (
       <Card className="mt-5">
         <CardHeader title="Add Branch" />
         <form onSubmit={handleCreate} className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3">
@@ -165,6 +173,7 @@ export default function BranchesPage() {
           </div>
         </form>
       </Card>
+      )}
 
       <Card className="mt-5">
         <CardHeader title="All Branches" description={`${pageInfo.total} total`} />
@@ -248,19 +257,25 @@ export default function BranchesPage() {
                           </div>
                         ) : (
                           <div className="flex justify-end gap-2">
-                            <Button variant="secondary" onClick={() => startEdit(b)}>
-                              Edit
-                            </Button>
-                            <Button
-                              variant={b.status === "ACTIVE" ? "danger" : "secondary"}
-                              disabled={rowBusy === b.id}
-                              onClick={() => toggleStatus(b)}
-                            >
-                              {b.status === "ACTIVE" ? "Deactivate" : "Reactivate"}
-                            </Button>
-                            <Button variant="danger" disabled={rowBusy === b.id} onClick={() => deleteBranch(b)}>
-                              Delete
-                            </Button>
+                            {canEdit && (
+                              <Button variant="secondary" onClick={() => startEdit(b)}>
+                                Edit
+                              </Button>
+                            )}
+                            {canToggle && (
+                              <Button
+                                variant={b.status === "ACTIVE" ? "danger" : "secondary"}
+                                disabled={rowBusy === b.id}
+                                onClick={() => toggleStatus(b)}
+                              >
+                                {b.status === "ACTIVE" ? "Deactivate" : "Reactivate"}
+                              </Button>
+                            )}
+                            {canDelete && (
+                              <Button variant="danger" disabled={rowBusy === b.id} onClick={() => deleteBranch(b)}>
+                                Delete
+                              </Button>
+                            )}
                           </div>
                         )}
                       </td>

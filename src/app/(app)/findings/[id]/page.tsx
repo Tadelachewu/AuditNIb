@@ -185,6 +185,11 @@ export default async function FindingDetailPage({ params }: { params: Promise<{ 
         // different-actor actions.
         canEdit: has("edit") && finding.createdBy === user.userId && ["DRAFT", "RETURNED"].includes(finding.status),
         canDelete: has("delete") && finding.createdBy === user.userId && finding.status === "DRAFT",
+        // Deliberately no ownership check, unlike canDelete above - see
+        // the registry's own doc comment on "delete-rejected": this is a
+        // reviewer housekeeping action on a terminal outcome, not the
+        // registrant cleaning up their own work.
+        canDeleteRejected: has("delete-rejected") && finding.status === "REJECTED",
         canSubmit: has("submit") && finding.createdBy === user.userId && ["DRAFT", "RETURNED"].includes(finding.status),
         canDistrictReview: has("district-review") && finding.status === "DISTRICT_REVIEW",
         // At each review stage (District/HO/Bank), the "Return" option is

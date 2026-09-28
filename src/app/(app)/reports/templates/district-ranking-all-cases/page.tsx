@@ -8,6 +8,7 @@ import { getDistrictRankingAllCases } from "@/lib/reportTemplates";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { PrintButton } from "@/components/reports/PrintButton";
+import { PeriodCheckboxAccordion } from "@/components/reports/PeriodCheckboxAccordion";
 
 export default async function DistrictRankingAllCasesPage({
   searchParams,
@@ -57,14 +58,7 @@ export default async function DistrictRankingAllCasesPage({
         <p className="mb-2 text-xs font-medium text-slate-600">
           Periods to include (none selected = every period, cumulative lifetime totals)
         </p>
-        <div className="flex flex-wrap gap-3">
-          {db.reportingPeriods.map((p) => (
-            <label key={p.id} className="flex items-center gap-1.5 text-sm text-slate-700">
-              <input type="checkbox" name="periodIds" value={p.id} defaultChecked={selectedPeriodIds.includes(p.id)} />
-              {p.code}
-            </label>
-          ))}
-        </div>
+        <PeriodCheckboxAccordion periods={db.reportingPeriods} selectedIds={selectedPeriodIds} />
         <Button type="submit" className="mt-2">
           Apply
         </Button>

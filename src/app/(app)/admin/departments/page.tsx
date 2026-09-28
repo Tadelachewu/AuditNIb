@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/Button";
 import { Input, Select, Label } from "@/components/ui/Field";
 import { Badge } from "@/components/ui/Badge";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { usePermissions } from "@/lib/permissions/PermissionsContext";
+import { hasPermission } from "@/lib/permissions/registry";
 import type { Department, District, Branch, OrgScope } from "@/types";
 
 const emptyForm = { code: "", name: "", orgScope: "BANK" as OrgScope, districtId: "", branchId: "" };
@@ -25,6 +27,11 @@ export default function DepartmentsPage() {
   const [editForm, setEditForm] = useState(emptyEditForm);
   const [editError, setEditError] = useState<string | null>(null);
   const { confirm, dialog } = useConfirm();
+  const permissions = usePermissions();
+  const canCreate = hasPermission(permissions, "departments.create");
+  const canEdit = hasPermission(permissions, "departments.edit");
+  const canToggle = hasPermission(permissions, "departments.toggle-status");
+  const canDelete = hasPermission(permissions, "departments.delete");
 
   async function load() {
     setLoading(true);
@@ -168,6 +175,7 @@ export default function DepartmentsPage() {
         one branch.
       </p>
 
+      {canCreate && (
       <Card className="mt-5">
         <CardHeader title="Add Department" />
         <form onSubmit={handleCreate} className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -230,6 +238,7 @@ export default function DepartmentsPage() {
           </div>
         </form>
       </Card>
+      )}
 
       <Card className="mt-5">
         <CardHeader title="All Departments" description={`${departments.length} total`} />
@@ -275,19 +284,25 @@ export default function DepartmentsPage() {
                         </td>
                         <td className="px-4 py-2 text-right">
                           <div className="flex justify-end gap-2">
-                            <Button variant="secondary" onClick={() => (isEditing ? setEditingId(null) : startEdit(d))}>
-                              {isEditing ? "Cancel" : "Edit"}
-                            </Button>
-                            <Button
-                              variant={d.active ? "danger" : "secondary"}
-                              disabled={rowBusy === d.id}
-                              onClick={() => toggleActive(d)}
-                            >
-                              {d.active ? "Deactivate" : "Activate"}
-                            </Button>
-                            <Button variant="danger" disabled={rowBusy === d.id} onClick={() => deleteDepartment(d)}>
-                              Delete
-                            </Button>
+                            {canEdit && (
+                              <Button variant="secondary" onClick={() => (isEditing ? setEditingId(null) : startEdit(d))}>
+                                {isEditing ? "Cancel" : "Edit"}
+                              </Button>
+                            )}
+                            {canToggle && (
+                              <Button
+                                variant={d.active ? "danger" : "secondary"}
+                                disabled={rowBusy === d.id}
+                                onClick={() => toggleActive(d)}
+                              >
+                                {d.active ? "Deactivate" : "Activate"}
+                              </Button>
+                            )}
+                            {canDelete && (
+                              <Button variant="danger" disabled={rowBusy === d.id} onClick={() => deleteDepartment(d)}>
+                                Delete
+                              </Button>
+                            )}
                           </div>
                         </td>
                       </tr>

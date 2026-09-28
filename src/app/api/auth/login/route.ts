@@ -121,10 +121,24 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Your role has been deactivated. Contact an administrator." }, { status: 403 });
   }
 
+  // Single-session-per-user: a new login bumps sessionVersion so every
+  // previously-issued cookie for this account is rejected on its next
+  // request. Compare to getCurrentUser() in session.ts, which does
+  // `cookie.sessionVersion !== db.sessionVersion → logout`. Without this
+  // bump multiple browser/device sessions for the same account would all
+  // coexist and only expire via idle/absolute timeouts or a password
+  // change. Computing the new value here, inside the same updateDb call
+  // that writes lastLoginAt, guarantees we don't re-issue with a stale
+  // version if two parallel logins race.
+  const nextSessionVersion = (user.sessionVersion ?? 1) + 1;
+
   const loginTime = new Date().toISOString();
   await updateDb((current) => {
     const u = current.users.find((x) => x.id === user.id);
-    if (u) u.lastLoginAt = loginTime;
+    if (u) {
+      u.lastLoginAt = loginTime;
+      u.sessionVersion = nextSessionVersion;
+    }
     appendAuditLog(current, {
       userId: user.id,
       userName: user.name,
@@ -134,6 +148,7 @@ export async function POST(request: Request) {
     });
   });
 
+  const now = Date.now();
   const session = await getSession();
   session.isLoggedIn = true;
   session.userId = user.id;
@@ -153,7 +168,13 @@ export async function POST(request: Request) {
   session.districtId = user.districtId ?? null;
   session.branchId = user.branchId ?? null;
   session.mustChangePassword = user.mustChangePassword ?? false;
-  session.sessionVersion = user.sessionVersion ?? 1;
+  session.sessionVersion = nextSessionVersion;
+  // Session-lifetime bookkeeping — used by getCurrentUser() to enforce the
+  // idle and absolute session-expiry windows (see session.ts). Both are set
+  // to the current wall-clock on login; lastActivityAt slides forward on
+  // every subsequent guarded request.
+  session.sessionCreatedAt = now;
+  session.lastActivityAt = now;
   await session.save();
 
   return NextResponse.json({ user: toSafeUser({ ...user, lastLoginAt: loginTime }) });

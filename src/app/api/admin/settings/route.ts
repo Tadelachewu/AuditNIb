@@ -99,6 +99,11 @@ const updateSchema = z.object({
     currency: z.boolean(),
     categoryId: z.boolean(),
   }),
+  // Per-report-template source inclusion: keys are REPORT_TEMPLATES slugs,
+  // values are arrays of Source IDs. Each source ID is validated against
+  // the actual sources table server-side below (in the PATCH handler),
+  // not in Zod, since Zod doesn't have DB access.
+  reportTemplateSources: z.record(z.string(), z.array(z.string())),
 });
 
 export async function PATCH(request: Request) {
@@ -129,9 +134,28 @@ export async function PATCH(request: Request) {
     }
   }
 
+  // Per-template source filter validation: every referenced source ID must
+  // exist (an inactive source is still allowed, since a report's filter may
+  // legitimately want to include historical data from a decommissioned
+  // source), and every key must be a known REPORT_TEMPLATES slug - unknown
+  // slugs would silently never match anything and confuse the admin who
+  // typed it in, so reject them up-front.
+  const validSourceIds = new Set(db.sources.map((s) => s.id));
+  const validSlugs = new Set(["uncovered-branches", "category-detail-by-district", "monthly-summary", "monthly-district-history", "monthly-district-detail", "district-ranking-other-cases", "weekly-executive-summary", "district-ranking-all-cases", "category-performance-summary", "mid-month-district-snapshot", "transferred-findings"]);
+  for (const [slug, ids] of Object.entries(parsed.data.reportTemplateSources) as [string, string[]][]) {
+    if (!validSlugs.has(slug)) {
+      return NextResponse.json({ error: `Unknown report template slug: ${slug}` }, { status: 400 });
+    }
+    const bad = ids.filter((id: string) => !validSourceIds.has(id));
+    if (bad.length > 0) {
+      return NextResponse.json({ error: `Template "${slug}" references unknown source ID(s): ${bad.join(", ")}` }, { status: 400 });
+    }
+  }
+
   const updated = await updateDb((current) => {
     current.settings = {
       ...parsed.data,
+      reportTemplateSources: parsed.data.reportTemplateSources as Record<string, string[]>,
       updatedAt: new Date().toISOString(),
       updatedBy: auth.session.userId!,
     };

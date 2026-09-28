@@ -304,6 +304,10 @@ export function NewFindingForm({
           // starts unset rather than risk defaulting to one that's
           // actually out of scope.
           departmentId: "",
+          // Admin-designated default (Admin -> Sources -> "Set as
+          // default"), at most one at a time. Registrant can still change
+          // it - this only saves the common case a re-pick every time.
+          sourceId: sources.find((s) => s.isDefault)?.id ?? "",
           currency: currencies[0] ?? "",
           riskLevel: riskLevels[0] ?? "",
           operationArea: operationAreas[0] ?? "",
@@ -353,7 +357,16 @@ export function NewFindingForm({
         if (cancelled || !res.draft) return;
         const { itemizeCases: draftItemize, caseAmounts: draftCaseAmounts, ...draftForm } = res.draft;
         skipNextAutosave.current = true;
-        setForm((f) => ({ ...f, ...draftForm }));
+        setForm((f) => ({
+          ...f,
+          ...draftForm,
+          // A draft saved before sourceId was ever picked (or before the
+          // admin-designated default source existed) carries "" here -
+          // restoring it should never clobber the fresh default-source
+          // pre-fill already computed at mount with an older, emptier
+          // value. Any real value the draft actually has still wins.
+          sourceId: draftForm.sourceId || f.sourceId,
+        }));
         if (draftItemize) setItemizeCases(true);
         if (draftCaseAmounts) setCaseAmounts(draftCaseAmounts);
         setRestoredBanner(true);
@@ -573,7 +586,7 @@ export function NewFindingForm({
               <option value="">Select source</option>
               {[...sources].sort((a, b) => a.name.localeCompare(b.name)).map((s) => (
                 <option key={s.id} value={s.id}>
-                  {s.name}
+                  {s.isDefault ? `★ ${s.name} (default)` : s.name}
                 </option>
               ))}
             </Select>

@@ -121,6 +121,11 @@ export interface Source {
   code: string;
   name: string;
   active: boolean;
+  // At most one Source has this true at a time (enforced in the PATCH
+  // route, not a DB constraint). Read by the Register Finding form to
+  // pre-fill sourceId for a brand-new finding only - never overrides an
+  // already-saved finding's own stored source on edit.
+  isDefault: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -197,6 +202,11 @@ export interface ReportingPeriod {
   year: number;
   month: number;
   code: string;
+  // Optional human-readable label - `code` ("2026-09") is what every
+  // dropdown/report still displays by default; this is a free-text
+  // addition shown only where a period is called out specifically (e.g.
+  // Monthly District Detail's Month column).
+  name?: string | null;
   // The actual reporting window, to the minute - filled in when the
   // period is opened, not just derived from year/month. `year`/`month`
   // (and `code`) are derived from `startsAt` at creation time and kept as
@@ -430,6 +440,14 @@ export interface Settings {
   // remains editable, it just can't be freshly chosen again from a blank
   // start once disabled.
   allowOtherValueFields: Record<OtherValueAllowedField, boolean>;
+  // Per-report-template source inclusion: keys are REPORT_TEMPLATES slugs,
+  // values are arrays of Source IDs. An empty array or missing key means
+  // "include every source" (backward-compatible default); a non-empty
+  // array means the template only counts findings whose sourceId is in
+  // that list, applied after any ScoringRule gate for the templates that
+  // also go through computeEligibleCaseCounts(). Admin-configurable from
+  // /admin/settings' "Report Template Source Filters" section.
+  reportTemplateSources: Record<string, string[]>;
   updatedAt: string;
   updatedBy?: string;
 }

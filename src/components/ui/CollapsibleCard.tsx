@@ -14,12 +14,21 @@ export function CollapsibleCard({
   description,
   defaultOpen = false,
   className = "",
+  // Wraps children in a <fieldset disabled> - not the toggle button above
+  // it, which must stay clickable regardless so a view-only viewer can
+  // still expand a section to read it, just not edit anything inside.
+  // `contents` keeps the fieldset out of layout entirely (no default
+  // browser border/padding) while its native disabled-cascade still
+  // reaches every input/select/button nested inside, component
+  // boundaries included - see the Settings page's own usage.
+  disabled = false,
   children,
 }: {
   title: string;
   description?: string;
   defaultOpen?: boolean;
   className?: string;
+  disabled?: boolean;
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(defaultOpen);
@@ -46,7 +55,13 @@ export function CollapsibleCard({
           <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
         </svg>
       </button>
-      {open && <div className="border-t border-slate-200">{children}</div>}
+      {open && (
+        <div className="border-t border-slate-200">
+          <fieldset disabled={disabled} className="contents">
+            {children}
+          </fieldset>
+        </div>
+      )}
     </div>
   );
 }

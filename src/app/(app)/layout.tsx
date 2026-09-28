@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Topbar } from "@/components/layout/Topbar";
+import { PermissionsProvider } from "@/lib/permissions/PermissionsContext";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await getCurrentUser();
@@ -20,12 +21,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   }
 
   return (
-    <div className="flex min-h-screen bg-slate-100">
-      <Sidebar permissions={user.permissions ?? []} role={user.role ?? ""} />
-      <div className="flex min-w-0 flex-1 flex-col">
-        <Topbar user={user} />
-        <main className="flex-1 overflow-x-auto p-6">{children}</main>
+    <PermissionsProvider permissions={user.permissions ?? []}>
+      <div className="flex min-h-screen bg-slate-100">
+        <Sidebar permissions={user.permissions ?? []} role={user.role ?? ""} />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <Topbar user={user} />
+          <main className="flex-1 overflow-x-auto p-6">{children}</main>
+        </div>
       </div>
-    </div>
+    </PermissionsProvider>
   );
 }

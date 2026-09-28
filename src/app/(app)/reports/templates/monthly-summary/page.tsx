@@ -42,7 +42,8 @@ export default async function MonthlySummaryReportPage({
           </Link>
           <h1 className="mt-1 text-lg font-semibold text-slate-900">Monthly Summary Report</h1>
           <p className="mt-1 text-sm text-slate-500">
-            Outstanding cases per category, amount involved, branch dispatch coverage, and the district&apos;s official score.
+            Total cases per category, amount involved, branch dispatch coverage, and the district&apos;s official score.
+            Unrect./Rect./Rect. % reflect only the scored performance category (Other Case).
           </p>
         </div>
         <div className="flex gap-2">
@@ -110,7 +111,7 @@ export default async function MonthlySummaryReportPage({
                   <td className="px-4 py-2 text-slate-900">{r.district.name}</td>
                   {r.perCategory.map((c) => (
                     <td key={c.category.id} className="px-2 py-2 text-center text-slate-700">
-                      {formatNumber(c.outstanding)}
+                      {formatNumber(c.total)}
                     </td>
                   ))}
                   <td className="px-2 py-2 text-center text-slate-700">{formatCurrency(r.amountInvolved)}</td>

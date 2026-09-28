@@ -36,7 +36,7 @@ export default async function MonthlyDistrictDetailPage({
   const districtId = typeof params.districtId === "string" ? params.districtId : "";
   const activeDistricts = db.districts.filter((d) => d.status === "ACTIVE").sort((a, b) => a.name.localeCompare(b.name, "en-US"));
 
-  const { otherCases: allOtherCases, various: allVarious } = getMonthlyDistrictSeries(db);
+  const { otherCases: allOtherCases, various: allVarious } = getMonthlyDistrictSeries(db, "monthly-district-detail");
   // Filtered to one district when chosen - "All Districts" (the default)
   // shows the full bank-wide series exactly as before.
   const otherCases = districtId ? allOtherCases.filter((r) => r.district.id === districtId) : allOtherCases;
@@ -152,7 +152,10 @@ export default async function MonthlyDistrictDetailPage({
                       <tr key={`${district.id}-${r.period.id}`}>
                         <td className="px-4 py-2 text-slate-400">{i + 1}</td>
                         <td className="px-4 py-2 text-slate-900">{i === 0 ? district.name : ""}</td>
-                        <td className="px-4 py-2 font-mono text-xs text-slate-600">{r.period.code}</td>
+                        <td className="px-4 py-2 font-mono text-xs text-slate-600">
+                          {r.period.code}
+                          {r.period.name && <span className="ml-1 font-sans text-slate-400">({r.period.name})</span>}
+                        </td>
                         <td className="px-4 py-2 text-slate-700">Other Cases</td>
                         <td className="px-4 py-2 text-slate-700">{formatNumber(r.totalCases)}</td>
                         <td className="px-4 py-2 text-slate-700">{formatNumber(r.outstandingCases)}</td>

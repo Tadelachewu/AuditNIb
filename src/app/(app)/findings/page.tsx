@@ -185,6 +185,8 @@ export default async function FindingsPage({
           sources={db.sources.filter((s) => s.active)}
           categories={db.categories.filter((c) => c.active)}
           riskLevels={db.settings.riskLevels}
+          operationAreas={db.settings.operationAreas}
+          irregularityTypes={db.settings.irregularityTypes}
           fixedDistrict={user.orgScope !== "BANK" && district ? { id: district.id, name: district.name } : undefined}
           fixedBranch={user.orgScope === "BRANCH" && branch ? { id: branch.id, name: branch.name } : undefined}
           statusOptions={FILTERABLE_FINDING_STATUSES}

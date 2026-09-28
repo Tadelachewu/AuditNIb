@@ -18,12 +18,18 @@ export default async function SourcesPage() {
   if (!hasPermission(user.permissions, permissionKey("sources", "view"))) redirect("/dashboard");
 
   const db = await readDb();
+  const permissions = {
+    canCreate: hasPermission(user.permissions, permissionKey("sources", "create")),
+    canEdit: hasPermission(user.permissions, permissionKey("sources", "edit")),
+    canToggle: hasPermission(user.permissions, permissionKey("sources", "toggle-status")),
+    canDelete: hasPermission(user.permissions, permissionKey("sources", "delete")),
+  };
 
   return (
     <div>
       <h1 className="text-lg font-semibold text-slate-900">Finding Sources</h1>
       <p className="mt-1 text-sm text-slate-500">Internal Control, Internal Audit, and future configurable sources.</p>
-      <SourcesManager initialSources={db.sources} />
+      <SourcesManager initialSources={db.sources} permissions={permissions} />
     </div>
   );
 }

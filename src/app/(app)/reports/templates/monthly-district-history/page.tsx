@@ -31,7 +31,7 @@ export default async function MonthlyDistrictHistoryPage({
   const period = db.reportingPeriods.find((p) => p.id === periodId);
   const periodsSorted = [...db.reportingPeriods].sort((a, b) => b.code.localeCompare(a.code));
 
-  const { otherCases } = getMonthlyDistrictSeries(db);
+  const { otherCases } = getMonthlyDistrictSeries(db, "monthly-district-history");
   const rows = period ? otherCases.filter((r) => r.period.id === period.id) : [];
   const totalCases = rows.reduce((sum, r) => sum + r.totalCases, 0);
   const rectifiedCases = rows.reduce((sum, r) => sum + r.rectifiedCases, 0);

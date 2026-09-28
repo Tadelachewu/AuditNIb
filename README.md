@@ -9,39 +9,39 @@ every role (Branch, District, HO, Executive).
 
 For a deep dive into how every piece of this Phase 1 build works and relates
 to the others — data model, auth flow, role/org-unit scoping, each admin
-module — see [PHASE1.md](PHASE1.md). Phase 2 replaced the fixed 7-role
+module — see [PHASE1.md](docs/PHASE1.md). Phase 2 replaced the fixed 7-role
 system with dynamic, admin-editable roles and a page/action permission
-matrix — see [PHASE2.md](PHASE2.md). Phase 3 completed CRUD (in-place edit
+matrix — see [PHASE2.md](docs/PHASE2.md). Phase 3 completed CRUD (in-place edit
 everywhere, real delete where it's safe) and added confirmation dialogs to
-every risky action — see [PHASE3.md](PHASE3.md). Phase 4 started the BRD's
+every risky action — see [PHASE3.md](docs/PHASE3.md). Phase 4 started the BRD's
 role-specific dashboards, beginning with Branch — real data where it
 exists, honest "no data yet" states for anything that needs Findings data —
-see [PHASE4.md](PHASE4.md). Phase 5 made every dashboard/feature its own
+see [PHASE4.md](docs/PHASE4.md). Phase 5 made every dashboard/feature its own
 permission and gave every seeded role a non-empty, BRD-grounded default
-permission set — see [PHASE5.md](PHASE5.md). Phase 6 built the Findings
+permission set — see [PHASE5.md](docs/PHASE5.md). Phase 6 built the Findings
 module itself: the `Finding` entity, the complete workflow state machine
 (register → district review → HO review → rectify → verified close), and
 wired the Branch dashboard's Phase 4 placeholders up to the real numbers —
-see [PHASE6.md](PHASE6.md). Phase 7 closed the remaining BRD gaps: the
+see [PHASE6.md](docs/PHASE6.md). Phase 7 closed the remaining BRD gaps: the
 cross-period Transfer Engine, real local-disk evidence upload, threaded
 comments, an in-app notification center, a Reports/CSV-export module, and
 real District/HO/Executive dashboards (plus a real risk-distribution and
 monthly-trend widget on all four dashboards, Branch included) — see
-[PHASE7.md](PHASE7.md).
+[PHASE7.md](docs/PHASE7.md).
 
 Several companion documents look at the finished app from different
-angles: [BRD_COMPLIANCE.md](BRD_COMPLIANCE.md) is a strict
+angles: [BRD_COMPLIANCE.md](docs/BRD_COMPLIANCE.md) is a strict
 requirement-by-requirement cross-check against every document in
-`AuditDocs/`; [APP_DOCUMENT.md](APP_DOCUMENT.md) is a business-facing,
+`AuditDocs/`; [APP_DOCUMENT.md](docs/APP_DOCUMENT.md) is a business-facing,
 screen-by-screen walkthrough of every feature and *why* the bank needs
 it, verified end-to-end in a live test pass rather than described from
-the code alone; [FINDINGS_WORKFLOW.md](FINDINGS_WORKFLOW.md) is the
+the code alone; [FINDINGS_WORKFLOW.md](docs/FINDINGS_WORKFLOW.md) is the
 complete state-machine reference for the Finding lifecycle - every
 status, every action, who can trigger it, and every side-flow (evidence,
 comments, notifications, transfer, period locking) attached to it;
-[RECTIFICATION.md](RECTIFICATION.md) is a focused deep-dive on exactly
+[RECTIFICATION.md](docs/RECTIFICATION_V1.md) is a focused deep-dive on exactly
 how `PARTIALLY_RECTIFIED` vs. `RECTIFIED` is decided and what each one
-does and doesn't allow next; [SCENARIOS.md](SCENARIOS.md) is a full
+does and doesn't allow next; [SCENARIOS.md](docs/SCENARIOS.md) is a full
 start-to-end test-case list covering the whole app; and
 [security/SECURITY.md](security/SECURITY.md) is a reference register of
 vulnerability classes previously found and fixed across the organization's
@@ -100,7 +100,7 @@ Open [http://localhost:3000](http://localhost:3000). You'll be redirected to `/l
 Log in with any of the [default users](#default-users--roles) below.
 
 To let someone outside this machine reach the running app (a demo, a
-quick review), see [EXPOSE_TO_INTERNET.md](EXPOSE_TO_INTERNET.md) —
+quick review), see [EXPOSE_TO_INTERNET.md](docs/EXPOSE_TO_INTERNET.md) —
 `npm run tunnel:cloudflare` is the one confirmed to work on NIB's
 corporate network.
 
@@ -153,7 +153,7 @@ a password bumps `User.sessionVersion`, which every request re-checks (see
 immediately invalidates every *other* already-open session for that account
 (and a deactivated account's open sessions), not just at next natural
 expiry. Roles are dynamic, admin-editable data (not a fixed list) and access
-is granted per page, per action — see [PHASE2.md](PHASE2.md) for the full
+is granted per page, per action — see [PHASE2.md](docs/PHASE2.md) for the full
 design. [src/proxy.ts](src/proxy.ts) (Next's routing proxy, formerly called
 "middleware") redirects unauthenticated requests to `/login` and redirects
 away from any `/admin/<page>` the session's role doesn't hold `<page>.view`
@@ -189,7 +189,7 @@ Seeded on first run, one user per role (see [src/lib/db.ts](src/lib/db.ts)):
 | Executive (Read-only) | `executive` | `Executive@123` | View-only, every page except Roles & Permissions |
 
 Every seeded role starts with a non-empty, BRD-grounded default (see
-[PHASE5.md](PHASE5.md) for the reasoning behind each one) rather than
+[PHASE5.md](docs/PHASE5.md) for the reasoning behind each one) rather than
 zero access — an admin narrows or widens from there. These are also listed
 on the login page under "Demo accounts". Change or remove them before any
 real deployment. Roles themselves are editable data at `/admin/roles` —
@@ -245,11 +245,11 @@ next time that role's users log in (see PHASE2.md §4).
   server-side (a district/branch user genuinely cannot see or act on
   another district/branch's findings — not just hidden in the UI); every
   transition is recorded with who/when/from/to/reason. See
-  [PHASE6.md](PHASE6.md) for the full design and a live, scripted
+  [PHASE6.md](docs/PHASE6.md) for the full design and a live, scripted
   verification of the BRD's own acceptance example. Phase 7 added a
   Transfer-to-next-period action, real evidence file upload/download,
   threaded comments, and an in-app notification bell — see
-  [PHASE7.md](PHASE7.md).
+  [PHASE7.md](docs/PHASE7.md).
 - Dashboards: Branch, District, HO, and Executive all backed by real
   Finding data (KPIs, category totals, risk distribution, monthly trend,
   work queue, recent activity), each its own permission-gated page.
@@ -265,6 +265,6 @@ adjustment integration into the computed performance figure, and email/
 Outlook delivery for notifications (the in-app notification center exists;
 there's no mail server or Graph API credential to send through) — see
 `AuditDocs/master.txt` §21 for the original phased roadmap and PHASE7.md
-for exactly what's deferred and why. [BRD_COMPLIANCE.md](BRD_COMPLIANCE.md)
+for exactly what's deferred and why. [BRD_COMPLIANCE.md](docs/BRD_COMPLIANCE.md)
 is a full requirement-by-requirement cross-check of the app against every
 document in `AuditDocs/`.

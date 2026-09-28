@@ -44,6 +44,7 @@ interface Lookups {
 interface Permissions {
   canEdit: boolean;
   canDelete: boolean;
+  canDeleteRejected: boolean;
   canSubmit: boolean;
   canDistrictReview: boolean;
   canDistrictReturnReview: boolean;
@@ -184,7 +185,7 @@ export function FindingDetailClient({
 
   async function handleDelete() {
     const result = await confirm({
-      title: "Delete this draft?",
+      title: finding.status === "REJECTED" ? "Delete this rejected finding?" : "Delete this draft?",
       message: `"${finding.reference}" will be permanently removed. This cannot be undone.`,
       confirmLabel: "Delete Permanently",
       tone: "danger",
@@ -604,7 +605,7 @@ export function FindingDetailClient({
         )}
       </Card>
 
-      {!editing && (permissions.canEdit || permissions.canDelete || permissions.canSubmit) && (
+      {!editing && (permissions.canEdit || permissions.canDelete || permissions.canDeleteRejected || permissions.canSubmit) && (
         <div className="flex flex-wrap gap-2">
           {permissions.canEdit && (
             <Button variant="neutral" onClick={() => setEditing(true)} disabled={busy}>
@@ -616,7 +617,7 @@ export function FindingDetailClient({
               {finding.status === "RETURNED" ? "Resubmit" : "Submit"}
             </Button>
           )}
-          {permissions.canDelete && (
+          {(permissions.canDelete || permissions.canDeleteRejected) && (
             <Button variant="danger" onClick={handleDelete} disabled={busy}>
               Delete
             </Button>

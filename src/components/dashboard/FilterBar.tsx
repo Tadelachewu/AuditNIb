@@ -12,6 +12,8 @@ export interface FilterBarProps {
   sources: Source[];
   categories: ClassifiedCategory[];
   riskLevels: string[];
+  operationAreas: string[];
+  irregularityTypes: string[];
   defaultPeriodId?: string;
   /** Org fields the caller's role may not widen past their own scope - shown fixed, not editable. */
   fixedDistrict?: { id: string; name: string };
@@ -42,7 +44,10 @@ export interface FilterBarProps {
 
 /**
  * The BRD's shared filter bar (master.txt §10: "Period, District, Branch,
- * Source, Classified Case, Risk, Status"). Org fields are locked to the
+ * Source, Classified Case, Risk, Status"), plus Operation Area and Type of
+ * Irregularity added on top of that minimum - both are already real
+ * Finding fields (registration-fields.md §8/§9) with no filter anywhere in
+ * the app until now. Org fields are locked to the
  * caller's own scope when provided - "Filters must never bypass
  * organizational scope" - so a Branch user cannot pick a different branch
  * even in the UI. URL-driven, same convention as TimeRangeFilter's own
@@ -59,6 +64,8 @@ export function FilterBar({
   sources,
   categories,
   riskLevels,
+  operationAreas,
+  irregularityTypes,
   defaultPeriodId,
   fixedDistrict,
   fixedBranch,
@@ -77,6 +84,8 @@ export function FilterBar({
     categoryId: searchParams.get("categoryId") ?? "",
     risk: searchParams.get("risk") ?? "",
     status: searchParams.get("status") ?? "",
+    operationArea: searchParams.get("operationArea") ?? "",
+    irregularityType: searchParams.get("irregularityType") ?? "",
   };
 
   function update(patch: Partial<DashboardFilters>) {
@@ -192,6 +201,34 @@ export function FilterBar({
         </div>
 
         <div>
+          <Label htmlFor="f-operation-area">Operation Area</Label>
+          <Select id="f-operation-area" value={filters.operationArea} onChange={(e) => update({ operationArea: e.target.value })}>
+            <option value="">All operation areas</option>
+            {operationAreas.map((a) => (
+              <option key={a} value={a}>
+                {a}
+              </option>
+            ))}
+          </Select>
+        </div>
+
+        <div>
+          <Label htmlFor="f-irregularity-type">Type of Irregularity</Label>
+          <Select
+            id="f-irregularity-type"
+            value={filters.irregularityType}
+            onChange={(e) => update({ irregularityType: e.target.value })}
+          >
+            <option value="">All types</option>
+            {irregularityTypes.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </Select>
+        </div>
+
+        <div>
           <Label htmlFor="f-risk">Risk</Label>
           <Select id="f-risk" value={filters.risk} onChange={(e) => update({ risk: e.target.value })}>
             <option value="">All risk levels</option>
@@ -221,7 +258,9 @@ export function FilterBar({
           filters.sourceId ||
           filters.categoryId ||
           filters.risk ||
-          filters.status) && (
+          filters.status ||
+          filters.operationArea ||
+          filters.irregularityType) && (
           <button
             type="button"
             onClick={() =>
@@ -233,6 +272,8 @@ export function FilterBar({
                 categoryId: "",
                 risk: "",
                 status: "",
+                operationArea: "",
+                irregularityType: "",
               })
             }
             className="text-xs text-slate-500 hover:underline"

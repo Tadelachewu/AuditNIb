@@ -17,8 +17,16 @@ import type { Source } from "@/types";
 // of an apiGet()-triggered local reload racing a separately-tracked copy.
 // Everything that *is* local state here is genuinely ephemeral UI: the
 // add-form draft, which row is mid-edit, and per-row busy flags.
-export function SourcesManager({ initialSources }: { initialSources: Source[] }) {
+interface SourcesPermissions {
+  canCreate: boolean;
+  canEdit: boolean;
+  canToggle: boolean;
+  canDelete: boolean;
+}
+
+export function SourcesManager({ initialSources, permissions }: { initialSources: Source[]; permissions: SourcesPermissions }) {
   const sources = initialSources;
+  const { canCreate, canEdit, canToggle, canDelete } = permissions;
   const router = useRouter();
   const [form, setForm] = useState({ code: "", name: "" });
   const [formError, setFormError] = useState<string | null>(null);
@@ -104,8 +112,24 @@ export function SourcesManager({ initialSources }: { initialSources: Source[] })
     }
   }
 
+  // Setting one source default always unsets whichever one currently is
+  // (server enforces this too) - unsetting the current default needs no
+  // confirmation, but picking a new one is a one-click action either way.
+  async function makeDefault(s: Source) {
+    setRowBusy(s.id);
+    try {
+      await apiSend(`/api/admin/sources/${s.id}`, "PATCH", { isDefault: !s.isDefault });
+      router.refresh();
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : "Failed to update default source");
+    } finally {
+      setRowBusy(null);
+    }
+  }
+
   return (
     <>
+      {canCreate && (
       <Card className="mt-5">
         <CardHeader title="Add Source" />
         <form onSubmit={handleCreate} className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3">
@@ -125,6 +149,7 @@ export function SourcesManager({ initialSources }: { initialSources: Source[] })
           </div>
         </form>
       </Card>
+      )}
 
       <Card className="mt-5">
         <CardHeader title="All Sources" description={`${sources.length} total`} />
@@ -135,6 +160,7 @@ export function SourcesManager({ initialSources }: { initialSources: Source[] })
                 <th className="px-4 py-2 font-medium">Code</th>
                 <th className="px-4 py-2 font-medium">Name</th>
                 <th className="px-4 py-2 font-medium">Status</th>
+                <th className="px-4 py-2 font-medium">Default</th>
                 <th className="px-4 py-2" />
               </tr>
             </thead>
@@ -142,7 +168,10 @@ export function SourcesManager({ initialSources }: { initialSources: Source[] })
               {sources.map((s) => {
                 const isEditing = editingId === s.id;
                 return (
-                  <tr key={s.id}>
+                  <tr
+                    key={s.id}
+                    className={s.isDefault ? "bg-amber-50 shadow-[inset_4px_0_0_0_var(--brand-gold,#feb914)]" : undefined}
+                  >
                     <td className="px-4 py-2 font-mono text-xs text-slate-600">{s.code}</td>
                     <td className="px-4 py-2 font-medium text-slate-900">
                       {isEditing ? (
@@ -157,6 +186,34 @@ export function SourcesManager({ initialSources }: { initialSources: Source[] })
                     <td className="px-4 py-2">
                       <Badge tone={s.active ? "green" : "gray"}>{s.active ? "Active" : "Inactive"}</Badge>
                     </td>
+                    <td className="px-4 py-2">
+                      {s.isDefault ? (
+                        <div className="flex items-center gap-2">
+                          <Badge tone="gold">★ Default</Badge>
+                          {canEdit && (
+                            <button
+                              type="button"
+                              className="text-xs text-slate-500 underline hover:text-slate-700 disabled:opacity-50"
+                              disabled={rowBusy === s.id}
+                              onClick={() => makeDefault(s)}
+                            >
+                              Unset
+                            </button>
+                          )}
+                        </div>
+                      ) : canEdit ? (
+                        <Button
+                          variant="secondary"
+                          disabled={rowBusy === s.id || !s.active}
+                          title={!s.active ? "Activate this source first" : "Pre-fill this source on new findings"}
+                          onClick={() => makeDefault(s)}
+                        >
+                          Set as default
+                        </Button>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
                     <td className="px-4 py-2 text-right">
                       {isEditing ? (
                         <div className="flex justify-end gap-2">
@@ -169,19 +226,25 @@ export function SourcesManager({ initialSources }: { initialSources: Source[] })
                         </div>
                       ) : (
                         <div className="flex justify-end gap-2">
-                          <Button variant="secondary" onClick={() => startEdit(s)}>
-                            Edit
-                          </Button>
-                          <Button
-                            variant={s.active ? "danger" : "secondary"}
-                            disabled={rowBusy === s.id}
-                            onClick={() => toggleActive(s)}
-                          >
-                            {s.active ? "Deactivate" : "Activate"}
-                          </Button>
-                          <Button variant="danger" disabled={rowBusy === s.id} onClick={() => deleteSource(s)}>
-                            Delete
-                          </Button>
+                          {canEdit && (
+                            <Button variant="secondary" onClick={() => startEdit(s)}>
+                              Edit
+                            </Button>
+                          )}
+                          {canToggle && (
+                            <Button
+                              variant={s.active ? "danger" : "secondary"}
+                              disabled={rowBusy === s.id}
+                              onClick={() => toggleActive(s)}
+                            >
+                              {s.active ? "Deactivate" : "Activate"}
+                            </Button>
+                          )}
+                          {canDelete && (
+                            <Button variant="danger" disabled={rowBusy === s.id} onClick={() => deleteSource(s)}>
+                              Delete
+                            </Button>
+                          )}
                         </div>
                       )}
                     </td>

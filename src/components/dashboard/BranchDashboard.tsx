@@ -301,6 +301,8 @@ export function BranchDashboard({
         sources={db.sources.filter((s) => s.active)}
         categories={activeCategories}
         riskLevels={db.settings.riskLevels}
+        operationAreas={db.settings.operationAreas}
+        irregularityTypes={db.settings.irregularityTypes}
         defaultPeriodId={db.reportingPeriods.find((p) => p.status === "OPEN")?.id}
         fixedDistrict={district ? { id: district.id, name: district.name } : undefined}
         fixedBranch={{ id: branch.id, name: branch.name }}

@@ -146,8 +146,32 @@ function branchFromRow(r: Prisma.BranchGetPayload<object>): Branch {
   };
 }
 
+// The sources PATCH route keeps at most one active default on every write,
+// but rows written before that rule (or edited directly in the DB) can
+// still carry several - or an inactive one. Normalize on read so every
+// consumer (Sources admin, Register Finding pre-fill) sees exactly one:
+// the most recently updated active row flagged default. The next write
+// through updateDb() persists the cleaned-up flags.
+function singleDefaultSource(sources: Source[]): Source[] {
+  const winner = sources
+    .filter((s) => s.isDefault && s.active)
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
+  return sources.map((s) => {
+    const keep = s.id === winner?.id;
+    return keep === s.isDefault ? s : { ...s, isDefault: keep };
+  });
+}
+
 function sourceFromRow(r: Prisma.SourceGetPayload<object>): Source {
-  return { id: r.id, code: r.code, name: r.name, active: r.active, createdAt: iso(r.createdAt), updatedAt: iso(r.updatedAt) };
+  return {
+    id: r.id,
+    code: r.code,
+    name: r.name,
+    active: r.active,
+    isDefault: r.isDefault,
+    createdAt: iso(r.createdAt),
+    updatedAt: iso(r.updatedAt),
+  };
 }
 
 function departmentFromRow(r: Prisma.DepartmentGetPayload<object>): Department {
@@ -217,6 +241,7 @@ function periodFromRow(r: Prisma.ReportingPeriodGetPayload<object>): ReportingPe
     year: r.year,
     month: r.month,
     code: r.code,
+    name: r.name,
     startsAt: iso(r.startsAt),
     endsAt: iso(r.endsAt),
     submissionStartsAt: iso(r.submissionStartsAt),
@@ -476,6 +501,7 @@ function settingsFromRow(r: Prisma.SettingsGetPayload<object>): Settings {
     similarFindingFields: r.similarFindingFields as Settings["similarFindingFields"],
     requiredFindingFields: r.requiredFindingFields as unknown as Settings["requiredFindingFields"],
     allowOtherValueFields: r.allowOtherValueFields as unknown as Settings["allowOtherValueFields"],
+    reportTemplateSources: (r as unknown as { reportTemplateSources?: Record<string, string[]> }).reportTemplateSources ?? {},
     updatedAt: iso(r.updatedAt),
     updatedBy: u(r.updatedBy),
   };
@@ -586,7 +612,7 @@ export async function readDb(): Promise<Database> {
     users: users.map(userFromRow),
     districts: districts.map(districtFromRow),
     branches: branches.map(branchFromRow),
-    sources: sources.map(sourceFromRow),
+    sources: singleDefaultSource(sources.map(sourceFromRow)),
     departments: departments.map(departmentFromRow),
     categories: categories.map(categoryFromRow),
     uncoveredReasons: uncoveredReasons.map(uncoveredReasonFromRow),
@@ -719,7 +745,14 @@ function branchToData(r: Branch) {
 }
 
 function sourceToData(r: Source) {
-  return { code: r.code, name: r.name, active: r.active, createdAt: toDate(r.createdAt), updatedAt: toDate(r.updatedAt) };
+  return {
+    code: r.code,
+    name: r.name,
+    active: r.active,
+    isDefault: r.isDefault,
+    createdAt: toDate(r.createdAt),
+    updatedAt: toDate(r.updatedAt),
+  };
 }
 
 function departmentToData(r: Department) {
@@ -786,6 +819,7 @@ function periodToData(r: ReportingPeriod) {
     year: r.year,
     month: r.month,
     code: r.code,
+    name: r.name ?? null,
     startsAt: toDate(r.startsAt),
     endsAt: toDate(r.endsAt),
     submissionStartsAt: toDate(r.submissionStartsAt),
@@ -1078,6 +1112,7 @@ async function persistChanges(before: Database, after: Database): Promise<void> 
           similarFindingFields: s.similarFindingFields,
           requiredFindingFields: s.requiredFindingFields as object,
           allowOtherValueFields: s.allowOtherValueFields as object,
+          reportTemplateSources: s.reportTemplateSources as object,
           permissionRegistrySyncedKeys: after.permissionRegistrySyncedKeys,
           updatedAt: toDate(s.updatedAt),
           updatedBy: s.updatedBy ?? null,

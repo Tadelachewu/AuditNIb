@@ -2,7 +2,7 @@
 
 This document explains what was actually built in Phase 1, how each piece
 works internally, and how the pieces relate to each other. It's the deep
-version of the summary table in [README.md](README.md).
+version of the summary table in [README.md](../README.md).
 
 Phase 1 corresponds to the plan's Phase 0/1/10 pulled forward: architecture,
 auth, organization hierarchy, users/roles, navigation/route guards, and the

@@ -198,6 +198,8 @@ export function ExecutiveDashboard({
         sources={activeSources}
         categories={db.categories.filter((c) => c.active)}
         riskLevels={db.settings.riskLevels}
+        operationAreas={db.settings.operationAreas}
+        irregularityTypes={db.settings.irregularityTypes}
         defaultPeriodId={db.reportingPeriods.find((p) => p.status === "OPEN")?.id}
         statusOptions={HO_APPROVED_OR_LATER_STATUSES}
         hint="Filters apply immediately. Performance % always reflects the full scoring formula, not narrowed by source/category/risk/status."

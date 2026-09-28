@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/Button";
 import { Input, Select, Label } from "@/components/ui/Field";
 import { Badge } from "@/components/ui/Badge";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { usePermissions } from "@/lib/permissions/PermissionsContext";
+import { hasPermission } from "@/lib/permissions/registry";
 import type { ScoringAdjustment, District, Branch, ReportingPeriod } from "@/types";
 
 const emptyForm = { targetType: "DISTRICT" as "DISTRICT" | "BRANCH", targetId: "", periodId: "", value: "", reason: "" };
@@ -24,6 +26,9 @@ export default function ScoringAdjustmentsPage() {
   const [rowBusy, setRowBusy] = useState<string | null>(null);
   const [rowError, setRowError] = useState<string | null>(null);
   const { confirm, dialog } = useConfirm();
+  const permissions = usePermissions();
+  const canCreate = hasPermission(permissions, "scoring-adjustments.create");
+  const canToggle = hasPermission(permissions, "scoring-adjustments.toggle-status");
 
   async function load() {
     setLoading(true);
@@ -112,6 +117,7 @@ export default function ScoringAdjustmentsPage() {
         outright. Every adjustment (and every activate/deactivate) requires a reason and is written to the audit trail.
       </p>
 
+      {canCreate && (
       <Card className="mt-5">
         <CardHeader title="New Adjustment" />
         <form onSubmit={handleCreate} className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -171,6 +177,7 @@ export default function ScoringAdjustmentsPage() {
           </div>
         </form>
       </Card>
+      )}
 
       <Card className="mt-5">
         <CardHeader title="Adjustment History" description={`${adjustments.length} total`} />
@@ -217,13 +224,15 @@ export default function ScoringAdjustmentsPage() {
                     <td className="px-4 py-2 text-slate-600">{a.reason}</td>
                     <td className="px-4 py-2 text-xs text-slate-400">{formatDateTime(a.createdAt)}</td>
                     <td className="px-4 py-2">
-                      <Button
-                        variant={a.status === "ACTIVE" ? "danger" : "success"}
-                        disabled={rowBusy === a.id}
-                        onClick={() => toggleStatus(a)}
-                      >
-                        {a.status === "ACTIVE" ? "Deactivate" : "Activate"}
-                      </Button>
+                      {canToggle && (
+                        <Button
+                          variant={a.status === "ACTIVE" ? "danger" : "success"}
+                          disabled={rowBusy === a.id}
+                          onClick={() => toggleStatus(a)}
+                        >
+                          {a.status === "ACTIVE" ? "Deactivate" : "Activate"}
+                        </Button>
+                      )}
                     </td>
                   </tr>
                 ))}

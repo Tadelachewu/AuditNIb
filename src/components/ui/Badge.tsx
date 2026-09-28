@@ -3,7 +3,7 @@ export function Badge({
   children,
   className = "",
 }: {
-  tone: "green" | "gray" | "amber" | "red" | "blue";
+  tone: "green" | "gray" | "amber" | "red" | "blue" | "gold";
   children: React.ReactNode;
   className?: string;
 }) {
@@ -13,6 +13,11 @@ export function Badge({
     amber: "bg-amber-50 text-amber-700 ring-amber-600/20",
     red: "bg-red-50 text-red-700 ring-red-600/20",
     blue: "bg-blue-50 text-blue-700 ring-blue-600/20",
+    // On-brand highlight for a single "this one is the chosen default"
+    // designation - deliberately distinct from every other tone here (all
+    // status/severity colors) so a default reads as special, not just
+    // another status.
+    gold: "bg-brand-gold text-on-gold ring-brand-gold-dark/40",
   };
   return (
     <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${tones[tone]} ${className}`}>

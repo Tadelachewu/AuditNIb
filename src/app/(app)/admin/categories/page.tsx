@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/Button";
 import { Input, Label } from "@/components/ui/Field";
 import { Badge } from "@/components/ui/Badge";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { usePermissions } from "@/lib/permissions/PermissionsContext";
+import { hasPermission } from "@/lib/permissions/registry";
 import type { ClassifiedCategory } from "@/types";
 
 export default function CategoriesPage() {
@@ -20,6 +22,11 @@ export default function CategoriesPage() {
   const [editName, setEditName] = useState("");
   const [editError, setEditError] = useState<string | null>(null);
   const { confirm, dialog } = useConfirm();
+  const permissions = usePermissions();
+  const canCreate = hasPermission(permissions, "categories.create");
+  const canEdit = hasPermission(permissions, "categories.edit");
+  const canToggle = hasPermission(permissions, "categories.toggle-status");
+  const canDelete = hasPermission(permissions, "categories.delete");
 
   async function load() {
     setLoading(true);
@@ -137,6 +144,7 @@ export default function CategoriesPage() {
         visible for general reporting.
       </p>
 
+      {canCreate && (
       <Card className="mt-5">
         <CardHeader title="Add Category" />
         <form onSubmit={handleCreate} className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-4 sm:items-end">
@@ -166,6 +174,7 @@ export default function CategoriesPage() {
           </div>
         </form>
       </Card>
+      )}
 
       <Card className="mt-5">
         <CardHeader title="All Categories" description={`${categories.length} total`} />
@@ -205,9 +214,13 @@ export default function CategoriesPage() {
                         )}
                       </td>
                       <td className="px-4 py-2">
-                        <button onClick={() => toggleScored(c)} disabled={rowBusy === c.id}>
+                        {canEdit ? (
+                          <button onClick={() => toggleScored(c)} disabled={rowBusy === c.id}>
+                            <Badge tone={c.scored ? "blue" : "gray"}>{c.scored ? "Scored" : "Informational"}</Badge>
+                          </button>
+                        ) : (
                           <Badge tone={c.scored ? "blue" : "gray"}>{c.scored ? "Scored" : "Informational"}</Badge>
-                        </button>
+                        )}
                       </td>
                       <td className="px-4 py-2">
                         <Badge tone={c.active ? "green" : "gray"}>{c.active ? "Active" : "Inactive"}</Badge>
@@ -224,19 +237,25 @@ export default function CategoriesPage() {
                           </div>
                         ) : (
                           <div className="flex justify-end gap-2">
-                            <Button variant="secondary" onClick={() => startEdit(c)}>
-                              Edit
-                            </Button>
-                            <Button
-                              variant={c.active ? "danger" : "secondary"}
-                              disabled={rowBusy === c.id}
-                              onClick={() => toggleActive(c)}
-                            >
-                              {c.active ? "Deactivate" : "Activate"}
-                            </Button>
-                            <Button variant="danger" disabled={rowBusy === c.id} onClick={() => deleteCategory(c)}>
-                              Delete
-                            </Button>
+                            {canEdit && (
+                              <Button variant="secondary" onClick={() => startEdit(c)}>
+                                Edit
+                              </Button>
+                            )}
+                            {canToggle && (
+                              <Button
+                                variant={c.active ? "danger" : "secondary"}
+                                disabled={rowBusy === c.id}
+                                onClick={() => toggleActive(c)}
+                              >
+                                {c.active ? "Deactivate" : "Activate"}
+                              </Button>
+                            )}
+                            {canDelete && (
+                              <Button variant="danger" disabled={rowBusy === c.id} onClick={() => deleteCategory(c)}>
+                                Delete
+                              </Button>
+                            )}
                           </div>
                         )}
                       </td>

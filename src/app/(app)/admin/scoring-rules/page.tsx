@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/Button";
 import { Input, Label } from "@/components/ui/Field";
 import { Badge } from "@/components/ui/Badge";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { usePermissions } from "@/lib/permissions/PermissionsContext";
+import { hasPermission } from "@/lib/permissions/registry";
 import type { ScoringRule, ClassifiedCategory, Source } from "@/types";
 
 const emptyForm = {
@@ -50,6 +52,11 @@ export default function ScoringRulesPage() {
   const [basisEditedManually, setBasisEditedManually] = useState(false);
   const [editBasisEditedManually, setEditBasisEditedManually] = useState(false);
   const { confirm, dialog } = useConfirm();
+  const permissions = usePermissions();
+  const canCreate = hasPermission(permissions, "scoring-rules.create");
+  const canEdit = hasPermission(permissions, "scoring-rules.edit");
+  const canDelete = hasPermission(permissions, "scoring-rules.delete");
+  const canActivate = hasPermission(permissions, "scoring-rules.activate");
 
   async function load() {
     setLoading(true);
@@ -194,6 +201,7 @@ export default function ScoringRulesPage() {
         time.
       </p>
 
+      {canCreate && (
       <Card className="mt-5">
         <CardHeader title="New Scoring Rule Version" />
         <form onSubmit={handleCreate} className="grid grid-cols-1 gap-4 p-4">
@@ -289,6 +297,7 @@ export default function ScoringRulesPage() {
           </div>
         </form>
       </Card>
+      )}
 
       <Card className="mt-5">
         <CardHeader title="Rule History" description={`${rules.length} version(s)`} />
@@ -306,25 +315,31 @@ export default function ScoringRulesPage() {
                     {!r.everActivated && <Badge tone="gray">Draft — never activated</Badge>}
                   </div>
                   <div className="flex items-center gap-2">
-                    <Button
-                      variant={r.active ? "secondary" : "primary"}
-                      disabled={rowBusy === r.id}
-                      onClick={() => setActive(r, !r.active)}
-                    >
-                      {r.active ? "Deactivate" : "Activate"}
-                    </Button>
+                    {canActivate && (
+                      <Button
+                        variant={r.active ? "secondary" : "primary"}
+                        disabled={rowBusy === r.id}
+                        onClick={() => setActive(r, !r.active)}
+                      >
+                        {r.active ? "Deactivate" : "Activate"}
+                      </Button>
+                    )}
                     {!r.everActivated && (
                       <>
-                        <Button
-                          variant="secondary"
-                          disabled={rowBusy === r.id}
-                          onClick={() => (editingRuleId === r.id ? setEditingRuleId(null) : startEditRule(r))}
-                        >
-                          {editingRuleId === r.id ? "Cancel" : "Edit"}
-                        </Button>
-                        <Button variant="danger" disabled={rowBusy === r.id} onClick={() => deleteRule(r)}>
-                          Delete
-                        </Button>
+                        {canEdit && (
+                          <Button
+                            variant="secondary"
+                            disabled={rowBusy === r.id}
+                            onClick={() => (editingRuleId === r.id ? setEditingRuleId(null) : startEditRule(r))}
+                          >
+                            {editingRuleId === r.id ? "Cancel" : "Edit"}
+                          </Button>
+                        )}
+                        {canDelete && (
+                          <Button variant="danger" disabled={rowBusy === r.id} onClick={() => deleteRule(r)}>
+                            Delete
+                          </Button>
+                        )}
                       </>
                     )}
                   </div>

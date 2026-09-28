@@ -40,9 +40,18 @@ const updateSchema = z
     // longer fits inside the just-changed period range.
     startsAt: z.string().min(1).optional(),
     endsAt: z.string().min(1).optional(),
+    // Renaming carries none of the date-range safety concerns above - safe
+    // to change regardless of whether findings already reference this
+    // period. `""` clears an existing name back to unset.
+    name: z.string().optional(),
   })
   .refine(
-    (v) => v.status !== undefined || v.draftsAllowedWhileLocked !== undefined || v.submissionStartsAt !== undefined || v.startsAt !== undefined,
+    (v) =>
+      v.status !== undefined ||
+      v.draftsAllowedWhileLocked !== undefined ||
+      v.submissionStartsAt !== undefined ||
+      v.startsAt !== undefined ||
+      v.name !== undefined,
     { message: "Nothing to update" }
   )
   .refine((v) => (v.submissionStartsAt === undefined) === (v.submissionEndsAt === undefined), {
@@ -75,7 +84,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid input" }, { status: 400 });
   }
-  const { status, reason, draftsAllowedWhileLocked, transferOverdueCases, submissionStartsAt, submissionEndsAt, startsAt, endsAt } =
+  const { status, reason, draftsAllowedWhileLocked, transferOverdueCases, submissionStartsAt, submissionEndsAt, startsAt, endsAt, name } =
     parsed.data;
 
   const db = await readDb();
@@ -141,6 +150,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       p.submissionStartsAt = new Date(submissionStartsAt).toISOString();
       p.submissionEndsAt = new Date(submissionEndsAt!).toISOString();
     }
+    if (name !== undefined) p.name = name.trim() || null;
     p.updatedAt = now;
     appendAuditLog(current, {
       userId: auth.session.userId!,
@@ -152,6 +162,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         status: existing.status,
         draftsAllowedWhileLocked: existing.draftsAllowedWhileLocked,
         code: existing.code,
+        name: existing.name ?? null,
         startsAt: existing.startsAt,
         endsAt: existing.endsAt,
         submissionStartsAt: existing.submissionStartsAt,
@@ -161,6 +172,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         status: p.status,
         draftsAllowedWhileLocked: p.draftsAllowedWhileLocked,
         code: p.code,
+        name: p.name ?? null,
         startsAt: p.startsAt,
         endsAt: p.endsAt,
         submissionStartsAt: p.submissionStartsAt,

@@ -698,6 +698,12 @@ export interface PerformanceScope {
   // findingCasesEligibleInPeriod() applies there too, not just to the
   // headline Performance % figure.
   sourceId?: string;
+  // Narrows to multiple source IDs on top of the active ScoringRule's own
+  // source gate (rule.sources). When both this AND sourceId are set,
+  // sourceIds takes precedence (broader, never narrower than either
+  // alone). Used by report template functions' per-template source
+  // filters (Settings.reportTemplateSources).
+  sourceIds?: string[];
 }
 
 /**
@@ -886,7 +892,9 @@ export function computeEligibleCaseCounts(db: Database, scope: PerformanceScope)
       isHoApproved(f) &&
       (!scope.branchId || f.branchId === scope.branchId) &&
       (!scope.districtId || f.districtId === scope.districtId) &&
-      (!scope.sourceId || f.sourceId === scope.sourceId)
+      (!scope.sourceIds
+        ? !scope.sourceId || f.sourceId === scope.sourceId
+        : scope.sourceIds.length === 0 || scope.sourceIds.includes(f.sourceId))
   );
 
   if (!scope.periodId) {
@@ -923,7 +931,7 @@ export function computeEligibleCaseCounts(db: Database, scope: PerformanceScope)
  * recently created one wins.
  */
 export function getActiveScoringAdjustment(db: Database, scope: PerformanceScope): ScoringAdjustment | null {
-  if (scope.sourceId || !scope.periodId) return null;
+  if (scope.sourceId || (scope.sourceIds && scope.sourceIds.length > 0) || !scope.periodId) return null;
   const matches = db.scoringAdjustments.filter((a) => {
     if (a.status !== "ACTIVE" || a.periodId !== scope.periodId) return false;
     if (a.targetType === "BRANCH") return a.targetId === scope.branchId;

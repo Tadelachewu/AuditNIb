@@ -187,7 +187,7 @@ an identical permission set) with the Controller's name and reason.
 ## 4. Rectification & Closure — the arithmetic
 
 Full deep-dive, worked examples, and the itemized-case variant live in
-[RECTIFICATION.md](RECTIFICATION.md). The short version:
+[RECTIFICATION_V1.md](RECTIFICATION_V1.md). The short version:
 
 - `finding.rectifiedCases`/`rectifiedAmount` are running totals, updated
   by every accepted `POST .../rectify` call, each of which also appends a
@@ -257,7 +257,7 @@ skipped (it's no longer in that period by the time the sweep runs).
 
 **Period-scoped performance after a transfer** doesn't rely on
 `finding.periodId` alone — see `findingCasesEligibleInPeriod()` and
-[RECTIFICATION.md §9](RECTIFICATION.md#9-period-performance-after-a-transfer)
+[RECTIFICATION_V1.md §9](RECTIFICATION_V1.md#9-period-performance-after-a-transfer)
 for the segment-based walk that credits each period only the cases/
 rectification that actually happened while the finding belonged to it.
 
@@ -449,7 +449,7 @@ monthly reporting period rather than a free date range. Exports to CSV
 | Topic | Document |
 |---|---|
 | Full permission table, registration fields, worked end-to-end trace, BR-WF-001–020 cross-check | [FINDINGS_WORKFLOW.md](FINDINGS_WORKFLOW.md) *(state diagram there is stale — this page's §2 is current)* |
-| Rectification/Closure arithmetic, ledger vs. running total, itemized-case worked example | [RECTIFICATION.md](RECTIFICATION.md) |
+| Rectification/Closure arithmetic, ledger vs. running total, itemized-case worked example | [RECTIFICATION_V1.md](RECTIFICATION_V1.md) |
 | BRD clause-by-clause compliance | [BRD_COMPLIANCE.md](BRD_COMPLIANCE.md) |
 | Test scenarios | [SCENARIOS.md](SCENARIOS.md) |
 | Gaps found against Document_3 and their fix status | [MISSING_FUNCTIONALITY.md](MISSING_FUNCTIONALITY.md) |

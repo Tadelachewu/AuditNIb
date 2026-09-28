@@ -6,24 +6,36 @@ import { CollapsibleCard } from "@/components/ui/CollapsibleCard";
 import { Button } from "@/components/ui/Button";
 import { Input, Select, Label } from "@/components/ui/Field";
 import { SettingsListEditor } from "@/components/admin/SettingsListEditor";
+import { REPORT_TEMPLATES } from "@/lib/reportTemplates";
 import { SIMILAR_FINDING_FIELDS, REQUIRABLE_FINDING_FIELDS, OTHER_VALUE_ALLOWED_FIELDS } from "@/types";
-import type { Settings, SafeUser } from "@/types";
+import { usePermissions } from "@/lib/permissions/PermissionsContext";
+import { hasPermission } from "@/lib/permissions/registry";
+import type { Settings, SafeUser, Source } from "@/types";
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [bankUsers, setBankUsers] = useState<SafeUser[]>([]);
+  const [sources, setSources] = useState<Source[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [testEmailSending, setTestEmailSending] = useState(false);
   const [testEmailResult, setTestEmailResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const permissions = usePermissions();
+  const canEdit = hasPermission(permissions, "settings.edit");
 
   useEffect(() => {
-    apiGet<{ settings: Settings }>("/api/admin/settings").then(({ settings }) => setSettings(settings));
+    // reportTemplateSources is a newer column - a server still running an
+    // older Prisma client (or a row predating the migration) returns it
+    // missing, so default it here rather than crash the render below.
+    apiGet<{ settings: Settings }>("/api/admin/settings").then(({ settings }) =>
+      setSettings({ ...settings, reportTemplateSources: settings.reportTemplateSources ?? {} })
+    );
     // Every active BANK-scoped user (ADMIN/HO Controller/Executive holders)
     // - the only pool a hoApproval approver can be picked from, enforced
     // again server-side in the PATCH route.
     apiGet<{ users: SafeUser[] }>("/api/admin/users?orgScope=BANK").then(({ users }) => setBankUsers(users));
+    apiGet<{ sources: Source[] }>("/api/admin/sources").then(({ sources }) => setSources(sources));
   }, []);
 
   function updateList(key: keyof Pick<Settings, "currencies" | "riskLevels" | "operationAreas" | "priorityLevels" | "irregularityTypes">, items: string[]) {
@@ -51,9 +63,10 @@ export default function SettingsPage() {
         similarFindingFields: settings.similarFindingFields,
         requiredFindingFields: settings.requiredFindingFields,
         allowOtherValueFields: settings.allowOtherValueFields,
+        reportTemplateSources: settings.reportTemplateSources ?? {},
       };
       const res = await apiSend<{ settings: Settings }>("/api/admin/settings", "PATCH", payload);
-      setSettings(res.settings);
+      setSettings({ ...res.settings, reportTemplateSources: res.settings.reportTemplateSources ?? {} });
       setSaved(true);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to save settings");
@@ -84,8 +97,13 @@ export default function SettingsPage() {
         Currencies, risk levels, operation areas, priority levels, irregularity types, and notification delivery
         configuration.
       </p>
+      {!canEdit && (
+        <p className="mt-2 rounded-md bg-slate-100 px-3 py-2 text-sm text-slate-600">
+          View-only access - your role doesn&apos;t hold Settings &rsaquo; Edit, so every field below is read-only.
+        </p>
+      )}
 
-      <CollapsibleCard
+      <CollapsibleCard disabled={!canEdit}
         className="mt-5"
         title="Configurable Lists"
         description="Each list drives a dropdown on the Finding registration form. Expand a section to add or remove a value."
@@ -121,7 +139,7 @@ export default function SettingsPage() {
         </div>
       </CollapsibleCard>
 
-      <CollapsibleCard className="mt-4" title="Notification Delivery">
+      <CollapsibleCard disabled={!canEdit} className="mt-4" title="Notification Delivery">
         <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2">
           <div>
             <Label htmlFor="provider">Provider</Label>
@@ -170,6 +188,7 @@ export default function SettingsPage() {
             </>
           )}
         </div>
+        {canEdit && (
         <div className="flex flex-wrap items-center gap-3 border-t border-slate-200 p-4">
           <Button type="button" variant="secondary" onClick={handleTestEmail} disabled={testEmailSending}>
             {testEmailSending ? "Sending..." : "Send Test Email"}
@@ -181,9 +200,10 @@ export default function SettingsPage() {
             <p className={`text-sm ${testEmailResult.ok ? "text-emerald-700" : "text-red-600"}`}>{testEmailResult.message}</p>
           )}
         </div>
+        )}
       </CollapsibleCard>
 
-      <CollapsibleCard
+      <CollapsibleCard disabled={!canEdit}
         className="mt-4"
         title="Case Transfer"
         description="Allow transferring outstanding findings when a period locks."
@@ -213,7 +233,7 @@ export default function SettingsPage() {
         </div>
       </CollapsibleCard>
 
-      <CollapsibleCard
+      <CollapsibleCard disabled={!canEdit}
         className="mt-4"
         title="Performance Ranking Visibility"
         description="Independently for branches and districts."
@@ -252,7 +272,7 @@ export default function SettingsPage() {
         </div>
       </CollapsibleCard>
 
-      <CollapsibleCard
+      <CollapsibleCard disabled={!canEdit}
         className="mt-4"
         title="Rectification Reminders"
         description="A time-based nudge for findings sitting too long awaiting rectification."
@@ -301,7 +321,7 @@ export default function SettingsPage() {
         </div>
       </CollapsibleCard>
 
-      <CollapsibleCard
+      <CollapsibleCard disabled={!canEdit}
         className="mt-4"
         title="Top / Bottom Performers"
         description="Thresholds driving the Top/Bottom Performers widgets on HO/District/Executive dashboards."
@@ -347,7 +367,7 @@ export default function SettingsPage() {
         </div>
       </CollapsibleCard>
 
-      <CollapsibleCard
+      <CollapsibleCard disabled={!canEdit}
         className="mt-4"
         title="Bank-Wide Approval"
         description="Optional approval step for findings registered by a bank-wide (HO/Admin) user."
@@ -397,7 +417,7 @@ export default function SettingsPage() {
         </div>
       </CollapsibleCard>
 
-      <CollapsibleCard
+      <CollapsibleCard disabled={!canEdit}
         className="mt-4"
         title="Finding Registration Fields"
         description="Which fields must be filled in to register or edit a finding, vs. left blank."
@@ -433,7 +453,7 @@ export default function SettingsPage() {
         </div>
       </CollapsibleCard>
 
-      <CollapsibleCard
+      <CollapsibleCard disabled={!canEdit}
         className="mt-4"
         title={'Custom "Other" Values'}
         description="Which dropdowns let a registrant type in a value that isn't in the configured list."
@@ -466,7 +486,7 @@ export default function SettingsPage() {
         </div>
       </CollapsibleCard>
 
-      <CollapsibleCard
+      <CollapsibleCard disabled={!canEdit}
         className="mt-4"
         title="Duplicate Finding Detection"
         description="Which fields the Register Finding form's 'similar finding already on record' check compares."
@@ -501,13 +521,74 @@ export default function SettingsPage() {
         </div>
       </CollapsibleCard>
 
+      <CollapsibleCard disabled={!canEdit}
+        className="mt-4"
+        title="Report Template Source Filters"
+        description="Independently for each of the 11 report templates, which finding sources count toward that template's totals."
+      >
+        <div className="flex flex-col gap-5 p-4">
+          {sources.length === 0 && (
+            <p className="text-sm text-slate-400">
+              No sources configured yet - add sources first at Admin &rarr; Sources, then return here to scope each
+              report template to a subset.
+            </p>
+          )}
+          {REPORT_TEMPLATES.map((t) => {
+            const selected = settings.reportTemplateSources?.[t.slug] ?? [];
+            return (
+              <div key={t.slug} className="rounded-md border border-slate-200 p-3">
+                <div className="mb-2">
+                  <p className="text-sm font-medium text-slate-900">{t.label}</p>
+                  <p className="text-xs text-slate-500">{t.description}</p>
+                </div>
+                <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 md:grid-cols-3">
+                  {sources
+                    .filter((s) => s.active)
+                    .map((s) => (
+                      <label key={s.id} className="flex items-center gap-2 text-sm text-slate-700">
+                        <input
+                          type="checkbox"
+                          checked={selected.includes(s.id)}
+                          onChange={(e) =>
+                            setSettings({
+                              ...settings,
+                              reportTemplateSources: {
+                                ...settings.reportTemplateSources,
+                                [t.slug]: e.target.checked
+                                  ? [...selected, s.id]
+                                  : selected.filter((id) => id !== s.id),
+                              },
+                            })
+                          }
+                          className="h-4 w-4 rounded border-slate-300"
+                        />
+                        <span>
+                          {s.name}
+                          <span className="text-xs text-slate-400"> ({s.code})</span>
+                        </span>
+                      </label>
+                    ))}
+                </div>
+                <p className="mt-2 text-xs text-slate-400">
+                  {selected.length === 0
+                    ? "All sources included (default)."
+                    : `${selected.length} source${selected.length === 1 ? "" : "s"} selected — only findings from the checked source(s) appear on this report.`}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+      </CollapsibleCard>
+
       {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
       {saved && <p className="mt-4 text-sm text-emerald-600">Settings saved.</p>}
+      {canEdit && (
       <div className="mt-4">
         <Button onClick={handleSave} disabled={saving}>
           {saving ? "Saving..." : "Save Settings"}
         </Button>
       </div>
+      )}
     </div>
   );
 }

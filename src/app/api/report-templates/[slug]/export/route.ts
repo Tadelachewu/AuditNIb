@@ -103,7 +103,7 @@ function buildCsv(slug: string, db: Database, params: URLSearchParams): string |
         i + 1,
         r.totalBranches,
         r.district.name,
-        ...r.perCategory.map((c) => c.outstanding),
+        ...r.perCategory.map((c) => c.total),
         r.amountInvolved,
         r.totalOutstanding,
         r.officialRectified,
@@ -133,7 +133,7 @@ function buildCsv(slug: string, db: Database, params: URLSearchParams): string |
       // picker now shows one period at a time, not every period stacked) -
       // omitted entirely, this still exports the full history across every
       // period, same as before that page-level filter existed.
-      let rows = getMonthlyDistrictSeries(db).otherCases;
+      let rows = getMonthlyDistrictSeries(db, "monthly-district-history").otherCases;
       if (periodId) rows = rows.filter((r) => r.period.id === periodId);
       return toCsv(
         ["Period", "Total No. of Branches", "District", "Others Cases", "Unrectified", "Rectified", "rectified percetage"],
@@ -150,7 +150,7 @@ function buildCsv(slug: string, db: Database, params: URLSearchParams): string |
       // month - see getMonthlyDistrictSeries()'s own doc comment). Mirrors
       // exactly how the on-screen table (monthly-district-detail/page.tsx)
       // renders the same series, so CSV and screen never diverge.
-      const { otherCases, various } = getMonthlyDistrictSeries(db);
+      const { otherCases, various } = getMonthlyDistrictSeries(db, "monthly-district-detail");
       const variousByDistrict = new Map(various.map((v) => [v.district.id, v]));
       const byDistrict = new Map<string, typeof otherCases>();
       for (const r of otherCases) {

@@ -44,6 +44,36 @@ function activeDistricts(db: Database): District[] {
   return db.districts.filter((d) => d.status === "ACTIVE");
 }
 
+// Per-template source inclusion filter: returns the configured source IDs
+// for `templateSlug`, or `undefined` when the template has no explicit
+// configuration (meaning "include every source" - the backward-compatible
+// default). Callers use `appliesSourceFilter` below to narrow a candidate
+// finding pool to only the configured sources, or pass the returned IDs
+// to computeEligibleCaseCounts via PerformanceScope.sourceIds.
+//
+// Settings.reportTemplateSources[slug] is either absent (no override) or
+// an array of Source IDs. An empty array is treated the same as absent
+// (no one configures a template to include zero sources - that would
+// zero out the whole report, so we treat it as a no-op instead of
+// silently returning an all-empty sheet).
+function getTemplateSourceIds(db: Database, templateSlug: string): string[] | undefined {
+  const configured = db.settings.reportTemplateSources[templateSlug];
+  if (!configured || configured.length === 0) return undefined;
+  return configured;
+}
+
+// Applies the template's configured source filter (if any) to an in-memory
+// finding array. Used by every template that builds its own candidate pool
+// with a plain db.findings.filter(...) instead of going through
+// computeEligibleCaseCounts - which instead takes sourceIds directly via
+// PerformanceScope so the FIFO transfer-case segmentation fix still
+// applies to the narrowed population.
+function applySourceFilter(db: Database, templateSlug: string, findings: Finding[]): Finding[] {
+  const ids = getTemplateSourceIds(db, templateSlug);
+  if (!ids) return findings;
+  return findings.filter((f) => ids.includes(f.sourceId));
+}
+
 // The bank's own Excel column order (see report/*.xlsx's "Category Detail
 // by District"/"Monthly Summary Report" sheets) - Zero Balance comes
 // before Dormant Account there, unlike db.categories' own creation order
@@ -81,7 +111,18 @@ export function getUncoveredBranches(db: Database, periodId: string): UncoveredB
   // f.periodId === periodId check would call it "uncovered" the moment
   // that finding transfers away, which is wrong (see
   // findingsResidentInPeriod()'s own doc comment).
-  const coveredBranchIds = new Set(findingsResidentInPeriod(db, periodId, db.findings).map((r) => r.finding.branchId));
+  //
+  // Excludes bank-scope-registered and bulk-imported findings from the
+  // candidate pool: neither reflects the BRANCH's own live reporting
+  // activity this period - a bank-scope finding was registered by HO on
+  // the branch's behalf (registeredByBankScope), and an imported row is a
+  // historical backfill (importBatchId set), not something the branch
+  // itself submitted now. A branch whose only activity this period is one
+  // of these should still show up here as not having done its own
+  // reporting, even though a Finding row technically exists against it.
+  let coverageCandidates = db.findings.filter((f) => !f.registeredByBankScope && !f.importBatchId);
+  coverageCandidates = applySourceFilter(db, "uncovered-branches", coverageCandidates);
+  const coveredBranchIds = new Set(findingsResidentInPeriod(db, periodId, coverageCandidates).map((r) => r.finding.branchId));
   return activeBranches(db)
     .filter((b) => !coveredBranchIds.has(b.id))
     .map((b) => ({
@@ -123,13 +164,14 @@ export function getCategoryDetailByDistrict(
   totalRow: { totalCases: number; totalRectified: number; totalOutstanding: number; rectifiedPct: number | null };
 } {
   const categories = activeCategories(db);
+  const sourceFilteredFindings = applySourceFilter(db, "category-detail-by-district", db.findings);
   const rows: CategoryDetailRow[] = activeDistricts(db).map((district) => {
     const perCategory = categories.map((category) => {
       // isHoApproved() gate - a finding still in DISTRICT_REVIEW/HO_REVIEW
       // (or REJECTED/RETURNED) isn't official yet and shouldn't count
       // toward a district's reported totals before anyone's actually
       // approved it, same gate every dashboard "official" figure applies.
-      const candidates = db.findings.filter((f) => f.districtId === district.id && f.categoryId === category.id && isHoApproved(f));
+      const candidates = sourceFilteredFindings.filter((f) => f.districtId === district.id && f.categoryId === category.id && isHoApproved(f));
       // Period-scoped (eligibleCases/closedCases), not the finding's live
       // lifetime caseCount/rectifiedCases - a transferred finding must
       // count toward exactly one period's total, never zero or two (see
@@ -161,23 +203,30 @@ export function getCategoryDetailByDistrict(
 }
 
 // ---------------------------------------------------------------------------
-// 3. Monthly Summary Report - one outstanding-case count per category (the
-// Excel condenses #2's Unrectified/Rectified pair down to a single number
-// per category here - see the sheet's own formulas, which pull just the
-// Unrectified half of each pair), plus amount involved, branch dispatch
-// coverage from #1, and the district's official BRD score (computePerformance
-// - the Other Case category is the only one the bank's own workflow ever
-// tracks rectification against, so "Rectified"/"Rectified %" here are that
-// same official score, not a second, informal tally). "Total No. of cases"
-// is the true unrectified+rectified total - the source workbook's own
-// formula for that cell was byte-identical to "Unrectified" (a copy-paste
-// bug, confirmed by comparing the two cells' formulas), which this
-// deliberately does not reproduce.
+// 3. Monthly Summary Report - one total-case count per category, plus amount
+// involved, branch dispatch coverage from #1, and the district's official
+// BRD score (computeEligibleCaseCounts - the Other Case category is the
+// only one the bank's own workflow ever tracks rectification against).
+//
+// Unrectified/Rectified/Rectified % are ALL scoped to that same official,
+// scored-category population - not summed across every category the way
+// the per-category grid is. Rectified was already computeEligibleCaseCounts-
+// based; Unrectified was previously a sum of every category's own
+// outstanding count (a different, broader scope than Rectified's), which
+// made the two figures on the same row not actually comparable to each
+// other despite sitting side by side. Both now come from the same
+// officialCounts call, so Unrectified + Rectified = officialCounts.totalCases
+// exactly, matching what "Rectified %" is already a percentage of.
+//
+// The per-category grid shows each category's own TOTAL case count (not
+// just what's still outstanding in it) - this is what keeps every category
+// besides the scored one visible on this sheet at all, now that the row's
+// own Unrectified/Rectified no longer aggregate across them.
 // ---------------------------------------------------------------------------
 
 export interface MonthlySummaryCell {
   category: ClassifiedCategory;
-  outstanding: number;
+  total: number;
 }
 
 export interface MonthlySummaryRow {
@@ -203,21 +252,25 @@ export function getMonthlySummaryReport(
 } {
   const categories = activeCategories(db);
   const uncovered = getUncoveredBranches(db, periodId);
+  const templateSourceIds = getTemplateSourceIds(db, "monthly-summary");
+  const sourceFilteredFindings = applySourceFilter(db, "monthly-summary", db.findings);
   const rows: MonthlySummaryRow[] = activeDistricts(db).map((district) => {
     // Period-scoped residency (see findingsResidentInPeriod()'s doc
     // comment) - not a raw f.periodId === periodId filter, which would
     // drop a finding's slice of this period the moment it transfers away.
     // isHoApproved() gate on top, same as every other "official" figure.
-    const districtResident = findingsResidentInPeriod(db, periodId, db.findings.filter((f) => f.districtId === district.id && isHoApproved(f)));
+    const districtResident = findingsResidentInPeriod(db, periodId, sourceFilteredFindings.filter((f) => f.districtId === district.id && isHoApproved(f)));
     const perCategory = categories.map((category) => {
       const catResident = districtResident.filter((r) => r.finding.categoryId === category.id);
       const total = catResident.reduce((sum, r) => sum + r.slice.eligibleCases, 0);
-      const rectified = catResident.reduce((sum, r) => sum + r.slice.closedCases, 0);
-      return { category, outstanding: total - rectified };
+      return { category, total };
     });
-    const totalOutstanding = perCategory.reduce((sum, c) => sum + c.outstanding, 0);
     const totalCases = districtResident.reduce((sum, r) => sum + r.slice.eligibleCases, 0);
-    const officialCounts = computeEligibleCaseCounts(db, { districtId: district.id, periodId });
+    const officialCounts = computeEligibleCaseCounts(db, { districtId: district.id, periodId, sourceIds: templateSourceIds });
+    // Same eligible/scored population Rectified already draws from - not
+    // a sum across every category the way perCategory is (see this
+    // function's own doc comment above).
+    const totalOutstanding = officialCounts ? officialCounts.totalCases - officialCounts.rectifiedCases : 0;
     const totalBranches = districtBranchCount(db, district.id);
     const notDispatched = uncovered.filter((u) => u.district?.id === district.id).length;
     const amountInvolved = districtResident.reduce((sum, r) => sum + r.slice.eligibleAmount, 0);
@@ -252,18 +305,22 @@ export function getMonthlySummaryReport(
 //   (a) otherCases — one row per district PER PERIOD, the official scored
 //       metric (what #6, #9, the BRD, and computeEligibleCaseCounts()
 //       track). This is the whole series Monthly District History uses.
-//   (b) various — exactly ONE row per district, a lifetime/cumulative
-//       catch-all for every OTHER classified category (ATM Mismatch, IT,
-//       Zero Balance, Dormant, Cheque Book, … - anything NOT the official
-//       "Other Cases" scoring category), never broken out per period. In
-//       the source sheet this is literally the last row of each district's
+//   (b) various ("Various internal Audit report") — exactly ONE row per
+//       district, a lifetime/cumulative rollup of the district's Other
+//       Case findings that came from the Internal Audit source
+//       specifically (source code "IA") - not the per-period Internal
+//       Control cadence (a) already tracks. icfms.txt: "Internal Audit
+//       findings will initially be entered into the system by Head Office
+//       Internal Controllers" - occasional/ad-hoc, not a monthly cadence,
+//       hence one cumulative line instead of a row per period. In the
+//       source sheet this is literally the last row of each district's
 //       block - no Month value at all - and its total/rectified feed
-//       straight into that district's subtotal alongside the period rows
-//       (confirmed: East's subtotal 11,464 = its 13 monthly Other-Case
-//       rows summed (10,561) + its one Various row (903), not duplicated
-//       per month). Monthly District Detail (#5) is the only page that
-//       renders it; Monthly District History (#4) has never shown it at
-//       all (Other-Case only).
+//       straight into that district's subtotal alongside the period rows.
+//       "Rectified" here means formally CLOSED (closedCases), the same
+//       verified-only basis every other official figure in this file
+//       uses - not the branch's raw self-reported rectifiedCases. Monthly
+//       District Detail (#5) is the only page that renders it; Monthly
+//       District History (#4) has never shown it at all (Other-Case only).
 // ---------------------------------------------------------------------------
 
 export interface DistrictPeriodRow {
@@ -285,17 +342,22 @@ export interface DistrictVariousRow {
   performance: number | null;
 }
 
-export function getMonthlyDistrictSeries(db: Database): { otherCases: DistrictPeriodRow[]; various: DistrictVariousRow[] } {
+export function getMonthlyDistrictSeries(
+  db: Database,
+  templateSlug: "monthly-district-history" | "monthly-district-detail" = "monthly-district-detail"
+): { otherCases: DistrictPeriodRow[]; various: DistrictVariousRow[] } {
   const rule = db.scoringRules.find((r) => r.active);
   const periods = [...db.reportingPeriods].sort((a, b) => a.year - b.year || a.month - b.month);
   const districts = activeDistricts(db);
+  const templateSourceIds = getTemplateSourceIds(db, templateSlug);
+  const sourceFilteredFindings = applySourceFilter(db, templateSlug, db.findings);
 
   const otherCases: DistrictPeriodRow[] = [];
   for (const period of periods) {
     for (const district of districts) {
       // Official "Other Cases" bucket — ScoringRule gated, exactly the
       // same series the history/ranking pages show.
-      const eligible = computeEligibleCaseCounts(db, { districtId: district.id, periodId: period.id });
+      const eligible = computeEligibleCaseCounts(db, { districtId: district.id, periodId: period.id, sourceIds: templateSourceIds });
       const otherTotal = eligible?.totalCases ?? 0;
       const otherRectified = eligible?.rectifiedCases ?? 0;
       otherCases.push({
@@ -310,27 +372,29 @@ export function getMonthlyDistrictSeries(db: Database): { otherCases: DistrictPe
     }
   }
 
-  // "Various internal Audit report" — every one of this district's
-  // HO-approved-or-later findings (any period) that does NOT fall into the
-  // official ScoringRule's category+source bucket. If no active
-  // ScoringRule exists, this bucket defaults to ALL such findings (all of
-  // them are "various" in that case, since nothing is official). Lifetime,
-  // not period-scoped - see this block's own doc comment above for why.
+  // "Various internal Audit report" — the district's Other Case findings
+  // that came from the Internal Audit source specifically, lifetime (see
+  // this block's own doc comment above for why it's not period-scoped).
+  // Requires both an active ScoringRule (to know which category is
+  // "Other Case") and a Source coded "IA" to exist at all - with either
+  // missing there's no "eligible, Internal-Audit-sourced Other Case"
+  // population to report, so every district shows zero rather than
+  // falling back to some broader, less precise population.
+  //
+  // The template's configured source filter also applies here: if the
+  // admin excluded the IA source from this template's scope, the various
+  // row naturally stays all-zero rather than sneaking in a source the
+  // template was meant to omit entirely.
+  const iaSource = db.sources.find((s) => s.code.toUpperCase() === "IA");
   const various: DistrictVariousRow[] = districts.map((district) => {
-    const allFindings = db.findings.filter((f) => f.districtId === district.id && isHoApproved(f));
     let variousTotal = 0;
     let variousRectified = 0;
-    if (!rule) {
-      variousTotal = allFindings.reduce((s, f) => s + f.caseCount, 0);
-      variousRectified = allFindings.reduce((s, f) => s + f.rectifiedCases, 0);
-    } else {
-      for (const f of allFindings) {
-        const inOfficial = rule.categories.includes(f.categoryId) && rule.sources.includes(f.sourceId);
-        if (!inOfficial) {
-          variousTotal += f.caseCount;
-          variousRectified += f.rectifiedCases;
-        }
-      }
+    if (rule && iaSource && (!templateSourceIds || templateSourceIds.includes(iaSource.id))) {
+      const findings = sourceFilteredFindings.filter(
+        (f) => f.districtId === district.id && isHoApproved(f) && rule.categories.includes(f.categoryId) && f.sourceId === iaSource.id
+      );
+      variousTotal = findings.reduce((s, f) => s + f.caseCount, 0);
+      variousRectified = findings.reduce((s, f) => s + f.closedCases, 0);
     }
     return {
       district,
@@ -378,13 +442,14 @@ export function getDistrictRankingOtherCases(
   db: Database,
   periodIds?: string[]
 ): { rows: DistrictRankingRow[]; totalRow: Omit<DistrictRankingRow, "district">; narrative: string } {
+  const templateSourceIds = getTemplateSourceIds(db, "district-ranking-other-cases");
   const rows: DistrictRankingRow[] = activeDistricts(db)
     .map((district) => {
       let totalCases = 0;
       let rectifiedCases = 0;
       if (periodIds && periodIds.length > 0) {
         for (const periodId of periodIds) {
-          const counts = computeEligibleCaseCounts(db, { districtId: district.id, periodId });
+          const counts = computeEligibleCaseCounts(db, { districtId: district.id, periodId, sourceIds: templateSourceIds });
           if (counts) {
             totalCases += counts.totalCases;
             rectifiedCases += counts.rectifiedCases;
@@ -395,7 +460,7 @@ export function getDistrictRankingOtherCases(
         // currently sitting under this district, regardless of which
         // period it's in today), matching computePerformance()'s own
         // "no periodId" mode.
-        const counts = computeEligibleCaseCounts(db, { districtId: district.id });
+        const counts = computeEligibleCaseCounts(db, { districtId: district.id, sourceIds: templateSourceIds });
         if (counts) {
           totalCases = counts.totalCases;
           rectifiedCases = counts.rectifiedCases;
@@ -496,12 +561,13 @@ export function getWeeklyExecutiveSummary(
   lastWeekCutoff: string = weekEndDate(1)
 ): WeeklyCategorySummary[] {
   const districts = activeDistricts(db);
+  const sourceFilteredFindings = applySourceFilter(db, "weekly-executive-summary", db.findings);
 
   function cumulativeAsOf(categoryId: string, districtId: string, asOfDate: string): { totalCases: number; rectifiedCases: number } {
     // isHoApproved() gate, same as every other "official" figure - a
     // still-in-review or rejected finding shouldn't move this week's
     // reported balance before it's actually cleared approval.
-    const findings = db.findings.filter(
+    const findings = sourceFilteredFindings.filter(
       (f) => f.categoryId === categoryId && f.districtId === districtId && isHoApproved(f) && f.findingDate <= asOfDate
     );
     return {
@@ -544,12 +610,13 @@ export function getWeeklyExecutiveSummary(
 // ---------------------------------------------------------------------------
 
 export function getDistrictRankingAllCases(db: Database, periodIds?: string[]): { rows: DistrictRankingRow[]; totalRow: Omit<DistrictRankingRow, "district"> } {
+  const sourceFilteredFindings = applySourceFilter(db, "district-ranking-all-cases", db.findings);
   const rows = activeDistricts(db)
     .map((district) => {
       // isHoApproved() gate - a finding still short of HO approval (or
       // rejected/returned) isn't official yet and shouldn't count toward
       // this ranking, same gate #6/every dashboard "official" figure uses.
-      const candidates = db.findings.filter((f) => f.districtId === district.id && isHoApproved(f));
+      const candidates = sourceFilteredFindings.filter((f) => f.districtId === district.id && isHoApproved(f));
       let totalCases: number;
       let rectifiedCases: number;
       if (periodIds && periodIds.length > 0) {
@@ -623,6 +690,7 @@ export function getCategoryPerformanceSummary(
 ): { rows: CategoryPerformanceRow[]; totalRow: { totalCases: number; rectifiedCases: number; outstandingCases: number }; grossPercentage: number | null } {
   const districts = activeDistricts(db);
   const previousPeriodId = periodId ? previousReportingPeriodId(db, periodId) : null;
+  const sourceFilteredFindings = applySourceFilter(db, "category-performance-summary", db.findings);
 
   // Period-scoped residency (see findingsResidentInPeriod()'s doc comment)
   // when a period is given, so a transferred finding counts toward exactly
@@ -638,14 +706,14 @@ export function getCategoryPerformanceSummary(
 
   function grossPercentageFor(categoryId: string, forPeriodId: string | null): number | null {
     // isHoApproved() gate, same as every other "official" figure here.
-    const candidates = db.findings.filter((f) => f.categoryId === categoryId && isHoApproved(f));
+    const candidates = sourceFilteredFindings.filter((f) => f.categoryId === categoryId && isHoApproved(f));
     const { total, rectified } = periodTotals(candidates, forPeriodId);
     if (total === 0) return null;
     return (rectified / total) * 100;
   }
 
   const rows: CategoryPerformanceRow[] = activeCategories(db).map((category) => {
-    const candidates = db.findings.filter((f) => f.categoryId === category.id && isHoApproved(f));
+    const candidates = sourceFilteredFindings.filter((f) => f.categoryId === category.id && isHoApproved(f));
     const { total: totalCases, rectified: rectifiedCases } = periodTotals(candidates, periodId ?? null);
     const districtPcts = districts
       .map((d) => {
@@ -700,6 +768,7 @@ export function getDistrictSnapshotAsOf(
   asOfDate: string
 ): { rows: DistrictRankingRow[]; totalRow: Omit<DistrictRankingRow, "district"> } {
   const rule = db.scoringRules.find((r) => r.active);
+  const templateSourceIds = getTemplateSourceIds(db, "mid-month-district-snapshot");
   const rows = activeDistricts(db)
     .map((district) => {
       // isHoApproved() gate - this snapshot presents itself as the official
@@ -712,7 +781,8 @@ export function getDistrictSnapshotAsOf(
           f.periodId === periodId &&
           isHoApproved(f) &&
           f.findingDate <= asOfDate &&
-          (!rule || (rule.categories.includes(f.categoryId) && rule.sources.includes(f.sourceId)))
+          (!rule || (rule.categories.includes(f.categoryId) && rule.sources.includes(f.sourceId))) &&
+          (!templateSourceIds || templateSourceIds.includes(f.sourceId))
       );
       const totalCases = findings.reduce((sum, f) => sum + f.caseCount, 0);
       const rectifiedCases = findings.reduce((sum, f) => sum + f.closedCases, 0);
@@ -780,6 +850,7 @@ export function getTransferredFindings(
   db: Database,
   filters?: { fromPeriodId?: string; toPeriodId?: string }
 ): TransferredFindingRow[] {
+  const templateSourceIds = getTemplateSourceIds(db, "transferred-findings");
   const hopsByFinding = new Map<string, Database["findingTransfers"]>();
   for (const t of db.findingTransfers) {
     const list = hopsByFinding.get(t.findingId) ?? [];
@@ -799,6 +870,13 @@ export function getTransferredFindings(
     .map((t): TransferredFindingRow | null => {
       const finding = db.findings.find((f) => f.id === t.findingId);
       if (!finding) return null;
+      // Source filter applied at the finding level rather than transfer
+      // level - a transfer's "source" is always the underlying finding's
+      // source (sources are a finding-level attribute, not per-hop).
+      // If this template has configured sources and the finding's source
+      // isn't among them, drop the whole hop row rather than silently
+      // rendering it with a mismatched source column.
+      if (templateSourceIds && !templateSourceIds.includes(finding.sourceId)) return null;
       const hops = hopsByFinding.get(t.findingId) ?? [t];
       const hopNumber = hops.findIndex((h) => h.id === t.id) + 1;
       return {

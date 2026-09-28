@@ -42,6 +42,10 @@ const createSchema = z
     endsAt: z.string().min(1, "End date/time is required"),
     submissionStartsAt: z.string().min(1, "Submission window start is required"),
     submissionEndsAt: z.string().min(1, "Submission window end is required"),
+    // Optional human-readable label - see ReportingPeriod.name's own doc
+    // comment. Never required, never derived - purely what the admin
+    // types, or blank.
+    name: z.string().optional(),
   })
   .refine((v) => new Date(v.endsAt).getTime() > new Date(v.startsAt).getTime(), {
     message: "End date/time must be after the start date/time",
@@ -60,7 +64,7 @@ export async function POST(request: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid input" }, { status: 400 });
   }
-  const { startsAt, endsAt, submissionStartsAt, submissionEndsAt } = parsed.data;
+  const { startsAt, endsAt, submissionStartsAt, submissionEndsAt, name } = parsed.data;
   const start = new Date(startsAt);
   if (Number.isNaN(start.getTime())) {
     return NextResponse.json({ error: "Invalid start date/time" }, { status: 400 });
@@ -85,6 +89,7 @@ export async function POST(request: Request) {
     year,
     month,
     code,
+    name: name?.trim() || null,
     startsAt: start.toISOString(),
     endsAt: new Date(endsAt).toISOString(),
     submissionStartsAt: new Date(submissionStartsAt).toISOString(),

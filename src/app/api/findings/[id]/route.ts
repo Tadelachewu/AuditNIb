@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requirePermission } from "@/lib/guard";
+import { hasPermission } from "@/lib/permissions/registry";
 import { readDb, updateDb } from "@/lib/db";
 import { assertFindingInScope } from "@/lib/findings-scope";
 import { assertPeriodWritable, nextFindingReference, assertRequiredFindingFieldsPresent } from "@/lib/findings";
@@ -238,7 +239,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 }
 
 export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requirePermission("findings.delete");
+  // Two independent permissions can reach this route, each only valid for
+  // a different status - see the registry's own doc comment on
+  // "delete-rejected" for why deleting a DRAFT (the registrant cleaning up
+  // their own unfinished work) and deleting a REJECTED finding (a
+  // Controller's housekeeping action on a terminal outcome that was never
+  // theirs to begin with) are deliberately separate grants, not one
+  // "delete" permission with a wider status list.
+  const auth = await requirePermission("findings.delete", "findings.delete-rejected");
   if (!auth.ok) return auth.response;
   const { id } = await params;
 
@@ -249,13 +257,25 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   const scopeError = assertFindingInScope(auth.session, existing);
   if (scopeError) return NextResponse.json({ error: scopeError }, { status: 403 });
 
-  // Ownership, not just org scope - see PATCH's own comment above.
-  if (existing.createdBy !== auth.session.userId) {
-    return NextResponse.json({ error: "You can only delete findings you registered yourself" }, { status: 403 });
-  }
+  const canDeleteDraft = hasPermission(auth.session.permissions, "findings.delete");
+  const canDeleteRejected = hasPermission(auth.session.permissions, "findings.delete-rejected");
 
-  if (existing.status !== "DRAFT") {
-    return NextResponse.json({ error: "Only draft findings can be deleted" }, { status: 409 });
+  if (existing.status === "DRAFT") {
+    if (!canDeleteDraft) {
+      return NextResponse.json({ error: "You don't have permission to delete draft findings" }, { status: 403 });
+    }
+    // Ownership, not just org scope - see PATCH's own comment above. Only
+    // the DRAFT path requires this; deleting a REJECTED finding is a
+    // reviewer housekeeping action, not tied to who registered it.
+    if (existing.createdBy !== auth.session.userId) {
+      return NextResponse.json({ error: "You can only delete findings you registered yourself" }, { status: 403 });
+    }
+  } else if (existing.status === "REJECTED") {
+    if (!canDeleteRejected) {
+      return NextResponse.json({ error: "You don't have permission to delete rejected findings" }, { status: 403 });
+    }
+  } else {
+    return NextResponse.json({ error: "Only draft or rejected findings can be deleted" }, { status: 409 });
   }
 
   const periodError = assertPeriodWritable(db, existing.periodId, existing.status);

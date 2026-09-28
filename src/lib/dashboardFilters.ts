@@ -27,6 +27,8 @@ export interface DashboardFilters {
   categoryId: string;
   risk: string;
   status: string;
+  operationArea: string;
+  irregularityType: string;
 }
 
 export const EMPTY_DASHBOARD_FILTERS: DashboardFilters = {
@@ -37,6 +39,8 @@ export const EMPTY_DASHBOARD_FILTERS: DashboardFilters = {
   categoryId: "",
   risk: "",
   status: "",
+  operationArea: "",
+  irregularityType: "",
 };
 
 export function parseDashboardFilters(searchParams: Record<string, string | string[] | undefined>): DashboardFilters {
@@ -52,6 +56,8 @@ export function parseDashboardFilters(searchParams: Record<string, string | stri
     categoryId: get("categoryId"),
     risk: get("risk"),
     status: get("status"),
+    operationArea: get("operationArea"),
+    irregularityType: get("irregularityType"),
   };
 }
 
@@ -73,6 +79,8 @@ export function applyDashboardFilters(findings: Finding[], filters: DashboardFil
       (!filters.sourceId || f.sourceId === filters.sourceId) &&
       (!filters.categoryId || f.categoryId === filters.categoryId) &&
       (!filters.risk || f.riskLevel === filters.risk) &&
-      (!filters.status || f.status === filters.status)
+      (!filters.status || f.status === filters.status) &&
+      (!filters.operationArea || f.operationArea === filters.operationArea) &&
+      (!filters.irregularityType || f.irregularityType === filters.irregularityType)
   );
 }

@@ -107,6 +107,7 @@ export async function POST(request: Request) {
   // next request - only this one, freshly reissued, carries the new
   // sessionVersion.
   const role = db.roles.find((r) => r.code === existing.role);
+  const now = Date.now();
   const session = await getSession();
   session.destroy();
   session.isLoggedIn = true;
@@ -121,6 +122,10 @@ export async function POST(request: Request) {
   session.branchId = existing.branchId ?? null;
   session.mustChangePassword = false;
   session.sessionVersion = nextSessionVersion;
+  // Password change re-issues a fresh session: treat it as a brand-new
+  // session from an expiry standpoint too (both clocks reset).
+  session.sessionCreatedAt = now;
+  session.lastActivityAt = now;
   await session.save();
 
   return NextResponse.json({ ok: true });
