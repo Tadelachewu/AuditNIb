@@ -8,6 +8,15 @@ import Link from "next/link";
  * re-fetches that page's slice from the API rather than slicing a
  * client-held array). Renders nothing when there's nothing to page
  * through, so callers can always mount it unconditionally.
+ *
+ * The bar is sticky to the bottom of the screen while its list is
+ * scrolled, so the count and Previous/Next are always within reach on a
+ * long list instead of only after scrolling to its end - every list in the
+ * app gets this from here. Mount it as the list card's last child: it only
+ * sticks within that card, so it settles back into place at the end of the
+ * list and never floats over anything below. Works because nothing between
+ * it and the window clips or scrolls - see StickyActions' note on
+ * (app)/layout.tsx's overflow-x-clip.
  */
 export function Pagination({
   page,
@@ -53,7 +62,7 @@ export function Pagination({
   }
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 px-4 py-2.5 text-sm text-slate-500">
+    <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-2 rounded-b-lg border-t border-slate-200 bg-white/95 px-4 py-2.5 text-sm text-slate-500 shadow-[0_-4px_10px_-8px_rgb(15_23_42/0.25)] backdrop-blur-sm">
       <p>
         Showing{" "}
         <span className="font-medium text-slate-700">
