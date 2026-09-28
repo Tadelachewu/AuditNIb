@@ -163,6 +163,23 @@ export function FindingsTable({ rows, permissions, emptyText }: { rows: FindingR
   const [busy, setBusy] = useState(false);
   const [summary, setSummary] = useState<string | null>(null);
 
+  // The whole row opens its finding, not just the reference link - which
+  // stays a real <a> for keyboard users and right-click "open in new tab".
+  // Behaves like a link: Ctrl/Cmd-click or middle-click opens a new tab.
+  // Ignored when the click was on a control inside the row (link, button,
+  // checkbox...) or ended a text selection (copying a title/reference).
+  function openFromRow(e: React.MouseEvent<HTMLTableRowElement>, id: string) {
+    if (e.button !== 0 && e.button !== 1) return;
+    if ((e.target as HTMLElement).closest("a, button, input, select, textarea, label")) return;
+    if (window.getSelection()?.toString()) return;
+    const href = `/findings/${id}`;
+    if (e.button === 1 || e.ctrlKey || e.metaKey) {
+      window.open(href, "_blank", "noopener");
+      return;
+    }
+    router.push(href);
+  }
+
   const canBulkAct =
     permissions.canSubmit ||
     permissions.canDistrictReview ||
@@ -293,9 +310,17 @@ export function FindingsTable({ rows, permissions, emptyText }: { rows: FindingR
               </tr>
             )}
             {rows.map((f) => (
-              <tr key={f.id} className={`hover:bg-slate-50 ${selected.has(f.id) ? "bg-blue-50/40" : ""}`}>
+              <tr
+                key={f.id}
+                onClick={(e) => openFromRow(e, f.id)}
+                onAuxClick={(e) => openFromRow(e, f.id)}
+                title={`Open ${f.reference}`}
+                className={`cursor-pointer transition-colors hover:bg-slate-50 ${selected.has(f.id) ? "bg-blue-50/40" : ""}`}
+              >
                 {canBulkAct && (
-                  <td className="px-4 py-2">
+                  // The selection cell never opens the row - a slightly
+                  // missed click on the checkbox shouldn't navigate away.
+                  <td className="px-4 py-2" onClick={(e) => e.stopPropagation()} onAuxClick={(e) => e.stopPropagation()}>
                     <input
                       type="checkbox"
                       checked={selected.has(f.id)}
