@@ -266,6 +266,10 @@ export default async function FindingDetailPage({ params }: { params: Promise<{ 
           finding.createdBy !== user.userId,
         canUploadEvidence: has("evidence"),
         canComment: has("comment"),
+        // Remove anyone's file; without it a user can still remove their own
+        // upload while the finding isn't closed (see the evidence DELETE route).
+        canDeleteAnyEvidence: has("delete-evidence"),
+        currentUserId: user.userId!,
       }}
     />
   );

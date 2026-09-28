@@ -18,8 +18,8 @@
 // Admin - straight to /dashboard before this component, or even the API
 // route, ever ran. Living at the top level instead is invisible to that
 // check entirely; the real authorization boundary is still enforced twice,
-// independently, in the API route itself (NODE_ENV + the literal ADMIN
-// role) - this file has no security logic of its own to begin with.
+// independently, in the API route itself (APP_ENV=development + the literal
+// ADMIN role) - this file has no security logic of its own to begin with.
 // =============================================================================
 
 import { useEffect, useState } from "react";
@@ -72,7 +72,9 @@ export default function DevResetPage() {
       setCounts(res.counts);
     } catch (err) {
       if (err instanceof ApiError && err.status === 404) {
-        setUnavailableReason("This tool isn't available in this environment (it's disabled whenever NODE_ENV=production).");
+        setUnavailableReason(
+          "This tool is turned off on this server. It only works when the server's .env has APP_ENV=development (then restart the app) - see docs/reset-data.md."
+        );
       } else if (err instanceof ApiError && err.status === 403) {
         setUnavailableReason("Administrator only.");
       } else {

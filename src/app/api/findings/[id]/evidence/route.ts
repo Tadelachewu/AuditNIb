@@ -1,17 +1,13 @@
 import { NextResponse } from "next/server";
 import { v4 as uuid } from "uuid";
-import fs from "fs";
 import { requireUser, requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { assertFindingInScope } from "@/lib/findings-scope";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
-import {
-  ALLOWED_EVIDENCE_TYPES,
-  MAX_EVIDENCE_BYTES,
-  ensureUploadsDir,
-  evidenceStoragePath,
-  evidenceContentMatchesType,
-} from "@/lib/evidence";
+import { appendAuditLog } from "@/lib/audit";
+import { isRateLimited, recordAttempt } from "@/lib/rateLimit";
+import { ALLOWED_EVIDENCE_TYPES, MAX_EVIDENCE_BYTES, EVIDENCE_UPLOAD_LIMIT, evidenceContentMatchesType } from "@/lib/evidence";
+import { writeStoredFile, deleteStoredFile, newStoredName, FileStorageError } from "@/lib/fileStorage";
 
 // icfms.txt: Branch Controller/Manager "upload optional evidence" for a
 // finding - gated by findings.evidence. A file attached to a *comment*
@@ -48,6 +44,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
   const auth = authBase;
+
+  // One account can't fill the disk: a per-user cap on uploads per window
+  // (shared by finding evidence and comment attachments).
+  const rateKey = `evidence-upload:${auth.session.userId}`;
+  const limited = await isRateLimited(rateKey, EVIDENCE_UPLOAD_LIMIT);
+  if (limited.limited) {
+    return NextResponse.json(
+      { error: `Too many uploads - please wait ${Math.ceil(limited.retryAfterSeconds / 60)} minute(s) and try again.` },
+      { status: 429, headers: { "Retry-After": String(limited.retryAfterSeconds) } }
+    );
+  }
 
   const db = await readDb();
   const existing = db.findings.find((f) => f.id === id);
@@ -88,27 +95,49 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     );
   }
 
-  ensureUploadsDir();
-  const storedFileName = `${uuid()}.${extension}`;
-  fs.writeFileSync(evidenceStoragePath(storedFileName), buffer);
+  // Encrypted at rest in the dedicated storage folder (src/lib/fileStorage.ts).
+  const storedFileName = newStoredName(extension);
+  try {
+    writeStoredFile("evidence", storedFileName, buffer);
+  } catch (err) {
+    console.error("[evidence] storing upload failed", err);
+    const message = err instanceof FileStorageError ? err.message : "Could not store the file - please try again.";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+  await recordAttempt(rateKey, EVIDENCE_UPLOAD_LIMIT);
 
-  const updated = await updateDb((current) => {
-    const f = current.findings.find((x) => x.id === id)!;
-    const entry = {
-      id: uuid(),
-      findingId: f.id,
-      commentId,
-      fileName: file.name,
-      mimeType: file.type,
-      size: file.size,
-      storagePath: storedFileName,
-      uploadedBy: auth.session.userId!,
-      uploadedByName: auth.session.name!,
-      createdAt: new Date().toISOString(),
-    };
-    current.evidence.push(entry);
-    return entry;
-  });
+  let updated;
+  try {
+    updated = await updateDb((current) => {
+      const f = current.findings.find((x) => x.id === id)!;
+      const entry = {
+        id: uuid(),
+        findingId: f.id,
+        commentId,
+        fileName: file.name,
+        mimeType: file.type,
+        size: file.size,
+        storagePath: storedFileName,
+        uploadedBy: auth.session.userId!,
+        uploadedByName: auth.session.name!,
+        createdAt: new Date().toISOString(),
+      };
+      current.evidence.push(entry);
+      appendAuditLog(current, {
+        userId: auth.session.userId!,
+        userName: auth.session.name!,
+        action: "EVIDENCE_UPLOAD",
+        entityType: "Evidence",
+        entityId: entry.id,
+        newValue: { findingId: f.id, reference: f.reference, commentId, fileName: entry.fileName, mimeType: entry.mimeType, size: entry.size },
+      });
+      return entry;
+    });
+  } catch (err) {
+    // The record didn't save - don't leave the file behind as an orphan.
+    deleteStoredFile("evidence", storedFileName);
+    throw err;
+  }
 
   return NextResponse.json({ evidence: updated }, { status: 201 });
 }

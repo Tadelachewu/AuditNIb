@@ -6,7 +6,8 @@ import { isDevResetEnabled, resetRegisteredData } from "@/lib/devResetRegistered
 
 // DEV-ONLY - see devResetRegisteredData.ts's own doc comment for the full
 // picture (scope, isolation, how to remove this feature entirely). 404s
-// outright whenever NODE_ENV=production, independent of the admin page's
+// outright unless APP_ENV=development (docs/reset-data.md) - regardless of
+// dev vs built mode - independent of the admin page's
 // own gating and regardless of who calls it or how - this is the one check
 // that actually matters, everything else here is defense in depth on top
 // of it. Requires the literal ADMIN role (not just some permission a custom

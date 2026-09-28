@@ -1,10 +1,6 @@
-import path from "path";
-import fs from "fs";
-
 // master.txt §16: "secure attachment validation and access controls."
-// Local disk under data/uploads/ - same "local now, swappable later"
-// pattern as db.ts's data/db.json, git-ignored by the existing /data/ rule.
-export const UPLOADS_DIR = path.join(process.cwd(), "data", "uploads");
+// Validation only - where and how files are stored (dedicated storage
+// folder, encryption at rest) lives in src/lib/fileStorage.ts.
 
 export const MAX_EVIDENCE_BYTES = 10 * 1024 * 1024;
 
@@ -17,9 +13,9 @@ export const ALLOWED_EVIDENCE_TYPES: Record<string, string> = {
   "text/csv": "csv",
 };
 
-export function ensureUploadsDir(): void {
-  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
-}
+// Per-user upload rate limit (evidence + comment attachments together):
+// at most this many uploads per window, so one account can't fill the disk.
+export const EVIDENCE_UPLOAD_LIMIT = { max: 30, windowMs: 10 * 60 * 1000 };
 
 function isZip(buf: Buffer): boolean {
   // Local file header "PK\x03\x04", or an empty-archive end-of-central-
@@ -65,9 +61,4 @@ const EVIDENCE_SIGNATURES: Record<string, (buf: Buffer) => boolean> = {
 export function evidenceContentMatchesType(buf: Buffer, mimeType: string): boolean {
   const check = EVIDENCE_SIGNATURES[mimeType];
   return check ? check(buf) : false;
-}
-
-/** Server-generated filename only - never the user-supplied one, to rule out path traversal (master.txt §16). */
-export function evidenceStoragePath(storedFileName: string): string {
-  return path.join(UPLOADS_DIR, storedFileName);
 }

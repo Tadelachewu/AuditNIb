@@ -588,6 +588,9 @@ model ImportBatch {
   duplicateCount   Int      @map("duplicate_count")
   errorCount       Int      @map("error_count")
   rows             Json
+  // Original spreadsheet in <STORAGE_DIR>/imports/ (encrypted); null for
+  // batches imported before originals were kept.
+  storedFile       String?  @map("stored_file")
   createdAt        DateTime @map("created_at")
 
   findings Finding[]

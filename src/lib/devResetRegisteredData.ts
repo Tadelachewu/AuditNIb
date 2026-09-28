@@ -1,5 +1,4 @@
-import fs from "node:fs";
-import { evidenceStoragePath } from "@/lib/evidence";
+import { deleteStoredFile } from "@/lib/fileStorage";
 import type { Database } from "@/types";
 
 // =============================================================================
@@ -24,10 +23,10 @@ import type { Database } from "@/types";
 // page code before this ever ran; see that page's own doc comment).
 // Nothing else in the app imports this file or links to that page - it's
 // not wired into src/lib/nav.ts's sidebar, so it leaves no trace anywhere
-// else in the codebase. Both this module and the API route independently
-// gate on isDevResetEnabled() (NODE_ENV !== "production"), so the feature
-// is inert wherever NODE_ENV=production is actually set, whether or not
-// these files have been deleted yet. To remove it entirely before a
+// else in the codebase. The API route gates on isDevResetEnabled() (only
+// APP_ENV=development - see below and docs/reset-data.md), so the feature
+// is inert on any server not explicitly marked as a development
+// environment, whether or not these files have been deleted yet. To remove it entirely before a
 // production release, delete these three files - nothing else references
 // any of them:
 //   - src/lib/devResetRegisteredData.ts (this file)
@@ -35,8 +34,23 @@ import type { Database } from "@/types";
 //   - src/app/(app)/dev-reset/page.tsx
 // =============================================================================
 
+/** The one switch for this tool - see docs/reset-data.md. */
+export const DEV_RESET_ENV_VAR = "APP_ENV";
+
+/**
+ * Enabled only when APP_ENV=development (case-insensitive) in the server's
+ * environment/.env - and for nothing else. Deliberately NOT tied to
+ * NODE_ENV / how the app was started: `next dev` vs `next build`+`next
+ * start` is a build detail (Next forces NODE_ENV=production for a build),
+ * not a statement about whether this deployment's data is disposable - a
+ * built UAT server may legitimately need resets, and a dev server pointed
+ * at real data must not have them. Unset, empty or any other value
+ * (e.g. "production") means disabled, so a server nobody configured is
+ * safe by default. Read at request time, so changing it only needs a
+ * restart, never a rebuild.
+ */
 export function isDevResetEnabled(): boolean {
-  return process.env.NODE_ENV !== "production";
+  return (process.env[DEV_RESET_ENV_VAR] ?? "").trim().toLowerCase() === "development";
 }
 
 export interface DevResetSummary {
@@ -84,18 +98,16 @@ export function resetRegisteredData(db: Database): DevResetSummary {
     comments: db.comments.length,
   };
 
-  // Delete the physical files backing every evidence row about to be
-  // dropped - otherwise they'd become permanently orphaned on disk
-  // (evidence.ts's own doc comment: data/uploads/ holds nothing else).
+  // Delete the stored files behind every evidence row and import batch
+  // about to be dropped - otherwise they'd be permanently orphaned in the
+  // storage folder (src/lib/fileStorage.ts). A missing file, or a
+  // filesystem error, isn't fatal to the reset - the records go regardless.
   let evidenceFilesDeleted = 0;
   for (const e of db.evidence) {
-    try {
-      fs.unlinkSync(evidenceStoragePath(e.storagePath));
-      evidenceFilesDeleted++;
-    } catch {
-      // Already missing, or a filesystem permissions issue - not fatal to
-      // the reset itself, the database record is being dropped regardless.
-    }
+    if (deleteStoredFile("evidence", e.storagePath)) evidenceFilesDeleted++;
+  }
+  for (const b of db.importBatches) {
+    if (b.storedFile) deleteStoredFile("imports", b.storedFile);
   }
 
   db.findings = [];

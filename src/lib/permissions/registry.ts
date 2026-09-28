@@ -35,6 +35,7 @@ export type PermissionAction =
   | "close"
   | "transfer"
   | "evidence"
+  | "delete-evidence"
   | "comment"
   | "import"
   | "uncovered-branches"
@@ -130,6 +131,11 @@ export const PAGE_REGISTRY: PageDefinition[] = [
       { action: "close", label: "Close (Verify)" },
       { action: "transfer", label: "Transfer to Next Period" },
       { action: "evidence", label: "Upload Evidence" },
+      // Removing *anyone's* evidence/attachment (housekeeping - a wrong or
+      // sensitive file). Uploaders can always remove their own upload while
+      // the finding isn't closed, without this. See evidence/[evidenceId]'s
+      // DELETE handler.
+      { action: "delete-evidence", label: "Delete Any Evidence" },
       { action: "comment", label: "Comment" },
       { action: "import", label: "Bulk Import (Excel)" },
     ],

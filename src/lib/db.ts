@@ -385,6 +385,7 @@ function importBatchFromRow(r: Prisma.ImportBatchGetPayload<object>): ImportBatc
     duplicateCount: r.duplicateCount,
     errorCount: r.errorCount,
     rows: r.rows as unknown as ImportBatch["rows"],
+    storedFile: r.storedFile ?? null,
     createdAt: iso(r.createdAt),
   };
 }
@@ -962,6 +963,7 @@ function importBatchToData(r: ImportBatch) {
     duplicateCount: r.duplicateCount,
     errorCount: r.errorCount,
     rows: r.rows as object,
+    storedFile: r.storedFile ?? null,
     createdAt: toDate(r.createdAt),
   };
 }

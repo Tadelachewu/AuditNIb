@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { Download } from "lucide-react";
 import { apiGet, ApiError } from "@/lib/api-client";
 import { formatDateTime } from "@/lib/format";
 import { Card, CardHeader } from "@/components/ui/Card";
@@ -224,6 +225,16 @@ export default function ImportFindingsPage() {
                     <Badge tone="green">{b.importedCount} imported</Badge>
                     {b.duplicateCount > 0 && <Badge tone="amber">{b.duplicateCount} duplicate</Badge>}
                     {b.errorCount > 0 && <Badge tone="red">{b.errorCount} error</Badge>}
+                    {b.storedFile && (
+                      <a
+                        href={`/api/findings/import/${b.id}/file`}
+                        className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                        title="Download the original spreadsheet behind this import"
+                      >
+                        <Download className="h-4 w-4" />
+                        Download file
+                      </a>
+                    )}
                     <Button variant="secondary" onClick={() => setExpandedBatchId(expandedBatchId === b.id ? null : b.id)}>
                       {expandedBatchId === b.id ? "Hide" : "Details"}
                     </Button>

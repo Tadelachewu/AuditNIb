@@ -9,6 +9,9 @@
     "start": "next start -p 9005",
     "lint": "eslint",
     "db:seed": "tsx prisma/seed.ts",
+    "storage:migrate": "tsx scripts/storage-migrate.ts",
+    "storage:cleanup": "tsx scripts/storage-cleanup.ts",
+    "storage:export": "tsx scripts/storage-export.ts",
     "tunnel": "lt --port 9005",
     "tunnel:cloudflare": "cloudflared tunnel --url http://localhost:9005"
   },

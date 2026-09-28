@@ -10,7 +10,12 @@ import {
   validateImportRow,
   existingDedupeKeys,
 } from "@/lib/import";
+import { isRateLimited, recordAttempt } from "@/lib/rateLimit";
+import { writeStoredFile, deleteStoredFile, newStoredName, FileStorageError } from "@/lib/fileStorage";
 import type { ImportBatch, ImportBatchRow } from "@/types";
+
+// Per-user cap on import attempts (each parses a whole workbook).
+const IMPORT_UPLOAD_LIMIT = { max: 10, windowMs: 10 * 60 * 1000 };
 
 // master.txt §22's import history - every past run, kept permanently
 // ("document any transformation") rather than only the response of the
@@ -39,6 +44,16 @@ export async function GET() {
 export async function POST(request: Request) {
   const auth = await requirePermission("findings.import");
   if (!auth.ok) return auth.response;
+
+  const rateKey = `import-upload:${auth.session.userId}`;
+  const limited = await isRateLimited(rateKey, IMPORT_UPLOAD_LIMIT);
+  if (limited.limited) {
+    return NextResponse.json(
+      { error: `Too many import attempts - please wait ${Math.ceil(limited.retryAfterSeconds / 60)} minute(s) and try again.` },
+      { status: 429, headers: { "Retry-After": String(limited.retryAfterSeconds) } }
+    );
+  }
+  await recordAttempt(rateKey, IMPORT_UPLOAD_LIMIT);
 
   let formData: FormData | null = null;
   try {
@@ -105,55 +120,75 @@ export async function POST(request: Request) {
 
   const importBatchId = uuid();
 
-  const batch = await updateDb((current) => {
-    const seenKeys = existingDedupeKeys(current);
-    const rows: ImportBatchRow[] = parsed.rows.map((row, i) =>
-      validateImportRow(current, row, i + 2, seenKeys, {
+  // Keep the original spreadsheet (encrypted, storage folder's imports/
+  // area) so the exact file behind this batch can be downloaded later from
+  // Import History. Only for a file that actually imports - a rejected file
+  // changed nothing, so there's nothing to keep a record of.
+  const storedFile = newStoredName("xlsx");
+  try {
+    writeStoredFile("imports", storedFile, buffer);
+  } catch (err) {
+    console.error("[import] storing original file failed", err);
+    const message = err instanceof FileStorageError ? err.message : "Could not store the import file - please try again.";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+
+  let batch: ImportBatch;
+  try {
+    batch = await updateDb((current) => {
+      const seenKeys = existingDedupeKeys(current);
+      const rows: ImportBatchRow[] = parsed.rows.map((row, i) =>
+        validateImportRow(current, row, i + 2, seenKeys, {
+          userId: auth.session.userId!,
+          userName: auth.session.name!,
+          importBatchId,
+          importerScope,
+        })
+      );
+
+      const importedCount = rows.filter((r) => r.outcome === "imported").length;
+      const duplicateCount = rows.filter((r) => r.outcome === "duplicate").length;
+      const errorCount = rows.filter((r) => r.outcome === "error").length;
+
+      const record: ImportBatch = {
+        id: importBatchId,
+        fileName: file.name,
+        importedBy: auth.session.userId!,
+        importedByName: auth.session.name!,
+        totalRows: rows.length,
+        importedCount,
+        duplicateCount,
+        errorCount,
+        // Never store the resolved `finding` object here - the ledger
+        // records the outcome/reference, not a second copy of the finding.
+        rows: rows.map(({ rowNumber, outcome, findingId, reference, duplicateOfReference, error }) => ({
+          rowNumber,
+          outcome,
+          findingId,
+          reference,
+          duplicateOfReference,
+          error,
+        })),
+        storedFile,
+        createdAt: new Date().toISOString(),
+      };
+      current.importBatches.push(record);
+
+      appendAuditLog(current, {
         userId: auth.session.userId!,
         userName: auth.session.name!,
-        importBatchId,
-        importerScope,
-      })
-    );
+        action: "IMPORT",
+        entityType: "ImportBatch",
+        entityId: record.id,
+        newValue: { fileName: record.fileName, importedCount, duplicateCount, errorCount, totalRows: record.totalRows },
+      });
 
-    const importedCount = rows.filter((r) => r.outcome === "imported").length;
-    const duplicateCount = rows.filter((r) => r.outcome === "duplicate").length;
-    const errorCount = rows.filter((r) => r.outcome === "error").length;
-
-    const record: ImportBatch = {
-      id: importBatchId,
-      fileName: file.name,
-      importedBy: auth.session.userId!,
-      importedByName: auth.session.name!,
-      totalRows: rows.length,
-      importedCount,
-      duplicateCount,
-      errorCount,
-      // Never store the resolved `finding` object here - the ledger
-      // records the outcome/reference, not a second copy of the finding.
-      rows: rows.map(({ rowNumber, outcome, findingId, reference, duplicateOfReference, error }) => ({
-        rowNumber,
-        outcome,
-        findingId,
-        reference,
-        duplicateOfReference,
-        error,
-      })),
-      createdAt: new Date().toISOString(),
-    };
-    current.importBatches.push(record);
-
-    appendAuditLog(current, {
-      userId: auth.session.userId!,
-      userName: auth.session.name!,
-      action: "IMPORT",
-      entityType: "ImportBatch",
-      entityId: record.id,
-      newValue: { fileName: record.fileName, importedCount, duplicateCount, errorCount, totalRows: record.totalRows },
+      return record;
     });
-
-    return record;
-  });
+  } catch (err) {
+    deleteStoredFile("imports", storedFile);
+    throw err;
+  }
 
   return NextResponse.json({ importBatch: batch }, { status: 201 });
 }

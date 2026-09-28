@@ -773,6 +773,10 @@ export interface ImportBatch {
   duplicateCount: number;
   errorCount: number;
   rows: ImportBatchRow[];
+  // The original uploaded spreadsheet, kept (encrypted) in the storage
+  // folder's imports/ area - see src/lib/fileStorage.ts. Null for batches
+  // imported before originals were kept.
+  storedFile: string | null;
   createdAt: string;
 }
 

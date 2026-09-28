@@ -7,6 +7,7 @@ import { assertFindingInScope } from "@/lib/findings-scope";
 import { assertPeriodWritable, nextFindingReference, assertRequiredFindingFieldsPresent } from "@/lib/findings";
 import { isDepartmentInScope } from "@/lib/org";
 import { appendAuditLog } from "@/lib/audit";
+import { deleteStoredFile } from "@/lib/fileStorage";
 
 const EDITABLE_STATUSES = ["DRAFT", "RETURNED"];
 
@@ -281,6 +282,12 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   const periodError = assertPeriodWritable(db, existing.periodId, existing.status);
   if (periodError) return NextResponse.json({ error: periodError }, { status: 409 });
 
+  // Its evidence/attachment records go with it (DB cascade); the stored
+  // files are removed below, once the delete has actually committed - so a
+  // failed delete never loses files, and a successful one never leaves
+  // them behind as orphans.
+  const evidenceFiles = db.evidence.filter((e) => e.findingId === id);
+
   await updateDb((current) => {
     current.findings = current.findings.filter((f) => f.id !== id);
     current.findingTransitions = current.findingTransitions.filter((t) => t.findingId !== id);
@@ -291,9 +298,10 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
       action: "DELETE",
       entityType: "Finding",
       entityId: id,
-      oldValue: existing,
+      oldValue: { ...existing, evidenceFilesDeleted: evidenceFiles.map((e) => e.fileName) },
     });
   });
+  for (const e of evidenceFiles) deleteStoredFile("evidence", e.storagePath);
 
   return NextResponse.json({ ok: true });
 }

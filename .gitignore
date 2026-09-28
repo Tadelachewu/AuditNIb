@@ -39,6 +39,8 @@ yarn-error.log*
 
 # local "database" (see src/lib/db.ts) - generated on first run
 /data/
+# Uploaded files (evidence, attachments, import originals) - docs/files.md
+/storage/
 
 # typescript
 *.tsbuildinfo

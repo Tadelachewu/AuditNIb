@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/Button";
 import { Input, Label, FileInput, FIELD_FOCUS } from "@/components/ui/Field";
 import { Badge } from "@/components/ui/Badge";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { Trash2 } from "lucide-react";
 import { FindingStatusBadge } from "@/components/findings/FindingStatusBadge";
 import { NewFindingForm } from "@/components/findings/NewFindingForm";
 import type {
@@ -62,6 +63,8 @@ interface Permissions {
   canBankReturnReview: boolean;
   canUploadEvidence: boolean;
   canComment: boolean;
+  canDeleteAnyEvidence: boolean;
+  currentUserId: string;
 }
 
 function formatBytes(bytes: number): string {
@@ -429,6 +432,51 @@ export function FindingDetailClient({
     const res = await fetch(`/api/findings/${finding.id}/evidence`, { method: "POST", body: formData });
     const body = await res.json().catch(() => ({}));
     if (!res.ok) throw new ApiError(body?.error ?? "Upload failed", res.status);
+  }
+
+  // Mirrors the DELETE route's rule (the real check is server-side):
+  // anyone's file with Delete Any Evidence, otherwise only your own upload
+  // while the finding isn't closed.
+  function canRemoveFile(e: Evidence): boolean {
+    if (permissions.canDeleteAnyEvidence) return true;
+    const canUploadHere = e.commentId ? permissions.canComment : permissions.canUploadEvidence;
+    return e.uploadedBy === permissions.currentUserId && canUploadHere && finding.status !== "CLOSED";
+  }
+
+  async function removeFile(e: Evidence) {
+    const result = await confirm({
+      title: "Remove this file?",
+      message: `"${e.fileName}" will be permanently removed from this finding and from storage. This is recorded in the audit log.`,
+      confirmLabel: "Remove",
+      tone: "danger",
+    });
+    if (result === false) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await apiSend(`/api/findings/${finding.id}/evidence/${e.id}`, "DELETE");
+      await refresh();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to remove the file");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function removeFileButton(file: Evidence) {
+    if (!canRemoveFile(file)) return null;
+    return (
+      <button
+        type="button"
+        onClick={() => void removeFile(file)}
+        disabled={busy}
+        title={`Remove ${file.fileName}`}
+        aria-label={`Remove ${file.fileName}`}
+        className="inline-flex items-center rounded p-1 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+      >
+        <Trash2 className="h-3.5 w-3.5" />
+      </button>
+    );
   }
 
   async function handleEvidenceUpload(file: File) {
@@ -1041,6 +1089,7 @@ export function FindingDetailClient({
                         {formatBytes(e.size)} · {e.uploadedByName} · {formatDateTime(e.createdAt)}
                       </p>
                     </div>
+                    {removeFileButton(e)}
                   </div>
                 ))}
               </div>
@@ -1068,13 +1117,15 @@ export function FindingDetailClient({
                             <span className="font-medium text-slate-900">{c.authorName}</span> {c.text}
                           </p>
                           {commentEvidence.map((e) => (
-                            <a
-                              key={e.id}
-                              href={`/api/findings/${finding.id}/evidence/${e.id}`}
-                              className="mt-1 flex items-center gap-1 text-xs text-blue-700 hover:underline"
-                            >
-                              📎 {e.fileName} ({formatBytes(e.size)})
-                            </a>
+                            <div key={e.id} className="mt-1 flex items-center gap-1">
+                              <a
+                                href={`/api/findings/${finding.id}/evidence/${e.id}`}
+                                className="flex items-center gap-1 text-xs text-blue-700 hover:underline"
+                              >
+                                📎 {e.fileName} ({formatBytes(e.size)})
+                              </a>
+                              {removeFileButton(e)}
+                            </div>
                           ))}
                           <div className="mt-1 flex items-center gap-2">
                             <span className="text-xs text-slate-500">{formatDateTime(c.createdAt)}</span>
@@ -1099,13 +1150,15 @@ export function FindingDetailClient({
                                   <span className="font-medium text-slate-900">{r.authorName}</span> {r.text}
                                 </p>
                                 {replyEvidence.map((e) => (
-                                  <a
-                                    key={e.id}
-                                    href={`/api/findings/${finding.id}/evidence/${e.id}`}
-                                    className="mt-1 flex items-center gap-1 text-xs text-blue-700 hover:underline"
-                                  >
-                                    📎 {e.fileName} ({formatBytes(e.size)})
-                                  </a>
+                                  <div key={e.id} className="mt-1 flex items-center gap-1">
+                                    <a
+                                      href={`/api/findings/${finding.id}/evidence/${e.id}`}
+                                      className="flex items-center gap-1 text-xs text-blue-700 hover:underline"
+                                    >
+                                      📎 {e.fileName} ({formatBytes(e.size)})
+                                    </a>
+                                    {removeFileButton(e)}
+                                  </div>
                                 ))}
                                 <span className="text-xs text-slate-500">{formatDateTime(r.createdAt)}</span>
                               </div>
