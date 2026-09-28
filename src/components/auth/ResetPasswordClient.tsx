@@ -8,6 +8,7 @@ import { apiSend, ApiError } from "@/lib/api-client";
 import { Button } from "@/components/ui/Button";
 import { Input, Label } from "@/components/ui/Field";
 import { validatePasswordStrength } from "@/lib/passwordValidation";
+import { AuthBackdrop, AUTH_PANEL_CLASS } from "@/components/auth/AuthBackdrop";
 
 export function ResetPasswordClient({ token: token }: { token: string | null }) {
   const router = useRouter();
@@ -53,21 +54,21 @@ export function ResetPasswordClient({ token: token }: { token: string | null }) 
 
   if (!token) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-100 px-4">
-        <div className="w-full max-w-sm">
+      <AuthBackdrop>
+        <div className={AUTH_PANEL_CLASS}>
           <div className="mb-6 flex flex-col items-center text-center">
             <Image src="/Nib_International_Bank.png" alt="NIB International Bank" width={64} height={64} className="mb-3" priority />
             <h1 className="text-xl font-bold text-brand-ink">Invalid reset link</h1>
             <p className="mt-1 text-sm text-slate-600">This link is missing the required reset token.</p>
           </div>
-          <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+          <div>
             <p className="text-sm text-slate-600">
               Request a new password reset link, or sign in if you remember your password.
             </p>
             <div className="mt-5 flex flex-col gap-2">
               <Link
                 href="/forgot-password"
-                className="inline-flex items-center justify-center rounded-md border border-transparent bg-blue-800 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-900"
+                className="inline-flex items-center justify-center rounded-md border border-transparent bg-brand-gold px-4 py-2 text-sm font-medium text-on-gold shadow-sm hover:bg-brand-gold-dark"
               >
                 Request a new reset link
               </Link>
@@ -80,14 +81,14 @@ export function ResetPasswordClient({ token: token }: { token: string | null }) 
             </div>
           </div>
         </div>
-      </div>
+      </AuthBackdrop>
     );
   }
 
   if (done) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-100 px-4">
-        <div className="w-full max-w-sm">
+      <AuthBackdrop>
+        <div className={AUTH_PANEL_CLASS}>
           <div className="mb-6 flex flex-col items-center text-center">
             <Image src="/Nib_International_Bank.png" alt="NIB International Bank" width={64} height={64} className="mb-3" priority />
             <h1 className="text-xl font-bold text-brand-ink">Password updated</h1>
@@ -102,27 +103,27 @@ export function ResetPasswordClient({ token: token }: { token: string | null }) 
             <div className="mt-5">
               <Link
                 href="/login"
-                className="inline-flex w-full items-center justify-center rounded-md border border-transparent bg-blue-800 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-900"
+                className="inline-flex w-full items-center justify-center rounded-md border border-transparent bg-brand-gold px-4 py-2 text-sm font-medium text-on-gold shadow-sm hover:bg-brand-gold-dark"
               >
                 Sign in with new password
               </Link>
             </div>
           </div>
         </div>
-      </div>
+      </AuthBackdrop>
     );
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-100 px-4">
-      <div className="w-full max-w-sm">
+    <AuthBackdrop>
+      <div className={AUTH_PANEL_CLASS}>
         <div className="mb-6 flex flex-col items-center text-center">
           <Image src="/Nib_International_Bank.png" alt="NIB International Bank" width={64} height={64} className="mb-3" priority />
           <h1 className="text-xl font-bold text-brand-ink">Set a new password</h1>
           <p className="mt-1 text-sm text-slate-600">Choose a strong password you haven&apos;t used elsewhere.</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+        <form onSubmit={handleSubmit}>
           <div className="mb-4">
             <Label htmlFor="newPassword" brand>New password</Label>
             <Input
@@ -171,6 +172,6 @@ export function ResetPasswordClient({ token: token }: { token: string | null }) 
           </div>
         </form>
       </div>
-    </div>
+    </AuthBackdrop>
   );
 }

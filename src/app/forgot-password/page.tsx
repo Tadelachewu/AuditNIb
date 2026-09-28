@@ -6,6 +6,7 @@ import Link from "next/link";
 import { apiSend, ApiError } from "@/lib/api-client";
 import { Button } from "@/components/ui/Button";
 import { Input, Label } from "@/components/ui/Field";
+import { AuthBackdrop, AUTH_PANEL_CLASS } from "@/components/auth/AuthBackdrop";
 
 export default function ForgotPasswordPage() {
   const [identifier, setIdentifier] = useState("");
@@ -48,8 +49,8 @@ export default function ForgotPasswordPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-100 px-4">
-      <div className="w-full max-w-sm">
+    <AuthBackdrop>
+      <div className={AUTH_PANEL_CLASS}>
         <div className="mb-6 flex flex-col items-center text-center">
           <Image src="/Nib_International_Bank.png" alt="NIB International Bank" width={64} height={64} className="mb-3" priority />
           <h1 className="text-xl font-bold text-brand-ink">Reset your password</h1>
@@ -139,7 +140,7 @@ export default function ForgotPasswordPage() {
             </Link>
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+          <form onSubmit={handleSubmit}>
             <div className="mb-4">
               <Label htmlFor="identifier" brand>Username or email address</Label>
               <Input
@@ -167,6 +168,6 @@ export default function ForgotPasswordPage() {
           </form>
         )}
       </div>
-    </div>
+    </AuthBackdrop>
   );
 }

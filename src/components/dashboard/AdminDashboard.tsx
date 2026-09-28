@@ -4,8 +4,12 @@ import { hasPermission, permissionKey } from "@/lib/permissions/registry";
 import { formatDateTime } from "@/lib/format";
 import { StatCard, Card, CardHeader } from "@/components/ui/Card";
 import { DASHBOARD_ICONS as ICON } from "@/lib/dashboardIcons";
+import { NAV_SECTIONS } from "@/lib/nav";
 import type { SessionData } from "@/lib/session";
 import type { Database } from "@/types";
+
+// Each quick link shows the same icon the sidebar uses for that page.
+const NAV_ICON_BY_HREF = new Map(NAV_SECTIONS.flatMap((s) => s.items.map((i) => [i.href, i.icon] as const)));
 
 const QUICK_LINKS: { label: string; href: string; pageCode: string }[] = [
   { label: "Users", href: "/admin/users", pageCode: "users" },
@@ -94,16 +98,23 @@ export function AdminDashboard({ user, db }: { user: SessionData; db: Database }
 
         <Card>
           <CardHeader title="Quick Links" />
-          <div className="flex flex-col gap-1.5 p-3">
-            {visibleLinks.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                className="rounded-md bg-brand-gold px-2.5 py-1.5 text-sm font-medium text-on-gold transition-colors hover:bg-brand-gold-dark"
-              >
-                {link.label}
-              </Link>
-            ))}
+          {/* Compact buttons stacked in one column, each only as wide as its
+              label (items-start stops them stretching to the card's width),
+              with the same icon the sidebar uses for that page. */}
+          <div className="flex flex-col items-start gap-1.5 p-3">
+            {visibleLinks.map((link) => {
+              const Icon = NAV_ICON_BY_HREF.get(link.href);
+              return (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className="inline-flex items-center gap-1.5 rounded-md bg-brand-gold px-2.5 py-1 text-xs font-medium text-on-gold transition-colors hover:bg-brand-gold-dark"
+                >
+                  {Icon && <Icon className="h-3.5 w-3.5 shrink-0" strokeWidth={2} />}
+                  {link.label}
+                </Link>
+              );
+            })}
           </div>
         </Card>
       </div>

@@ -417,6 +417,11 @@ export default function SettingsPage() {
           </p>
           <div>
             <Label>Approver(s) - bank-wide users only</Label>
+            <p className="mb-1 text-xs text-slate-500">
+              Administrators only receive Support notifications, so an Administrator picked here won&apos;t be notified
+              when a finding is waiting - they&apos;ll only see it in their queue. Pick at least one non-Administrator
+              approver (e.g. an HO Controller).
+            </p>
             <div className="mt-1 flex max-h-48 flex-col gap-1 overflow-y-auto rounded-md border border-slate-200 p-2">
               {bankUsers.length === 0 && <p className="p-2 text-sm text-slate-500">No bank-wide users found.</p>}
               {bankUsers.map((u) => (

@@ -20,9 +20,26 @@ export interface NotifyOptions {
  * underlying workflow action. Sending itself no-ops silently whenever the
  * recipient has no email or SMTP isn't configured (see EMAIL_SETUP.md).
  */
+/**
+ * The Administrator role holds every permission and is bank-wide, so every
+ * permission-driven recipient lookup below would otherwise hand it every
+ * finding's every workflow step, bank-wide (plus an email for each). An
+ * Admin configures the system rather than working findings, so it only
+ * receives Support notifications - enforced here, the one place every
+ * notification (and its email) passes through, rather than at ~20 call
+ * sites. See docs/notifications.md for who receives what.
+ */
+export const ADMIN_ROLE_CODE = "ADMIN";
+export const ADMIN_NOTIFICATION_TYPES: ReadonlySet<string> = new Set(["SUPPORT_MESSAGE", "SUPPORT_REPLY"]);
+
 export function notifyUsers(db: Database, recipientUserIds: string[], opts: NotifyOptions): void {
   const now = new Date().toISOString();
+  const adminOnlyGetsSupport = !ADMIN_NOTIFICATION_TYPES.has(opts.type);
+  const adminIds = adminOnlyGetsSupport
+    ? new Set(db.users.filter((u) => u.role === ADMIN_ROLE_CODE).map((u) => u.id))
+    : new Set<string>();
   for (const recipientUserId of new Set(recipientUserIds)) {
+    if (adminIds.has(recipientUserId)) continue;
     const notification = {
       id: uuid(),
       recipientUserId,

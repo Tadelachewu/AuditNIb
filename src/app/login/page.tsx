@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { apiSend, ApiError } from "@/lib/api-client";
 import { Button } from "@/components/ui/Button";
 import { Input, Label } from "@/components/ui/Field";
+import { AuthBackdrop, AUTH_PANEL_CLASS } from "@/components/auth/AuthBackdrop";
 
 const DEMO_USERS = [
   { role: "Administrator", username: "admin", password: "Admin@123" },
@@ -42,15 +43,15 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-100 px-4">
-      <div className="w-full max-w-sm">
+    <AuthBackdrop>
+      <div className={AUTH_PANEL_CLASS}>
         <div className="mb-6 flex flex-col items-center text-center">
           <Image src="/Nib_International_Bank.png" alt="NIB International Bank" width={64} height={64} className="mb-3" priority />
           <h1 className="text-xl font-bold text-brand-ink">NIB Control360</h1>
           <p className="text-sm font-medium text-brand-ink">Internal Control Findings Management System</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+        <form onSubmit={handleSubmit}>
           <div className="mb-4">
             <Label htmlFor="username" brand>Username</Label>
             <Input
@@ -112,6 +113,6 @@ export default function LoginPage() {
           )}
         </div>
       </div>
-    </div>
+    </AuthBackdrop>
   );
 }
