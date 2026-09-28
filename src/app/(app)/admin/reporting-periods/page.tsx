@@ -5,9 +5,16 @@ import { apiGet, apiSend, ApiError } from "@/lib/api-client";
 import { formatDateTime } from "@/lib/format";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { StickyActions } from "@/components/ui/StickyActions";
 import { Input, Label } from "@/components/ui/Field";
 import { Badge } from "@/components/ui/Badge";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { Tag } from "lucide-react";
+import { AddDialog } from "@/components/ui/AddDialog";
+import { RowAction, RowActions } from "@/components/ui/RowActions";
+import { TableSkeletonRows } from "@/components/ui/Skeleton";
+import { Pagination } from "@/components/ui/Pagination";
+import { useClientPagination } from "@/lib/useClientPagination";
 import { usePermissions } from "@/lib/permissions/PermissionsContext";
 import { hasPermission } from "@/lib/permissions/registry";
 import type { ReportingPeriod } from "@/types";
@@ -80,6 +87,7 @@ export default function ReportingPeriodsPage() {
   // registry for this page) - gated identically to Lock/Unlock itself.
   const canLock = hasPermission(permissions, "reporting-periods.lock");
   const canDelete = hasPermission(permissions, "reporting-periods.delete");
+  const pager = useClientPagination(periods);
 
   function handleStartsAtChange(value: string) {
     setForm((f) => ({ ...f, startsAt: value, submissionStartsAt: f.submissionStartsAt === f.startsAt ? value : f.submissionStartsAt }));
@@ -239,13 +247,14 @@ export default function ReportingPeriodsPage() {
     load();
   }, []);
 
-  async function handleCreate(e: React.FormEvent) {
+  async function handleCreate(e: React.FormEvent, close: () => void) {
     e.preventDefault();
     setFormError(null);
     setSubmitting(true);
     try {
       await apiSend("/api/admin/reporting-periods", "POST", form);
       setForm((f) => ({ ...f, name: "" }));
+      close();
       await load();
     } catch (err) {
       setFormError(err instanceof ApiError ? err.message : "Failed to create reporting period");
@@ -341,66 +350,71 @@ export default function ReportingPeriodsPage() {
         always requires a reason and is audit-logged.
       </p>
 
-      {canCreate && (
       <Card className="mt-5">
-        <CardHeader
-          title="Open a New Period"
-          description="Created LOCKED by default (drafts still allowed) - use Unlock below to open it for the full workflow."
+        <CardHeader title="All Periods" description={`${periods.length} total`}
+          action={canCreate && (
+            <AddDialog
+              title="Open a New Period"
+              description="Created LOCKED by default (drafts still allowed) - use Unlock below to open it for the full workflow."
+            >
+              {({ close }) => (
+              <>
+              <form onSubmit={(e) => handleCreate(e, close)} className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3 sm:items-end">
+                <div>
+                  <Label htmlFor="startsAt">Starts at (date &amp; time)</Label>
+                  <Input id="startsAt" type="datetime-local" value={form.startsAt} onChange={(e) => handleStartsAtChange(e.target.value)} />
+                </div>
+                <div>
+                  <Label htmlFor="endsAt">Ends at (date &amp; time)</Label>
+                  <Input id="endsAt" type="datetime-local" value={form.endsAt} onChange={(e) => handleEndsAtChange(e.target.value)} />
+                </div>
+                <div>
+                  <Label htmlFor="name">Name (optional)</Label>
+                  <Input
+                    id="name"
+                    placeholder="e.g. September 2026 Monthly Review"
+                    value={form.name}
+                    onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="submissionStartsAt">Submission window starts at</Label>
+                  <Input
+                    id="submissionStartsAt"
+                    type="datetime-local"
+                    value={form.submissionStartsAt}
+                    onChange={(e) => setForm({ ...form, submissionStartsAt: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="submissionEndsAt">Submission window ends at</Label>
+                  <Input
+                    id="submissionEndsAt"
+                    type="datetime-local"
+                    value={form.submissionEndsAt}
+                    onChange={(e) => setForm({ ...form, submissionEndsAt: e.target.value })}
+                  />
+                </div>
+                <StickyActions error={formError}>
+                  <Button type="button" variant="cancel" onClick={close}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={submitting}>
+                    {submitting ? "Creating..." : "Create Period"}
+                  </Button>
+                </StickyActions>
+              </form>
+              <p className="px-4 pb-4 text-xs text-slate-500">
+                The submission window is when a finding can actually be submitted (moved past draft) - narrower than, and
+                inside, the period&apos;s own date range above. Defaults to matching it exactly; narrow it only if new
+                findings should stop being submittable partway through the period (e.g. the period covers all of
+                September, but branches should only submit in the first two weeks).
+              </p>
+              </>
+              )}
+            </AddDialog>
+          )}
         />
-        <form onSubmit={handleCreate} className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3 sm:items-end">
-          <div>
-            <Label htmlFor="startsAt">Starts at (date &amp; time)</Label>
-            <Input id="startsAt" type="datetime-local" value={form.startsAt} onChange={(e) => handleStartsAtChange(e.target.value)} />
-          </div>
-          <div>
-            <Label htmlFor="endsAt">Ends at (date &amp; time)</Label>
-            <Input id="endsAt" type="datetime-local" value={form.endsAt} onChange={(e) => handleEndsAtChange(e.target.value)} />
-          </div>
-          <div>
-            <Label htmlFor="name">Name (optional)</Label>
-            <Input
-              id="name"
-              placeholder="e.g. September 2026 Monthly Review"
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-            />
-          </div>
-          <div>
-            <Label htmlFor="submissionStartsAt">Submission window starts at</Label>
-            <Input
-              id="submissionStartsAt"
-              type="datetime-local"
-              value={form.submissionStartsAt}
-              onChange={(e) => setForm({ ...form, submissionStartsAt: e.target.value })}
-            />
-          </div>
-          <div>
-            <Label htmlFor="submissionEndsAt">Submission window ends at</Label>
-            <Input
-              id="submissionEndsAt"
-              type="datetime-local"
-              value={form.submissionEndsAt}
-              onChange={(e) => setForm({ ...form, submissionEndsAt: e.target.value })}
-            />
-          </div>
-          <div>
-            {formError && <p className="mb-2 text-sm text-red-600">{formError}</p>}
-            <Button type="submit" disabled={submitting}>
-              {submitting ? "Creating..." : "Create Period"}
-            </Button>
-          </div>
-        </form>
-        <p className="px-4 pb-4 text-xs text-slate-500">
-          The submission window is when a finding can actually be submitted (moved past draft) - narrower than, and
-          inside, the period&apos;s own date range above. Defaults to matching it exactly; narrow it only if new
-          findings should stop being submittable partway through the period (e.g. the period covers all of
-          September, but branches should only submit in the first two weeks).
-        </p>
-      </Card>
-      )}
-
-      <Card className="mt-5">
-        <CardHeader title="All Periods" description={`${periods.length} total`} />
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-600">
@@ -413,15 +427,16 @@ export default function ReportingPeriodsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {loading && (
+              {loading && <TableSkeletonRows cols={5} />}
+              {!loading && periods.length === 0 && (
                 <tr>
-                  <td className="px-4 py-4 text-slate-500" colSpan={5}>
-                    Loading...
+                  <td className="px-4 py-6 text-center text-slate-500" colSpan={5}>
+                    No reporting periods yet.
                   </td>
                 </tr>
               )}
               {!loading &&
-                periods.map((p) => (
+                pager.pageItems.map((p) => (
                   <tr key={p.id}>
                     <td className="px-4 py-2 font-medium text-slate-900">
                       {p.code}
@@ -440,37 +455,14 @@ export default function ReportingPeriodsPage() {
                             className="max-w-56 text-xs"
                           />
                           {renameError && <p className="text-xs text-red-600">{renameError}</p>}
-                          <div className="flex gap-2">
-                            <Button variant="secondary" onClick={() => setRenamingId(null)} disabled={renameBusy}>
-                              Cancel
-                            </Button>
-                            <Button onClick={() => saveRename(p)} disabled={renameBusy}>
-                              {renameBusy ? "Saving..." : "Save"}
-                            </Button>
+                          <div className="flex gap-1.5">
+                            <RowAction kind="cancel" onClick={() => setRenamingId(null)} disabled={renameBusy} />
+                            <RowAction kind="save" busy={renameBusy} label={renameBusy ? "Saving..." : "Save"} onClick={() => saveRename(p)} />
                           </div>
                         </div>
                       ) : (
                         p.name && <div className="mt-0.5 text-xs font-normal text-slate-500">{p.name}</div>
                       )}
-                      <div className="mt-0.5 flex flex-wrap gap-2">
-                        {canLock && (p.findingCount === 0 ? (
-                          <button type="button" onClick={() => openPeriodEditDialog(p)} className="text-xs font-normal text-blue-800 hover:underline">
-                            Edit Period
-                          </button>
-                        ) : (
-                          <span
-                            className="text-xs font-normal text-slate-400"
-                            title={`Can't change this period's date range - ${p.findingCount} finding(s) already reference it`}
-                          >
-                            Edit Period
-                          </span>
-                        ))}
-                        {canLock && renamingId !== p.id && (
-                          <button type="button" onClick={() => openRename(p)} className="text-xs font-normal text-blue-800 hover:underline">
-                            {p.name ? "Rename" : "Add name"}
-                          </button>
-                        )}
-                      </div>
                     </td>
                     <td className="px-4 py-2 text-xs text-slate-500">
                       {formatDateTime(p.startsAt)} — {formatDateTime(p.endsAt)}
@@ -506,29 +498,43 @@ export default function ReportingPeriodsPage() {
                       {p.lockReason ? `${p.lockReason} · ${formatDateTime(p.updatedAt)}` : "—"}
                     </td>
                     <td className="px-4 py-2 text-right">
-                      <div className="flex justify-end gap-2">
+                      <RowActions>
                         {canLock && (
-                        <Button variant="secondary" disabled={rowBusy === p.id} onClick={() => toggleLock(p)}>
-                          {p.status === "OPEN" ? "Lock" : "Unlock"}
-                        </Button>
+                          <RowAction
+                            kind="edit"
+                            label="Edit period"
+                            disabled={p.findingCount > 0}
+                            title={
+                              p.findingCount > 0
+                                ? `Can't change this period's date range - ${p.findingCount} finding(s) already reference it`
+                                : "Edit this period's date range"
+                            }
+                            onClick={() => openPeriodEditDialog(p)}
+                          />
+                        )}
+                        {canLock && renamingId !== p.id && (
+                          <RowAction kind="edit" icon={Tag} label={p.name ? "Rename" : "Add name"} onClick={() => openRename(p)} />
+                        )}
+                        {canLock && (
+                          <RowAction kind={p.status === "OPEN" ? "lock" : "unlock"} busy={rowBusy === p.id} onClick={() => toggleLock(p)} />
                         )}
                         {canDelete && (
-                        <Button
-                          variant="danger"
-                          disabled={rowBusy === p.id || p.findingCount > 0}
-                          title={p.findingCount > 0 ? `${p.findingCount} finding(s) reference this period` : undefined}
-                          onClick={() => deletePeriod(p)}
-                        >
-                          Delete
-                        </Button>
+                          <RowAction
+                            kind="delete"
+                            busy={rowBusy === p.id}
+                            disabled={p.findingCount > 0}
+                            title={p.findingCount > 0 ? `${p.findingCount} finding(s) reference this period` : "Delete"}
+                            onClick={() => deletePeriod(p)}
+                          />
                         )}
-                      </div>
+                      </RowActions>
                     </td>
                   </tr>
                 ))}
             </tbody>
           </table>
         </div>
+        <Pagination page={pager.page} totalPages={pager.totalPages} total={pager.total} pageSize={pager.pageSize} onPageChange={pager.setPage} />
       </Card>
       {dialog}
 
@@ -581,7 +587,7 @@ export default function ReportingPeriodsPage() {
               </>
             )}
             <div className="mt-4 flex justify-end gap-2">
-              <Button variant="secondary" onClick={() => setLockTarget(null)}>
+              <Button variant="cancel" onClick={() => setLockTarget(null)}>
                 Cancel
               </Button>
               <Button variant="danger" disabled={lockBusy || lockReasonInput.trim().length < 5} onClick={confirmLock}>
@@ -624,7 +630,7 @@ export default function ReportingPeriodsPage() {
             </div>
             {windowError && <p className="mt-2 text-sm text-red-600">{windowError}</p>}
             <div className="mt-4 flex justify-end gap-2">
-              <Button variant="secondary" onClick={() => setWindowTarget(null)}>
+              <Button variant="cancel" onClick={() => setWindowTarget(null)}>
                 Cancel
               </Button>
               <Button disabled={windowBusy || windowReason.trim().length < 5} onClick={confirmWindow}>
@@ -685,7 +691,7 @@ export default function ReportingPeriodsPage() {
             </div>
             {periodEditError && <p className="mt-2 text-sm text-red-600">{periodEditError}</p>}
             <div className="mt-4 flex justify-end gap-2">
-              <Button variant="secondary" onClick={() => setPeriodEditTarget(null)}>
+              <Button variant="cancel" onClick={() => setPeriodEditTarget(null)}>
                 Cancel
               </Button>
               <Button disabled={periodEditBusy || periodEditReason.trim().length < 5} onClick={confirmPeriodEdit}>

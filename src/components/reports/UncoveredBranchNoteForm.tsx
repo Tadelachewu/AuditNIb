@@ -78,7 +78,7 @@ export function UncoveredBranchNoteForm({
       <div className="flex flex-col gap-1">
         {error && <span className="text-xs text-red-600">{error}</span>}
         <div className="flex gap-2">
-          <Button variant="secondary" onClick={() => setEditing(false)}>
+          <Button variant="cancel" onClick={() => setEditing(false)}>
             Cancel
           </Button>
           <Button disabled={busy || !resolved} onClick={save}>

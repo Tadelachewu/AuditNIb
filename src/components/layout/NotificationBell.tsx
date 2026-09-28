@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiGet, apiSend, ApiError } from "@/lib/api-client";
 import { formatDateTime } from "@/lib/format";
+import { FIELD_FOCUS } from "@/components/ui/Field";
 import type { Notification } from "@/types";
 
 // master.txt §12's in-app notification center: bell + unread badge, polled
@@ -112,7 +113,7 @@ export function NotificationBell() {
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="relative rounded-full p-2 text-on-dark/90 hover:bg-on-dark/10 hover:text-on-dark"
+        className="relative rounded-full p-2 text-chrome-fg hover:bg-chrome-hover"
         aria-label="Notifications"
       >
         <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
@@ -162,7 +163,7 @@ export function NotificationBell() {
                         placeholder="Add a comment (optional)..."
                         value={commentText}
                         onChange={(e) => setCommentText(e.target.value)}
-                        className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-xs"
+                        className={`w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs ${FIELD_FOCUS}`}
                       />
                       {commentError && <p className="text-xs text-red-600">{commentError}</p>}
                       <div className="flex justify-end gap-2">

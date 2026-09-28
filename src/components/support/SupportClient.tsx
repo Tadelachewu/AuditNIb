@@ -9,6 +9,9 @@ import { Button } from "@/components/ui/Button";
 import { Textarea } from "@/components/ui/Field";
 import { Badge } from "@/components/ui/Badge";
 import type { SupportThread, SupportMessage } from "@/types";
+import { ListSkeleton } from "@/components/ui/Skeleton";
+import { Pagination } from "@/components/ui/Pagination";
+import { useClientPagination } from "@/lib/useClientPagination";
 
 function StatusBadge({ thread }: { thread: SupportThread }) {
   if (thread.status === "RESOLVED") return <Badge tone="green">Resolved{thread.rating ? ` - ${thread.rating}★` : ""}</Badge>;
@@ -23,6 +26,7 @@ function StatusBadge({ thread }: { thread: SupportThread }) {
  */
 export function SupportClient() {
   const [threads, setThreads] = useState<SupportThread[] | null>(null);
+  const pager = useClientPagination(threads ?? []);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [messages, setMessages] = useState<SupportMessage[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -152,9 +156,9 @@ export function SupportClient() {
         <Card>
           <CardHeader title="My Conversations" />
           <div className="max-h-[28rem] divide-y divide-slate-200 overflow-y-auto">
-            {threads === null && <p className="p-4 text-sm text-slate-500">Loading...</p>}
+            {threads === null && <ListSkeleton rows={5} />}
             {threads?.length === 0 && <p className="p-4 text-sm text-slate-500">No messages yet.</p>}
-            {threads?.map((t) => (
+            {threads !== null && pager.pageItems.map((t) => (
               <button
                 key={t.id}
                 onClick={() => setSelectedId(t.id)}
@@ -168,6 +172,7 @@ export function SupportClient() {
               </button>
             ))}
           </div>
+          <Pagination page={pager.page} totalPages={pager.totalPages} total={pager.total} pageSize={pager.pageSize} onPageChange={pager.setPage} />
         </Card>
       </div>
 
@@ -180,6 +185,7 @@ export function SupportClient() {
           <div className="flex h-full flex-col">
             <CardHeader title={selectedThread.subject} action={<StatusBadge thread={selectedThread} />} />
             <div className="flex max-h-[26rem] min-h-[10rem] flex-col gap-3 overflow-y-auto p-4">
+              {messages === null && <ListSkeleton rows={3} />}
               {messages?.map((m) => (
                 <div key={m.id} className={`flex flex-col ${m.senderIsSupport ? "items-start" : "items-end"}`}>
                   <div

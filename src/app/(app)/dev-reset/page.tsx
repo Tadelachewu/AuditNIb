@@ -27,6 +27,7 @@ import { apiGet, apiSend, ApiError } from "@/lib/api-client";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input, Label } from "@/components/ui/Field";
+import { FormSkeleton } from "@/components/ui/Skeleton";
 
 const CONFIRM_PHRASE = "DELETE ALL FINDINGS";
 
@@ -117,9 +118,7 @@ export default function DevResetPage() {
       </div>
 
       {loading && (
-        <Card>
-          <p className="p-4 text-sm text-slate-500">Loading...</p>
-        </Card>
+        <FormSkeleton cards={1} />
       )}
 
       {!loading && unavailableReason && (

@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiSend, ApiError } from "@/lib/api-client";
-import { Card, CardHeader } from "@/components/ui/Card";
+import { Card } from "@/components/ui/Card";
+import { CollapsibleCard } from "@/components/ui/CollapsibleCard";
 import { Button } from "@/components/ui/Button";
 import { Input, Label } from "@/components/ui/Field";
 
@@ -65,11 +66,13 @@ export function ProfileClient({ forced }: { forced: boolean }) {
         </Card>
       )}
 
-      <Card>
-        <CardHeader
-          title="Change Password"
-          description="Requires your current password. Every other account detail - display name, username, role, organization assignment, email, and phone - can only be changed by an administrator."
-        />
+      {/* Opens by itself when a password change is being forced - that's the
+          one thing this page is for until it's done. */}
+      <CollapsibleCard
+        defaultOpen={forced}
+        title="Change Password"
+        description="Requires your current password. Every other account detail - display name, username, role, organization assignment, email, and phone - can only be changed by an administrator."
+      >
         <form onSubmit={savePassword} className="flex flex-col gap-3 p-4 sm:max-w-sm">
           <div>
             <Label htmlFor="current-password">Current password</Label>
@@ -110,7 +113,7 @@ export function ProfileClient({ forced }: { forced: boolean }) {
             </Button>
           </div>
         </form>
-      </Card>
+      </CollapsibleCard>
     </div>
   );
 }

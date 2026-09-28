@@ -10,6 +10,9 @@ import { Badge } from "@/components/ui/Badge";
 import { FileInput } from "@/components/ui/Field";
 import { ImportGuide } from "@/components/findings/ImportGuide";
 import type { ImportBatch, ImportBatchRow } from "@/types";
+import { ListSkeleton } from "@/components/ui/Skeleton";
+import { Pagination } from "@/components/ui/Pagination";
+import { useClientPagination } from "@/lib/useClientPagination";
 
 const OUTCOME_TONE: Record<string, "green" | "amber" | "red"> = {
   imported: "green",
@@ -24,7 +27,7 @@ type DisplayRow = Pick<ImportBatchRow, "rowNumber" | "outcome" | "reference" | "
 
 function BatchRowsTable({ rows }: { rows: DisplayRow[] }) {
   return (
-    <div className="max-h-72 overflow-y-auto rounded-md border border-slate-100">
+    <div className="max-h-72 overflow-auto rounded-md border border-slate-100">
       <table className="w-full text-left text-xs">
         <thead className="sticky top-0 border-b border-slate-100 bg-slate-50 uppercase tracking-wide text-slate-600">
           <tr>
@@ -55,6 +58,7 @@ function BatchRowsTable({ rows }: { rows: DisplayRow[] }) {
 
 export default function ImportFindingsPage() {
   const [history, setHistory] = useState<ImportBatch[]>([]);
+  const pager = useClientPagination(history);
   const [loading, setLoading] = useState(true);
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -204,10 +208,10 @@ export default function ImportFindingsPage() {
       <Card>
         <CardHeader title="Import History" description={`${history.length} run(s)`} />
         <div className="divide-y divide-slate-100">
-          {loading && <p className="px-4 py-4 text-sm text-slate-500">Loading...</p>}
+          {loading && <ListSkeleton rows={4} />}
           {!loading && history.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-500">No imports yet.</p>}
           {!loading &&
-            history.map((b) => (
+            pager.pageItems.map((b) => (
               <div key={b.id} className="px-4 py-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="text-sm">
@@ -233,6 +237,7 @@ export default function ImportFindingsPage() {
               </div>
             ))}
         </div>
+        <Pagination page={pager.page} totalPages={pager.totalPages} total={pager.total} pageSize={pager.pageSize} onPageChange={pager.setPage} />
       </Card>
     </div>
   );

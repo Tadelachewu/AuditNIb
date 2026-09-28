@@ -5,9 +5,14 @@ import { useRouter } from "next/navigation";
 import { apiSend, ApiError } from "@/lib/api-client";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { StickyActions } from "@/components/ui/StickyActions";
 import { Input, Label } from "@/components/ui/Field";
 import { Badge } from "@/components/ui/Badge";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { AddDialog } from "@/components/ui/AddDialog";
+import { RowAction, RowActions, StatusToggleAction } from "@/components/ui/RowActions";
+import { Pagination } from "@/components/ui/Pagination";
+import { useClientPagination } from "@/lib/useClientPagination";
 import type { UncoveredReason } from "@/types";
 
 // Same convention as SourcesManager: the list is a prop refreshed via
@@ -25,14 +30,16 @@ export function UncoveredReasonsManager({ initialReasons }: { initialReasons: Un
   const [editName, setEditName] = useState("");
   const [editError, setEditError] = useState<string | null>(null);
   const { confirm, dialog } = useConfirm();
+  const pager = useClientPagination(reasons);
 
-  async function handleCreate(e: React.FormEvent) {
+  async function handleCreate(e: React.FormEvent, close: () => void) {
     e.preventDefault();
     setFormError(null);
     setSubmitting(true);
     try {
       await apiSend("/api/admin/uncovered-reasons", "POST", form);
       setForm({ code: "", name: "" });
+      close();
       router.refresh();
     } catch (err) {
       setFormError(err instanceof ApiError ? err.message : "Failed to create reason");
@@ -104,27 +111,32 @@ export function UncoveredReasonsManager({ initialReasons }: { initialReasons: Un
   return (
     <>
       <Card className="mt-5">
-        <CardHeader title="Add Reason" />
-        <form onSubmit={handleCreate} className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3">
-          <div>
-            <Label htmlFor="code">Code</Label>
-            <Input id="code" required value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} />
-          </div>
-          <div className="sm:col-span-2">
-            <Label htmlFor="name">Name</Label>
-            <Input id="name" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-          </div>
-          <div className="sm:col-span-3">
-            {formError && <p className="mb-2 text-sm text-red-600">{formError}</p>}
-            <Button type="submit" disabled={submitting}>
-              {submitting ? "Adding..." : "Add Reason"}
-            </Button>
-          </div>
-        </form>
-      </Card>
-
-      <Card className="mt-5">
-        <CardHeader title="All Reasons" description={`${reasons.length} total - reporters can always type their own via "Other" instead`} />
+        <CardHeader title="All Reasons" description={`${reasons.length} total - reporters can always type their own via "Other" instead`}
+          action={(
+            <AddDialog title="Add Reason">
+              {({ close }) => (
+              <form onSubmit={(e) => handleCreate(e, close)} className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3">
+                <div>
+                  <Label htmlFor="code">Code</Label>
+                  <Input id="code" required value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} />
+                </div>
+                <div className="sm:col-span-2">
+                  <Label htmlFor="name">Name</Label>
+                  <Input id="name" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+                </div>
+                <StickyActions error={formError}>
+                  <Button type="button" variant="cancel" onClick={close}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={submitting}>
+                    {submitting ? "Adding..." : "Add Reason"}
+                  </Button>
+                </StickyActions>
+              </form>
+              )}
+            </AddDialog>
+          )}
+        />
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-600">
@@ -136,7 +148,7 @@ export function UncoveredReasonsManager({ initialReasons }: { initialReasons: Un
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {reasons.map((r) => {
+              {pager.pageItems.map((r) => {
                 const isEditing = editingId === r.id;
                 return (
                   <tr key={r.id}>
@@ -156,30 +168,16 @@ export function UncoveredReasonsManager({ initialReasons }: { initialReasons: Un
                     </td>
                     <td className="px-4 py-2 text-right">
                       {isEditing ? (
-                        <div className="flex justify-end gap-2">
-                          <Button variant="secondary" onClick={() => setEditingId(null)}>
-                            Cancel
-                          </Button>
-                          <Button disabled={rowBusy === r.id} onClick={() => saveEdit(r)}>
-                            {rowBusy === r.id ? "Saving..." : "Save"}
-                          </Button>
-                        </div>
+                        <RowActions inline>
+                          <RowAction kind="cancel" onClick={() => setEditingId(null)} />
+                          <RowAction kind="save" busy={rowBusy === r.id} label={rowBusy === r.id ? "Saving..." : "Save"} onClick={() => saveEdit(r)} />
+                        </RowActions>
                       ) : (
-                        <div className="flex justify-end gap-2">
-                          <Button variant="secondary" onClick={() => startEdit(r)}>
-                            Edit
-                          </Button>
-                          <Button
-                            variant={r.active ? "danger" : "secondary"}
-                            disabled={rowBusy === r.id}
-                            onClick={() => toggleActive(r)}
-                          >
-                            {r.active ? "Deactivate" : "Activate"}
-                          </Button>
-                          <Button variant="danger" disabled={rowBusy === r.id} onClick={() => deleteReason(r)}>
-                            Delete
-                          </Button>
-                        </div>
+                        <RowActions>
+                          <RowAction kind="edit" onClick={() => startEdit(r)} />
+                          <StatusToggleAction active={r.active} busy={rowBusy === r.id} onClick={() => toggleActive(r)} />
+                          <RowAction kind="delete" busy={rowBusy === r.id} onClick={() => deleteReason(r)} />
+                        </RowActions>
                       )}
                     </td>
                   </tr>
@@ -188,6 +186,7 @@ export function UncoveredReasonsManager({ initialReasons }: { initialReasons: Un
             </tbody>
           </table>
         </div>
+        <Pagination page={pager.page} totalPages={pager.totalPages} total={pager.total} pageSize={pager.pageSize} onPageChange={pager.setPage} />
       </Card>
       {dialog}
     </>

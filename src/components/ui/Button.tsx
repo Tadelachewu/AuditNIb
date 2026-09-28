@@ -1,13 +1,14 @@
 import { type ButtonHTMLAttributes } from "react";
 
-type Variant = "primary" | "secondary" | "danger" | "success" | "info" | "neutral" | "warning" | "ghost";
+type Variant = "primary" | "secondary" | "cancel" | "danger" | "success" | "info" | "neutral" | "warning" | "ghost";
 
 // Action buttons (Sign In, Create User, Sign Out, New Finding, and
 // similar) show the brand gold sampled from the NIB logo's lower half
 // (globals.css's --brand-gold) as their resting color, not just on hover -
-// only sidebar/page-navigation links (src/components/layout/Sidebar.tsx,
-// the admin Quick Links list) stay gold-on-hover-only, since those are
-// navigation, not actions. `--brand-gold-dark` is only for the
+// only the sidebar's navigation links (src/components/layout/Sidebar.tsx)
+// stay gold-for-the-current-page-only, since those are navigation, not
+// actions. (The admin dashboard's Quick Links are gold at rest too, like
+// buttons - they're shortcuts to act on.) `--brand-gold-dark` is only for the
 // hover/press feedback on top of that resting gold. `danger` keeps its
 // own red, unchanged - a destructive action losing its red cue would
 // undermine the warning it's there for.
@@ -25,6 +26,15 @@ const VARIANT_CLASSES: Record<Variant, string> = {
   primary: "bg-brand-gold text-on-gold hover:bg-brand-gold-dark disabled:bg-amber-100 disabled:text-slate-400",
   secondary:
     "bg-white text-slate-700 border border-slate-300 hover:bg-slate-50 hover:border-slate-400 disabled:bg-slate-50 disabled:text-slate-300 disabled:border-slate-200",
+  // Every "Cancel" / dismiss button (dialogs, editors, sticky action bars,
+  // confirmations) - a soft grey fill, the app's neutral "back out, nothing
+  // changes" color. Deliberately filled, not `secondary`'s white outline:
+  // on a white card or dialog that outline reads as no background at all,
+  // and looks the same as outlined actions like Edit that DO do something.
+  // Distinct from gold (do it), red (destroy) and blue (workflow step).
+  // Theme-remapped slate tokens, so it stays a quiet grey in dark mode too.
+  cancel:
+    "bg-slate-100 text-slate-700 border border-slate-300 hover:bg-slate-200 hover:border-slate-400 disabled:text-slate-400",
   // Fixed literal hex, not the theme-remapped red-600/700/300 tokens -
   // those flip to pale tints in dark mode (see globals.css's dark-mode
   // block, meant for the pale-bg-plus-dark-text Badge idiom), which would

@@ -4,9 +4,15 @@ import { useEffect, useState } from "react";
 import { apiGet, apiSend, ApiError } from "@/lib/api-client";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { StickyActions } from "@/components/ui/StickyActions";
 import { Input, Select, Label } from "@/components/ui/Field";
 import { Badge } from "@/components/ui/Badge";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { AddDialog } from "@/components/ui/AddDialog";
+import { RowAction, RowActions, StatusToggleAction } from "@/components/ui/RowActions";
+import { ListSkeleton } from "@/components/ui/Skeleton";
+import { Pagination } from "@/components/ui/Pagination";
+import { useClientPagination } from "@/lib/useClientPagination";
 import type { RoleDefinition, OrgScope } from "@/types";
 import { permissionKey, type PageDefinition } from "@/lib/permissions/registry";
 
@@ -41,6 +47,7 @@ export default function RolesPage() {
   const [editError, setEditError] = useState<string | null>(null);
   const [rowBusy, setRowBusy] = useState<string | null>(null);
   const { confirm, dialog } = useConfirm();
+  const pager = useClientPagination(roles);
 
   async function load() {
     setLoading(true);
@@ -58,13 +65,14 @@ export default function RolesPage() {
     setList(list.includes(key) ? list.filter((k) => k !== key) : [...list, key]);
   }
 
-  async function handleCreate(e: React.FormEvent) {
+  async function handleCreate(e: React.FormEvent, close: () => void) {
     e.preventDefault();
     setFormError(null);
     setSubmitting(true);
     try {
       await apiSend("/api/admin/roles", "POST", { ...form, permissions: newPermissions });
       setForm(emptyForm);
+      close();
       setNewPermissions([]);
       await load();
     } catch (err) {
@@ -150,98 +158,106 @@ export default function RolesPage() {
       </p>
 
       <Card className="mt-5">
-        <CardHeader title="New Role" />
-        <form onSubmit={handleCreate} className="flex flex-col gap-4 p-4">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <div>
-              <Label htmlFor="code">Code</Label>
-              <Input
-                id="code"
-                required
-                placeholder="REGIONAL_AUDITOR"
-                value={form.code}
-                onChange={(e) => setForm({ ...form, code: e.target.value.toUpperCase() })}
-              />
-            </div>
-            <div>
-              <Label htmlFor="name">Name</Label>
-              <Input id="name" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-            </div>
-            <div>
-              <Label htmlFor="orgScope">Organization scope</Label>
-              <Select
-                id="orgScope"
-                value={form.orgScope}
-                onChange={(e) => setForm({ ...form, orgScope: e.target.value as OrgScope })}
-              >
-                <option value="BANK">Bank-wide</option>
-                <option value="DISTRICT">District</option>
-                <option value="BRANCH">Branch</option>
-              </Select>
-            </div>
-            {form.orgScope === "BRANCH" && (
-              <div className="flex items-center gap-2 pb-1.5 pt-5">
-                <input
-                  id="branchSingleton"
-                  type="checkbox"
-                  checked={form.branchSingleton}
-                  onChange={(e) => setForm({ ...form, branchSingleton: e.target.checked })}
-                  className="h-4 w-4 rounded border-slate-300"
-                />
-                <Label htmlFor="branchSingleton">At most one active user per branch</Label>
-              </div>
-            )}
-          </div>
-
-          <div>
-            <Label htmlFor="description">Description</Label>
-            <Input
-              id="description"
-              value={form.description}
-              onChange={(e) => setForm({ ...form, description: e.target.value })}
-            />
-          </div>
-
-          <div>
-            <Label>Permissions</Label>
-            <div className="flex flex-col gap-2 rounded-md border border-slate-200 p-3">
-              {registry.map((page) => (
-                <div key={page.code} className="flex flex-wrap items-center gap-3">
-                  <span className="w-44 shrink-0 text-sm text-slate-700">{page.label}</span>
-                  {page.actions.map((a) => {
-                    const key = `${page.code}.${a.action}`;
-                    return (
-                      <label key={key} className="flex items-center gap-1.5 text-xs text-slate-600">
-                        <input
-                          type="checkbox"
-                          checked={newPermissions.includes(key)}
-                          onChange={() => togglePermission(newPermissions, setNewPermissions, key)}
-                          className="h-3.5 w-3.5 rounded border-slate-300"
-                        />
-                        {a.label}
-                      </label>
-                    );
-                  })}
+        <CardHeader title="All Roles" description={`${roles.length} total`}
+          action={(
+            <AddDialog size="xl" title="New Role">
+              {({ close }) => (
+              <form onSubmit={(e) => handleCreate(e, close)} className="flex flex-col gap-4 p-4">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <div>
+                    <Label htmlFor="code">Code</Label>
+                    <Input
+                      id="code"
+                      required
+                      placeholder="REGIONAL_AUDITOR"
+                      value={form.code}
+                      onChange={(e) => setForm({ ...form, code: e.target.value.toUpperCase() })}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="name">Name</Label>
+                    <Input id="name" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+                  </div>
+                  <div>
+                    <Label htmlFor="orgScope">Organization scope</Label>
+                    <Select
+                      id="orgScope"
+                      value={form.orgScope}
+                      onChange={(e) => setForm({ ...form, orgScope: e.target.value as OrgScope })}
+                    >
+                      <option value="BANK">Bank-wide</option>
+                      <option value="DISTRICT">District</option>
+                      <option value="BRANCH">Branch</option>
+                    </Select>
+                  </div>
+                  {form.orgScope === "BRANCH" && (
+                    <div className="flex items-center gap-2 pb-1.5 pt-5">
+                      <input
+                        id="branchSingleton"
+                        type="checkbox"
+                        checked={form.branchSingleton}
+                        onChange={(e) => setForm({ ...form, branchSingleton: e.target.checked })}
+                        className="h-4 w-4 rounded border-slate-300"
+                      />
+                      <Label htmlFor="branchSingleton">At most one active user per branch</Label>
+                    </div>
+                  )}
                 </div>
-              ))}
-            </div>
-          </div>
 
-          {formError && <p className="text-sm text-red-600">{formError}</p>}
-          <div>
-            <Button type="submit" disabled={submitting}>
-              {submitting ? "Creating..." : "Create Role"}
-            </Button>
-          </div>
-        </form>
-      </Card>
+                <div>
+                  <Label htmlFor="description">Description</Label>
+                  <Input
+                    id="description"
+                    value={form.description}
+                    onChange={(e) => setForm({ ...form, description: e.target.value })}
+                  />
+                </div>
 
-      <Card className="mt-5">
-        <CardHeader title="All Roles" description={`${roles.length} total`} />
+                <div>
+                  <Label>Permissions</Label>
+                  <div className="flex flex-col gap-2 rounded-md border border-slate-200 p-3">
+                    {registry.map((page) => (
+                      <div key={page.code} className="flex flex-wrap items-center gap-3">
+                        <span className="w-44 shrink-0 text-sm font-semibold text-slate-900">{page.label}</span>
+                        {page.actions.map((a) => {
+                          const key = `${page.code}.${a.action}`;
+                          return (
+                            <label
+                              key={key}
+                              className="flex items-center gap-1.5 text-xs text-slate-600"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={newPermissions.includes(key)}
+                                onChange={() => togglePermission(newPermissions, setNewPermissions, key)}
+                                className="h-3.5 w-3.5 rounded border-slate-300"
+                              />
+                              {a.label}
+                            </label>
+                          );
+                        })}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <StickyActions error={formError}>
+                  <Button type="button" variant="cancel" onClick={close}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={submitting}>
+                    {submitting ? "Creating..." : "Create Role"}
+                  </Button>
+                </StickyActions>
+              </form>
+              )}
+            </AddDialog>
+          )}
+        />
         <div className="divide-y divide-slate-100">
-          {loading && <p className="px-4 py-4 text-sm text-slate-500">Loading...</p>}
+          {loading && <ListSkeleton rows={5} />}
           {!loading &&
-            roles.map((role) => {
+            pager.pageItems.map((role) => {
               const isAdminRole = role.code === "ADMIN";
               const isExpanded = expandedRoleId === role.id;
               return (
@@ -254,24 +270,24 @@ export default function RolesPage() {
                       {role.isSystem && <Badge tone="gray">System</Badge>}{" "}
                       <Badge tone={role.status === "ACTIVE" ? "green" : "gray"}>{role.status}</Badge>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-slate-500">{role.permissions.length} permission(s)</span>
-                      <Button
-                        variant="secondary"
-                        onClick={() => (isExpanded ? setExpandedRoleId(null) : startEditing(role))}
-                      >
-                        {isExpanded ? "Cancel" : "Edit role"}
-                      </Button>
+                    <div className="flex items-center gap-3">
+                    <span className="text-xs text-slate-500">{role.permissions.length} permission(s)</span>
+                    <RowActions>
+                      <RowAction
+                        kind="edit"
+                        disabled={isExpanded}
+                        title={isExpanded ? "Already editing - use Save Changes or Cancel below" : "Edit"}
+                        onClick={() => startEditing(role)}
+                      />
                       {!isAdminRole && (
-                        <Button variant={role.status === "ACTIVE" ? "danger" : "secondary"} disabled={rowBusy === role.id} onClick={() => toggleStatus(role)}>
-                          {role.status === "ACTIVE" ? "Deactivate" : "Reactivate"}
-                        </Button>
+                        <StatusToggleAction
+                          active={role.status === "ACTIVE"}
+                          busy={rowBusy === role.id}
+                          onClick={() => toggleStatus(role)}
+                        />
                       )}
-                      {!role.isSystem && (
-                        <Button variant="danger" disabled={rowBusy === role.id} onClick={() => deleteRole(role)}>
-                          Delete
-                        </Button>
-                      )}
+                      {!role.isSystem && <RowAction kind="delete" busy={rowBusy === role.id} onClick={() => deleteRole(role)} />}
+                    </RowActions>
                     </div>
                   </div>
                   {role.description && <p className="mt-1 text-xs text-slate-500">{role.description}</p>}
@@ -303,12 +319,15 @@ export default function RolesPage() {
                       <div className="mt-3 flex flex-col gap-2">
                         {registry.map((page) => (
                           <div key={page.code} className="flex flex-wrap items-center gap-3">
-                            <span className="w-44 shrink-0 text-sm text-slate-700">{page.label}</span>
+                            <span className="w-44 shrink-0 text-sm font-semibold text-slate-900">{page.label}</span>
                             {page.actions.map((a) => {
                               const key = `${page.code}.${a.action}`;
                               const locked = isAdminRole && key === ROLES_MANAGE_KEY;
                               return (
-                                <label key={key} className="flex items-center gap-1.5 text-xs text-slate-600">
+                                <label
+                                  key={key}
+                                  className="flex items-center gap-1.5 text-xs text-slate-600"
+                                >
                                   <input
                                     type="checkbox"
                                     checked={draftPermissions.includes(key)}
@@ -324,18 +343,21 @@ export default function RolesPage() {
                         ))}
                       </div>
 
-                      {editError && <p className="mt-2 text-sm text-red-600">{editError}</p>}
-                      <div className="mt-3">
+                      <StickyActions variant="inset" className="mt-3" error={editError}>
+                        <Button variant="cancel" onClick={() => setExpandedRoleId(null)}>
+                          Cancel
+                        </Button>
                         <Button disabled={rowBusy === role.id} onClick={() => saveRole(role)}>
                           {rowBusy === role.id ? "Saving..." : "Save Changes"}
                         </Button>
-                      </div>
+                      </StickyActions>
                     </div>
                   )}
                 </div>
               );
             })}
         </div>
+        <Pagination page={pager.page} totalPages={pager.totalPages} total={pager.total} pageSize={pager.pageSize} onPageChange={pager.setPage} />
       </Card>
       {dialog}
     </div>

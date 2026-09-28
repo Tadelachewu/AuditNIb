@@ -4,10 +4,14 @@ import { useEffect, useState } from "react";
 import { apiGet, apiSend, ApiError } from "@/lib/api-client";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { StickyActions } from "@/components/ui/StickyActions";
 import { Input, Select, Label } from "@/components/ui/Field";
 import { StatusBadge, Badge } from "@/components/ui/Badge";
 import { Pagination } from "@/components/ui/Pagination";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { AddDialog } from "@/components/ui/AddDialog";
+import { RowAction, RowActions, StatusToggleAction } from "@/components/ui/RowActions";
+import { TableSkeletonRows } from "@/components/ui/Skeleton";
 import { usePermissions } from "@/lib/permissions/PermissionsContext";
 import { hasPermission } from "@/lib/permissions/registry";
 import type { District, Branch } from "@/types";
@@ -55,13 +59,14 @@ export default function BranchesPage() {
     return districts.find((d) => d.id === id)?.name ?? "—";
   }
 
-  async function handleCreate(e: React.FormEvent) {
+  async function handleCreate(e: React.FormEvent, close: () => void) {
     e.preventDefault();
     setFormError(null);
     setSubmitting(true);
     try {
       await apiSend("/api/admin/branches", "POST", form);
       setForm({ code: "", name: "", districtId: "" });
+      close();
       await load();
     } catch (err) {
       setFormError(err instanceof ApiError ? err.message : "Failed to create branch");
@@ -137,46 +142,49 @@ export default function BranchesPage() {
         Linked to a district. Manager and Internal Controller are assigned from the Users page.
       </p>
 
-      {canCreate && (
       <Card className="mt-5">
-        <CardHeader title="Add Branch" />
-        <form onSubmit={handleCreate} className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3">
-          <div>
-            <Label htmlFor="code">Code</Label>
-            <Input id="code" required value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} />
-          </div>
-          <div>
-            <Label htmlFor="name">Name</Label>
-            <Input id="name" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-          </div>
-          <div>
-            <Label htmlFor="districtId">District</Label>
-            <Select
-              id="districtId"
-              required
-              value={form.districtId}
-              onChange={(e) => setForm({ ...form, districtId: e.target.value })}
-            >
-              <option value="">Select district</option>
-              {districts.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name}
-                </option>
-              ))}
-            </Select>
-          </div>
-          <div className="sm:col-span-3">
-            {formError && <p className="mb-2 text-sm text-red-600">{formError}</p>}
-            <Button type="submit" disabled={submitting}>
-              {submitting ? "Adding..." : "Add Branch"}
-            </Button>
-          </div>
-        </form>
-      </Card>
-      )}
-
-      <Card className="mt-5">
-        <CardHeader title="All Branches" description={`${pageInfo.total} total`} />
+        <CardHeader title="All Branches" description={`${pageInfo.total} total`}
+          action={canCreate && (
+            <AddDialog title="Add Branch">
+              {({ close }) => (
+              <form onSubmit={(e) => handleCreate(e, close)} className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3">
+                <div>
+                  <Label htmlFor="code">Code</Label>
+                  <Input id="code" required value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} />
+                </div>
+                <div>
+                  <Label htmlFor="name">Name</Label>
+                  <Input id="name" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+                </div>
+                <div>
+                  <Label htmlFor="districtId">District</Label>
+                  <Select
+                    id="districtId"
+                    required
+                    value={form.districtId}
+                    onChange={(e) => setForm({ ...form, districtId: e.target.value })}
+                  >
+                    <option value="">Select district</option>
+                    {districts.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.name}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+                <StickyActions error={formError}>
+                  <Button type="button" variant="cancel" onClick={close}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={submitting}>
+                    {submitting ? "Adding..." : "Add Branch"}
+                  </Button>
+                </StickyActions>
+              </form>
+              )}
+            </AddDialog>
+          )}
+        />
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-600">
@@ -192,10 +200,11 @@ export default function BranchesPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {loading && (
+              {loading && <TableSkeletonRows cols={8} />}
+              {!loading && branches.length === 0 && (
                 <tr>
-                  <td className="px-4 py-4 text-slate-500" colSpan={8}>
-                    Loading...
+                  <td className="px-4 py-6 text-center text-slate-500" colSpan={8}>
+                    No branches yet.
                   </td>
                 </tr>
               )}
@@ -246,37 +255,19 @@ export default function BranchesPage() {
                         {isEditing ? (
                           <div className="flex flex-col items-end gap-1">
                             {editError && <p className="text-xs text-red-600">{editError}</p>}
-                            <div className="flex justify-end gap-2">
-                              <Button variant="secondary" onClick={() => setEditingId(null)}>
-                                Cancel
-                              </Button>
-                              <Button disabled={rowBusy === b.id} onClick={() => saveEdit(b)}>
-                                {rowBusy === b.id ? "Saving..." : "Save"}
-                              </Button>
-                            </div>
+                            <RowActions inline>
+                              <RowAction kind="cancel" onClick={() => setEditingId(null)} />
+                              <RowAction kind="save" busy={rowBusy === b.id} label={rowBusy === b.id ? "Saving..." : "Save"} onClick={() => saveEdit(b)} />
+                            </RowActions>
                           </div>
                         ) : (
-                          <div className="flex justify-end gap-2">
-                            {canEdit && (
-                              <Button variant="secondary" onClick={() => startEdit(b)}>
-                                Edit
-                              </Button>
-                            )}
+                          <RowActions>
+                            {canEdit && <RowAction kind="edit" onClick={() => startEdit(b)} />}
                             {canToggle && (
-                              <Button
-                                variant={b.status === "ACTIVE" ? "danger" : "secondary"}
-                                disabled={rowBusy === b.id}
-                                onClick={() => toggleStatus(b)}
-                              >
-                                {b.status === "ACTIVE" ? "Deactivate" : "Reactivate"}
-                              </Button>
+                              <StatusToggleAction active={b.status === "ACTIVE"} busy={rowBusy === b.id} onClick={() => toggleStatus(b)} />
                             )}
-                            {canDelete && (
-                              <Button variant="danger" disabled={rowBusy === b.id} onClick={() => deleteBranch(b)}>
-                                Delete
-                              </Button>
-                            )}
-                          </div>
+                            {canDelete && <RowAction kind="delete" busy={rowBusy === b.id} onClick={() => deleteBranch(b)} />}
+                          </RowActions>
                         )}
                       </td>
                     </tr>

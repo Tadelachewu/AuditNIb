@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 import { readDb } from "@/lib/db";
 import { formatDateTime } from "@/lib/format";
-import { Card, CardHeader } from "@/components/ui/Card";
+import { CollapsibleCard } from "@/components/ui/CollapsibleCard";
 import { ProfileClient } from "@/components/profile/ProfileClient";
 
 // Every logged-in user reaches this page regardless of role or
@@ -30,8 +30,7 @@ export default async function ProfilePage() {
         <p className="mt-1 text-sm text-slate-600">Your account details and self-service settings.</p>
       </div>
 
-      <Card>
-        <CardHeader title="Account" description="Set by an administrator - contact one to change any of this." />
+      <CollapsibleCard title="Account" description="Set by an administrator - contact one to change any of this.">
         <dl className="grid grid-cols-1 gap-x-6 gap-y-3 p-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
           <div>
             <dt className="text-xs font-medium text-slate-500">Display Name</dt>
@@ -66,7 +65,7 @@ export default async function ProfilePage() {
             <dd className="mt-0.5 text-slate-900">{user.lastLoginAt ? formatDateTime(user.lastLoginAt) : "—"}</dd>
           </div>
         </dl>
-      </Card>
+      </CollapsibleCard>
 
       <ProfileClient forced={Boolean(user.mustChangePassword)} />
     </div>

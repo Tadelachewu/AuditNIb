@@ -4,9 +4,15 @@ import { Fragment, useEffect, useMemo, useState } from "react";
 import { apiGet, apiSend, ApiError } from "@/lib/api-client";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { StickyActions } from "@/components/ui/StickyActions";
 import { Input, Select, Label } from "@/components/ui/Field";
 import { Badge } from "@/components/ui/Badge";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { AddDialog, Modal } from "@/components/ui/AddDialog";
+import { RowAction, RowActions, StatusToggleAction } from "@/components/ui/RowActions";
+import { TableSkeletonRows } from "@/components/ui/Skeleton";
+import { Pagination } from "@/components/ui/Pagination";
+import { useClientPagination } from "@/lib/useClientPagination";
 import { usePermissions } from "@/lib/permissions/PermissionsContext";
 import { hasPermission } from "@/lib/permissions/registry";
 import type { Department, District, Branch, OrgScope } from "@/types";
@@ -32,6 +38,7 @@ export default function DepartmentsPage() {
   const canEdit = hasPermission(permissions, "departments.edit");
   const canToggle = hasPermission(permissions, "departments.toggle-status");
   const canDelete = hasPermission(permissions, "departments.delete");
+  const pager = useClientPagination(departments);
 
   async function load() {
     setLoading(true);
@@ -76,7 +83,7 @@ export default function DepartmentsPage() {
     return "Bank-wide";
   }
 
-  async function handleCreate(e: React.FormEvent) {
+  async function handleCreate(e: React.FormEvent, close: () => void) {
     e.preventDefault();
     setFormError(null);
     setSubmitting(true);
@@ -89,6 +96,7 @@ export default function DepartmentsPage() {
         branchId: form.branchId || undefined,
       });
       setForm(emptyForm);
+      close();
       await load();
     } catch (err) {
       setFormError(err instanceof ApiError ? err.message : "Failed to create department");
@@ -175,73 +183,76 @@ export default function DepartmentsPage() {
         one branch.
       </p>
 
-      {canCreate && (
       <Card className="mt-5">
-        <CardHeader title="Add Department" />
-        <form onSubmit={handleCreate} className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4">
-          <div>
-            <Label htmlFor="code">Code</Label>
-            <Input id="code" required value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} />
-          </div>
-          <div>
-            <Label htmlFor="name">Name</Label>
-            <Input id="name" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-          </div>
-          <div>
-            <Label htmlFor="orgScope">Scope</Label>
-            <Select
-              id="orgScope"
-              value={form.orgScope}
-              onChange={(e) => setForm({ ...form, orgScope: e.target.value as OrgScope, districtId: "", branchId: "" })}
-            >
-              <option value="BANK">Bank-wide</option>
-              <option value="DISTRICT">District</option>
-              <option value="BRANCH">Branch</option>
-            </Select>
-          </div>
-          {(isDistrictScoped || isBranchScoped) && (
-            <div>
-              <Label htmlFor="districtId">District</Label>
-              <Select
-                id="districtId"
-                required
-                value={form.districtId}
-                onChange={(e) => setForm({ ...form, districtId: e.target.value, branchId: "" })}
-              >
-                <option value="">Select district</option>
-                {districts.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.name}
-                  </option>
-                ))}
-              </Select>
-            </div>
+        <CardHeader title="All Departments" description={`${departments.length} total`}
+          action={canCreate && (
+            <AddDialog title="Add Department">
+              {({ close }) => (
+              <form onSubmit={(e) => handleCreate(e, close)} className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4">
+                <div>
+                  <Label htmlFor="code">Code</Label>
+                  <Input id="code" required value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} />
+                </div>
+                <div>
+                  <Label htmlFor="name">Name</Label>
+                  <Input id="name" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+                </div>
+                <div>
+                  <Label htmlFor="orgScope">Scope</Label>
+                  <Select
+                    id="orgScope"
+                    value={form.orgScope}
+                    onChange={(e) => setForm({ ...form, orgScope: e.target.value as OrgScope, districtId: "", branchId: "" })}
+                  >
+                    <option value="BANK">Bank-wide</option>
+                    <option value="DISTRICT">District</option>
+                    <option value="BRANCH">Branch</option>
+                  </Select>
+                </div>
+                {(isDistrictScoped || isBranchScoped) && (
+                  <div>
+                    <Label htmlFor="districtId">District</Label>
+                    <Select
+                      id="districtId"
+                      required
+                      value={form.districtId}
+                      onChange={(e) => setForm({ ...form, districtId: e.target.value, branchId: "" })}
+                    >
+                      <option value="">Select district</option>
+                      {districts.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.name}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+                )}
+                {isBranchScoped && (
+                  <div>
+                    <Label htmlFor="branchId">Branch</Label>
+                    <Select id="branchId" required value={form.branchId} onChange={(e) => setForm({ ...form, branchId: e.target.value })}>
+                      <option value="">Select branch</option>
+                      {branchOptions.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.name}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+                )}
+                <StickyActions error={formError}>
+                  <Button type="button" variant="cancel" onClick={close}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={submitting}>
+                    {submitting ? "Adding..." : "Add Department"}
+                  </Button>
+                </StickyActions>
+              </form>
+              )}
+            </AddDialog>
           )}
-          {isBranchScoped && (
-            <div>
-              <Label htmlFor="branchId">Branch</Label>
-              <Select id="branchId" required value={form.branchId} onChange={(e) => setForm({ ...form, branchId: e.target.value })}>
-                <option value="">Select branch</option>
-                {branchOptions.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.name}
-                  </option>
-                ))}
-              </Select>
-            </div>
-          )}
-          <div className="sm:col-span-2 lg:col-span-4">
-            {formError && <p className="mb-2 text-sm text-red-600">{formError}</p>}
-            <Button type="submit" disabled={submitting}>
-              {submitting ? "Adding..." : "Add Department"}
-            </Button>
-          </div>
-        </form>
-      </Card>
-      )}
-
-      <Card className="mt-5">
-        <CardHeader title="All Departments" description={`${departments.length} total`} />
+        />
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-600">
@@ -254,15 +265,9 @@ export default function DepartmentsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {loading && (
-                <tr>
-                  <td className="px-4 py-4 text-slate-500" colSpan={5}>
-                    Loading...
-                  </td>
-                </tr>
-              )}
+              {loading && <TableSkeletonRows cols={5} />}
               {!loading &&
-                departments.map((d) => {
+                pager.pageItems.map((d) => {
                   const isEditing = editingId === d.id;
                   return (
                     <Fragment key={d.id}>
@@ -283,32 +288,28 @@ export default function DepartmentsPage() {
                           <Badge tone={d.active ? "green" : "gray"}>{d.active ? "Active" : "Inactive"}</Badge>
                         </td>
                         <td className="px-4 py-2 text-right">
-                          <div className="flex justify-end gap-2">
+                          <RowActions>
                             {canEdit && (
-                              <Button variant="secondary" onClick={() => (isEditing ? setEditingId(null) : startEdit(d))}>
-                                {isEditing ? "Cancel" : "Edit"}
-                              </Button>
+                              <RowAction
+                                kind="edit"
+                                disabled={isEditing}
+                                title={isEditing ? "Already editing - use Save Changes or Cancel below" : "Edit"}
+                                onClick={() => startEdit(d)}
+                              />
                             )}
                             {canToggle && (
-                              <Button
-                                variant={d.active ? "danger" : "secondary"}
-                                disabled={rowBusy === d.id}
-                                onClick={() => toggleActive(d)}
-                              >
-                                {d.active ? "Deactivate" : "Activate"}
-                              </Button>
+                              <StatusToggleAction active={d.active} busy={rowBusy === d.id} onClick={() => toggleActive(d)} />
                             )}
                             {canDelete && (
-                              <Button variant="danger" disabled={rowBusy === d.id} onClick={() => deleteDepartment(d)}>
-                                Delete
-                              </Button>
+                              <RowAction kind="delete" busy={rowBusy === d.id} onClick={() => deleteDepartment(d)} />
                             )}
-                          </div>
+                          </RowActions>
                         </td>
                       </tr>
+                      {/* Editor in a dialog, like Add (see the Users page's note). */}
                       {isEditing && (
-                        <tr>
-                          <td colSpan={5} className="bg-slate-50 px-4 py-3">
+                        <Modal title={`Edit ${d.name}`} description={d.code} size="xl" onClose={() => setEditingId(null)}>
+                          <div className="p-4">
                             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
                               <div>
                                 <Label htmlFor="edit-name">Name</Label>
@@ -367,17 +368,16 @@ export default function DepartmentsPage() {
                                 </div>
                               )}
                             </div>
-                            {editError && <p className="mt-2 text-sm text-red-600">{editError}</p>}
-                            <div className="mt-3 flex justify-end gap-2">
-                              <Button variant="secondary" onClick={() => setEditingId(null)}>
+                            <StickyActions className="mt-4" error={editError}>
+                              <Button variant="cancel" onClick={() => setEditingId(null)}>
                                 Cancel
                               </Button>
                               <Button disabled={rowBusy === d.id} onClick={() => saveEdit(d)}>
                                 {rowBusy === d.id ? "Saving..." : "Save Changes"}
                               </Button>
-                            </div>
-                          </td>
-                        </tr>
+                            </StickyActions>
+                          </div>
+                        </Modal>
                       )}
                     </Fragment>
                   );
@@ -385,6 +385,7 @@ export default function DepartmentsPage() {
             </tbody>
           </table>
         </div>
+        <Pagination page={pager.page} totalPages={pager.totalPages} total={pager.total} pageSize={pager.pageSize} onPageChange={pager.setPage} />
       </Card>
       {dialog}
     </div>

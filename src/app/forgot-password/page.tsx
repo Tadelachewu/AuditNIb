@@ -52,7 +52,7 @@ export default function ForgotPasswordPage() {
       <div className="w-full max-w-sm">
         <div className="mb-6 flex flex-col items-center text-center">
           <Image src="/Nib_International_Bank.png" alt="NIB International Bank" width={64} height={64} className="mb-3" priority />
-          <h1 className="text-xl font-bold text-blue-900">Reset your password</h1>
+          <h1 className="text-xl font-bold text-brand-ink">Reset your password</h1>
           <p className="mt-1 text-sm text-slate-600">
             {response
               ? "Check your inbox for the reset link."
@@ -141,7 +141,7 @@ export default function ForgotPasswordPage() {
         ) : (
           <form onSubmit={handleSubmit} className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
             <div className="mb-4">
-              <Label htmlFor="identifier">Username or email address</Label>
+              <Label htmlFor="identifier" brand>Username or email address</Label>
               <Input
                 id="identifier"
                 autoFocus
@@ -160,7 +160,7 @@ export default function ForgotPasswordPage() {
             </Button>
 
             <div className="mt-5 text-center text-sm">
-              <Link href="/login" className="font-medium text-blue-700 hover:text-blue-900 hover:underline">
+              <Link href="/login" className="font-medium text-brand-ink hover:underline">
                 ← Back to sign in
               </Link>
             </div>

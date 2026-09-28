@@ -66,7 +66,7 @@ export function useConfirm() {
           </div>
         )}
         <div className="mt-4 flex justify-end gap-2">
-          <Button variant="secondary" onClick={handleCancel}>
+          <Button variant="cancel" onClick={handleCancel}>
             Cancel
           </Button>
           <Button

@@ -1,14 +1,23 @@
 import { type InputHTMLAttributes, type SelectHTMLAttributes, type TextareaHTMLAttributes, type ReactNode } from "react";
 
-const fieldClass =
-  "w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm text-slate-900 focus:border-blue-700 focus:outline-none focus:ring-1 focus:ring-blue-700";
+/**
+ * The one focus style for every text field, select and textarea in the app
+ * (the sign-in page's look, applied everywhere): the border and ring take
+ * the Sign in button's brand gold, and the background a soft tint of it -
+ * a tint, not solid gold, so typed text keeps full contrast. Exported for
+ * the odd raw <select>/<textarea> that can't use the components below.
+ */
+export const FIELD_FOCUS =
+  "transition-colors focus:border-brand-gold focus:bg-brand-gold/15 focus:outline-none focus:ring-1 focus:ring-brand-gold";
+
+const fieldClass = `w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm text-slate-900 ${FIELD_FOCUS}`;
 
 export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
   return <input {...props} className={`${fieldClass} ${props.className ?? ""}`} />;
 }
 
 export function Select(props: SelectHTMLAttributes<HTMLSelectElement>) {
-  return <select {...props} className={`${fieldClass} bg-white ${props.className ?? ""}`} />;
+  return <select {...props} className={`${fieldClass} ${props.className ?? ""}`} />;
 }
 
 export function Textarea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
@@ -32,9 +41,9 @@ export function FileInput(props: InputHTMLAttributes<HTMLInputElement>) {
   );
 }
 
-export function Label({ children, htmlFor }: { children: ReactNode; htmlFor?: string }) {
+export function Label({ children, htmlFor, brand = false }: { children: ReactNode; htmlFor?: string; brand?: boolean }) {
   return (
-    <label htmlFor={htmlFor} className="mb-1 block text-xs font-medium text-slate-600">
+    <label htmlFor={htmlFor} className={`mb-1 block text-xs font-medium ${brand ? "text-brand-ink" : "text-slate-600"}`}>
       {children}
     </label>
   );

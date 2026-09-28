@@ -46,13 +46,13 @@ export default function LoginPage() {
       <div className="w-full max-w-sm">
         <div className="mb-6 flex flex-col items-center text-center">
           <Image src="/Nib_International_Bank.png" alt="NIB International Bank" width={64} height={64} className="mb-3" priority />
-          <h1 className="text-xl font-bold text-blue-900">NIB Control360</h1>
-          <p className="text-sm text-slate-500">Internal Control Findings Management System</p>
+          <h1 className="text-xl font-bold text-brand-ink">NIB Control360</h1>
+          <p className="text-sm font-medium text-brand-ink">Internal Control Findings Management System</p>
         </div>
 
         <form onSubmit={handleSubmit} className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
           <div className="mb-4">
-            <Label htmlFor="username">Username</Label>
+            <Label htmlFor="username" brand>Username</Label>
             <Input
               id="username"
               autoFocus
@@ -63,7 +63,7 @@ export default function LoginPage() {
             />
           </div>
           <div className="mb-4">
-            <Label htmlFor="password">Password</Label>
+            <Label htmlFor="password" brand>Password</Label>
             <Input
               id="password"
               type="password"
@@ -75,7 +75,7 @@ export default function LoginPage() {
             <div className="mt-1.5 text-right">
               <Link
                 href="/forgot-password"
-                className="text-xs font-medium text-blue-700 hover:text-blue-900 hover:underline"
+                className="text-xs font-medium text-brand-ink hover:underline"
               >
                 Forgot password?
               </Link>
@@ -93,7 +93,7 @@ export default function LoginPage() {
           <button
             type="button"
             onClick={() => setShowDemo((v) => !v)}
-            className="flex w-full items-center justify-between px-4 py-2.5 text-left text-xs font-medium text-slate-600"
+            className="flex w-full items-center justify-between px-4 py-2.5 text-left text-xs font-medium text-brand-ink"
           >
             Demo accounts (one per role)
             <span>{showDemo ? "−" : "+"}</span>
@@ -102,8 +102,8 @@ export default function LoginPage() {
             <div className="max-h-56 overflow-y-auto border-t border-slate-100 px-4 py-2 text-xs">
               {DEMO_USERS.map((u) => (
                 <div key={u.username} className="flex items-center justify-between gap-2 py-1.5">
-                  <span className="text-slate-500">{u.role}</span>
-                  <span className="whitespace-nowrap font-mono text-slate-800">
+                  <span className="text-brand-ink/80">{u.role}</span>
+                  <span className="whitespace-nowrap font-mono text-brand-ink">
                     {u.username} / {u.password}
                   </span>
                 </div>

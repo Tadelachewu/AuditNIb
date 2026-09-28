@@ -4,9 +4,15 @@ import { useEffect, useState } from "react";
 import { apiGet, apiSend, ApiError } from "@/lib/api-client";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { StickyActions } from "@/components/ui/StickyActions";
 import { Input, Label } from "@/components/ui/Field";
 import { StatusBadge } from "@/components/ui/Badge";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { AddDialog } from "@/components/ui/AddDialog";
+import { RowAction, RowActions, StatusToggleAction } from "@/components/ui/RowActions";
+import { TableSkeletonRows } from "@/components/ui/Skeleton";
+import { Pagination } from "@/components/ui/Pagination";
+import { useClientPagination } from "@/lib/useClientPagination";
 import { usePermissions } from "@/lib/permissions/PermissionsContext";
 import { hasPermission } from "@/lib/permissions/registry";
 import type { District } from "@/types";
@@ -34,6 +40,7 @@ export default function DistrictsPage() {
   const canEdit = hasPermission(permissions, "districts.edit");
   const canToggle = hasPermission(permissions, "districts.toggle-status");
   const canDelete = hasPermission(permissions, "districts.delete");
+  const pager = useClientPagination(districts);
 
   async function load() {
     setLoading(true);
@@ -46,13 +53,14 @@ export default function DistrictsPage() {
     load();
   }, []);
 
-  async function handleCreate(e: React.FormEvent) {
+  async function handleCreate(e: React.FormEvent, close: () => void) {
     e.preventDefault();
     setFormError(null);
     setSubmitting(true);
     try {
       await apiSend("/api/admin/districts", "POST", form);
       setForm({ code: "", name: "" });
+      close();
       await load();
     } catch (err) {
       setFormError(err instanceof ApiError ? err.message : "Failed to create district");
@@ -126,30 +134,33 @@ export default function DistrictsPage() {
       <h1 className="text-lg font-semibold text-slate-900">Districts</h1>
       <p className="mt-1 text-sm text-slate-600">Bank-wide, config-driven — no hard-coded district count.</p>
 
-      {canCreate && (
       <Card className="mt-5">
-        <CardHeader title="Add District" />
-        <form onSubmit={handleCreate} className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3">
-          <div>
-            <Label htmlFor="code">Code</Label>
-            <Input id="code" required value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} />
-          </div>
-          <div className="sm:col-span-2">
-            <Label htmlFor="name">Name</Label>
-            <Input id="name" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-          </div>
-          <div className="sm:col-span-3">
-            {formError && <p className="mb-2 text-sm text-red-600">{formError}</p>}
-            <Button type="submit" disabled={submitting}>
-              {submitting ? "Adding..." : "Add District"}
-            </Button>
-          </div>
-        </form>
-      </Card>
-      )}
-
-      <Card className="mt-5">
-        <CardHeader title="All Districts" description={`${districts.length} total`} />
+        <CardHeader title="All Districts" description={`${districts.length} total`}
+          action={canCreate && (
+            <AddDialog title="Add District">
+              {({ close }) => (
+              <form onSubmit={(e) => handleCreate(e, close)} className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3">
+                <div>
+                  <Label htmlFor="code">Code</Label>
+                  <Input id="code" required value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} />
+                </div>
+                <div className="sm:col-span-2">
+                  <Label htmlFor="name">Name</Label>
+                  <Input id="name" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+                </div>
+                <StickyActions error={formError}>
+                  <Button type="button" variant="cancel" onClick={close}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={submitting}>
+                    {submitting ? "Adding..." : "Add District"}
+                  </Button>
+                </StickyActions>
+              </form>
+              )}
+            </AddDialog>
+          )}
+        />
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-600">
@@ -163,15 +174,16 @@ export default function DistrictsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {loading && (
+              {loading && <TableSkeletonRows cols={6} />}
+              {!loading && districts.length === 0 && (
                 <tr>
-                  <td className="px-4 py-4 text-slate-500" colSpan={6}>
-                    Loading...
+                  <td className="px-4 py-6 text-center text-slate-500" colSpan={6}>
+                    No districts yet.
                   </td>
                 </tr>
               )}
               {!loading &&
-                districts.map((d) => (
+                pager.pageItems.map((d) => (
                   <tr key={d.id}>
                     <td className="px-4 py-2 font-mono text-xs text-slate-600">{d.code}</td>
                     <td className="px-4 py-2 font-medium text-slate-900">
@@ -191,36 +203,18 @@ export default function DistrictsPage() {
                     </td>
                     <td className="px-4 py-2 text-right">
                       {editingId === d.id ? (
-                        <div className="flex justify-end gap-2">
-                          <Button variant="secondary" onClick={() => setEditingId(null)}>
-                            Cancel
-                          </Button>
-                          <Button disabled={rowBusy === d.id} onClick={() => saveEdit(d)}>
-                            {rowBusy === d.id ? "Saving..." : "Save"}
-                          </Button>
-                        </div>
+                        <RowActions inline>
+                          <RowAction kind="cancel" onClick={() => setEditingId(null)} />
+                          <RowAction kind="save" busy={rowBusy === d.id} label={rowBusy === d.id ? "Saving..." : "Save"} onClick={() => saveEdit(d)} />
+                        </RowActions>
                       ) : (
-                        <div className="flex justify-end gap-2">
-                          {canEdit && (
-                            <Button variant="secondary" onClick={() => startEdit(d)}>
-                              Edit
-                            </Button>
-                          )}
+                        <RowActions>
+                          {canEdit && <RowAction kind="edit" onClick={() => startEdit(d)} />}
                           {canToggle && (
-                            <Button
-                              variant={d.status === "ACTIVE" ? "danger" : "secondary"}
-                              disabled={rowBusy === d.id}
-                              onClick={() => toggleStatus(d)}
-                            >
-                              {d.status === "ACTIVE" ? "Deactivate" : "Reactivate"}
-                            </Button>
+                            <StatusToggleAction active={d.status === "ACTIVE"} busy={rowBusy === d.id} onClick={() => toggleStatus(d)} />
                           )}
-                          {canDelete && (
-                            <Button variant="danger" disabled={rowBusy === d.id} onClick={() => deleteDistrict(d)}>
-                              Delete
-                            </Button>
-                          )}
-                        </div>
+                          {canDelete && <RowAction kind="delete" busy={rowBusy === d.id} onClick={() => deleteDistrict(d)} />}
+                        </RowActions>
                       )}
                     </td>
                   </tr>
@@ -228,6 +222,7 @@ export default function DistrictsPage() {
             </tbody>
           </table>
         </div>
+        <Pagination page={pager.page} totalPages={pager.totalPages} total={pager.total} pageSize={pager.pageSize} onPageChange={pager.setPage} />
       </Card>
       {dialog}
     </div>

@@ -12,6 +12,12 @@
   --brand-gold: #feb914;
   --brand-gold-dark: #d89d11;
   --brand-brown: #8a4d21;
+  /* Brand-colored *text* (and focus outlines) on the page background: the
+     logo's brown (~6.6:1 on slate-100). Unlike --brand-brown itself this
+     one IS remapped in dark mode (below) - the logo brown on a dark
+     surface drops to ~2.3:1, so it lightens to a tan there instead. Used
+     by the sign-in / password pages' headings, links and focused fields. */
+  --brand-ink: #8a4d21;
   /* A deep bronze for large solid surfaces (the sidebar/topbar) - the
      midpoint between the earlier near-black chrome and the lighter
      #836115 brown-gold that followed it: dark enough that text on it has
@@ -46,6 +52,26 @@
      escape hatch for exactly those spots; --color-white stays free to
      keep adapting everywhere else. */
   --on-dark: #ffffff;
+  /* Sidebar + topbar ("chrome") palette. These defaults are the bronze
+     look above; Settings > Appearance > Header & sidebar color swaps the
+     whole set at once (src/lib/typography.ts's CHROME_OPTIONS, injected by
+     (app)/layout.tsx), so every chrome component reads only these tokens -
+     never --brand-sidebar/--on-dark directly - and a light option can flip
+     text to dark in the same move as the background.
+       bg       - surface
+       fg       - primary text/icons (brand name, nav items, user name)
+       muted    - secondary text (subtitles, role name)
+       accent   - section labels
+       hover    - hover wash behind a nav item / icon button
+       border   - hairline between chrome and page
+       scroll   - sidebar scrollbar thumb */
+  --chrome-bg: var(--brand-sidebar);
+  --chrome-fg: #ffffff;
+  --chrome-muted: rgb(255 255 255 / 0.75);
+  --chrome-accent: var(--brand-gold);
+  --chrome-hover: rgb(255 255 255 / 0.1);
+  --chrome-border: rgb(255 255 255 / 0.1);
+  --chrome-scroll: rgb(255 255 255 / 0.18);
 }
 
 @theme inline {
@@ -54,9 +80,16 @@
   --color-brand-gold: var(--brand-gold);
   --color-brand-gold-dark: var(--brand-gold-dark);
   --color-brand-brown: var(--brand-brown);
+  --color-brand-ink: var(--brand-ink);
   --color-brand-sidebar: var(--brand-sidebar);
   --color-on-gold: var(--on-gold);
   --color-on-dark: var(--on-dark);
+  --color-chrome-bg: var(--chrome-bg);
+  --color-chrome-fg: var(--chrome-fg);
+  --color-chrome-muted: var(--chrome-muted);
+  --color-chrome-accent: var(--chrome-accent);
+  --color-chrome-hover: var(--chrome-hover);
+  --color-chrome-border: var(--chrome-border);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
@@ -94,6 +127,8 @@
     --foreground: #e7e9ee;
 
     --color-white: #1b2540;
+  --brand-ink: #e2b27a;
+    --brand-ink: #e2b27a;
 
     --color-slate-50: #0f172a;
     --color-slate-100: #1e293b;
@@ -186,6 +221,14 @@
   --color-red-800: #fee2e2;
 }
 
+/* Every native checkbox/radio fills with the brand color when checked
+   (instead of the browser's default blue) - the same --brand-ink brown the
+   sign-in page uses, tan in dark mode so the tick stays visible. */
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: var(--brand-ink);
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
@@ -200,7 +243,7 @@ body {
    rather than a foreign UI element interrupting it. */
 .sidebar-scroll {
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+  scrollbar-color: var(--chrome-scroll) transparent;
 }
 .sidebar-scroll::-webkit-scrollbar {
   width: 6px;
@@ -209,9 +252,9 @@ body {
   background: transparent;
 }
 .sidebar-scroll::-webkit-scrollbar-thumb {
-  background-color: rgba(255, 255, 255, 0.18);
+  background-color: var(--chrome-scroll);
   border-radius: 9999px;
 }
 .sidebar-scroll::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(255, 255, 255, 0.32);
+  background-color: var(--chrome-muted);
 }

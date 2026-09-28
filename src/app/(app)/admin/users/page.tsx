@@ -5,10 +5,14 @@ import { apiGet, apiSend, ApiError } from "@/lib/api-client";
 import { formatDateTime } from "@/lib/format";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { StickyActions } from "@/components/ui/StickyActions";
 import { Input, Select, Label } from "@/components/ui/Field";
 import { StatusBadge } from "@/components/ui/Badge";
 import { Pagination } from "@/components/ui/Pagination";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { AddDialog, Modal } from "@/components/ui/AddDialog";
+import { RowAction, RowActions, StatusToggleAction } from "@/components/ui/RowActions";
+import { TableSkeletonRows } from "@/components/ui/Skeleton";
 import { usePermissions } from "@/lib/permissions/PermissionsContext";
 import { hasPermission } from "@/lib/permissions/registry";
 import type { SafeUser, District, Branch, Department, RoleDefinition } from "@/types";
@@ -132,7 +136,7 @@ export default function UsersPage() {
     return departments.find((d) => d.id === id)?.name ?? "—";
   }
 
-  async function handleCreate(e: React.FormEvent) {
+  async function handleCreate(e: React.FormEvent, close: () => void) {
     e.preventDefault();
     setFormError(null);
     setSubmitting(true);
@@ -149,6 +153,7 @@ export default function UsersPage() {
         departmentId: form.departmentId || null,
       });
       setForm({ ...emptyForm, role: form.role });
+      close();
       await loadAll();
     } catch (err) {
       setFormError(err instanceof ApiError ? err.message : "Failed to create user");
@@ -258,138 +263,141 @@ export default function UsersPage() {
       </p>
       {rolesError && <p className="mt-2 text-sm text-amber-700">{rolesError}</p>}
 
-      {canCreate && (
       <Card className="mt-5">
-        <CardHeader title="Add User" />
-        <form onSubmit={handleCreate} className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 lg:grid-cols-3">
-          <div>
-            <Label htmlFor="name">Full name</Label>
-            <Input id="name" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-          </div>
-          <div>
-            <Label htmlFor="username">Username</Label>
-            <Input
-              id="username"
-              required
-              value={form.username}
-              onChange={(e) => setForm({ ...form, username: e.target.value })}
-            />
-          </div>
-          <div>
-            <Label htmlFor="email">Email <span className="font-normal text-red-600" aria-hidden="true">*</span></Label>
-            <Input
-              id="email"
-              type="email"
-              required
-              placeholder="someone@nibbank.com.et"
-              value={form.email}
-              onChange={(e) => setForm({ ...form, email: e.target.value })}
-            />
-          </div>
-          <div>
-            <Label htmlFor="phone">Phone</Label>
-            <Input
-              id="phone"
-              type="tel"
-              placeholder="+251..."
-              value={form.phone}
-              onChange={(e) => setForm({ ...form, phone: e.target.value })}
-            />
-          </div>
-          <div>
-            <Label htmlFor="password">Temporary password</Label>
-            <Input
-              id="password"
-              type="password"
-              required
-              minLength={8}
-              value={form.password}
-              onChange={(e) => setForm({ ...form, password: e.target.value })}
-            />
-          </div>
-          <div>
-            <Label htmlFor="role">Role</Label>
-            <Select
-              id="role"
-              required
-              value={form.role}
-              onChange={(e) => setForm({ ...form, role: e.target.value, districtId: "", branchId: "" })}
-            >
-              <option value="">Select role</option>
-              {activeRoles.map((r) => (
-                <option key={r.id} value={r.code}>
-                  {r.name}
-                </option>
-              ))}
-            </Select>
-          </div>
+        <CardHeader title="All Users" description={`${pageInfo.total} total`}
+          action={canCreate && (
+            <AddDialog size="xl" title="Add User">
+              {({ close }) => (
+              <form onSubmit={(e) => handleCreate(e, close)} className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 lg:grid-cols-3">
+                <div>
+                  <Label htmlFor="name">Full name</Label>
+                  <Input id="name" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+                </div>
+                <div>
+                  <Label htmlFor="username">Username</Label>
+                  <Input
+                    id="username"
+                    required
+                    value={form.username}
+                    onChange={(e) => setForm({ ...form, username: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="email">Email <span className="font-normal text-red-600" aria-hidden="true">*</span></Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    required
+                    placeholder="someone@nibbank.com.et"
+                    value={form.email}
+                    onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="phone">Phone</Label>
+                  <Input
+                    id="phone"
+                    type="tel"
+                    placeholder="+251..."
+                    value={form.phone}
+                    onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="password">Temporary password</Label>
+                  <Input
+                    id="password"
+                    type="password"
+                    required
+                    minLength={8}
+                    value={form.password}
+                    onChange={(e) => setForm({ ...form, password: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="role">Role</Label>
+                  <Select
+                    id="role"
+                    required
+                    value={form.role}
+                    onChange={(e) => setForm({ ...form, role: e.target.value, districtId: "", branchId: "" })}
+                  >
+                    <option value="">Select role</option>
+                    {activeRoles.map((r) => (
+                      <option key={r.id} value={r.code}>
+                        {r.name}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
 
-          {(isDistrictScoped || isBranchScoped) && (
-            <div>
-              <Label htmlFor="districtId">District</Label>
-              <Select
-                id="districtId"
-                required
-                value={form.districtId}
-                onChange={(e) => setForm({ ...form, districtId: e.target.value, branchId: "", departmentId: "" })}
-              >
-                <option value="">Select district</option>
-                {districts.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.name}
-                  </option>
-                ))}
-              </Select>
-            </div>
+                {(isDistrictScoped || isBranchScoped) && (
+                  <div>
+                    <Label htmlFor="districtId">District</Label>
+                    <Select
+                      id="districtId"
+                      required
+                      value={form.districtId}
+                      onChange={(e) => setForm({ ...form, districtId: e.target.value, branchId: "", departmentId: "" })}
+                    >
+                      <option value="">Select district</option>
+                      {districts.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.name}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+                )}
+
+                {isBranchScoped && (
+                  <div>
+                    <Label htmlFor="branchId">Branch</Label>
+                    <Select
+                      id="branchId"
+                      required
+                      value={form.branchId}
+                      onChange={(e) => setForm({ ...form, branchId: e.target.value, departmentId: "" })}
+                    >
+                      <option value="">Select branch</option>
+                      {branchesInDistrict.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.name}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+                )}
+
+                <div>
+                  <Label htmlFor="departmentId">Department (optional)</Label>
+                  <Select
+                    id="departmentId"
+                    value={form.departmentId}
+                    onChange={(e) => setForm({ ...form, departmentId: e.target.value })}
+                  >
+                    <option value="">No department</option>
+                    {departmentOptions.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.name}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+
+                <StickyActions error={formError}>
+                  <Button type="button" variant="cancel" onClick={close}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={submitting || !form.role || !form.email.trim()}>
+                    {submitting ? "Creating..." : "Create User"}
+                  </Button>
+                </StickyActions>
+              </form>
+              )}
+            </AddDialog>
           )}
-
-          {isBranchScoped && (
-            <div>
-              <Label htmlFor="branchId">Branch</Label>
-              <Select
-                id="branchId"
-                required
-                value={form.branchId}
-                onChange={(e) => setForm({ ...form, branchId: e.target.value, departmentId: "" })}
-              >
-                <option value="">Select branch</option>
-                {branchesInDistrict.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.name}
-                  </option>
-                ))}
-              </Select>
-            </div>
-          )}
-
-          <div>
-            <Label htmlFor="departmentId">Department (optional)</Label>
-            <Select
-              id="departmentId"
-              value={form.departmentId}
-              onChange={(e) => setForm({ ...form, departmentId: e.target.value })}
-            >
-              <option value="">No department</option>
-              {departmentOptions.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name}
-                </option>
-              ))}
-            </Select>
-          </div>
-
-          <div className="sm:col-span-2 lg:col-span-3">
-            {formError && <p className="mb-2 text-sm text-red-600">{formError}</p>}
-            <Button type="submit" disabled={submitting || !form.role || !form.email.trim()}>
-              {submitting ? "Creating..." : "Create User"}
-            </Button>
-          </div>
-        </form>
-      </Card>
-      )}
-
-      <Card className="mt-5">
-        <CardHeader title="All Users" description={`${pageInfo.total} total`} />
+        />
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-600">
@@ -407,13 +415,7 @@ export default function UsersPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {loading && (
-                <tr>
-                  <td className="px-4 py-4 text-slate-500" colSpan={10}>
-                    Loading...
-                  </td>
-                </tr>
-              )}
+              {loading && <TableSkeletonRows cols={10} />}
               {!loading &&
                 users.map((u) => {
                   const isEditing = editingId === u.id;
@@ -436,32 +438,30 @@ export default function UsersPage() {
                           {u.lastLoginAt ? formatDateTime(u.lastLoginAt) : "Never"}
                         </td>
                         <td className="px-4 py-2 text-right">
-                          <div className="flex justify-end gap-2">
+                          <RowActions>
                             {canEdit && (
-                              <Button variant="secondary" onClick={() => (isEditing ? setEditingId(null) : startEdit(u))}>
-                                {isEditing ? "Cancel" : "Edit"}
-                              </Button>
+                              <RowAction
+                                kind="edit"
+                                disabled={isEditing}
+                                title={isEditing ? "Already editing - use Save Changes or Cancel below" : "Edit"}
+                                onClick={() => startEdit(u)}
+                              />
                             )}
                             {canToggle && (
-                              <Button
-                                variant={u.status === "ACTIVE" ? "danger" : "secondary"}
-                                disabled={rowBusy === u.id}
-                                onClick={() => toggleStatus(u)}
-                              >
-                                {u.status === "ACTIVE" ? "Deactivate" : "Reactivate"}
-                              </Button>
+                              <StatusToggleAction active={u.status === "ACTIVE"} busy={rowBusy === u.id} onClick={() => toggleStatus(u)} />
                             )}
                             {canDelete && (
-                              <Button variant="danger" disabled={rowBusy === u.id} onClick={() => deleteUser(u)}>
-                                Delete
-                              </Button>
+                              <RowAction kind="delete" busy={rowBusy === u.id} onClick={() => deleteUser(u)} />
                             )}
-                          </div>
+                          </RowActions>
                         </td>
                       </tr>
+                      {/* The editor opens in a dialog (portalled out of the table),
+                          like Add - an in-row panel sat inside the table's
+                          horizontal-scroll wrapper, where Save couldn't stay pinned. */}
                       {isEditing && (
-                        <tr>
-                          <td colSpan={10} className="bg-slate-50 px-4 py-3">
+                        <Modal title={`Edit ${u.name}`} description={u.username} size="xl" onClose={() => setEditingId(null)}>
+                          <div className="p-4">
                             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
                               <div>
                                 <Label htmlFor="edit-name">Full name</Label>
@@ -570,17 +570,16 @@ export default function UsersPage() {
                                 />
                               </div>
                             </div>
-                            {editError && <p className="mt-2 text-sm text-red-600">{editError}</p>}
-                            <div className="mt-3 flex justify-end gap-2">
-                              <Button variant="secondary" onClick={() => setEditingId(null)}>
+                            <StickyActions className="mt-4" error={editError}>
+                              <Button variant="cancel" onClick={() => setEditingId(null)}>
                                 Cancel
                               </Button>
                               <Button disabled={rowBusy === u.id} onClick={() => saveEdit(u)}>
                                 {rowBusy === u.id ? "Saving..." : "Save Changes"}
                               </Button>
-                            </div>
-                          </td>
-                        </tr>
+                            </StickyActions>
+                          </div>
+                        </Modal>
                       )}
                     </Fragment>
                   );

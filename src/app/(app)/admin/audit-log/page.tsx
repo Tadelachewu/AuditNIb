@@ -7,6 +7,7 @@ import { Card, CardHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Pagination } from "@/components/ui/Pagination";
 import type { AuditLogEntry } from "@/types";
+import { TableSkeletonRows } from "@/components/ui/Skeleton";
 
 export default function AuditLogPage() {
   const [logs, setLogs] = useState<AuditLogEntry[]>([]);
@@ -64,13 +65,7 @@ export default function AuditLogPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {loading && (
-                <tr>
-                  <td className="px-4 py-4 text-slate-500" colSpan={5}>
-                    Loading...
-                  </td>
-                </tr>
-              )}
+              {loading && <TableSkeletonRows cols={5} actions={false} rows={10} />}
               {!loading &&
                 logs.map((l) => (
                   <tr key={l.id}>

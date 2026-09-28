@@ -5,9 +5,15 @@ import { apiGet, apiSend, ApiError } from "@/lib/api-client";
 import { formatDate } from "@/lib/format";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { StickyActions } from "@/components/ui/StickyActions";
 import { Input, Label } from "@/components/ui/Field";
 import { Badge } from "@/components/ui/Badge";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { AddDialog } from "@/components/ui/AddDialog";
+import { RowAction, RowActions, StatusToggleAction } from "@/components/ui/RowActions";
+import { ListSkeleton } from "@/components/ui/Skeleton";
+import { Pagination } from "@/components/ui/Pagination";
+import { useClientPagination } from "@/lib/useClientPagination";
 import { usePermissions } from "@/lib/permissions/PermissionsContext";
 import { hasPermission } from "@/lib/permissions/registry";
 import type { ScoringRule, ClassifiedCategory, Source } from "@/types";
@@ -57,6 +63,7 @@ export default function ScoringRulesPage() {
   const canEdit = hasPermission(permissions, "scoring-rules.edit");
   const canDelete = hasPermission(permissions, "scoring-rules.delete");
   const canActivate = hasPermission(permissions, "scoring-rules.activate");
+  const pager = useClientPagination(rules);
 
   async function load() {
     setLoading(true);
@@ -90,7 +97,7 @@ export default function ScoringRulesPage() {
     return list.find((x) => x.id === id)?.name ?? id;
   }
 
-  async function handleCreate(e: React.FormEvent) {
+  async function handleCreate(e: React.FormEvent, close: () => void) {
     e.preventDefault();
     setFormError(null);
 
@@ -111,6 +118,7 @@ export default function ScoringRulesPage() {
     try {
       await apiSend("/api/admin/scoring-rules", "POST", form);
       setForm(emptyForm);
+      close();
       setBasisEditedManually(false);
       await load();
     } catch (err) {
@@ -201,110 +209,113 @@ export default function ScoringRulesPage() {
         time.
       </p>
 
-      {canCreate && (
       <Card className="mt-5">
-        <CardHeader title="New Scoring Rule Version" />
-        <form onSubmit={handleCreate} className="grid grid-cols-1 gap-4 p-4">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <div>
-              <Label htmlFor="name">Name</Label>
-              <Input id="name" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-            </div>
-            <div>
-              <Label htmlFor="effectiveFrom">Effective from</Label>
-              <Input
-                id="effectiveFrom"
-                type="date"
-                required
-                value={form.effectiveFrom}
-                onChange={(e) => setForm({ ...form, effectiveFrom: e.target.value })}
-              />
-            </div>
-          </div>
+        <CardHeader title="Rule History" description={`${rules.length} version(s)`}
+          action={canCreate && (
+            <AddDialog title="New Scoring Rule Version">
+              {({ close }) => (
+              <form onSubmit={(e) => handleCreate(e, close)} className="grid grid-cols-1 gap-4 p-4">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div>
+                    <Label htmlFor="name">Name</Label>
+                    <Input id="name" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+                  </div>
+                  <div>
+                    <Label htmlFor="effectiveFrom">Effective from</Label>
+                    <Input
+                      id="effectiveFrom"
+                      type="date"
+                      required
+                      value={form.effectiveFrom}
+                      onChange={(e) => setForm({ ...form, effectiveFrom: e.target.value })}
+                    />
+                  </div>
+                </div>
 
-          <div>
-            <Label>Included categories</Label>
-            <div className="flex flex-wrap gap-2">
-              {categories.map((c) => (
-                <button
-                  type="button"
-                  key={c.id}
-                  onClick={() => toggleMulti("categories", c.id)}
-                  className={`rounded-full px-2.5 py-1 text-xs ring-1 ring-inset ${
-                    form.categories.includes(c.id)
-                      ? "bg-[#1e3a8a] text-on-dark ring-[#1e3a8a]"
-                      : "bg-white text-slate-600 ring-slate-300"
-                  }`}
-                >
-                  {c.name}
-                </button>
-              ))}
-            </div>
-          </div>
+                <div>
+                  <Label>Included categories</Label>
+                  <div className="flex flex-wrap gap-2">
+                    {categories.map((c) => (
+                      <button
+                        type="button"
+                        key={c.id}
+                        onClick={() => toggleMulti("categories", c.id)}
+                        className={`rounded-full px-2.5 py-1 text-xs ring-1 ring-inset ${
+                          form.categories.includes(c.id)
+                            ? "bg-[#1e3a8a] text-on-dark ring-[#1e3a8a]"
+                            : "bg-white text-slate-600 ring-slate-300"
+                        }`}
+                      >
+                        {c.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
-          <div>
-            <Label>Included sources</Label>
-            <div className="flex flex-wrap gap-2">
-              {sources.map((s) => (
-                <button
-                  type="button"
-                  key={s.id}
-                  onClick={() => toggleMulti("sources", s.id)}
-                  className={`rounded-full px-2.5 py-1 text-xs ring-1 ring-inset ${
-                    form.sources.includes(s.id)
-                      ? "bg-[#1e3a8a] text-on-dark ring-[#1e3a8a]"
-                      : "bg-white text-slate-600 ring-slate-300"
-                  }`}
-                >
-                  {s.name}
-                </button>
-              ))}
-            </div>
-          </div>
+                <div>
+                  <Label>Included sources</Label>
+                  <div className="flex flex-wrap gap-2">
+                    {sources.map((s) => (
+                      <button
+                        type="button"
+                        key={s.id}
+                        onClick={() => toggleMulti("sources", s.id)}
+                        className={`rounded-full px-2.5 py-1 text-xs ring-1 ring-inset ${
+                          form.sources.includes(s.id)
+                            ? "bg-[#1e3a8a] text-on-dark ring-[#1e3a8a]"
+                            : "bg-white text-slate-600 ring-slate-300"
+                        }`}
+                      >
+                        {s.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
-          <div>
-            <Label htmlFor="basis">Calculation basis</Label>
-            <Input
-              id="basis"
-              required
-              value={form.basis}
-              onChange={(e) => {
-                setBasisEditedManually(true);
-                setForm({ ...form, basis: e.target.value });
-              }}
-            />
-            <p className="mt-1 text-xs text-slate-500">
-              Auto-fills from the categories selected above - edit it directly to override.
-            </p>
-          </div>
+                <div>
+                  <Label htmlFor="basis">Calculation basis</Label>
+                  <Input
+                    id="basis"
+                    required
+                    value={form.basis}
+                    onChange={(e) => {
+                      setBasisEditedManually(true);
+                      setForm({ ...form, basis: e.target.value });
+                    }}
+                  />
+                  <p className="mt-1 text-xs text-slate-500">
+                    Auto-fills from the categories selected above - edit it directly to override.
+                  </p>
+                </div>
 
-          <div className="flex items-center gap-2">
-            <input
-              id="activateNow"
-              type="checkbox"
-              checked={form.activateNow}
-              onChange={(e) => setForm({ ...form, activateNow: e.target.checked })}
-              className="h-4 w-4 rounded border-slate-300"
-            />
-            <Label htmlFor="activateNow">Activate immediately (deactivates the current rule)</Label>
-          </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    id="activateNow"
+                    type="checkbox"
+                    checked={form.activateNow}
+                    onChange={(e) => setForm({ ...form, activateNow: e.target.checked })}
+                    className="h-4 w-4 rounded border-slate-300"
+                  />
+                  <Label htmlFor="activateNow">Activate immediately (deactivates the current rule)</Label>
+                </div>
 
-          {formError && <p className="text-sm text-red-600">{formError}</p>}
-          <div>
-            <Button type="submit" disabled={submitting}>
-              {submitting ? "Saving..." : "Create Version"}
-            </Button>
-          </div>
-        </form>
-      </Card>
-      )}
-
-      <Card className="mt-5">
-        <CardHeader title="Rule History" description={`${rules.length} version(s)`} />
+                <StickyActions error={formError}>
+                  <Button type="button" variant="cancel" onClick={close}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={submitting}>
+                    {submitting ? "Saving..." : "Create Version"}
+                  </Button>
+                </StickyActions>
+              </form>
+              )}
+            </AddDialog>
+          )}
+        />
         <div className="divide-y divide-slate-100">
-          {loading && <p className="px-4 py-4 text-sm text-slate-500">Loading...</p>}
+          {loading && <ListSkeleton rows={4} />}
           {!loading &&
-            rules.map((r) => (
+            pager.pageItems.map((r) => (
               <div key={r.id} className="px-4 py-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
@@ -314,35 +325,22 @@ export default function ScoringRulesPage() {
                     {r.active && <Badge tone="green">Active</Badge>}
                     {!r.everActivated && <Badge tone="gray">Draft — never activated</Badge>}
                   </div>
-                  <div className="flex items-center gap-2">
+                  <RowActions>
+                    {!r.everActivated && canEdit && (
+                      <RowAction
+                        kind="edit"
+                        disabled={rowBusy === r.id || editingRuleId === r.id}
+                        title={editingRuleId === r.id ? "Already editing - use Save Changes or Cancel below" : "Edit"}
+                        onClick={() => startEditRule(r)}
+                      />
+                    )}
                     {canActivate && (
-                      <Button
-                        variant={r.active ? "secondary" : "primary"}
-                        disabled={rowBusy === r.id}
-                        onClick={() => setActive(r, !r.active)}
-                      >
-                        {r.active ? "Deactivate" : "Activate"}
-                      </Button>
+                      <StatusToggleAction active={r.active} busy={rowBusy === r.id} onClick={() => setActive(r, !r.active)} />
                     )}
-                    {!r.everActivated && (
-                      <>
-                        {canEdit && (
-                          <Button
-                            variant="secondary"
-                            disabled={rowBusy === r.id}
-                            onClick={() => (editingRuleId === r.id ? setEditingRuleId(null) : startEditRule(r))}
-                          >
-                            {editingRuleId === r.id ? "Cancel" : "Edit"}
-                          </Button>
-                        )}
-                        {canDelete && (
-                          <Button variant="danger" disabled={rowBusy === r.id} onClick={() => deleteRule(r)}>
-                            Delete
-                          </Button>
-                        )}
-                      </>
+                    {!r.everActivated && canDelete && (
+                      <RowAction kind="delete" busy={rowBusy === r.id} onClick={() => deleteRule(r)} />
                     )}
-                  </div>
+                  </RowActions>
                 </div>
 
                 {editingRuleId === r.id ? (
@@ -432,12 +430,14 @@ export default function ScoringRulesPage() {
                         Auto-fills from the categories selected above - edit it directly to override.
                       </p>
                     </div>
-                    {editError && <p className="text-sm text-red-600">{editError}</p>}
-                    <div>
+                    <StickyActions variant="inset" className="mt-3" error={editError}>
+                      <Button variant="cancel" onClick={() => setEditingRuleId(null)}>
+                        Cancel
+                      </Button>
                       <Button disabled={rowBusy === r.id} onClick={() => saveRuleEdit(r)}>
                         {rowBusy === r.id ? "Saving..." : "Save Changes"}
                       </Button>
-                    </div>
+                    </StickyActions>
                   </div>
                 ) : (
                   <>
@@ -452,6 +452,7 @@ export default function ScoringRulesPage() {
               </div>
             ))}
         </div>
+        <Pagination page={pager.page} totalPages={pager.totalPages} total={pager.total} pageSize={pager.pageSize} onPageChange={pager.setPage} />
       </Card>
       {dialog}
     </div>

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { apiGet, apiSend, ApiError } from "@/lib/api-client";
 import { CollapsibleCard } from "@/components/ui/CollapsibleCard";
 import { Button } from "@/components/ui/Button";
+import { StickyActions } from "@/components/ui/StickyActions";
 import { Input, Select, Label } from "@/components/ui/Field";
 import { SettingsListEditor } from "@/components/admin/SettingsListEditor";
 import { REPORT_TEMPLATES } from "@/lib/reportTemplateMeta";
@@ -12,12 +13,17 @@ import { SIMILAR_FINDING_FIELDS, REQUIRABLE_FINDING_FIELDS, OTHER_VALUE_ALLOWED_
 import { usePermissions } from "@/lib/permissions/PermissionsContext";
 import { hasPermission } from "@/lib/permissions/registry";
 import type { Settings, SafeUser, Source } from "@/types";
+import { FormSkeleton } from "@/components/ui/Skeleton";
 import {
   DEFAULT_TYPOGRAPHY,
   FONT_GROUPS,
   FONT_OPTIONS,
   TEXT_SIZE_OPTIONS,
   TEXT_CONTRAST_OPTIONS,
+  CHROME_OPTIONS,
+  CHROME_GROUPS,
+  chromeStyle,
+  isDefaultTypography,
   fontStack,
   normalizeTypography,
   type Typography,
@@ -104,10 +110,18 @@ export default function SettingsPage() {
     }
   }
 
-  if (!settings) return <p className="text-sm text-slate-500">Loading...</p>;
+  if (!settings)
+    return (
+      <div>
+        <h1 className="text-lg font-semibold text-slate-900">Settings</h1>
+        <div className="mt-5">
+          <FormSkeleton cards={6} grid />
+        </div>
+      </div>
+    );
 
   return (
-    <div className="max-w-2xl">
+    <div>
       <h1 className="text-lg font-semibold text-slate-900">Settings</h1>
       <p className="mt-1 text-sm text-slate-600">
         Currencies, risk levels, operation areas, priority levels, irregularity types, and notification delivery
@@ -119,8 +133,11 @@ export default function SettingsPage() {
         </p>
       )}
 
+      {/* Sections sit in a two-column grid on wide screens; items-start keeps an
+          expanded section from stretching its closed neighbour to match. The two
+          sections with wide content span both columns. */}
+      <div className="mt-5 grid grid-cols-1 items-start gap-4 xl:grid-cols-2">
       <CollapsibleCard disabled={!canEdit}
-        className="mt-5"
         title="Configurable Lists"
         description="Each list drives a dropdown on the Finding registration form. Expand a section to add or remove a value."
       >
@@ -155,7 +172,7 @@ export default function SettingsPage() {
         </div>
       </CollapsibleCard>
 
-      <CollapsibleCard disabled={!canEdit} className="mt-4" title="Notification Delivery">
+      <CollapsibleCard disabled={!canEdit} title="Notification Delivery">
         <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2">
           <div>
             <Label htmlFor="provider">Provider</Label>
@@ -220,7 +237,6 @@ export default function SettingsPage() {
       </CollapsibleCard>
 
       <CollapsibleCard disabled={!canEdit}
-        className="mt-4"
         title="Case Transfer"
         description="Allow transferring outstanding findings when a period locks."
       >
@@ -250,7 +266,6 @@ export default function SettingsPage() {
       </CollapsibleCard>
 
       <CollapsibleCard disabled={!canEdit}
-        className="mt-4"
         title="Performance Ranking Visibility"
         description="Independently for branches and districts."
       >
@@ -289,7 +304,6 @@ export default function SettingsPage() {
       </CollapsibleCard>
 
       <CollapsibleCard disabled={!canEdit}
-        className="mt-4"
         title="Rectification Reminders"
         description="A time-based nudge for findings sitting too long awaiting rectification."
       >
@@ -338,7 +352,6 @@ export default function SettingsPage() {
       </CollapsibleCard>
 
       <CollapsibleCard disabled={!canEdit}
-        className="mt-4"
         title="Top / Bottom Performers"
         description="Thresholds driving the Top/Bottom Performers widgets on HO/District/Executive dashboards."
       >
@@ -384,7 +397,6 @@ export default function SettingsPage() {
       </CollapsibleCard>
 
       <CollapsibleCard disabled={!canEdit}
-        className="mt-4"
         title="Bank-Wide Approval"
         description="Optional approval step for findings registered by a bank-wide (HO/Admin) user."
       >
@@ -434,7 +446,6 @@ export default function SettingsPage() {
       </CollapsibleCard>
 
       <CollapsibleCard disabled={!canEdit}
-        className="mt-4"
         title="Finding Registration Fields"
         description="Which fields must be filled in to register or edit a finding, vs. left blank."
       >
@@ -470,7 +481,6 @@ export default function SettingsPage() {
       </CollapsibleCard>
 
       <CollapsibleCard disabled={!canEdit}
-        className="mt-4"
         title={'Custom "Other" Values'}
         description="Which dropdowns let a registrant type in a value that isn't in the configured list."
       >
@@ -503,7 +513,6 @@ export default function SettingsPage() {
       </CollapsibleCard>
 
       <CollapsibleCard disabled={!canEdit}
-        className="mt-4"
         title="Duplicate Finding Detection"
         description="Which fields the Register Finding form's 'similar finding already on record' check compares."
       >
@@ -538,7 +547,7 @@ export default function SettingsPage() {
       </CollapsibleCard>
 
       <CollapsibleCard disabled={!canEdit}
-        className="mt-4"
+        className="xl:col-span-2"
         title="Report Template Source Filters"
         description="Independently for each of the 11 report templates, which finding sources count toward that template's totals."
       >
@@ -597,9 +606,9 @@ export default function SettingsPage() {
       </CollapsibleCard>
 
       <CollapsibleCard disabled={!canEdit}
-        className="mt-4"
-        title="Typography"
-        description="Font, text size, and text contrast used on every page of the app."
+        className="xl:col-span-2"
+        title="Appearance"
+        description="Font, text size, text contrast, and header & sidebar color used on every page of the app."
       >
         {(() => {
           const typography = normalizeTypography(settings.typography);
@@ -607,10 +616,7 @@ export default function SettingsPage() {
             setSettings({ ...settings, typography: { ...typography, ...patch } });
           const sizeScale = { compact: 0.9375, default: 1, comfortable: 1.0625, large: 1.125 }[typography.textSize];
           const high = typography.textContrast === "high";
-          const isDefault =
-            typography.fontFamily === DEFAULT_TYPOGRAPHY.fontFamily &&
-            typography.textSize === DEFAULT_TYPOGRAPHY.textSize &&
-            typography.textContrast === DEFAULT_TYPOGRAPHY.textContrast;
+          const isDefault = isDefaultTypography(typography);
           return (
             <div className="flex flex-col gap-4 p-4">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -664,6 +670,57 @@ export default function SettingsPage() {
               </div>
 
               <div>
+                <p className="mb-1.5 text-xs font-medium text-slate-600">Header &amp; sidebar color</p>
+                {CHROME_GROUPS.map((g) => (
+                <div key={g.key} className="mb-3 last:mb-0">
+                <p className="mb-1 text-xs text-slate-500">{g.label}</p>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7" role="radiogroup" aria-label={`Header and sidebar color - ${g.label}`}>
+                  {CHROME_OPTIONS.filter((o) => o.group === g.key).map((o) => {
+                    const selected = typography.chrome === o.key;
+                    return (
+                      <button
+                        key={o.key}
+                        type="button"
+                        role="radio"
+                        aria-checked={selected}
+                        onClick={() => setTypography({ chrome: o.key })}
+                        className={`flex flex-col overflow-hidden rounded-md border text-left transition-shadow ${
+                          selected ? "border-brand-gold ring-2 ring-brand-gold/60" : "border-slate-200 hover:border-slate-300"
+                        }`}
+                      >
+                        {/* Miniature app: header bar + sidebar in the option's
+                            own palette, beside the (unchanged) page canvas. */}
+                        <div className="flex h-14 bg-slate-100" style={chromeStyle(o.key)}>
+                          <div className="flex w-1/3 flex-col gap-1 border-r border-chrome-border bg-chrome-bg p-1.5">
+                            <span className="h-1 w-3/4 rounded-full bg-chrome-accent" />
+                            <span className="h-1 w-full rounded-full bg-chrome-fg opacity-80" />
+                            <span className="h-1.5 w-full rounded-sm bg-brand-gold" />
+                            <span className="h-1 w-2/3 rounded-full bg-chrome-fg opacity-80" />
+                          </div>
+                          <div className="flex flex-1 flex-col">
+                            <div className="flex h-3 items-center justify-end gap-0.5 border-b border-chrome-border bg-chrome-bg px-1">
+                              <span className="h-1 w-3 rounded-full bg-chrome-fg opacity-80" />
+                            </div>
+                            <div className="m-1 flex-1 rounded-sm bg-white" />
+                          </div>
+                        </div>
+                        <span className="flex items-center gap-1.5 px-2 py-1.5 text-xs text-slate-700">
+                          <span className="h-2.5 w-2.5 shrink-0 rounded-full border border-slate-300" style={{ background: o.swatch }} />
+                          <span className="truncate">{o.label}</span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+                </div>
+              ))}
+                <p className="mt-1.5 text-xs text-slate-500">
+                  The highlighted page link stays gold on every option. Light options add a thin border so the
+                  sidebar and header stay distinct from the page, even on &quot;Page&quot;.
+                </p>
+              </div>
+
+              <div>
                 <p className="mb-1 text-xs font-medium text-slate-600">
                   Preview <span className="font-normal text-slate-500">- sample text only, not real data</span>
                 </p>
@@ -703,15 +760,23 @@ export default function SettingsPage() {
           );
         })()}
       </CollapsibleCard>
-
-      {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
-      {saved && <p className="mt-4 text-sm text-emerald-600">Settings saved.</p>}
-      {canEdit && (
-      <div className="mt-4">
-        <Button onClick={handleSave} disabled={saving}>
-          {saving ? "Saving..." : "Save Settings"}
-        </Button>
       </div>
+
+      {/* Pinned to the bottom of the screen: with a dozen collapsible
+          sections above, the one Save button must never be out of reach. */}
+      {canEdit ? (
+        <StickyActions
+          variant="page"
+          className="mt-5"
+          error={error}
+          hint={saved ? <span className="text-sm text-emerald-600">Settings saved.</span> : "Changes apply to everyone once saved."}
+        >
+          <Button onClick={handleSave} disabled={saving}>
+            {saving ? "Saving..." : "Save Settings"}
+          </Button>
+        </StickyActions>
+      ) : (
+        error && <p className="mt-4 text-sm text-red-600">{error}</p>
       )}
     </div>
   );

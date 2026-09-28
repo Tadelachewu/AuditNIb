@@ -5,9 +5,15 @@ import { apiGet, apiSend, ApiError } from "@/lib/api-client";
 import { formatDateTime } from "@/lib/format";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { StickyActions } from "@/components/ui/StickyActions";
 import { Input, Select, Label } from "@/components/ui/Field";
 import { Badge } from "@/components/ui/Badge";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { AddDialog } from "@/components/ui/AddDialog";
+import { RowActions, StatusToggleAction } from "@/components/ui/RowActions";
+import { TableSkeletonRows } from "@/components/ui/Skeleton";
+import { Pagination } from "@/components/ui/Pagination";
+import { useClientPagination } from "@/lib/useClientPagination";
 import { usePermissions } from "@/lib/permissions/PermissionsContext";
 import { hasPermission } from "@/lib/permissions/registry";
 import type { ScoringAdjustment, District, Branch, ReportingPeriod } from "@/types";
@@ -29,6 +35,7 @@ export default function ScoringAdjustmentsPage() {
   const permissions = usePermissions();
   const canCreate = hasPermission(permissions, "scoring-adjustments.create");
   const canToggle = hasPermission(permissions, "scoring-adjustments.toggle-status");
+  const pager = useClientPagination(adjustments);
 
   async function load() {
     setLoading(true);
@@ -62,7 +69,7 @@ export default function ScoringAdjustmentsPage() {
     return periods.find((p) => p.id === id)?.code ?? id;
   }
 
-  async function handleCreate(e: React.FormEvent) {
+  async function handleCreate(e: React.FormEvent, close: () => void) {
     e.preventDefault();
     setFormError(null);
     setSubmitting(true);
@@ -72,6 +79,7 @@ export default function ScoringAdjustmentsPage() {
         value: Number(form.value),
       });
       setForm(emptyForm);
+      close();
       await load();
     } catch (err) {
       setFormError(err instanceof ApiError ? err.message : "Failed to create adjustment");
@@ -117,70 +125,73 @@ export default function ScoringAdjustmentsPage() {
         outright. Every adjustment (and every activate/deactivate) requires a reason and is written to the audit trail.
       </p>
 
-      {canCreate && (
       <Card className="mt-5">
-        <CardHeader title="New Adjustment" />
-        <form onSubmit={handleCreate} className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4">
-          <div>
-            <Label htmlFor="targetType">Target type</Label>
-            <Select
-              id="targetType"
-              value={form.targetType}
-              onChange={(e) => setForm({ ...form, targetType: e.target.value as "DISTRICT" | "BRANCH", targetId: "" })}
-            >
-              <option value="DISTRICT">District</option>
-              <option value="BRANCH">Branch</option>
-            </Select>
-          </div>
-          <div>
-            <Label htmlFor="targetId">{form.targetType === "DISTRICT" ? "District" : "Branch"}</Label>
-            <Select id="targetId" required value={form.targetId} onChange={(e) => setForm({ ...form, targetId: e.target.value })}>
-              <option value="">Select...</option>
-              {targetOptions.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-            </Select>
-          </div>
-          <div>
-            <Label htmlFor="periodId">Reporting period</Label>
-            <Select id="periodId" required value={form.periodId} onChange={(e) => setForm({ ...form, periodId: e.target.value })}>
-              <option value="">Select...</option>
-              {periods.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.code}
-                </option>
-              ))}
-            </Select>
-          </div>
-          <div>
-            <Label htmlFor="value">Adjusted score (%)</Label>
-            <Input
-              id="value"
-              type="number"
-              step="0.01"
-              required
-              value={form.value}
-              onChange={(e) => setForm({ ...form, value: e.target.value })}
-            />
-          </div>
-          <div className="sm:col-span-2 lg:col-span-4">
-            <Label htmlFor="reason">Reason</Label>
-            <Input id="reason" required value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} />
-          </div>
-          <div className="sm:col-span-2 lg:col-span-4">
-            {formError && <p className="mb-2 text-sm text-red-600">{formError}</p>}
-            <Button type="submit" disabled={submitting}>
-              {submitting ? "Saving..." : "Record Adjustment"}
-            </Button>
-          </div>
-        </form>
-      </Card>
-      )}
-
-      <Card className="mt-5">
-        <CardHeader title="Adjustment History" description={`${adjustments.length} total`} />
+        <CardHeader title="Adjustment History" description={`${adjustments.length} total`}
+          action={canCreate && (
+            <AddDialog title="New Adjustment">
+              {({ close }) => (
+              <form onSubmit={(e) => handleCreate(e, close)} className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4">
+                <div>
+                  <Label htmlFor="targetType">Target type</Label>
+                  <Select
+                    id="targetType"
+                    value={form.targetType}
+                    onChange={(e) => setForm({ ...form, targetType: e.target.value as "DISTRICT" | "BRANCH", targetId: "" })}
+                  >
+                    <option value="DISTRICT">District</option>
+                    <option value="BRANCH">Branch</option>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="targetId">{form.targetType === "DISTRICT" ? "District" : "Branch"}</Label>
+                  <Select id="targetId" required value={form.targetId} onChange={(e) => setForm({ ...form, targetId: e.target.value })}>
+                    <option value="">Select...</option>
+                    {targetOptions.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="periodId">Reporting period</Label>
+                  <Select id="periodId" required value={form.periodId} onChange={(e) => setForm({ ...form, periodId: e.target.value })}>
+                    <option value="">Select...</option>
+                    {periods.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.code}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="value">Adjusted score (%)</Label>
+                  <Input
+                    id="value"
+                    type="number"
+                    step="0.01"
+                    required
+                    value={form.value}
+                    onChange={(e) => setForm({ ...form, value: e.target.value })}
+                  />
+                </div>
+                <div className="sm:col-span-2 lg:col-span-4">
+                  <Label htmlFor="reason">Reason</Label>
+                  <Input id="reason" required value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} />
+                </div>
+                <StickyActions error={formError}>
+                  <Button type="button" variant="cancel" onClick={close}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={submitting}>
+                    {submitting ? "Saving..." : "Record Adjustment"}
+                  </Button>
+                </StickyActions>
+              </form>
+              )}
+            </AddDialog>
+          )}
+        />
         {rowError && <p className="px-4 pt-3 text-sm text-red-600">{rowError}</p>}
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
@@ -196,13 +207,7 @@ export default function ScoringAdjustmentsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {loading && (
-                <tr>
-                  <td className="px-4 py-4 text-slate-500" colSpan={7}>
-                    Loading...
-                  </td>
-                </tr>
-              )}
+              {loading && <TableSkeletonRows cols={7} />}
               {!loading && adjustments.length === 0 && (
                 <tr>
                   <td className="px-4 py-4 text-slate-500" colSpan={7}>
@@ -211,7 +216,7 @@ export default function ScoringAdjustmentsPage() {
                 </tr>
               )}
               {!loading &&
-                adjustments.map((a) => (
+                pager.pageItems.map((a) => (
                   <tr key={a.id}>
                     <td className="px-4 py-2 text-slate-900">
                       {targetName(a)} <span className="text-xs text-slate-500">({a.targetType})</span>
@@ -223,22 +228,19 @@ export default function ScoringAdjustmentsPage() {
                     </td>
                     <td className="px-4 py-2 text-slate-600">{a.reason}</td>
                     <td className="px-4 py-2 text-xs text-slate-500">{formatDateTime(a.createdAt)}</td>
-                    <td className="px-4 py-2">
-                      {canToggle && (
-                        <Button
-                          variant={a.status === "ACTIVE" ? "danger" : "success"}
-                          disabled={rowBusy === a.id}
-                          onClick={() => toggleStatus(a)}
-                        >
-                          {a.status === "ACTIVE" ? "Deactivate" : "Activate"}
-                        </Button>
-                      )}
+                    <td className="px-4 py-2 text-right">
+                      <RowActions>
+                        {canToggle && (
+                          <StatusToggleAction active={a.status === "ACTIVE"} busy={rowBusy === a.id} onClick={() => toggleStatus(a)} />
+                        )}
+                      </RowActions>
                     </td>
                   </tr>
                 ))}
             </tbody>
           </table>
         </div>
+        <Pagination page={pager.page} totalPages={pager.totalPages} total={pager.total} pageSize={pager.pageSize} onPageChange={pager.setPage} />
       </Card>
     </div>
   );

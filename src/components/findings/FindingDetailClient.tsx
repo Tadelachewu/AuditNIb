@@ -7,7 +7,7 @@ import { apiSend, ApiError } from "@/lib/api-client";
 import { formatDate, formatDateTime, formatNumber, formatCurrency } from "@/lib/format";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { Input, Label, FileInput } from "@/components/ui/Field";
+import { Input, Label, FileInput, FIELD_FOCUS } from "@/components/ui/Field";
 import { Badge } from "@/components/ui/Badge";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { FindingStatusBadge } from "@/components/findings/FindingStatusBadge";
@@ -788,7 +788,7 @@ export function FindingDetailClient({
               </div>
               <div className="flex gap-2">
                 <Button
-                  variant="secondary"
+                  variant="cancel"
                   onClick={() => {
                     setRectifying(false);
                     setSelectedCaseIds([]);
@@ -908,7 +908,7 @@ export function FindingDetailClient({
                   <Label htmlFor="t-period">Destination period</Label>
                   <select
                     id="t-period"
-                    className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                    className={`w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm ${FIELD_FOCUS}`}
                     value={transferPeriodId}
                     onChange={(e) => setTransferPeriodId(e.target.value)}
                   >
@@ -990,7 +990,7 @@ export function FindingDetailClient({
                 </div>
 
                 <div className="flex gap-2">
-                  <Button variant="secondary" onClick={() => setTransferring(false)} disabled={busy}>
+                  <Button variant="cancel" onClick={() => setTransferring(false)} disabled={busy}>
                     Cancel
                   </Button>
                   <Button variant="info" onClick={handleTransfer} disabled={busy || !transferPeriodId}>

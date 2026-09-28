@@ -5,9 +5,14 @@ import { useRouter } from "next/navigation";
 import { apiSend, ApiError } from "@/lib/api-client";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { StickyActions } from "@/components/ui/StickyActions";
 import { Input, Label } from "@/components/ui/Field";
 import { Badge } from "@/components/ui/Badge";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { AddDialog } from "@/components/ui/AddDialog";
+import { RowAction, RowActions, StatusToggleAction } from "@/components/ui/RowActions";
+import { Pagination } from "@/components/ui/Pagination";
+import { useClientPagination } from "@/lib/useClientPagination";
 import type { Source } from "@/types";
 
 // The list itself is never copied into local state - `sources` is read
@@ -36,14 +41,16 @@ export function SourcesManager({ initialSources, permissions }: { initialSources
   const [editName, setEditName] = useState("");
   const [editError, setEditError] = useState<string | null>(null);
   const { confirm, dialog } = useConfirm();
+  const pager = useClientPagination(sources);
 
-  async function handleCreate(e: React.FormEvent) {
+  async function handleCreate(e: React.FormEvent, close: () => void) {
     e.preventDefault();
     setFormError(null);
     setSubmitting(true);
     try {
       await apiSend("/api/admin/sources", "POST", form);
       setForm({ code: "", name: "" });
+      close();
       router.refresh();
     } catch (err) {
       setFormError(err instanceof ApiError ? err.message : "Failed to create source");
@@ -129,30 +136,33 @@ export function SourcesManager({ initialSources, permissions }: { initialSources
 
   return (
     <>
-      {canCreate && (
       <Card className="mt-5">
-        <CardHeader title="Add Source" />
-        <form onSubmit={handleCreate} className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3">
-          <div>
-            <Label htmlFor="code">Code</Label>
-            <Input id="code" required value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} />
-          </div>
-          <div className="sm:col-span-2">
-            <Label htmlFor="name">Name</Label>
-            <Input id="name" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-          </div>
-          <div className="sm:col-span-3">
-            {formError && <p className="mb-2 text-sm text-red-600">{formError}</p>}
-            <Button type="submit" disabled={submitting}>
-              {submitting ? "Adding..." : "Add Source"}
-            </Button>
-          </div>
-        </form>
-      </Card>
-      )}
-
-      <Card className="mt-5">
-        <CardHeader title="All Sources" description={`${sources.length} total`} />
+        <CardHeader title="All Sources" description={`${sources.length} total`}
+          action={canCreate && (
+            <AddDialog title="Add Source">
+              {({ close }) => (
+              <form onSubmit={(e) => handleCreate(e, close)} className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3">
+                <div>
+                  <Label htmlFor="code">Code</Label>
+                  <Input id="code" required value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} />
+                </div>
+                <div className="sm:col-span-2">
+                  <Label htmlFor="name">Name</Label>
+                  <Input id="name" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+                </div>
+                <StickyActions error={formError}>
+                  <Button type="button" variant="cancel" onClick={close}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={submitting}>
+                    {submitting ? "Adding..." : "Add Source"}
+                  </Button>
+                </StickyActions>
+              </form>
+              )}
+            </AddDialog>
+          )}
+        />
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-600">
@@ -165,7 +175,7 @@ export function SourcesManager({ initialSources, permissions }: { initialSources
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {sources.map((s) => {
+              {pager.pageItems.map((s) => {
                 const isEditing = editingId === s.id;
                 return (
                   <tr
@@ -187,65 +197,35 @@ export function SourcesManager({ initialSources, permissions }: { initialSources
                       <Badge tone={s.active ? "green" : "gray"}>{s.active ? "Active" : "Inactive"}</Badge>
                     </td>
                     <td className="px-4 py-2">
-                      {s.isDefault ? (
-                        <div className="flex items-center gap-2">
-                          <Badge tone="gold">★ Default</Badge>
-                          {canEdit && (
-                            <button
-                              type="button"
-                              className="text-xs text-slate-500 underline hover:text-slate-700 disabled:opacity-50"
-                              disabled={rowBusy === s.id}
-                              onClick={() => makeDefault(s)}
-                            >
-                              Unset
-                            </button>
-                          )}
-                        </div>
-                      ) : canEdit ? (
-                        <Button
-                          variant="secondary"
-                          disabled={rowBusy === s.id || !s.active}
-                          title={!s.active ? "Activate this source first" : "Pre-fill this source on new findings"}
-                          onClick={() => makeDefault(s)}
-                        >
-                          Set as default
-                        </Button>
-                      ) : (
-                        "—"
-                      )}
+                      {s.isDefault ? <Badge tone="gold">★ Default</Badge> : <span className="text-slate-400">—</span>}
                     </td>
                     <td className="px-4 py-2 text-right">
                       {isEditing ? (
-                        <div className="flex justify-end gap-2">
-                          <Button variant="secondary" onClick={() => setEditingId(null)}>
-                            Cancel
-                          </Button>
-                          <Button disabled={rowBusy === s.id} onClick={() => saveEdit(s)}>
-                            {rowBusy === s.id ? "Saving..." : "Save"}
-                          </Button>
-                        </div>
+                        <RowActions inline>
+                          <RowAction kind="cancel" onClick={() => setEditingId(null)} />
+                          <RowAction kind="save" busy={rowBusy === s.id} label={rowBusy === s.id ? "Saving..." : "Save"} onClick={() => saveEdit(s)} />
+                        </RowActions>
                       ) : (
-                        <div className="flex justify-end gap-2">
+                        <RowActions>
                           {canEdit && (
-                            <Button variant="secondary" onClick={() => startEdit(s)}>
-                              Edit
-                            </Button>
+                            <RowAction kind="edit" onClick={() => startEdit(s)} />
+                          )}
+                          {canEdit && (
+                            <RowAction
+                              kind={s.isDefault ? "undefault" : "default"}
+                              busy={rowBusy === s.id}
+                              disabled={!s.isDefault && !s.active}
+                              title={!s.isDefault && !s.active ? "Activate this source first" : "Pre-fill this source on new findings"}
+                              onClick={() => makeDefault(s)}
+                            />
                           )}
                           {canToggle && (
-                            <Button
-                              variant={s.active ? "danger" : "secondary"}
-                              disabled={rowBusy === s.id}
-                              onClick={() => toggleActive(s)}
-                            >
-                              {s.active ? "Deactivate" : "Activate"}
-                            </Button>
+                            <StatusToggleAction active={s.active} busy={rowBusy === s.id} onClick={() => toggleActive(s)} />
                           )}
                           {canDelete && (
-                            <Button variant="danger" disabled={rowBusy === s.id} onClick={() => deleteSource(s)}>
-                              Delete
-                            </Button>
+                            <RowAction kind="delete" busy={rowBusy === s.id} onClick={() => deleteSource(s)} />
                           )}
-                        </div>
+                        </RowActions>
                       )}
                     </td>
                   </tr>
@@ -254,6 +234,7 @@ export function SourcesManager({ initialSources, permissions }: { initialSources
             </tbody>
           </table>
         </div>
+        <Pagination page={pager.page} totalPages={pager.totalPages} total={pager.total} pageSize={pager.pageSize} onPageChange={pager.setPage} />
       </Card>
       {dialog}
     </>

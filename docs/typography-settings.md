@@ -1,6 +1,6 @@
-# Typography Settings
+# Appearance Settings (Typography & Header/Sidebar Color)
 
-Admins can change the font, text size and text contrast for the whole app from **Admin → Settings → Typography**. The default is exactly how the app looked before this setting existed, so nothing changes until an admin saves a different choice.
+Admins can change the font, text size, text contrast and the header & sidebar color for the whole app from **Admin → Settings → Appearance**. The default is exactly how the app looked before these settings existed, so nothing changes until an admin saves a different choice.
 
 ---
 
@@ -77,12 +77,36 @@ The size scales the whole interface, including spacing, padding and column width
 
 Headings and body text are already at maximum contrast, so High contrast only affects the muted text.
 
+### 2.4 Header & sidebar color
+
+The top header bar and the left sidebar (the app's "chrome") share one color. Text and icons on it switch automatically, so they stay readable on every option.
+
+The options are grouped as they appear in Settings:
+
+| Group | Option | Color | Text on it |
+|---|---|---|---|
+| Dark (same in light and dark mode) | **Bronze** | The default: deep brand bronze `#4e390e` | White 11:1; gold section labels 6.4:1 |
+| | Deep bronze | Almost-black bronze `#2e2108` | White; gold labels |
+| | Navy | Classic banking navy `#12294a` | White; gold labels |
+| | Midnight | Blue-black slate `#0f172a` | White; gold labels |
+| | Charcoal | Neutral dark grey `#1f2937` | White; gold labels |
+| | Forest green | Deep green `#123a2b` | White; gold labels |
+| | Burgundy | Deep wine red `#4a1622` | White; gold labels |
+| Light (follows light/dark mode) | White | The card surface | Dark text; amber labels |
+| | Soft | One shade off white | Dark text; amber labels |
+| | **Page** | *Exactly* the page background, so the header and sidebar blend into the page | Dark text; amber labels 4.6:1 |
+
+- **The highlighted page link** in the sidebar stays brand gold with dark text on every option, so "where am I" always looks the same.
+- **The light options** (White, Soft, Page) add a thin border between the chrome and the page. On **Page** that border is the only separation, since the colors are identical.
+- All options meet the WCAG AA contrast standard for their text.
+
 ## 3. Using it
 
-1. Open **Admin → Settings** and expand **Typography**.
+1. Open **Admin → Settings** and expand **Appearance**.
 2. Choose a font, text size and contrast. Each font in the dropdown is shown in its own face, and the **Preview** box below shows a heading, description, finding row and timestamp in the chosen style, including an Amharic sample.
 3. Click **Save Settings** at the bottom of the page. The whole app switches immediately, with no reload needed.
-4. **Reset to default** appears whenever the selection differs from the default and restores Geist, Default size and Standard contrast. You still need to click **Save Settings** afterwards.
+   For the header & sidebar color, click one of the ten tiles. Each shows a miniature header and sidebar in that color, and the selected tile has a gold outline.
+4. **Reset to default** appears whenever the selection differs from the default and restores Geist, Default size, Standard contrast and Bronze. You still need to click **Save Settings** afterwards.
 
 ## 4. Where it applies
 
@@ -199,6 +223,12 @@ Families you don't want to bundle can be deleted from `layout.tsx` and `FONT_OPT
 Nothing to install or restart. Saving in **Admin → Settings** applies immediately to every signed-in user on their next page load or navigation. The admin who saved it sees the change at once.
 
 ## 6. How it works (for developers)
+
+**Header & sidebar color.** `Sidebar.tsx`, `Topbar.tsx`, `NotificationBell.tsx` and `ThemeToggle.tsx` use only the `--chrome-*` tokens (`bg`, `fg`, `muted`, `accent`, `hover`, `border`, `scroll`) through the `bg-chrome-bg`, `text-chrome-fg`, … utilities defined in `globals.css`. They never use `--brand-sidebar` or `--on-dark` directly. `globals.css` sets the bronze values as defaults. Any other option's palette comes from `CHROME_OPTIONS` in `src/lib/typography.ts` and is injected as `:root:root{--chrome-…}` by the same `<style>` the text options use. The doubled selector outranks the plain `:root` defaults regardless of stylesheet order. The dark options are fixed hex colors. Light and Soft point at the app's theme-remapped tokens (`--color-white`, `--color-slate-*`, `--color-amber-700`), which is why they follow the light/dark toggle with no extra code. The option is stored as `typography.chrome` in the same JSON column, so it needed no migration. A row saved before it existed reads back as `bronze`.
+
+To add a chrome option, add an entry to `CHROME_OPTIONS` with all seven `vars`. The tile, preview, save validation and CSS all derive from that list.
+
+**Text options.**
 
 | Piece | File |
 |---|---|

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { appendAuditLog } from "@/lib/audit";
-import { FONT_KEYS, TEXT_SIZE_KEYS, TEXT_CONTRAST_KEYS } from "@/lib/typography";
+import { FONT_KEYS, TEXT_SIZE_KEYS, TEXT_CONTRAST_KEYS, CHROME_KEYS, normalizeTypography } from "@/lib/typography";
 
 export async function GET() {
   const auth = await requirePermission("settings.view");
@@ -112,6 +112,9 @@ const updateSchema = z.object({
       fontFamily: z.enum(FONT_KEYS),
       textSize: z.enum(TEXT_SIZE_KEYS),
       textContrast: z.enum(TEXT_CONTRAST_KEYS),
+      // Optional so a client that predates the header/sidebar color option
+      // doesn't fail validation; normalizeTypography() fills the default.
+      chrome: z.enum(CHROME_KEYS).optional(),
     })
     .optional(),
 });
@@ -166,7 +169,9 @@ export async function PATCH(request: Request) {
     current.settings = {
       ...parsed.data,
       reportTemplateSources: parsed.data.reportTemplateSources as Record<string, string[]>,
-      typography: parsed.data.typography ?? current.settings.typography,
+      typography: parsed.data.typography
+        ? normalizeTypography({ ...current.settings.typography, ...parsed.data.typography })
+        : current.settings.typography,
       updatedAt: new Date().toISOString(),
       updatedBy: auth.session.userId!,
     };

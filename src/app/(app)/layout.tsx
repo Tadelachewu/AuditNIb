@@ -33,7 +33,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <div className="flex min-h-screen flex-col bg-slate-100">
         {typographyStyle}
         <Topbar user={user} />
-        <main className="flex-1 overflow-x-auto p-6">{children}</main>
+        <main className="min-w-0 flex-1 overflow-x-clip p-6">{children}</main>
       </div>
     );
   }
@@ -45,7 +45,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <Sidebar permissions={user.permissions ?? []} role={user.role ?? ""} />
         <div className="flex min-w-0 flex-1 flex-col">
           <Topbar user={user} />
-          <main className="flex-1 overflow-x-auto p-6">{children}</main>
+          <main className="min-w-0 flex-1 overflow-x-clip p-6">{children}</main>
         </div>
       </div>
     </PermissionsProvider>

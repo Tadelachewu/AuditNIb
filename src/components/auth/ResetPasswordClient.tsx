@@ -57,7 +57,7 @@ export function ResetPasswordClient({ token: token }: { token: string | null }) 
         <div className="w-full max-w-sm">
           <div className="mb-6 flex flex-col items-center text-center">
             <Image src="/Nib_International_Bank.png" alt="NIB International Bank" width={64} height={64} className="mb-3" priority />
-            <h1 className="text-xl font-bold text-blue-900">Invalid reset link</h1>
+            <h1 className="text-xl font-bold text-brand-ink">Invalid reset link</h1>
             <p className="mt-1 text-sm text-slate-600">This link is missing the required reset token.</p>
           </div>
           <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
@@ -90,7 +90,7 @@ export function ResetPasswordClient({ token: token }: { token: string | null }) 
         <div className="w-full max-w-sm">
           <div className="mb-6 flex flex-col items-center text-center">
             <Image src="/Nib_International_Bank.png" alt="NIB International Bank" width={64} height={64} className="mb-3" priority />
-            <h1 className="text-xl font-bold text-blue-900">Password updated</h1>
+            <h1 className="text-xl font-bold text-brand-ink">Password updated</h1>
             <p className="mt-1 text-sm text-slate-600">You can now sign in with your new password.</p>
           </div>
           <div className="rounded-lg border border-green-200 bg-green-50 p-6 text-sm text-green-800">
@@ -118,13 +118,13 @@ export function ResetPasswordClient({ token: token }: { token: string | null }) 
       <div className="w-full max-w-sm">
         <div className="mb-6 flex flex-col items-center text-center">
           <Image src="/Nib_International_Bank.png" alt="NIB International Bank" width={64} height={64} className="mb-3" priority />
-          <h1 className="text-xl font-bold text-blue-900">Set a new password</h1>
-          <p className="mt-1 text-sm text-slate-600">Choose a strong password you haven't used elsewhere.</p>
+          <h1 className="text-xl font-bold text-brand-ink">Set a new password</h1>
+          <p className="mt-1 text-sm text-slate-600">Choose a strong password you haven&apos;t used elsewhere.</p>
         </div>
 
         <form onSubmit={handleSubmit} className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
           <div className="mb-4">
-            <Label htmlFor="newPassword">New password</Label>
+            <Label htmlFor="newPassword" brand>New password</Label>
             <Input
               id="newPassword"
               type="password"
@@ -144,7 +144,7 @@ export function ResetPasswordClient({ token: token }: { token: string | null }) 
             </p>
           </div>
           <div className="mb-4">
-            <Label htmlFor="confirmPassword">Confirm new password</Label>
+            <Label htmlFor="confirmPassword" brand>Confirm new password</Label>
             <Input
               id="confirmPassword"
               type="password"
@@ -165,7 +165,7 @@ export function ResetPasswordClient({ token: token }: { token: string | null }) 
             <Link href="/forgot-password" className="font-medium text-slate-500 hover:text-slate-700 hover:underline">
               Request a new link
             </Link>
-            <Link href="/login" className="font-medium text-blue-700 hover:text-blue-900 hover:underline">
+            <Link href="/login" className="font-medium text-brand-ink hover:underline">
               Back to sign in →
             </Link>
           </div>

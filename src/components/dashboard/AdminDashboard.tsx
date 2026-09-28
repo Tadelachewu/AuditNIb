@@ -94,12 +94,12 @@ export function AdminDashboard({ user, db }: { user: SessionData; db: Database }
 
         <Card>
           <CardHeader title="Quick Links" />
-          <div className="flex flex-col gap-0.5 px-2 py-2">
+          <div className="flex flex-col gap-1.5 p-3">
             {visibleLinks.map((link) => (
               <Link
                 key={link.href}
                 href={link.href}
-                className="rounded-md px-2.5 py-1.5 text-sm text-slate-600 transition-colors hover:bg-brand-gold hover:text-on-gold"
+                className="rounded-md bg-brand-gold px-2.5 py-1.5 text-sm font-medium text-on-gold transition-colors hover:bg-brand-gold-dark"
               >
                 {link.label}
               </Link>

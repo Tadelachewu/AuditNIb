@@ -4,9 +4,15 @@ import { useEffect, useState } from "react";
 import { apiGet, apiSend, ApiError } from "@/lib/api-client";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { StickyActions } from "@/components/ui/StickyActions";
 import { Input, Label } from "@/components/ui/Field";
 import { Badge } from "@/components/ui/Badge";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { AddDialog } from "@/components/ui/AddDialog";
+import { RowAction, RowActions, StatusToggleAction } from "@/components/ui/RowActions";
+import { TableSkeletonRows } from "@/components/ui/Skeleton";
+import { Pagination } from "@/components/ui/Pagination";
+import { useClientPagination } from "@/lib/useClientPagination";
 import { usePermissions } from "@/lib/permissions/PermissionsContext";
 import { hasPermission } from "@/lib/permissions/registry";
 import type { ClassifiedCategory } from "@/types";
@@ -27,6 +33,7 @@ export default function CategoriesPage() {
   const canEdit = hasPermission(permissions, "categories.edit");
   const canToggle = hasPermission(permissions, "categories.toggle-status");
   const canDelete = hasPermission(permissions, "categories.delete");
+  const pager = useClientPagination(categories);
 
   async function load() {
     setLoading(true);
@@ -39,13 +46,14 @@ export default function CategoriesPage() {
     load();
   }, []);
 
-  async function handleCreate(e: React.FormEvent) {
+  async function handleCreate(e: React.FormEvent, close: () => void) {
     e.preventDefault();
     setFormError(null);
     setSubmitting(true);
     try {
       await apiSend("/api/admin/categories", "POST", form);
       setForm({ code: "", name: "", scored: false });
+      close();
       await load();
     } catch (err) {
       setFormError(err instanceof ApiError ? err.message : "Failed to create category");
@@ -144,40 +152,43 @@ export default function CategoriesPage() {
         visible for general reporting.
       </p>
 
-      {canCreate && (
       <Card className="mt-5">
-        <CardHeader title="Add Category" />
-        <form onSubmit={handleCreate} className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-4 sm:items-end">
-          <div>
-            <Label htmlFor="code">Code</Label>
-            <Input id="code" required value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} />
-          </div>
-          <div className="sm:col-span-2">
-            <Label htmlFor="name">Name</Label>
-            <Input id="name" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-          </div>
-          <div className="flex items-center gap-2 pb-1.5">
-            <input
-              id="scored"
-              type="checkbox"
-              checked={form.scored}
-              onChange={(e) => setForm({ ...form, scored: e.target.checked })}
-              className="h-4 w-4 rounded border-slate-300"
-            />
-            <Label htmlFor="scored">Scored category</Label>
-          </div>
-          <div className="sm:col-span-4">
-            {formError && <p className="mb-2 text-sm text-red-600">{formError}</p>}
-            <Button type="submit" disabled={submitting}>
-              {submitting ? "Adding..." : "Add Category"}
-            </Button>
-          </div>
-        </form>
-      </Card>
-      )}
-
-      <Card className="mt-5">
-        <CardHeader title="All Categories" description={`${categories.length} total`} />
+        <CardHeader title="All Categories" description={`${categories.length} total`}
+          action={canCreate && (
+            <AddDialog title="Add Category">
+              {({ close }) => (
+              <form onSubmit={(e) => handleCreate(e, close)} className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-4 sm:items-end">
+                <div>
+                  <Label htmlFor="code">Code</Label>
+                  <Input id="code" required value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} />
+                </div>
+                <div className="sm:col-span-2">
+                  <Label htmlFor="name">Name</Label>
+                  <Input id="name" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+                </div>
+                <div className="flex items-center gap-2 pb-1.5">
+                  <input
+                    id="scored"
+                    type="checkbox"
+                    checked={form.scored}
+                    onChange={(e) => setForm({ ...form, scored: e.target.checked })}
+                    className="h-4 w-4 rounded border-slate-300"
+                  />
+                  <Label htmlFor="scored">Scored category</Label>
+                </div>
+                <StickyActions error={formError}>
+                  <Button type="button" variant="cancel" onClick={close}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={submitting}>
+                    {submitting ? "Adding..." : "Add Category"}
+                  </Button>
+                </StickyActions>
+              </form>
+              )}
+            </AddDialog>
+          )}
+        />
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-600">
@@ -190,15 +201,9 @@ export default function CategoriesPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {loading && (
-                <tr>
-                  <td className="px-4 py-4 text-slate-500" colSpan={5}>
-                    Loading...
-                  </td>
-                </tr>
-              )}
+              {loading && <TableSkeletonRows cols={5} />}
               {!loading &&
-                categories.map((c) => {
+                pager.pageItems.map((c) => {
                   const isEditing = editingId === c.id;
                   return (
                     <tr key={c.id}>
@@ -227,36 +232,22 @@ export default function CategoriesPage() {
                       </td>
                       <td className="px-4 py-2 text-right">
                         {isEditing ? (
-                          <div className="flex justify-end gap-2">
-                            <Button variant="secondary" onClick={() => setEditingId(null)}>
-                              Cancel
-                            </Button>
-                            <Button disabled={rowBusy === c.id} onClick={() => saveEdit(c)}>
-                              {rowBusy === c.id ? "Saving..." : "Save"}
-                            </Button>
-                          </div>
+                          <RowActions inline>
+                            <RowAction kind="cancel" onClick={() => setEditingId(null)} />
+                            <RowAction kind="save" busy={rowBusy === c.id} label={rowBusy === c.id ? "Saving..." : "Save"} onClick={() => saveEdit(c)} />
+                          </RowActions>
                         ) : (
-                          <div className="flex justify-end gap-2">
+                          <RowActions>
                             {canEdit && (
-                              <Button variant="secondary" onClick={() => startEdit(c)}>
-                                Edit
-                              </Button>
+                              <RowAction kind="edit" onClick={() => startEdit(c)} />
                             )}
                             {canToggle && (
-                              <Button
-                                variant={c.active ? "danger" : "secondary"}
-                                disabled={rowBusy === c.id}
-                                onClick={() => toggleActive(c)}
-                              >
-                                {c.active ? "Deactivate" : "Activate"}
-                              </Button>
+                              <StatusToggleAction active={c.active} busy={rowBusy === c.id} onClick={() => toggleActive(c)} />
                             )}
                             {canDelete && (
-                              <Button variant="danger" disabled={rowBusy === c.id} onClick={() => deleteCategory(c)}>
-                                Delete
-                              </Button>
+                              <RowAction kind="delete" busy={rowBusy === c.id} onClick={() => deleteCategory(c)} />
                             )}
-                          </div>
+                          </RowActions>
                         )}
                       </td>
                     </tr>
@@ -265,6 +256,7 @@ export default function CategoriesPage() {
             </tbody>
           </table>
         </div>
+        <Pagination page={pager.page} totalPages={pager.totalPages} total={pager.total} pageSize={pager.pageSize} onPageChange={pager.setPage} />
       </Card>
       {dialog}
     </div>
