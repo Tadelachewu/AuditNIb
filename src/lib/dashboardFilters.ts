@@ -62,6 +62,28 @@ export function parseDashboardFilters(searchParams: Record<string, string | stri
 }
 
 /**
+ * Filter match for the free-text list fields (Operation Area, Type of
+ * Irregularity): a finding stores whatever the registrant picked or typed
+ * (or an import sheet carried), so an exact === missed findings saved as
+ * "cash operations" or "Cash  Operations " against the configured
+ * "Cash Operations" filter value. Case-, spacing- and edge-whitespace-
+ * insensitive. An empty filter value always matches (= no filter).
+ */
+export function matchesListValue(filterValue: string, findingValue: string | null | undefined): boolean {
+  if (!filterValue) return true;
+  const norm = (s: string) => s.trim().replace(/\s+/g, " ").toLowerCase();
+  return norm(findingValue ?? "") === norm(filterValue);
+}
+
+/** Operation Area + Type of Irregularity together - every findings list/export applies both. */
+export function matchesOperationAndIrregularity(
+  f: Pick<Finding, "operationArea" | "irregularityType">,
+  filters: { operationArea: string; irregularityType: string }
+): boolean {
+  return matchesListValue(filters.operationArea, f.operationArea) && matchesListValue(filters.irregularityType, f.irregularityType);
+}
+
+/**
  * Applies every field except `periodId` to a findings list - a dashboard
  * resolves its own "effective period" separately (picking which
  * ReportingPeriod counts as `openPeriod` changes what the whole page
@@ -80,7 +102,6 @@ export function applyDashboardFilters(findings: Finding[], filters: DashboardFil
       (!filters.categoryId || f.categoryId === filters.categoryId) &&
       (!filters.risk || f.riskLevel === filters.risk) &&
       (!filters.status || f.status === filters.status) &&
-      (!filters.operationArea || f.operationArea === filters.operationArea) &&
-      (!filters.irregularityType || f.irregularityType === filters.irregularityType)
+      matchesOperationAndIrregularity(f, filters)
   );
 }

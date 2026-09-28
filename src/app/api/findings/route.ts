@@ -7,6 +7,7 @@ import { findingsInScope } from "@/lib/findings-scope";
 import { nextFindingReference, submitFinding, assertPeriodOpenForSubmission, assertRequiredFindingFieldsPresent } from "@/lib/findings";
 import { isDepartmentInScope } from "@/lib/org";
 import type { Finding, FindingCase } from "@/types";
+import { matchesOperationAndIrregularity } from "@/lib/dashboardFilters";
 
 export async function GET(request: Request) {
   const auth = await requirePermission("findings.view");
@@ -25,6 +26,8 @@ export async function GET(request: Request) {
   const sourceId = url.searchParams.get("sourceId");
   const categoryId = url.searchParams.get("categoryId");
   const risk = url.searchParams.get("risk");
+  const operationArea = url.searchParams.get("operationArea") ?? "";
+  const irregularityType = url.searchParams.get("irregularityType") ?? "";
   const status = url.searchParams.get("status");
 
   if (periodId) findings = findings.filter((f) => f.periodId === periodId);
@@ -33,6 +36,7 @@ export async function GET(request: Request) {
   if (sourceId) findings = findings.filter((f) => f.sourceId === sourceId);
   if (categoryId) findings = findings.filter((f) => f.categoryId === categoryId);
   if (risk) findings = findings.filter((f) => f.riskLevel === risk);
+  if (operationArea || irregularityType) findings = findings.filter((f) => matchesOperationAndIrregularity(f, { operationArea, irregularityType }));
   if (status) findings = findings.filter((f) => f.status === status);
 
   findings = [...findings].sort((a, b) => b.createdAt.localeCompare(a.createdAt));

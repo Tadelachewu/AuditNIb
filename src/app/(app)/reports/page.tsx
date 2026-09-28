@@ -15,6 +15,7 @@ import { FilterBar } from "@/components/dashboard/FilterBar";
 import { TimeRangeFilter } from "@/components/reports/TimeRangeFilter";
 import { PrintButton } from "@/components/reports/PrintButton";
 import { FILTERABLE_FINDING_STATUSES, type Finding } from "@/types";
+import { matchesOperationAndIrregularity } from "@/lib/dashboardFilters";
 
 // master.txt §18's 14 named reports, covered as a small number of real,
 // data-backed views rather than 14 separate pages (see PHASE7.md): the
@@ -46,6 +47,8 @@ export default async function ReportsPage({
   const sourceId = get("sourceId");
   const categoryId = get("categoryId");
   const risk = get("risk");
+  const operationArea = get("operationArea");
+  const irregularityType = get("irregularityType");
   const status = get("status");
   const dateFrom = get("dateFrom");
   const dateTo = get("dateTo");
@@ -55,6 +58,7 @@ export default async function ReportsPage({
   if (sourceId) findings = findings.filter((f) => f.sourceId === sourceId);
   if (categoryId) findings = findings.filter((f) => f.categoryId === categoryId);
   if (risk) findings = findings.filter((f) => f.riskLevel === risk);
+  if (operationArea || irregularityType) findings = findings.filter((f) => matchesOperationAndIrregularity(f, { operationArea, irregularityType }));
   if (status) findings = findings.filter((f) => f.status === status);
   // Today/This Week/This Month/Custom (TimeRangeFilter) - by each
   // finding's own findingDate, distinct from the reporting-period
@@ -85,7 +89,7 @@ export default async function ReportsPage({
   const branch = db.branches.find((b) => b.id === user.branchId);
 
   const exportQuery = new URLSearchParams();
-  for (const [k, v] of Object.entries({ periodId, districtId, branchId, sourceId, categoryId, risk, status, dateFrom, dateTo })) {
+  for (const [k, v] of Object.entries({ periodId, districtId, branchId, sourceId, categoryId, risk, status, operationArea, irregularityType, dateFrom, dateTo })) {
     if (v) exportQuery.set(k, v);
   }
 

@@ -3,6 +3,7 @@ import { requirePermission } from "@/lib/guard";
 import { readDb } from "@/lib/db";
 import { findingsInScope } from "@/lib/findings-scope";
 import { findingsResidentInPeriod } from "@/lib/findings";
+import { matchesOperationAndIrregularity } from "@/lib/dashboardFilters";
 
 // master.txt §18's report set, as a real text/csv export - same
 // org-scope + filter logic as GET /api/findings (src/app/api/findings/route.ts),
@@ -26,6 +27,8 @@ export async function GET(request: Request) {
   const sourceId = url.searchParams.get("sourceId");
   const categoryId = url.searchParams.get("categoryId");
   const risk = url.searchParams.get("risk");
+  const operationArea = url.searchParams.get("operationArea") ?? "";
+  const irregularityType = url.searchParams.get("irregularityType") ?? "";
   const status = url.searchParams.get("status");
   const dateFrom = url.searchParams.get("dateFrom");
   const dateTo = url.searchParams.get("dateTo");
@@ -35,6 +38,7 @@ export async function GET(request: Request) {
   if (sourceId) findings = findings.filter((f) => f.sourceId === sourceId);
   if (categoryId) findings = findings.filter((f) => f.categoryId === categoryId);
   if (risk) findings = findings.filter((f) => f.riskLevel === risk);
+  if (operationArea || irregularityType) findings = findings.filter((f) => matchesOperationAndIrregularity(f, { operationArea, irregularityType }));
   if (status) findings = findings.filter((f) => f.status === status);
   if (dateFrom) findings = findings.filter((f) => f.findingDate >= dateFrom);
   if (dateTo) findings = findings.filter((f) => f.findingDate <= dateTo);

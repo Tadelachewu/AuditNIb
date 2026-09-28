@@ -14,6 +14,7 @@ import { TimeRangeFilter } from "@/components/reports/TimeRangeFilter";
 import { FilterBar } from "@/components/dashboard/FilterBar";
 import { FindingsTable, type FindingRow } from "@/components/findings/FindingsTable";
 import { FILTERABLE_FINDING_STATUSES, type Finding } from "@/types";
+import { matchesOperationAndIrregularity } from "@/lib/dashboardFilters";
 
 export default async function FindingsPage({
   searchParams,
@@ -37,6 +38,8 @@ export default async function FindingsPage({
   const sourceId = get("sourceId");
   const categoryId = get("categoryId");
   const risk = get("risk");
+  const operationArea = get("operationArea");
+  const irregularityType = get("irregularityType");
   const status = get("status");
   const dateFrom = get("dateFrom");
   const dateTo = get("dateTo");
@@ -46,6 +49,7 @@ export default async function FindingsPage({
   if (sourceId) findings = findings.filter((f) => f.sourceId === sourceId);
   if (categoryId) findings = findings.filter((f) => f.categoryId === categoryId);
   if (risk) findings = findings.filter((f) => f.riskLevel === risk);
+  if (operationArea || irregularityType) findings = findings.filter((f) => matchesOperationAndIrregularity(f, { operationArea, irregularityType }));
   // Comma-separated to support the Status Distribution donut's multi-status
   // buckets (e.g. "Draft / In Review" spans 6 statuses) linking here with
   // one query param - a single status value still works unchanged since
