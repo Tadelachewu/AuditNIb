@@ -17,7 +17,7 @@ export default async function SupportPage() {
     <div className="flex flex-col gap-5">
       <div>
         <h1 className="text-lg font-semibold text-slate-900">Support</h1>
-        <p className="mt-1 text-sm text-slate-500">Send a message and get help from support. Rate the response once you&apos;re satisfied.</p>
+        <p className="mt-1 text-sm text-slate-600">Send a message and get help from support. Rate the response once you&apos;re satisfied.</p>
       </div>
       <SupportClient />
     </div>

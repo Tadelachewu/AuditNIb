@@ -17,7 +17,7 @@ export function PeriodCheckboxAccordion({ periods, selectedIds }: { periods: Rep
   const years = [...byYear.keys()].sort((a, b) => b - a);
 
   if (years.length === 0) {
-    return <p className="text-sm text-slate-400">No reporting periods yet.</p>;
+    return <p className="text-sm text-slate-500">No reporting periods yet.</p>;
   }
 
   return (
@@ -29,7 +29,7 @@ export function PeriodCheckboxAccordion({ periods, selectedIds }: { periods: Rep
           <details key={year} className="rounded-md border border-slate-200">
             <summary className="cursor-pointer select-none rounded-md px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
               {year}{" "}
-              <span className="font-normal text-slate-400">
+              <span className="font-normal text-slate-500">
                 ({yearPeriods.length} period{yearPeriods.length === 1 ? "" : "s"}
                 {selectedCount > 0 ? `, ${selectedCount} selected` : ""})
               </span>

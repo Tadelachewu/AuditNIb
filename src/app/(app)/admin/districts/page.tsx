@@ -124,7 +124,7 @@ export default function DistrictsPage() {
   return (
     <div>
       <h1 className="text-lg font-semibold text-slate-900">Districts</h1>
-      <p className="mt-1 text-sm text-slate-500">Bank-wide, config-driven — no hard-coded district count.</p>
+      <p className="mt-1 text-sm text-slate-600">Bank-wide, config-driven — no hard-coded district count.</p>
 
       {canCreate && (
       <Card className="mt-5">
@@ -152,7 +152,7 @@ export default function DistrictsPage() {
         <CardHeader title="All Districts" description={`${districts.length} total`} />
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-100 text-xs uppercase text-slate-400">
+            <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-600">
               <tr>
                 <th className="px-4 py-2 font-medium">Code</th>
                 <th className="px-4 py-2 font-medium">Name</th>
@@ -165,7 +165,7 @@ export default function DistrictsPage() {
             <tbody className="divide-y divide-slate-100">
               {loading && (
                 <tr>
-                  <td className="px-4 py-4 text-slate-400" colSpan={6}>
+                  <td className="px-4 py-4 text-slate-500" colSpan={6}>
                     Loading...
                   </td>
                 </tr>

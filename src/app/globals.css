@@ -12,14 +12,16 @@
   --brand-gold: #feb914;
   --brand-gold-dark: #d89d11;
   --brand-brown: #8a4d21;
-  /* A warm, muted brown-gold for large solid surfaces (the sidebar/
-     topbar) - lightened from an earlier near-black version toward
-     --brand-gold-dark (roughly their midpoint) so the chrome reads less
-     harshly dark, while staying dark/desaturated enough that the existing
-     white nav text (--on-dark) and the bright --brand-gold active-item
-     highlight both still read clearly against it (~5.7:1 contrast with
-     white - comfortably past WCAG AA's 4.5:1 for normal text). */
-  --brand-sidebar: #836115;
+  /* A deep bronze for large solid surfaces (the sidebar/topbar) - the
+     midpoint between the earlier near-black chrome and the lighter
+     #836115 brown-gold that followed it: dark enough that text on it has
+     real contrast, warm enough to still read as brand. Text tiers on it
+     (Sidebar.tsx / Topbar.tsx), all WCAG AA or better:
+       white           ~11:1  - primary (brand name, nav items, user name)
+       white/75        ~7:1   - secondary (subtitles, role name)
+       --brand-gold    ~6.3:1 - section labels (accent, not body text)
+     The bright --brand-gold active-item highlight sits on top of it. */
+  --brand-sidebar: #4e390e;
   /* Fixed dark text for anything sitting directly on --brand-gold (Button's
      `primary` variant, the sidebar's active/hover nav item, "View"/"Back"
      links styled to look like a gold button, ...). Deliberately NOT part of
@@ -187,7 +189,7 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 
 /* The sidebar's own internal scrollbar (Sidebar.tsx's overflow-y-auto,

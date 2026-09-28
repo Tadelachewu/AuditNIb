@@ -28,7 +28,7 @@ export default async function SourcesPage() {
   return (
     <div>
       <h1 className="text-lg font-semibold text-slate-900">Finding Sources</h1>
-      <p className="mt-1 text-sm text-slate-500">Internal Control, Internal Audit, and future configurable sources.</p>
+      <p className="mt-1 text-sm text-slate-600">Internal Control, Internal Audit, and future configurable sources.</p>
       <SourcesManager initialSources={db.sources} permissions={permissions} />
     </div>
   );

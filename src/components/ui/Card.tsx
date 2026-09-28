@@ -78,16 +78,16 @@ export function StatCard({
           </span>
         )}
         <div className="min-w-0 flex-1">
-          <p className="truncate text-xs font-medium text-slate-500">{label}</p>
+          <p className="truncate text-xs font-medium text-slate-600">{label}</p>
           {detail ? (
             <details className="group mt-1">
-              <summary className="cursor-pointer list-none text-2xl font-semibold text-slate-900 marker:content-none">{value}</summary>
+              <summary className="cursor-pointer list-none text-2xl font-semibold tabular-nums text-slate-900 marker:content-none">{value}</summary>
               <div className="mt-1.5 border-t border-slate-200 pt-1.5 text-xs leading-relaxed text-slate-600">{detail}</div>
             </details>
           ) : (
-            <p className="mt-1 text-2xl font-semibold text-slate-900">{value}</p>
+            <p className="mt-1 text-2xl font-semibold tabular-nums text-slate-900">{value}</p>
           )}
-          {hint && <p className="mt-0.5 text-xs text-slate-400">{hint}</p>}
+          {hint && <p className="mt-0.5 text-xs text-slate-500">{hint}</p>}
         </div>
       </div>
     </Card>

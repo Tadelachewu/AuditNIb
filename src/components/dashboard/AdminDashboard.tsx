@@ -53,7 +53,7 @@ export function AdminDashboard({ user, db }: { user: SessionData; db: Database }
   return (
     <div>
       <h1 className="text-lg font-semibold text-slate-900">Admin Dashboard</h1>
-      <p className="mt-1 text-sm text-slate-500">Bank-wide configuration and user administration.</p>
+      <p className="mt-1 text-sm text-slate-600">Bank-wide configuration and user administration.</p>
 
       <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <StatCard icon={ICON.activeUsers} label="Active Users" value={activeUsers} hint={`${db.users.length} total`} />
@@ -84,7 +84,7 @@ export function AdminDashboard({ user, db }: { user: SessionData; db: Database }
               <div key={role.id} className="flex items-center justify-between py-2 text-sm">
                 <span className="text-slate-600">
                   {role.name}
-                  {role.status === "INACTIVE" && <span className="ml-2 text-xs text-slate-400">(inactive)</span>}
+                  {role.status === "INACTIVE" && <span className="ml-2 text-xs text-slate-500">(inactive)</span>}
                 </span>
                 <span className="font-medium text-slate-900">{usersByRole[role.code] ?? 0}</span>
               </div>
@@ -111,14 +111,14 @@ export function AdminDashboard({ user, db }: { user: SessionData; db: Database }
       <Card className="mt-4">
         <CardHeader title="Recent Activity" description="Latest administrative and authentication events" />
         <div className="divide-y divide-slate-100 px-4">
-          {recentAudit.length === 0 && <p className="py-3 text-sm text-slate-400">No activity yet.</p>}
+          {recentAudit.length === 0 && <p className="py-3 text-sm text-slate-500">No activity yet.</p>}
           {recentAudit.map((entry) => (
             <div key={entry.id} className="flex items-center justify-between py-2 text-sm">
               <span className="text-slate-600">
                 <span className="font-medium text-slate-900">{entry.userName}</span> {entry.action.toLowerCase()}{" "}
                 {entry.entityType.toLowerCase()}
               </span>
-              <span className="text-xs text-slate-400">{formatDateTime(entry.timestamp)}</span>
+              <span className="text-xs text-slate-500">{formatDateTime(entry.timestamp)}</span>
             </div>
           ))}
         </div>

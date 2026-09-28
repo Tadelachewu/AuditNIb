@@ -336,7 +336,7 @@ export default function ReportingPeriodsPage() {
   return (
     <div>
       <h1 className="text-lg font-semibold text-slate-900">Reporting Periods</h1>
-      <p className="mt-1 text-sm text-slate-500">
+      <p className="mt-1 text-sm text-slate-600">
         Locking a period blocks new writes against it, except DRAFT findings when explicitly allowed. Lock/unlock
         always requires a reason and is audit-logged.
       </p>
@@ -390,7 +390,7 @@ export default function ReportingPeriodsPage() {
             </Button>
           </div>
         </form>
-        <p className="px-4 pb-4 text-xs text-slate-400">
+        <p className="px-4 pb-4 text-xs text-slate-500">
           The submission window is when a finding can actually be submitted (moved past draft) - narrower than, and
           inside, the period&apos;s own date range above. Defaults to matching it exactly; narrow it only if new
           findings should stop being submittable partway through the period (e.g. the period covers all of
@@ -403,7 +403,7 @@ export default function ReportingPeriodsPage() {
         <CardHeader title="All Periods" description={`${periods.length} total`} />
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-100 text-xs uppercase text-slate-400">
+            <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-600">
               <tr>
                 <th className="px-4 py-2 font-medium">Period</th>
                 <th className="px-4 py-2 font-medium">Date/Time Range</th>
@@ -415,7 +415,7 @@ export default function ReportingPeriodsPage() {
             <tbody className="divide-y divide-slate-100">
               {loading && (
                 <tr>
-                  <td className="px-4 py-4 text-slate-400" colSpan={5}>
+                  <td className="px-4 py-4 text-slate-500" colSpan={5}>
                     Loading...
                   </td>
                 </tr>
@@ -459,7 +459,7 @@ export default function ReportingPeriodsPage() {
                           </button>
                         ) : (
                           <span
-                            className="text-xs font-normal text-slate-300"
+                            className="text-xs font-normal text-slate-400"
                             title={`Can't change this period's date range - ${p.findingCount} finding(s) already reference it`}
                           >
                             Edit Period
@@ -474,7 +474,7 @@ export default function ReportingPeriodsPage() {
                     </td>
                     <td className="px-4 py-2 text-xs text-slate-500">
                       {formatDateTime(p.startsAt)} — {formatDateTime(p.endsAt)}
-                      <div className="mt-0.5 text-slate-400">
+                      <div className="mt-0.5 text-slate-500">
                         Submissions: {formatDateTime(p.submissionStartsAt)} – {formatDateTime(p.submissionEndsAt)}{" "}
                         {canLock && (
                           <button type="button" onClick={() => openWindowDialog(p)} className="text-blue-800 hover:underline">
@@ -502,7 +502,7 @@ export default function ReportingPeriodsPage() {
                         </>
                       )}
                     </td>
-                    <td className="px-4 py-2 text-xs text-slate-400">
+                    <td className="px-4 py-2 text-xs text-slate-500">
                       {p.lockReason ? `${p.lockReason} · ${formatDateTime(p.updatedAt)}` : "—"}
                     </td>
                     <td className="px-4 py-2 text-right">

@@ -104,7 +104,7 @@ export function AdminSupportClient({ canRespond }: { canRespond: boolean }) {
                 <StatusBadge thread={t} />
               </div>
               <p className="mt-0.5 truncate text-xs text-slate-500">{t.subject}</p>
-              <span className="text-xs text-slate-400">{formatDateTime(t.updatedAt)}</span>
+              <span className="text-xs text-slate-500">{formatDateTime(t.updatedAt)}</span>
             </button>
           ))}
         </div>
@@ -129,7 +129,7 @@ export function AdminSupportClient({ canRespond }: { canRespond: boolean }) {
                   >
                     {m.body}
                   </div>
-                  <span className="mt-1 text-xs text-slate-400">
+                  <span className="mt-1 text-xs text-slate-500">
                     {m.senderIsSupport ? "Support" : m.senderName} - {formatDateTime(m.createdAt)}
                   </span>
                 </div>

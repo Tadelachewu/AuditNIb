@@ -155,7 +155,7 @@ export function SourcesManager({ initialSources, permissions }: { initialSources
         <CardHeader title="All Sources" description={`${sources.length} total`} />
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-100 text-xs uppercase text-slate-400">
+            <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-600">
               <tr>
                 <th className="px-4 py-2 font-medium">Code</th>
                 <th className="px-4 py-2 font-medium">Name</th>

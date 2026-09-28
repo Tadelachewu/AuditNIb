@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { appendAuditLog } from "@/lib/audit";
+import { FONT_KEYS, TEXT_SIZE_KEYS, TEXT_CONTRAST_KEYS } from "@/lib/typography";
 
 export async function GET() {
   const auth = await requirePermission("settings.view");
@@ -104,6 +105,15 @@ const updateSchema = z.object({
   // the actual sources table server-side below (in the PATCH handler),
   // not in Zod, since Zod doesn't have DB access.
   reportTemplateSources: z.record(z.string(), z.array(z.string())),
+  // Optional so a client that predates the Typography section doesn't
+  // reset it to defaults on save - omitted means "keep what's stored".
+  typography: z
+    .object({
+      fontFamily: z.enum(FONT_KEYS),
+      textSize: z.enum(TEXT_SIZE_KEYS),
+      textContrast: z.enum(TEXT_CONTRAST_KEYS),
+    })
+    .optional(),
 });
 
 export async function PATCH(request: Request) {
@@ -156,6 +166,7 @@ export async function PATCH(request: Request) {
     current.settings = {
       ...parsed.data,
       reportTemplateSources: parsed.data.reportTemplateSources as Record<string, string[]>,
+      typography: parsed.data.typography ?? current.settings.typography,
       updatedAt: new Date().toISOString(),
       updatedBy: auth.session.userId!,
     };

@@ -76,7 +76,7 @@ export function TrendChart({
 
   const hasAnyValue = series.some((s) => s.values.some((v) => v !== null));
   if (labels.length === 0 || !hasAnyValue) {
-    return <p className="py-10 text-center text-sm text-slate-400">{emptyText}</p>;
+    return <p className="py-10 text-center text-sm text-slate-500">{emptyText}</p>;
   }
 
   const leftSeries = series.filter((s) => (s.axis ?? "left") === "left");

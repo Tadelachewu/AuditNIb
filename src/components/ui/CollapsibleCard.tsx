@@ -46,7 +46,7 @@ export function CollapsibleCard({
           {description && <p className="mt-0.5 text-xs text-slate-500">{description}</p>}
         </div>
         <svg
-          className={`mt-0.5 h-4 w-4 shrink-0 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`}
+          className={`mt-0.5 h-4 w-4 shrink-0 text-slate-500 transition-transform ${open ? "rotate-180" : ""}`}
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"

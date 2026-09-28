@@ -20,10 +20,27 @@ const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 // scoped variable would if the module itself got re-required) and only in
 // non-production, where each deploy is a fresh process anyway and this
 // would otherwise leak the client across serverless invocations instead.
-const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
+//
+// The cached client is only reused while it was built from the *same*
+// PrismaClient class. `prisma generate` (after a schema change/migration)
+// rewrites src/generated/prisma, so the next hot reload evaluates a new
+// class - without this check the stale instance on globalThis would keep
+// the old data model and reject new columns ("Unknown argument `x`")
+// until someone restarted `next dev`.
+const globalForPrisma = globalThis as unknown as {
+  prisma?: PrismaClient;
+  prismaClass?: typeof PrismaClient;
+};
 
-export const prisma = globalForPrisma.prisma ?? new PrismaClient({ adapter });
+const cached = globalForPrisma.prismaClass === PrismaClient ? globalForPrisma.prisma : undefined;
+if (!cached && globalForPrisma.prisma) {
+  // Release the outdated client's connection pool before replacing it.
+  void globalForPrisma.prisma.$disconnect().catch(() => {});
+}
+
+export const prisma = cached ?? new PrismaClient({ adapter });
 
 if (process.env.NODE_ENV !== "production") {
   globalForPrisma.prisma = prisma;
+  globalForPrisma.prismaClass = PrismaClient;
 }

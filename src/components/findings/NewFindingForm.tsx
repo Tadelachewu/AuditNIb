@@ -606,7 +606,7 @@ export function NewFindingForm({
                 </option>
               ))}
             </Select>
-            <p className="mt-1 text-xs text-slate-400">Bank-wide departments, plus any scoped to the district/branch below.</p>
+            <p className="mt-1 text-xs text-slate-500">Bank-wide departments, plus any scoped to the district/branch below.</p>
           </div>
           <div>
             <Label htmlFor="periodId">Reporting period</Label>
@@ -791,7 +791,7 @@ export function NewFindingForm({
               />
               Track individual case amounts (optional)
             </label>
-            <p className="mt-1 text-xs text-slate-400">
+            <p className="mt-1 text-xs text-slate-500">
               Lets a future rectification pick specific cases (e.g. &quot;only Case 2&quot;) instead of just a
               count/amount that happens to add up.
             </p>

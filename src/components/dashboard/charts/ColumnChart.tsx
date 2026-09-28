@@ -51,7 +51,7 @@ export function ColumnChart({
   const [hovered, setHovered] = useState<number | null>(null);
 
   if (items.length === 0) {
-    return <p className="py-10 text-center text-sm text-slate-400">{emptyText}</p>;
+    return <p className="py-10 text-center text-sm text-slate-500">{emptyText}</p>;
   }
 
   const width = 600;

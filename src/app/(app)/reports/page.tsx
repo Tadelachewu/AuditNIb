@@ -154,7 +154,7 @@ export default async function ReportsPage({
       <div className="no-print flex flex-wrap items-center justify-between gap-2">
         <div>
           <h1 className="text-lg font-semibold text-slate-900">Reports</h1>
-          <p className="mt-1 text-sm text-slate-500">
+          <p className="mt-1 text-sm text-slate-600">
             Findings, performance, category/risk breakdowns, and transfers - export as CSV or print to PDF.
           </p>
         </div>
@@ -193,7 +193,7 @@ export default async function ReportsPage({
         <CardHeader title="Findings Report" description={`${findings.length} finding(s) matching the current filters`} />
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-100 text-xs uppercase text-slate-400">
+            <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-600">
               <tr>
                 <th className="px-4 py-2 font-medium">Reference</th>
                 <th className="px-4 py-2 font-medium">Title</th>
@@ -209,7 +209,7 @@ export default async function ReportsPage({
             <tbody className="divide-y divide-slate-100">
               {findingsPage.items.length === 0 && (
                 <tr>
-                  <td className="px-4 py-6 text-center text-slate-400" colSpan={9}>
+                  <td className="px-4 py-6 text-center text-slate-500" colSpan={9}>
                     No findings match these filters.
                   </td>
                 </tr>
@@ -263,11 +263,11 @@ export default async function ReportsPage({
         <Card>
           <CardHeader title="Branch Performance" description={periodId ? "Filtered period" : "All periods"} />
           <div className="divide-y divide-slate-100">
-            {branchPerformance.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-400">No data yet.</p>}
+            {branchPerformance.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-500">No data yet.</p>}
             {branchPerformance.map((row, i) => (
               <div key={row.branch.id} className="flex items-center justify-between px-4 py-2 text-sm">
                 <span className="text-slate-900">
-                  <span className="mr-2 text-slate-400">#{i + 1}</span>
+                  <span className="mr-2 text-slate-500">#{i + 1}</span>
                   {row.branch.name}
                 </span>
                 <span className="font-medium text-slate-700">{row.performance!.toFixed(1)}%</span>
@@ -279,11 +279,11 @@ export default async function ReportsPage({
         <Card>
           <CardHeader title="District Performance" description={periodId ? "Filtered period" : "All periods"} />
           <div className="divide-y divide-slate-100">
-            {districtPerformance.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-400">No data yet.</p>}
+            {districtPerformance.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-500">No data yet.</p>}
             {districtPerformance.map((row, i) => (
               <div key={row.district.id} className="flex items-center justify-between px-4 py-2 text-sm">
                 <span className="text-slate-900">
-                  <span className="mr-2 text-slate-400">#{i + 1}</span>
+                  <span className="mr-2 text-slate-500">#{i + 1}</span>
                   {row.district.name}
                 </span>
                 <span className="font-medium text-slate-700">{row.performance!.toFixed(1)}%</span>
@@ -298,7 +298,7 @@ export default async function ReportsPage({
           <CardHeader title="Category Breakdown" description="Matching the current filters" />
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
-              <thead className="border-b border-slate-100 text-xs uppercase text-slate-400">
+              <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-600">
                 <tr>
                   <th className="px-4 py-2 font-medium">Category</th>
                   <th className="px-4 py-2 font-medium">Total</th>
@@ -337,7 +337,7 @@ export default async function ReportsPage({
         <CardHeader title="Transfers" description="Findings carried into a later reporting period, matching the current filters" />
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-100 text-xs uppercase text-slate-400">
+            <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-600">
               <tr>
                 <th className="px-4 py-2 font-medium">Finding</th>
                 <th className="px-4 py-2 font-medium">From → To Period</th>
@@ -355,7 +355,7 @@ export default async function ReportsPage({
             <tbody className="divide-y divide-slate-100">
               {transfersPage.items.length === 0 && (
                 <tr>
-                  <td className="px-4 py-6 text-center text-slate-400" colSpan={11}>
+                  <td className="px-4 py-6 text-center text-slate-500" colSpan={11}>
                     No transfers recorded.
                   </td>
                 </tr>
@@ -388,7 +388,7 @@ export default async function ReportsPage({
                       <Badge tone={t.method === "AUTOMATIC" ? "blue" : "gray"}>{t.method === "AUTOMATIC" ? "Automatic" : "Manual"}</Badge>
                     </td>
                     <td className="px-4 py-2 text-slate-900">{t.createdByName}</td>
-                    <td className="px-4 py-2 text-xs text-slate-400">{formatDateTime(t.createdAt)}</td>
+                    <td className="px-4 py-2 text-xs text-slate-500">{formatDateTime(t.createdAt)}</td>
                     <td className="px-4 py-2 text-xs text-slate-500">{t.reason}</td>
                   </tr>
                 );

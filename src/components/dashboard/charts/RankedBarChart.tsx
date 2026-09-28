@@ -31,7 +31,7 @@ export function RankedBarChart({
   showRank?: boolean;
 }) {
   if (items.length === 0) {
-    return <p className="py-6 text-center text-sm text-slate-400">{emptyText}</p>;
+    return <p className="py-6 text-center text-sm text-slate-500">{emptyText}</p>;
   }
 
   return (
@@ -45,7 +45,7 @@ export function RankedBarChart({
         );
         return (
           <div key={item.id} className="flex items-center gap-2 text-sm">
-            {showRank && <span className="w-4 shrink-0 text-right text-xs text-slate-400">{i + 1}</span>}
+            {showRank && <span className="w-4 shrink-0 text-right text-xs text-slate-500">{i + 1}</span>}
             {item.href ? (
               <Link href={item.href} className="w-32 shrink-0 truncate text-xs text-blue-800 hover:underline" title={item.label}>
                 {item.label}

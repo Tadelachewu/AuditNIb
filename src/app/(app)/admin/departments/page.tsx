@@ -170,7 +170,7 @@ export default function DepartmentsPage() {
   return (
     <div>
       <h1 className="text-lg font-semibold text-slate-900">Departments</h1>
-      <p className="mt-1 text-sm text-slate-500">
+      <p className="mt-1 text-sm text-slate-600">
         The internal department a finding belongs to. Scope decides who can select it: bank-wide, one district, or
         one branch.
       </p>
@@ -244,7 +244,7 @@ export default function DepartmentsPage() {
         <CardHeader title="All Departments" description={`${departments.length} total`} />
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-100 text-xs uppercase text-slate-400">
+            <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-600">
               <tr>
                 <th className="px-4 py-2 font-medium">Code</th>
                 <th className="px-4 py-2 font-medium">Name</th>
@@ -256,7 +256,7 @@ export default function DepartmentsPage() {
             <tbody className="divide-y divide-slate-100">
               {loading && (
                 <tr>
-                  <td className="px-4 py-4 text-slate-400" colSpan={5}>
+                  <td className="px-4 py-4 text-slate-500" colSpan={5}>
                     Loading...
                   </td>
                 </tr>

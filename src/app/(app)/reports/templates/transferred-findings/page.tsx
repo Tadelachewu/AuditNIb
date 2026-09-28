@@ -55,7 +55,7 @@ export default async function TransferredFindingsPage({
             ← Back
           </Link>
           <h1 className="mt-1 text-lg font-semibold text-slate-900">Transferred Findings</h1>
-          <p className="mt-1 text-sm text-slate-500">
+          <p className="mt-1 text-sm text-slate-600">
             Every transfer hop, bank-wide: original-period detail, what happened before it left, where it went, and its status today.
           </p>
         </div>
@@ -108,7 +108,7 @@ export default async function TransferredFindingsPage({
           description={rows.length === 0 ? "No transfers match this filter." : `${rows.length} transfer hop(s), most recent first`}
         />
         <div className="flex flex-col gap-3 divide-y divide-slate-100 p-4">
-          {rows.length === 0 && <p className="py-6 text-center text-sm text-slate-400">No transfers recorded yet.</p>}
+          {rows.length === 0 && <p className="py-6 text-center text-sm text-slate-500">No transfers recorded yet.</p>}
           {rows.map((r) => (
             <div key={r.transfer.id} className="flex flex-col gap-2 pt-3 first:pt-0">
               <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
@@ -130,7 +130,7 @@ export default async function TransferredFindingsPage({
                     <span className="font-medium text-slate-900">{r.toPeriod?.code ?? r.transfer.toPeriodId}</span>
                   </span>
                 </div>
-                <span className="text-xs text-slate-400">{formatDateTime(r.transfer.createdAt)}</span>
+                <span className="text-xs text-slate-500">{formatDateTime(r.transfer.createdAt)}</span>
               </div>
 
               <p className="text-xs text-slate-500">
@@ -141,7 +141,7 @@ export default async function TransferredFindingsPage({
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <div className="rounded-md bg-slate-50 p-3">
-                  <p className="mb-1.5 text-xs font-semibold uppercase text-slate-400">Original Period Data</p>
+                  <p className="mb-1.5 text-xs font-semibold uppercase text-slate-500">Original Period Data</p>
                   <dl className="flex flex-col gap-1 text-xs">
                     <div className="flex justify-between gap-2">
                       <dt className="text-slate-500">Previous Reporting Month</dt>
@@ -165,7 +165,7 @@ export default async function TransferredFindingsPage({
                 </div>
 
                 <div className="rounded-md bg-slate-50 p-3">
-                  <p className="mb-1.5 text-xs font-semibold uppercase text-slate-400">What Happened Before It Left</p>
+                  <p className="mb-1.5 text-xs font-semibold uppercase text-slate-500">What Happened Before It Left</p>
                   <dl className="flex flex-col gap-1 text-xs">
                     <div className="flex justify-between gap-2">
                       <dt className="text-slate-500">Resolved Before Transfer (Cases)</dt>
@@ -191,7 +191,7 @@ export default async function TransferredFindingsPage({
                 </div>
 
                 <div className="rounded-md bg-slate-50 p-3">
-                  <p className="mb-1.5 text-xs font-semibold uppercase text-slate-400">
+                  <p className="mb-1.5 text-xs font-semibold uppercase text-slate-500">
                     Where It Transfers, and Status Today
                   </p>
                   <dl className="flex flex-col gap-1 text-xs">

@@ -241,7 +241,7 @@ export function FindingsTable({ rows, permissions, emptyText }: { rows: FindingR
       {summary && (
         <div className="flex items-center justify-between gap-2 border-b border-slate-100 bg-slate-50 px-4 py-2 text-xs text-slate-600">
           <span>{summary}</span>
-          <button type="button" onClick={() => setSummary(null)} className="text-slate-400 hover:text-slate-600">
+          <button type="button" onClick={() => setSummary(null)} className="text-slate-500 hover:text-slate-600">
             Dismiss
           </button>
         </div>
@@ -250,7 +250,7 @@ export function FindingsTable({ rows, permissions, emptyText }: { rows: FindingR
         <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 bg-blue-50/50 px-4 py-2.5">
           <span className="text-xs font-medium text-slate-600">{selected.size} selected</span>
           {actionKinds.length === 0 ? (
-            <span className="text-xs text-slate-400">No bulk actions apply to this selection.</span>
+            <span className="text-xs text-slate-500">No bulk actions apply to this selection.</span>
           ) : (
             actionKinds.map((kind) => (
               <Button key={kind} variant={ACTION_VARIANTS[kind]} disabled={busy} onClick={() => runBulkAction(kind)}>
@@ -265,7 +265,7 @@ export function FindingsTable({ rows, permissions, emptyText }: { rows: FindingR
       )}
       <div className="overflow-x-auto">
         <table className="w-full text-left text-sm">
-          <thead className="border-b border-slate-100 text-xs uppercase text-slate-400">
+          <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-600">
             <tr>
               {canBulkAct && (
                 <th className="w-8 px-4 py-2">
@@ -287,7 +287,7 @@ export function FindingsTable({ rows, permissions, emptyText }: { rows: FindingR
           <tbody className="divide-y divide-slate-100">
             {rows.length === 0 && (
               <tr>
-                <td className="px-4 py-6 text-center text-slate-400" colSpan={canBulkAct ? 11 : 10}>
+                <td className="px-4 py-6 text-center text-slate-500" colSpan={canBulkAct ? 11 : 10}>
                   {emptyText}
                 </td>
               </tr>
@@ -332,7 +332,7 @@ export function FindingsTable({ rows, permissions, emptyText }: { rows: FindingR
                     <FindingStatusBadge status={f.status} />
                   )}
                 </td>
-                <td className="px-4 py-2 text-xs text-slate-400">{formatDateTime(f.updatedAt)}</td>
+                <td className="px-4 py-2 text-xs text-slate-500">{formatDateTime(f.updatedAt)}</td>
               </tr>
             ))}
           </tbody>

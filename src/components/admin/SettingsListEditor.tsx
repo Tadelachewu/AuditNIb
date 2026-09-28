@@ -46,12 +46,12 @@ export function SettingsListEditor({
       >
         <div>
           <p className="text-sm font-medium text-slate-800">{title}</p>
-          {description && <p className="mt-0.5 text-xs text-slate-400">{description}</p>}
+          {description && <p className="mt-0.5 text-xs text-slate-500">{description}</p>}
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <span className="text-xs text-slate-400">{items.length}</span>
+          <span className="text-xs text-slate-500">{items.length}</span>
           <svg
-            className={`h-4 w-4 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`}
+            className={`h-4 w-4 text-slate-500 transition-transform ${open ? "rotate-180" : ""}`}
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -65,7 +65,7 @@ export function SettingsListEditor({
       {open && (
         <div className="border-t border-slate-100 p-3">
           <div className="flex flex-col gap-1.5">
-            {items.length === 0 && <p className="px-1 text-xs text-slate-400">No items yet.</p>}
+            {items.length === 0 && <p className="px-1 text-xs text-slate-500">No items yet.</p>}
             {items.map((item) => (
               <div key={item} className="flex items-center justify-between rounded-md bg-slate-50 px-2.5 py-1.5 text-sm">
                 <span className="text-slate-800">{item}</span>

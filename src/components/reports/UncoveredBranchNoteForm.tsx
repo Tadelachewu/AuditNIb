@@ -34,7 +34,7 @@ export function UncoveredBranchNoteForm({
   if (!editing) {
     return (
       <div className="flex items-center justify-between gap-2">
-        <span className="text-slate-700">{note?.reason || <span className="text-slate-400">No reason recorded</span>}</span>
+        <span className="text-slate-700">{note?.reason || <span className="text-slate-500">No reason recorded</span>}</span>
         <Button
           variant="secondary"
           onClick={() => {

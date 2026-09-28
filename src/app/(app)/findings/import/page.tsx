@@ -26,7 +26,7 @@ function BatchRowsTable({ rows }: { rows: DisplayRow[] }) {
   return (
     <div className="max-h-72 overflow-y-auto rounded-md border border-slate-100">
       <table className="w-full text-left text-xs">
-        <thead className="sticky top-0 border-b border-slate-100 bg-slate-50 uppercase text-slate-400">
+        <thead className="sticky top-0 border-b border-slate-100 bg-slate-50 uppercase tracking-wide text-slate-600">
           <tr>
             <th className="px-3 py-1.5 font-medium">Row</th>
             <th className="px-3 py-1.5 font-medium">Outcome</th>
@@ -128,7 +128,7 @@ export default function ImportFindingsPage() {
     <div className="flex flex-col gap-5">
       <div>
         <h1 className="text-lg font-semibold text-slate-900">Import Findings</h1>
-        <p className="mt-1 text-sm text-slate-500">
+        <p className="mt-1 text-sm text-slate-600">
           Bulk-backfill findings that are already resolved (or in progress) outside the system, from an Excel file.
           Each row&apos;s Status column must be one of{" "}
           <span className="font-medium text-slate-700">SENT_TO_BRANCH_MANAGER</span> (approved, nothing rectified
@@ -162,7 +162,7 @@ export default function ImportFindingsPage() {
         />
         <div className="flex flex-col gap-3 p-4">
           <FileInput accept=".xlsx" onChange={(e) => handleFileChange(e.target.files?.[0] ?? null)} />
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-slate-500">
             {file ? (
               <>
                 Selected: <span className="font-medium text-slate-600">{file.name}</span>
@@ -204,15 +204,15 @@ export default function ImportFindingsPage() {
       <Card>
         <CardHeader title="Import History" description={`${history.length} run(s)`} />
         <div className="divide-y divide-slate-100">
-          {loading && <p className="px-4 py-4 text-sm text-slate-400">Loading...</p>}
-          {!loading && history.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-400">No imports yet.</p>}
+          {loading && <p className="px-4 py-4 text-sm text-slate-500">Loading...</p>}
+          {!loading && history.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-500">No imports yet.</p>}
           {!loading &&
             history.map((b) => (
               <div key={b.id} className="px-4 py-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="text-sm">
                     <span className="font-medium text-slate-900">{b.fileName}</span>{" "}
-                    <span className="text-xs text-slate-400">
+                    <span className="text-xs text-slate-500">
                       by {b.importedByName} · {formatDateTime(b.createdAt)}
                     </span>
                   </div>

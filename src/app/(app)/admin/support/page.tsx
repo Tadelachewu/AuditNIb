@@ -19,7 +19,7 @@ export default async function AdminSupportPage() {
     <div className="flex flex-col gap-5">
       <div>
         <h1 className="text-lg font-semibold text-slate-900">Support Inbox</h1>
-        <p className="mt-1 text-sm text-slate-500">Support messages from every user.</p>
+        <p className="mt-1 text-sm text-slate-600">Support messages from every user.</p>
       </div>
       <AdminSupportClient canRespond={canRespond} />
     </div>

@@ -16,7 +16,7 @@ export default async function NewFindingPage() {
   return (
     <div className="mx-auto max-w-3xl">
       <h1 className="text-lg font-semibold text-slate-900">Register Finding</h1>
-      <p className="mt-1 text-sm text-slate-500">Save as a draft, or save and submit it into the workflow.</p>
+      <p className="mt-1 text-sm text-slate-600">Save as a draft, or save and submit it into the workflow.</p>
 
       <NewFindingForm
         sources={db.sources.filter((s) => s.active)}

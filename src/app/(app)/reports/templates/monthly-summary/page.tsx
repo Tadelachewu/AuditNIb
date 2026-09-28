@@ -41,7 +41,7 @@ export default async function MonthlySummaryReportPage({
             ← Back
           </Link>
           <h1 className="mt-1 text-lg font-semibold text-slate-900">Monthly Summary Report</h1>
-          <p className="mt-1 text-sm text-slate-500">
+          <p className="mt-1 text-sm text-slate-600">
             Total cases per category, amount involved, branch dispatch coverage, and the district&apos;s official score.
             Unrect./Rect./Rect. % reflect only the scored performance category (Other Case).
           </p>
@@ -77,7 +77,7 @@ export default async function MonthlySummaryReportPage({
         />
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-100 text-xs uppercase text-slate-400">
+            <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-600">
               <tr>
                 <th className="px-4 py-2 font-medium">SN</th>
                 <th className="px-4 py-2 font-medium">Total No. of Branches</th>
@@ -99,14 +99,14 @@ export default async function MonthlySummaryReportPage({
             <tbody className="divide-y divide-slate-100">
               {rows.length === 0 && (
                 <tr>
-                  <td className="px-4 py-6 text-center text-slate-400" colSpan={10 + categories.length}>
+                  <td className="px-4 py-6 text-center text-slate-500" colSpan={10 + categories.length}>
                     No districts configured yet.
                   </td>
                 </tr>
               )}
               {rows.map((r, i) => (
                 <tr key={r.district.id}>
-                  <td className="px-4 py-2 text-slate-400">{i + 1}</td>
+                  <td className="px-4 py-2 text-slate-500">{i + 1}</td>
                   <td className="px-4 py-2 text-slate-700">{formatNumber(r.totalBranches)}</td>
                   <td className="px-4 py-2 text-slate-900">{r.district.name}</td>
                   {r.perCategory.map((c) => (

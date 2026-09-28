@@ -161,7 +161,7 @@ export function ImportGuide() {
           </p>
           <div className="overflow-x-auto rounded-md border border-slate-200">
             <table className="w-full text-left text-xs">
-              <thead className="border-b border-slate-200 bg-slate-50 uppercase text-slate-400">
+              <thead className="border-b border-slate-200 bg-slate-50 uppercase tracking-wide text-slate-600">
                 <tr>
                   <th className="px-3 py-1.5 font-medium">On the registration form</th>
                   <th className="px-3 py-1.5 font-medium">In the import file</th>
@@ -185,27 +185,27 @@ export function ImportGuide() {
                   <td className="px-3 py-1.5 text-slate-500">See the full register below.</td>
                 </tr>
                 <tr>
-                  <td className="px-3 py-1.5 italic text-slate-400">(new findings are always Draft)</td>
+                  <td className="px-3 py-1.5 italic text-slate-500">(new findings are always Draft)</td>
                   <td className="px-3 py-1.5 font-mono">Status column</td>
                   <td className="px-3 py-1.5 text-slate-500">Only exists in the import file.</td>
                 </tr>
                 <tr>
-                  <td className="px-3 py-1.5 italic text-slate-400">(entered on the live Rectify screen, later)</td>
+                  <td className="px-3 py-1.5 italic text-slate-500">(entered on the live Rectify screen, later)</td>
                   <td className="px-3 py-1.5 font-mono">Rectified Cases / Amount</td>
                   <td className="px-3 py-1.5 text-slate-500">Only meaningful for a Transferred row.</td>
                 </tr>
                 <tr>
                   <td className="px-3 py-1.5">Itemized case amounts (optional checkbox)</td>
-                  <td className="px-3 py-1.5 text-slate-400">not available</td>
+                  <td className="px-3 py-1.5 text-slate-500">not available</td>
                   <td className="px-3 py-1.5 text-slate-500">Import always produces the plain, non-itemized shape.</td>
                 </tr>
                 <tr>
                   <td className="px-3 py-1.5">Root Cause field</td>
-                  <td className="px-3 py-1.5 text-slate-400">not available</td>
+                  <td className="px-3 py-1.5 text-slate-500">not available</td>
                   <td className="px-3 py-1.5 text-slate-500">Leave blank; add it later from the finding&apos;s own page if needed.</td>
                 </tr>
                 <tr>
-                  <td className="px-3 py-1.5 italic text-slate-400">(system-generated on save)</td>
+                  <td className="px-3 py-1.5 italic text-slate-500">(system-generated on save)</td>
                   <td className="px-3 py-1.5">Reference number</td>
                   <td className="px-3 py-1.5 text-slate-500">Never taken from your file, on either path.</td>
                 </tr>
@@ -223,7 +223,7 @@ export function ImportGuide() {
           </p>
           <div className="max-h-96 overflow-y-auto overflow-x-auto rounded-md border border-slate-200">
             <table className="w-full text-left text-xs">
-              <thead className="sticky top-0 border-b border-slate-200 bg-slate-50 uppercase text-slate-400">
+              <thead className="sticky top-0 border-b border-slate-200 bg-slate-50 uppercase tracking-wide text-slate-600">
                 <tr>
                   <th className="px-3 py-1.5 font-medium">#</th>
                   <th className="px-3 py-1.5 font-medium">Column</th>
@@ -235,7 +235,7 @@ export function ImportGuide() {
               <tbody className="divide-y divide-slate-100">
                 {COLUMNS.map((c) => (
                   <tr key={c.n}>
-                    <td className="px-3 py-1.5 text-slate-400">{c.n}</td>
+                    <td className="px-3 py-1.5 text-slate-500">{c.n}</td>
                     <td className="whitespace-nowrap px-3 py-1.5 font-mono text-slate-800">{c.name}</td>
                     <td className="px-3 py-1.5">
                       <Badge tone={REQ_LABEL[c.req].tone}>{REQ_LABEL[c.req].label}</Badge>
@@ -247,7 +247,7 @@ export function ImportGuide() {
               </tbody>
             </table>
           </div>
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-slate-500">
             <Badge tone="red">Always</Badge> required on every row · <Badge tone="amber">Admin setting</Badge> required only if
             switched on under Required Fields · <Badge tone="blue">Status-conditional</Badge> required only for one specific
             Status · <Badge tone="gray">Optional</Badge> never required.
@@ -348,7 +348,7 @@ export function ImportGuide() {
           </p>
           <div className="max-h-96 overflow-y-auto overflow-x-auto rounded-md border border-slate-200">
             <table className="w-full text-left text-xs">
-              <thead className="sticky top-0 border-b border-slate-200 bg-slate-50 uppercase text-slate-400">
+              <thead className="sticky top-0 border-b border-slate-200 bg-slate-50 uppercase tracking-wide text-slate-600">
                 <tr>
                   <th className="px-3 py-1.5 font-medium">#</th>
                   <th className="px-3 py-1.5 font-medium">Scenario</th>
@@ -360,7 +360,7 @@ export function ImportGuide() {
               <tbody className="divide-y divide-slate-100">
                 {TEST_CASES.map((t) => (
                   <tr key={t.n}>
-                    <td className="px-3 py-1.5 text-slate-400">{t.n}</td>
+                    <td className="px-3 py-1.5 text-slate-500">{t.n}</td>
                     <td className="px-3 py-1.5 text-slate-700">{t.scenario}</td>
                     <td className="whitespace-nowrap px-3 py-1.5 font-mono text-slate-600">{t.status}</td>
                     <td className="px-3 py-1.5 text-slate-500">{t.key}</td>
@@ -373,7 +373,7 @@ export function ImportGuide() {
               </tbody>
             </table>
           </div>
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-slate-500">
             Because validation is all-or-nothing, mixing an error row into an otherwise-clean file rejects the entire upload,
             including every valid row in it. Fix it, then re-upload the whole file.
           </p>

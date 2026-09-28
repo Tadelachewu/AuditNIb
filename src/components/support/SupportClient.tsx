@@ -163,7 +163,7 @@ export function SupportClient() {
                 <p className="truncate font-medium text-slate-900">{t.subject}</p>
                 <div className="mt-1 flex items-center justify-between gap-2">
                   <StatusBadge thread={t} />
-                  <span className="text-xs text-slate-400">{formatDateTime(t.updatedAt)}</span>
+                  <span className="text-xs text-slate-500">{formatDateTime(t.updatedAt)}</span>
                 </div>
               </button>
             ))}
@@ -189,7 +189,7 @@ export function SupportClient() {
                   >
                     {m.body}
                   </div>
-                  <span className="mt-1 text-xs text-slate-400">
+                  <span className="mt-1 text-xs text-slate-500">
                     {m.senderIsSupport ? "Support" : m.senderName} - {formatDateTime(m.createdAt)}
                   </span>
                 </div>
@@ -209,7 +209,7 @@ export function SupportClient() {
                     </button>
                   ))}
                 </div>
-                <p className="mt-1 text-xs text-slate-400">5 stars closes this conversation. Fewer stars keeps it open - send another message below.</p>
+                <p className="mt-1 text-xs text-slate-500">5 stars closes this conversation. Fewer stars keeps it open - send another message below.</p>
               </div>
             )}
 

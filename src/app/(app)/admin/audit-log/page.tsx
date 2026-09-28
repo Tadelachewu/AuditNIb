@@ -44,7 +44,7 @@ export default function AuditLogPage() {
           </Badge>
         )}
       </div>
-      <p className="mt-1 text-sm text-slate-500">
+      <p className="mt-1 text-sm text-slate-600">
         Immutable record of workflow, configuration and authentication events - every entry is
         cryptographically chained to the one before it, so an edit or deletion made directly in the
         database (bypassing this app) is detectable, not just assumed impossible.
@@ -54,7 +54,7 @@ export default function AuditLogPage() {
         <CardHeader title="Recent Events" description={`${pageInfo.total} total`} />
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-100 text-xs uppercase text-slate-400">
+            <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-600">
               <tr>
                 <th className="px-4 py-2 font-medium">Time</th>
                 <th className="px-4 py-2 font-medium">Actor</th>
@@ -66,7 +66,7 @@ export default function AuditLogPage() {
             <tbody className="divide-y divide-slate-100">
               {loading && (
                 <tr>
-                  <td className="px-4 py-4 text-slate-400" colSpan={5}>
+                  <td className="px-4 py-4 text-slate-500" colSpan={5}>
                     Loading...
                   </td>
                 </tr>
@@ -74,7 +74,7 @@ export default function AuditLogPage() {
               {!loading &&
                 logs.map((l) => (
                   <tr key={l.id}>
-                    <td className="px-4 py-2 text-xs text-slate-400 whitespace-nowrap">{formatDateTime(l.timestamp)}</td>
+                    <td className="px-4 py-2 text-xs text-slate-500 whitespace-nowrap">{formatDateTime(l.timestamp)}</td>
                     <td className="px-4 py-2 text-slate-900">{l.userName}</td>
                     <td className="px-4 py-2">
                       <Badge tone="blue">{l.action}</Badge>

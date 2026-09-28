@@ -58,7 +58,7 @@ export function ResetPasswordClient({ token: token }: { token: string | null }) 
           <div className="mb-6 flex flex-col items-center text-center">
             <Image src="/Nib_International_Bank.png" alt="NIB International Bank" width={64} height={64} className="mb-3" priority />
             <h1 className="text-xl font-bold text-blue-900">Invalid reset link</h1>
-            <p className="mt-1 text-sm text-slate-500">This link is missing the required reset token.</p>
+            <p className="mt-1 text-sm text-slate-600">This link is missing the required reset token.</p>
           </div>
           <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
             <p className="text-sm text-slate-600">
@@ -91,7 +91,7 @@ export function ResetPasswordClient({ token: token }: { token: string | null }) 
           <div className="mb-6 flex flex-col items-center text-center">
             <Image src="/Nib_International_Bank.png" alt="NIB International Bank" width={64} height={64} className="mb-3" priority />
             <h1 className="text-xl font-bold text-blue-900">Password updated</h1>
-            <p className="mt-1 text-sm text-slate-500">You can now sign in with your new password.</p>
+            <p className="mt-1 text-sm text-slate-600">You can now sign in with your new password.</p>
           </div>
           <div className="rounded-lg border border-green-200 bg-green-50 p-6 text-sm text-green-800">
             <p className="font-medium">Your password has been reset.</p>
@@ -119,7 +119,7 @@ export function ResetPasswordClient({ token: token }: { token: string | null }) 
         <div className="mb-6 flex flex-col items-center text-center">
           <Image src="/Nib_International_Bank.png" alt="NIB International Bank" width={64} height={64} className="mb-3" priority />
           <h1 className="text-xl font-bold text-blue-900">Set a new password</h1>
-          <p className="mt-1 text-sm text-slate-500">Choose a strong password you haven't used elsewhere.</p>
+          <p className="mt-1 text-sm text-slate-600">Choose a strong password you haven't used elsewhere.</p>
         </div>
 
         <form onSubmit={handleSubmit} className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">

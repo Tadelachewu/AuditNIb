@@ -64,7 +64,7 @@ export function Pagination({
       {totalPages > 1 && (
         <div className="flex items-center gap-1.5">
           {renderNav(page - 1, "Previous", page <= 1)}
-          <span className="px-1.5 text-xs text-slate-400">
+          <span className="px-1.5 text-xs text-slate-500">
             Page {page} of {totalPages}
           </span>
           {renderNav(page + 1, "Next", page >= totalPages)}

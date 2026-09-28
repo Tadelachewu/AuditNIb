@@ -282,7 +282,7 @@ export function FilterBar({
           </button>
         )}
       </div>
-      {hint && <p className="mt-2 text-xs text-slate-400">{hint}</p>}
+      {hint && <p className="mt-2 text-xs text-slate-500">{hint}</p>}
     </div>
   );
 }

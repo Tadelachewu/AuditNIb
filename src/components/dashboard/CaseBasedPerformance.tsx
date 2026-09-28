@@ -71,7 +71,7 @@ export function CaseBasedPerformance({
     return (
       <Card className="border-blue-100 bg-blue-50/30">
         <CardHeader title="Case-Based Performance" description="Performance section" />
-        <p className="p-4 text-sm text-slate-400">No active scoring rule configured yet.</p>
+        <p className="p-4 text-sm text-slate-500">No active scoring rule configured yet.</p>
       </Card>
     );
   }

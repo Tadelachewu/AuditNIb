@@ -181,7 +181,7 @@ export function BranchPerformanceTable({
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-left text-sm">
-          <thead className="border-b border-slate-100 text-xs uppercase text-slate-400">
+          <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-600">
             <tr>
               <th className="px-4 py-2 font-medium">Rank</th>
               <th className="px-4 py-2 font-medium">Branch</th>
@@ -194,14 +194,14 @@ export function BranchPerformanceTable({
           <tbody className="divide-y divide-slate-100">
             {ranked.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-slate-400">
+                <td colSpan={6} className="px-4 py-6 text-center text-slate-500">
                   No branches configured yet.
                 </td>
               </tr>
             )}
             {ranked.map((row, i) => (
               <tr key={row.branch.id}>
-                <td className="px-4 py-2 text-slate-400">{i + 1}</td>
+                <td className="px-4 py-2 text-slate-500">{i + 1}</td>
                 <td className="px-4 py-2">
                   <Link href={`/findings?branchId=${row.branch.id}`} className="text-blue-800 hover:underline">
                     {row.branch.name}

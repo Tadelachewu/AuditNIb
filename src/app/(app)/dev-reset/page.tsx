@@ -107,7 +107,7 @@ export default function DevResetPage() {
     <div className="flex flex-col gap-5">
       <div>
         <h1 className="text-lg font-semibold text-slate-900">Reset Registered Data</h1>
-        <p className="mt-1 text-sm text-slate-500">
+        <p className="mt-1 text-sm text-slate-600">
           Dev/staging tool - permanently deletes every finding and everything generated from one (history, rectifications,
           transfers, closures, itemized cases, import batches, scoring adjustments, uncovered-branch notes, evidence, comments,
           and any Finding-related notification or audit log entry). A reporting period that&apos;s currently locked is reset
@@ -118,7 +118,7 @@ export default function DevResetPage() {
 
       {loading && (
         <Card>
-          <p className="p-4 text-sm text-slate-400">Loading...</p>
+          <p className="p-4 text-sm text-slate-500">Loading...</p>
         </Card>
       )}
 

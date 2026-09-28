@@ -127,7 +127,7 @@ export function UncoveredBranchesTable({ rows, periodId, reasons }: { rows: Row[
           className="max-w-xs"
         />
         {search && (
-          <span className="text-xs text-slate-400">
+          <span className="text-xs text-slate-500">
             {visibleRows.length} of {rows.length} branch(es)
           </span>
         )}
@@ -135,7 +135,7 @@ export function UncoveredBranchesTable({ rows, periodId, reasons }: { rows: Row[
 
       <div className="overflow-x-auto">
         <table className="w-full text-left text-sm">
-          <thead className="border-b border-slate-100 text-xs uppercase text-slate-400">
+          <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-600">
             <tr>
               <th className="no-print w-8 px-4 py-2">
                 <input
@@ -156,14 +156,14 @@ export function UncoveredBranchesTable({ rows, periodId, reasons }: { rows: Row[
           <tbody className="divide-y divide-slate-100">
             {rows.length === 0 && (
               <tr>
-                <td className="px-4 py-6 text-center text-slate-400" colSpan={5}>
+                <td className="px-4 py-6 text-center text-slate-500" colSpan={5}>
                   Every active branch submitted at least one finding this period.
                 </td>
               </tr>
             )}
             {rows.length > 0 && visibleRows.length === 0 && (
               <tr>
-                <td className="px-4 py-6 text-center text-slate-400" colSpan={5}>
+                <td className="px-4 py-6 text-center text-slate-500" colSpan={5}>
                   No branches match &quot;{search}&quot;.
                 </td>
               </tr>
@@ -179,7 +179,7 @@ export function UncoveredBranchesTable({ rows, periodId, reasons }: { rows: Row[
                     className="h-3.5 w-3.5 rounded border-slate-300"
                   />
                 </td>
-                <td className="px-4 py-2 text-slate-400">{i + 1}</td>
+                <td className="px-4 py-2 text-slate-500">{i + 1}</td>
                 <td className="px-4 py-2 text-slate-900">{r.branch.name}</td>
                 <td className="px-4 py-2 text-slate-600">{r.district?.name ?? "—"}</td>
                 <td className="px-4 py-2">

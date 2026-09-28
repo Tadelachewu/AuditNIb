@@ -47,13 +47,14 @@ export interface NavItem {
 }
 
 export interface NavSection {
-  label: string;
+  // Optional: the first section (Dashboard/Profile/Support) is shown with
+  // no heading above it - those links need no category name.
+  label?: string;
   items: NavItem[];
 }
 
 export const NAV_SECTIONS: NavSection[] = [
   {
-    label: "Overview",
     items: [
       { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard, hideForRoles: ["ADMIN"] },
       { label: "Admin Dashboard", href: "/admin", icon: LayoutGrid, permission: permissionKey("admin-dashboard", "view") },

@@ -13,7 +13,7 @@ export default function NotFound() {
     <div className="flex min-h-screen items-center justify-center bg-slate-50">
       <div className="mx-auto max-w-sm rounded-lg border border-slate-200 bg-white p-6 text-center shadow-sm">
         <p className="text-sm font-semibold text-slate-900">Page not found</p>
-        <p className="mt-1 text-sm text-slate-500">The page you&apos;re looking for doesn&apos;t exist or has moved.</p>
+        <p className="mt-1 text-sm text-slate-600">The page you&apos;re looking for doesn&apos;t exist or has moved.</p>
         <Link
           href="/dashboard"
           className="mt-4 inline-block rounded-md bg-brand-gold px-3 py-1.5 text-sm font-medium text-on-gold hover:bg-brand-gold-dark"

@@ -42,7 +42,7 @@ export default async function CategoryDetailByDistrictPage({
             ← Back
           </Link>
           <h1 className="mt-1 text-lg font-semibold text-slate-900">Category Detail by District</h1>
-          <p className="mt-1 text-sm text-slate-500">Every district x classified-case category, Unrectified/Rectified.</p>
+          <p className="mt-1 text-sm text-slate-600">Every district x classified-case category, Unrectified/Rectified.</p>
         </div>
         <div className="flex gap-2">
           <a href={`/api/report-templates/category-detail-by-district/export?periodId=${periodId}`}>
@@ -72,7 +72,7 @@ export default async function CategoryDetailByDistrictPage({
         <CardHeader title="Category Detail by District" description={period ? period.code : "No reporting period"} />
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-100 text-xs uppercase text-slate-400">
+            <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-600">
               <tr>
                 <th className="px-4 py-2 font-medium" rowSpan={2}>
                   SN
@@ -107,14 +107,14 @@ export default async function CategoryDetailByDistrictPage({
             <tbody className="divide-y divide-slate-100">
               {rows.length === 0 && (
                 <tr>
-                  <td className="px-4 py-6 text-center text-slate-400" colSpan={5 + categories.length * 2}>
+                  <td className="px-4 py-6 text-center text-slate-500" colSpan={5 + categories.length * 2}>
                     No districts configured yet.
                   </td>
                 </tr>
               )}
               {rows.map((r, i) => (
                 <tr key={r.district.id}>
-                  <td className="px-4 py-2 text-slate-400">{i + 1}</td>
+                  <td className="px-4 py-2 text-slate-500">{i + 1}</td>
                   <td className="px-4 py-2 text-slate-700">{formatNumber(r.totalBranches)}</td>
                   <td className="px-4 py-2 text-slate-900">{r.district.name}</td>
                   {r.perCategory.map((c) => (

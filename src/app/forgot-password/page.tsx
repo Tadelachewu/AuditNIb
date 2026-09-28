@@ -53,7 +53,7 @@ export default function ForgotPasswordPage() {
         <div className="mb-6 flex flex-col items-center text-center">
           <Image src="/Nib_International_Bank.png" alt="NIB International Bank" width={64} height={64} className="mb-3" priority />
           <h1 className="text-xl font-bold text-blue-900">Reset your password</h1>
-          <p className="mt-1 text-sm text-slate-500">
+          <p className="mt-1 text-sm text-slate-600">
             {response
               ? "Check your inbox for the reset link."
               : "Enter your username or email and we'll send a link to set a new password."}

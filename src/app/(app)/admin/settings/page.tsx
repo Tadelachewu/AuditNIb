@@ -1,16 +1,27 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { apiGet, apiSend, ApiError } from "@/lib/api-client";
 import { CollapsibleCard } from "@/components/ui/CollapsibleCard";
 import { Button } from "@/components/ui/Button";
 import { Input, Select, Label } from "@/components/ui/Field";
 import { SettingsListEditor } from "@/components/admin/SettingsListEditor";
-import { REPORT_TEMPLATES } from "@/lib/reportTemplates";
+import { REPORT_TEMPLATES } from "@/lib/reportTemplateMeta";
 import { SIMILAR_FINDING_FIELDS, REQUIRABLE_FINDING_FIELDS, OTHER_VALUE_ALLOWED_FIELDS } from "@/types";
 import { usePermissions } from "@/lib/permissions/PermissionsContext";
 import { hasPermission } from "@/lib/permissions/registry";
 import type { Settings, SafeUser, Source } from "@/types";
+import {
+  DEFAULT_TYPOGRAPHY,
+  FONT_GROUPS,
+  FONT_OPTIONS,
+  TEXT_SIZE_OPTIONS,
+  TEXT_CONTRAST_OPTIONS,
+  fontStack,
+  normalizeTypography,
+  type Typography,
+} from "@/lib/typography";
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -21,6 +32,7 @@ export default function SettingsPage() {
   const [saved, setSaved] = useState(false);
   const [testEmailSending, setTestEmailSending] = useState(false);
   const [testEmailResult, setTestEmailResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const router = useRouter();
   const permissions = usePermissions();
   const canEdit = hasPermission(permissions, "settings.edit");
 
@@ -64,10 +76,14 @@ export default function SettingsPage() {
         requiredFindingFields: settings.requiredFindingFields,
         allowOtherValueFields: settings.allowOtherValueFields,
         reportTemplateSources: settings.reportTemplateSources ?? {},
+        typography: normalizeTypography(settings.typography),
       };
       const res = await apiSend<{ settings: Settings }>("/api/admin/settings", "PATCH", payload);
       setSettings({ ...res.settings, reportTemplateSources: res.settings.reportTemplateSources ?? {} });
       setSaved(true);
+      // Re-renders (app)/layout.tsx so a Typography change applies to the
+      // whole app immediately, not just after the next navigation.
+      router.refresh();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to save settings");
     } finally {
@@ -88,12 +104,12 @@ export default function SettingsPage() {
     }
   }
 
-  if (!settings) return <p className="text-sm text-slate-400">Loading...</p>;
+  if (!settings) return <p className="text-sm text-slate-500">Loading...</p>;
 
   return (
     <div className="max-w-2xl">
       <h1 className="text-lg font-semibold text-slate-900">Settings</h1>
-      <p className="mt-1 text-sm text-slate-500">
+      <p className="mt-1 text-sm text-slate-600">
         Currencies, risk levels, operation areas, priority levels, irregularity types, and notification delivery
         configuration.
       </p>
@@ -219,7 +235,7 @@ export default function SettingsPage() {
             <span>
               Allow transferring outstanding findings when their period locks
               <br />
-              <span className="text-xs text-slate-400">
+              <span className="text-xs text-slate-500">
                 When enabled, the Lock dialog on Reporting Periods asks the locking user whether to transfer this
                 period&apos;s still-outstanding findings into the next open period - it&apos;s never silent or
                 automatic. If they say yes, every still-outstanding finding moves, tagged &quot;Automatic&quot; in
@@ -263,7 +279,7 @@ export default function SettingsPage() {
             Show district ranking/comparison (District Dashboard&apos;s own District Ranking, HO Dashboard&apos;s District
             Ranking)
           </label>
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-slate-500">
             When enabled, every branch sees how it compares to its peer branches in the same district, and every
             district sees how it compares to every other district bank-wide - for competitive visibility. When
             disabled, a user only sees their own branch/district&apos;s own performance number, never how it compares
@@ -313,7 +329,7 @@ export default function SettingsPage() {
               />
             </div>
           )}
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-slate-500">
             Reminds the Branch Manager/Controller when a finding has gone this many days without any rectification
             progress. Checked lazily off the existing notification poll (no scheduler in this app), so it may take a
             few minutes past the exact threshold to fire, never less.
@@ -359,7 +375,7 @@ export default function SettingsPage() {
               }
             />
           </div>
-          <p className="text-xs text-slate-400 sm:col-span-2">
+          <p className="text-xs text-slate-500 sm:col-span-2">
             A district/branch qualifies as a &quot;Top Performer&quot; once its performance for the current period
             reaches the first value, and a &quot;Bottom Performer&quot; at or below the second. Every district/branch
             that clears the bar is shown - not a fixed top-5/bottom-5.
@@ -382,7 +398,7 @@ export default function SettingsPage() {
             />
             Require approval before a bank-registered finding is sent to the branch
           </label>
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-slate-500">
             A finding an HO Controller or Admin registers has no natural district to review it, so it never goes
             through District/HO Review. When this is off, it&apos;s sent straight to the Branch Manager on submit. When
             on, it waits for one of the approver(s) below instead.
@@ -390,7 +406,7 @@ export default function SettingsPage() {
           <div>
             <Label>Approver(s) - bank-wide users only</Label>
             <div className="mt-1 flex max-h-48 flex-col gap-1 overflow-y-auto rounded-md border border-slate-200 p-2">
-              {bankUsers.length === 0 && <p className="p-2 text-sm text-slate-400">No bank-wide users found.</p>}
+              {bankUsers.length === 0 && <p className="p-2 text-sm text-slate-500">No bank-wide users found.</p>}
               {bankUsers.map((u) => (
                 <label key={u.id} className="flex items-center gap-2 rounded px-2 py-1 text-sm hover:bg-slate-50">
                   <input
@@ -409,7 +425,7 @@ export default function SettingsPage() {
                     }
                     className="h-4 w-4 rounded border-slate-300"
                   />
-                  {u.name} <span className="text-xs text-slate-400">({u.username})</span>
+                  {u.name} <span className="text-xs text-slate-500">({u.username})</span>
                 </label>
               ))}
             </div>
@@ -441,7 +457,7 @@ export default function SettingsPage() {
               </label>
             ))}
           </div>
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-slate-500">
             Checked means required - the Register Finding form won&apos;t save without it, and bulk import rejects a
             row missing it. Unchecked means optional - it can be left blank on either path (a source/department/
             classified case left blank simply never matches anything scored or scoped by it, the way a blank text
@@ -477,7 +493,7 @@ export default function SettingsPage() {
               </label>
             ))}
           </div>
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-slate-500">
             Checked (default) means the dropdown offers &quot;Other (type in)&quot; when the value someone needs
             isn&apos;t in the list below - unchecked restricts it to that list only. Turning this off never hides or
             blocks an existing finding that already has a custom value from before - it only stops new ones from
@@ -512,7 +528,7 @@ export default function SettingsPage() {
               </label>
             ))}
           </div>
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-slate-500">
             A finding is flagged as a likely duplicate only when it matches on <strong>every</strong> field checked
             above - narrower selections (fewer fields) catch more possible duplicates but risk more false
             positives; broader selections (more fields) are stricter. This is only ever a suggestion shown to the
@@ -528,7 +544,7 @@ export default function SettingsPage() {
       >
         <div className="flex flex-col gap-5 p-4">
           {sources.length === 0 && (
-            <p className="text-sm text-slate-400">
+            <p className="text-sm text-slate-500">
               No sources configured yet - add sources first at Admin &rarr; Sources, then return here to scope each
               report template to a subset.
             </p>
@@ -564,12 +580,12 @@ export default function SettingsPage() {
                         />
                         <span>
                           {s.name}
-                          <span className="text-xs text-slate-400"> ({s.code})</span>
+                          <span className="text-xs text-slate-500"> ({s.code})</span>
                         </span>
                       </label>
                     ))}
                 </div>
-                <p className="mt-2 text-xs text-slate-400">
+                <p className="mt-2 text-xs text-slate-500">
                   {selected.length === 0
                     ? "All sources included (default)."
                     : `${selected.length} source${selected.length === 1 ? "" : "s"} selected — only findings from the checked source(s) appear on this report.`}
@@ -578,6 +594,114 @@ export default function SettingsPage() {
             );
           })}
         </div>
+      </CollapsibleCard>
+
+      <CollapsibleCard disabled={!canEdit}
+        className="mt-4"
+        title="Typography"
+        description="Font, text size, and text contrast used on every page of the app."
+      >
+        {(() => {
+          const typography = normalizeTypography(settings.typography);
+          const setTypography = (patch: Partial<Typography>) =>
+            setSettings({ ...settings, typography: { ...typography, ...patch } });
+          const sizeScale = { compact: 0.9375, default: 1, comfortable: 1.0625, large: 1.125 }[typography.textSize];
+          const high = typography.textContrast === "high";
+          const isDefault =
+            typography.fontFamily === DEFAULT_TYPOGRAPHY.fontFamily &&
+            typography.textSize === DEFAULT_TYPOGRAPHY.textSize &&
+            typography.textContrast === DEFAULT_TYPOGRAPHY.textContrast;
+          return (
+            <div className="flex flex-col gap-4 p-4">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div>
+                  <Label htmlFor="typo-font">Font</Label>
+                  <Select
+                    id="typo-font"
+                    value={typography.fontFamily}
+                    onChange={(e) => setTypography({ fontFamily: e.target.value as Typography["fontFamily"] })}
+                  >
+                    {FONT_GROUPS.map((g) => (
+                      <optgroup key={g.key} label={g.label}>
+                        {FONT_OPTIONS.filter((o) => o.group === g.key).map((o) => (
+                          <option key={o.key} value={o.key} style={{ fontFamily: fontStack(o.key) }}>
+                            {o.label}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ))}
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="typo-size">Text size</Label>
+                  <Select
+                    id="typo-size"
+                    value={typography.textSize}
+                    onChange={(e) => setTypography({ textSize: e.target.value as Typography["textSize"] })}
+                  >
+                    {TEXT_SIZE_OPTIONS.map((o) => (
+                      <option key={o.key} value={o.key}>
+                        {o.label}
+                        {o.key === DEFAULT_TYPOGRAPHY.textSize ? " (default)" : ""}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="typo-contrast">Text contrast</Label>
+                  <Select
+                    id="typo-contrast"
+                    value={typography.textContrast}
+                    onChange={(e) => setTypography({ textContrast: e.target.value as Typography["textContrast"] })}
+                  >
+                    {TEXT_CONTRAST_OPTIONS.map((o) => (
+                      <option key={o.key} value={o.key}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+              </div>
+
+              <div>
+                <p className="mb-1 text-xs font-medium text-slate-600">
+                  Preview <span className="font-normal text-slate-500">- sample text only, not real data</span>
+                </p>
+                <div
+                  className="rounded-md border border-slate-200 bg-slate-50 p-4"
+                  style={{ fontFamily: fontStack(typography.fontFamily) }}
+                >
+                  <p className="font-semibold text-slate-900" style={{ fontSize: `${1.125 * sizeScale}rem` }}>
+                    Findings Register
+                  </p>
+                  <p className={high ? "text-slate-700" : "text-slate-600"} style={{ fontSize: `${0.875 * sizeScale}rem` }}>
+                    Every finding registered for the current reporting period, by district and branch.
+                  </p>
+                  <p className="mt-3 text-slate-800" style={{ fontSize: `${0.875 * sizeScale}rem` }}>
+                    Cash shortage at teller 3 - ETB 12,450.00 - 4 cases
+                  </p>
+                  <p className={high ? "text-slate-600" : "text-slate-500"} style={{ fontSize: `${0.75 * sizeScale}rem` }}>
+                    Registered 28 Sep 2026 by the Branch Controller · ሰላም 0123456789
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs text-slate-500">
+                  Applies to every signed-in page for every user once saved. Web fonts look identical for everyone;
+                  installed fonts depend on each user&apos;s computer and fall back to the closest match if missing. Text size scales spacing along with
+                  text, so layouts keep their proportions. High contrast darkens secondary text (descriptions,
+                  hints, table headers) one shade, in both light and dark themes.
+                </p>
+                {!isDefault && canEdit && (
+                  <Button type="button" variant="secondary" onClick={() => setTypography({ ...DEFAULT_TYPOGRAPHY })}>
+                    Reset to default
+                  </Button>
+                )}
+              </div>
+            </div>
+          );
+        })()}
       </CollapsibleCard>
 
       {error && <p className="mt-4 text-sm text-red-600">{error}</p>}

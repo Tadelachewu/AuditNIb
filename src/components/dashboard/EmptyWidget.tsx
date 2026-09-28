@@ -22,8 +22,8 @@ export function EmptyWidget({
     <Card className={className}>
       <CardHeader title={title} />
       <div className="flex min-h-[140px] flex-col items-center justify-center gap-1 p-6 text-center">
-        <p className="text-sm font-medium text-slate-400">No data yet</p>
-        <p className="max-w-xs text-xs text-slate-400">{description}</p>
+        <p className="text-sm font-medium text-slate-500">No data yet</p>
+        <p className="max-w-xs text-xs text-slate-500">{description}</p>
         {children}
       </div>
     </Card>

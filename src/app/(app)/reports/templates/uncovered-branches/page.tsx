@@ -42,7 +42,7 @@ export default async function UncoveredBranchesPage({
             ← Back
           </Link>
           <h1 className="mt-1 text-lg font-semibold text-slate-900">Uncovered Branches</h1>
-          <p className="mt-1 text-sm text-slate-500">Branches with no findings submitted this period, and why.</p>
+          <p className="mt-1 text-sm text-slate-600">Branches with no findings submitted this period, and why.</p>
         </div>
         <div className="flex gap-2">
           <a href={`/api/report-templates/uncovered-branches/export?periodId=${periodId}`}>

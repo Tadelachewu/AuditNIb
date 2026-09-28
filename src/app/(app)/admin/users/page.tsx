@@ -251,7 +251,7 @@ export default function UsersPage() {
   return (
     <div>
       <h1 className="text-lg font-semibold text-slate-900">Users</h1>
-      <p className="mt-1 text-sm text-slate-500">
+      <p className="mt-1 text-sm text-slate-600">
         Create, edit, deactivate/reactivate users and assign role + organization unit. Branch-scoped roles marked
         &quot;one active user per branch&quot; (in Roles &amp; Permissions) can only be held by one active person per
         branch at a time.
@@ -392,7 +392,7 @@ export default function UsersPage() {
         <CardHeader title="All Users" description={`${pageInfo.total} total`} />
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-100 text-xs uppercase text-slate-400">
+            <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-600">
               <tr>
                 <th className="px-4 py-2 font-medium">Name</th>
                 <th className="px-4 py-2 font-medium">Username</th>
@@ -409,7 +409,7 @@ export default function UsersPage() {
             <tbody className="divide-y divide-slate-100">
               {loading && (
                 <tr>
-                  <td className="px-4 py-4 text-slate-400" colSpan={10}>
+                  <td className="px-4 py-4 text-slate-500" colSpan={10}>
                     Loading...
                   </td>
                 </tr>
@@ -432,7 +432,7 @@ export default function UsersPage() {
                         <td className="px-4 py-2">
                           <StatusBadge status={u.status} />
                         </td>
-                        <td className="px-4 py-2 text-xs text-slate-400">
+                        <td className="px-4 py-2 text-xs text-slate-500">
                           {u.lastLoginAt ? formatDateTime(u.lastLoginAt) : "Never"}
                         </td>
                         <td className="px-4 py-2 text-right">

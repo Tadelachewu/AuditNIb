@@ -195,7 +195,7 @@ export default function ScoringRulesPage() {
   return (
     <div>
       <h1 className="text-lg font-semibold text-slate-900">Scoring Rules</h1>
-      <p className="mt-1 text-sm text-slate-500">
+      <p className="mt-1 text-sm text-slate-600">
         Versioned and admin-only. Creating a rule never edits a past version — it adds a new one, so historical
         periods keep reconciling against the rule that was live when they ran. Only one rule can be active at a
         time.
@@ -273,7 +273,7 @@ export default function ScoringRulesPage() {
                 setForm({ ...form, basis: e.target.value });
               }}
             />
-            <p className="mt-1 text-xs text-slate-400">
+            <p className="mt-1 text-xs text-slate-500">
               Auto-fills from the categories selected above - edit it directly to override.
             </p>
           </div>
@@ -302,7 +302,7 @@ export default function ScoringRulesPage() {
       <Card className="mt-5">
         <CardHeader title="Rule History" description={`${rules.length} version(s)`} />
         <div className="divide-y divide-slate-100">
-          {loading && <p className="px-4 py-4 text-sm text-slate-400">Loading...</p>}
+          {loading && <p className="px-4 py-4 text-sm text-slate-500">Loading...</p>}
           {!loading &&
             rules.map((r) => (
               <div key={r.id} className="px-4 py-3">
@@ -428,7 +428,7 @@ export default function ScoringRulesPage() {
                           setEditDraft({ ...editDraft, basis: e.target.value });
                         }}
                       />
-                      <p className="mt-1 text-xs text-slate-400">
+                      <p className="mt-1 text-xs text-slate-500">
                         Auto-fills from the categories selected above - edit it directly to override.
                       </p>
                     </div>
@@ -442,7 +442,7 @@ export default function ScoringRulesPage() {
                 ) : (
                   <>
                     <p className="mt-1 text-xs text-slate-500">{r.basis}</p>
-                    <p className="mt-1 text-xs text-slate-400">
+                    <p className="mt-1 text-xs text-slate-500">
                       Effective {formatDate(r.effectiveFrom)} · Categories:{" "}
                       {r.categories.map((id) => nameFor(categories, id)).join(", ") || "—"} · Sources:{" "}
                       {r.sources.map((id) => nameFor(sources, id)).join(", ") || "—"}

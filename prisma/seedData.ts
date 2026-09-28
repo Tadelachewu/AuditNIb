@@ -5,6 +5,7 @@
 // module, once db.ts became a pure Prisma read/write layer with nothing left
 // to bootstrap a missing file for.
 import { hashPassword } from "../src/lib/auth";
+import { DEFAULT_TYPOGRAPHY } from "../src/lib/typography";
 import { ALL_PERMISSION_KEYS, ALL_VIEW_PERMISSION_KEYS, permissionKey } from "../src/lib/permissions/registry";
 import type {
   Database,
@@ -262,6 +263,7 @@ export function buildSeedDatabase(): Database {
       categoryId: true,
     },
     reportTemplateSources: {},
+    typography: { ...DEFAULT_TYPOGRAPHY },
     updatedAt: now,
   };
 

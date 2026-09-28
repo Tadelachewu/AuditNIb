@@ -112,7 +112,7 @@ export default function ScoringAdjustmentsPage() {
     <div>
       {dialog}
       <h1 className="text-lg font-semibold text-slate-900">Scoring Adjustments</h1>
-      <p className="mt-1 text-sm text-slate-500">
+      <p className="mt-1 text-sm text-slate-600">
         A manual override of a computed score - while ACTIVE, it replaces the dashboard/report figure for that exact target and period
         outright. Every adjustment (and every activate/deactivate) requires a reason and is written to the audit trail.
       </p>
@@ -184,7 +184,7 @@ export default function ScoringAdjustmentsPage() {
         {rowError && <p className="px-4 pt-3 text-sm text-red-600">{rowError}</p>}
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-100 text-xs uppercase text-slate-400">
+            <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-600">
               <tr>
                 <th className="px-4 py-2 font-medium">Target</th>
                 <th className="px-4 py-2 font-medium">Period</th>
@@ -198,14 +198,14 @@ export default function ScoringAdjustmentsPage() {
             <tbody className="divide-y divide-slate-100">
               {loading && (
                 <tr>
-                  <td className="px-4 py-4 text-slate-400" colSpan={7}>
+                  <td className="px-4 py-4 text-slate-500" colSpan={7}>
                     Loading...
                   </td>
                 </tr>
               )}
               {!loading && adjustments.length === 0 && (
                 <tr>
-                  <td className="px-4 py-4 text-slate-400" colSpan={7}>
+                  <td className="px-4 py-4 text-slate-500" colSpan={7}>
                     No adjustments recorded.
                   </td>
                 </tr>
@@ -214,7 +214,7 @@ export default function ScoringAdjustmentsPage() {
                 adjustments.map((a) => (
                   <tr key={a.id}>
                     <td className="px-4 py-2 text-slate-900">
-                      {targetName(a)} <span className="text-xs text-slate-400">({a.targetType})</span>
+                      {targetName(a)} <span className="text-xs text-slate-500">({a.targetType})</span>
                     </td>
                     <td className="px-4 py-2 text-slate-600">{periodCode(a.periodId)}</td>
                     <td className="px-4 py-2 font-medium text-slate-900">{a.value}%</td>
@@ -222,7 +222,7 @@ export default function ScoringAdjustmentsPage() {
                       <Badge tone={a.status === "ACTIVE" ? "green" : "gray"}>{a.status === "ACTIVE" ? "Active" : "Inactive"}</Badge>
                     </td>
                     <td className="px-4 py-2 text-slate-600">{a.reason}</td>
-                    <td className="px-4 py-2 text-xs text-slate-400">{formatDateTime(a.createdAt)}</td>
+                    <td className="px-4 py-2 text-xs text-slate-500">{formatDateTime(a.createdAt)}</td>
                     <td className="px-4 py-2">
                       {canToggle && (
                         <Button

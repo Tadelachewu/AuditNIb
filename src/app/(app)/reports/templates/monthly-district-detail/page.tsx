@@ -88,7 +88,7 @@ export default async function MonthlyDistrictDetailPage({
             ← Back
           </Link>
           <h1 className="mt-1 text-lg font-semibold text-slate-900">Monthly District Detail</h1>
-          <p className="mt-1 text-sm text-slate-500">
+          <p className="mt-1 text-sm text-slate-600">
             District-by-district history: Other Cases per period, then one closing &quot;Various internal Audit report&quot; row per district, subtotal, and grand total.
           </p>
         </div>
@@ -121,7 +121,7 @@ export default async function MonthlyDistrictDetailPage({
         <CardHeader title="Monthly District Detail" description={`${totalRowCount} row(s) across ${groups.length} district(s)`} />
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-100 text-xs uppercase text-slate-400">
+            <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-600">
               <tr>
                 <th className="px-4 py-2 font-medium">SN</th>
                 <th className="px-4 py-2 font-medium">District</th>
@@ -136,7 +136,7 @@ export default async function MonthlyDistrictDetailPage({
             <tbody className="divide-y divide-slate-100">
               {groups.length === 0 && (
                 <tr>
-                  <td className="px-4 py-6 text-center text-slate-400" colSpan={8}>
+                  <td className="px-4 py-6 text-center text-slate-500" colSpan={8}>
                     No reporting periods configured yet.
                   </td>
                 </tr>
@@ -150,11 +150,11 @@ export default async function MonthlyDistrictDetailPage({
                   <Fragment key={district.id}>
                     {periodRows.map((r, i) => (
                       <tr key={`${district.id}-${r.period.id}`}>
-                        <td className="px-4 py-2 text-slate-400">{i + 1}</td>
+                        <td className="px-4 py-2 text-slate-500">{i + 1}</td>
                         <td className="px-4 py-2 text-slate-900">{i === 0 ? district.name : ""}</td>
                         <td className="px-4 py-2 font-mono text-xs text-slate-600">
                           {r.period.code}
-                          {r.period.name && <span className="ml-1 font-sans text-slate-400">({r.period.name})</span>}
+                          {r.period.name && <span className="ml-1 font-sans text-slate-500">({r.period.name})</span>}
                         </td>
                         <td className="px-4 py-2 text-slate-700">Other Cases</td>
                         <td className="px-4 py-2 text-slate-700">{formatNumber(r.totalCases)}</td>
@@ -165,7 +165,7 @@ export default async function MonthlyDistrictDetailPage({
                     ))}
                     {variousRow && (
                       <tr key={`${district.id}-various`} className="bg-slate-50/50">
-                        <td className="px-4 py-2 text-slate-400">{periodRows.length + 1}</td>
+                        <td className="px-4 py-2 text-slate-500">{periodRows.length + 1}</td>
                         <td className="px-4 py-2" />
                         <td className="px-4 py-2" />
                         <td className="px-4 py-2 text-slate-700">

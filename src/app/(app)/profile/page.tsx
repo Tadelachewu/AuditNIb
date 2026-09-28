@@ -27,7 +27,7 @@ export default async function ProfilePage() {
     <div className="flex flex-col gap-5">
       <div>
         <h1 className="text-lg font-semibold text-slate-900">My Profile</h1>
-        <p className="mt-1 text-sm text-slate-500">Your account details and self-service settings.</p>
+        <p className="mt-1 text-sm text-slate-600">Your account details and self-service settings.</p>
       </div>
 
       <Card>

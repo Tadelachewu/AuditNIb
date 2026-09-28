@@ -139,7 +139,7 @@ export default function CategoriesPage() {
   return (
     <div>
       <h1 className="text-lg font-semibold text-slate-900">Classified Case Categories</h1>
-      <p className="mt-1 text-sm text-slate-500">
+      <p className="mt-1 text-sm text-slate-600">
         Only categories marked <strong>Scored</strong> are included in the performance calculation; the rest stay
         visible for general reporting.
       </p>
@@ -180,7 +180,7 @@ export default function CategoriesPage() {
         <CardHeader title="All Categories" description={`${categories.length} total`} />
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-100 text-xs uppercase text-slate-400">
+            <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-600">
               <tr>
                 <th className="px-4 py-2 font-medium">Code</th>
                 <th className="px-4 py-2 font-medium">Name</th>
@@ -192,7 +192,7 @@ export default function CategoriesPage() {
             <tbody className="divide-y divide-slate-100">
               {loading && (
                 <tr>
-                  <td className="px-4 py-4 text-slate-400" colSpan={5}>
+                  <td className="px-4 py-4 text-slate-500" colSpan={5}>
                     Loading...
                   </td>
                 </tr>

@@ -160,7 +160,7 @@ export default async function FindingsPage({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h1 className="text-lg font-semibold text-slate-900">Findings</h1>
-          <p className="mt-1 text-sm text-slate-500">{total} matching</p>
+          <p className="mt-1 text-sm text-slate-600">{total} matching</p>
         </div>
         {canCreate && (
           <Link href="/findings/new">

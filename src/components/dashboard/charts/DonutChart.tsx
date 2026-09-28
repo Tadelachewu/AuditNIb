@@ -35,7 +35,7 @@ export function DonutChart({
 }) {
   const total = segments.reduce((sum, s) => sum + s.value, 0);
   if (total === 0) {
-    return <p className="py-10 text-center text-sm text-slate-400">{emptyText}</p>;
+    return <p className="py-10 text-center text-sm text-slate-500">{emptyText}</p>;
   }
 
   const size = 140;
@@ -81,9 +81,7 @@ export function DonutChart({
               strokeWidth={2}
               className={a.href ? "cursor-pointer transition-opacity hover:opacity-80" : undefined}
             >
-              <title>
-                {a.label}: {formatNumber(a.value)} ({((a.value / total) * 100).toFixed(0)}%)
-              </title>
+              <title>{`${a.label}: ${formatNumber(a.value)} (${((a.value / total) * 100).toFixed(0)}%)`}</title>
             </path>
           );
           return a.href ? (

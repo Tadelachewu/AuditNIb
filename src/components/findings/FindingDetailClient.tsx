@@ -478,8 +478,8 @@ export function FindingDetailClient({
             ← Back
           </Link>
           <h1 className="mt-1 text-lg font-semibold text-slate-900">{finding.title}</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            <span className="font-mono text-xs text-slate-400">{finding.reference}</span> · {lookups.branchName} ·{" "}
+          <p className="mt-1 text-sm text-slate-600">
+            <span className="font-mono text-xs text-slate-500">{finding.reference}</span> · {lookups.branchName} ·{" "}
             {lookups.districtName} · {lookups.periodCode}
           </p>
         </div>
@@ -516,88 +516,88 @@ export function FindingDetailClient({
         ) : (
           <dl className="grid grid-cols-1 gap-x-6 gap-y-3 p-4 text-sm sm:grid-cols-2">
             <div>
-              <dt className="text-xs text-slate-400">Source</dt>
+              <dt className="text-xs text-slate-500">Source</dt>
               <dd className="text-slate-900">{lookups.sourceName}</dd>
             </div>
             <div>
-              <dt className="text-xs text-slate-400">Department</dt>
+              <dt className="text-xs text-slate-500">Department</dt>
               <dd className="text-slate-900">{lookups.departmentName}</dd>
             </div>
             <div>
-              <dt className="text-xs text-slate-400">Classified case</dt>
+              <dt className="text-xs text-slate-500">Classified case</dt>
               <dd className="text-slate-900">{lookups.categoryName}</dd>
             </div>
             <div>
-              <dt className="text-xs text-slate-400">Finding date</dt>
+              <dt className="text-xs text-slate-500">Finding date</dt>
               <dd className="text-slate-900">{finding.findingDate}</dd>
             </div>
             <div>
-              <dt className="text-xs text-slate-400">Risk level</dt>
+              <dt className="text-xs text-slate-500">Risk level</dt>
               <dd className="text-slate-900">{finding.riskLevel}</dd>
             </div>
             <div>
-              <dt className="text-xs text-slate-400">Priority</dt>
+              <dt className="text-xs text-slate-500">Priority</dt>
               <dd className="text-slate-900">{finding.priority}</dd>
             </div>
             <div>
-              <dt className="text-xs text-slate-400">Operation area</dt>
+              <dt className="text-xs text-slate-500">Operation area</dt>
               <dd className="text-slate-900">{finding.operationArea}</dd>
             </div>
             <div>
-              <dt className="text-xs text-slate-400">Type of irregularity</dt>
+              <dt className="text-xs text-slate-500">Type of irregularity</dt>
               <dd className="text-slate-900">{finding.irregularityType}</dd>
             </div>
             <div>
-              <dt className="text-xs text-slate-400">Currency</dt>
+              <dt className="text-xs text-slate-500">Currency</dt>
               <dd className="text-slate-900">{finding.currency}</dd>
             </div>
             <div>
-              <dt className="text-xs text-slate-400">Amount involved</dt>
+              <dt className="text-xs text-slate-500">Amount involved</dt>
               <dd className="text-slate-900">
                 {finding.currency} {formatCurrency(finding.amount)} ({finding.caseCount} case
                 {finding.caseCount === 1 ? "" : "s"})
               </dd>
             </div>
             <div>
-              <dt className="text-xs text-slate-400">Outstanding</dt>
+              <dt className="text-xs text-slate-500">Outstanding</dt>
               <dd className="text-slate-900">
                 {finding.currency} {formatCurrency(outstandingAmount)} ({outstandingCases} case
                 {outstandingCases === 1 ? "" : "s"})
               </dd>
             </div>
             <div>
-              <dt className="text-xs text-slate-400">District Verified</dt>
+              <dt className="text-xs text-slate-500">District Verified</dt>
               <dd className="text-slate-900">
                 {finding.currency} {formatCurrency(finding.districtVerifiedAmount)} ({finding.districtVerifiedCases} case
                 {finding.districtVerifiedCases === 1 ? "" : "s"})
               </dd>
             </div>
             <div>
-              <dt className="text-xs text-slate-400">Closed</dt>
+              <dt className="text-xs text-slate-500">Closed</dt>
               <dd className="text-slate-900">
                 {finding.currency} {formatCurrency(finding.closedAmount)} ({finding.closedCases} case
                 {finding.closedCases === 1 ? "" : "s"})
               </dd>
             </div>
             <div className="sm:col-span-2">
-              <dt className="text-xs text-slate-400">Description</dt>
+              <dt className="text-xs text-slate-500">Description</dt>
               <dd className="text-slate-900">{finding.description}</dd>
             </div>
             {finding.rootCause && (
               <div className="sm:col-span-2">
-                <dt className="text-xs text-slate-400">Root cause</dt>
+                <dt className="text-xs text-slate-500">Root cause</dt>
                 <dd className="text-slate-900">{finding.rootCause}</dd>
               </div>
             )}
             {finding.recommendation && (
               <div className="sm:col-span-2">
-                <dt className="text-xs text-slate-400">Recommendation</dt>
+                <dt className="text-xs text-slate-500">Recommendation</dt>
                 <dd className="text-slate-900">{finding.recommendation}</dd>
               </div>
             )}
             {finding.evidenceNote && (
               <div className="sm:col-span-2">
-                <dt className="text-xs text-slate-400">Evidence note</dt>
+                <dt className="text-xs text-slate-500">Evidence note</dt>
                 <dd className="text-slate-900">{finding.evidenceNote}</dd>
               </div>
             )}
@@ -716,7 +716,7 @@ export function FindingDetailClient({
                   <Label>Select outstanding case(s) to rectify</Label>
                   <div className="mt-1 flex flex-col gap-1.5 rounded-md border border-slate-200 p-2">
                     {outstandingFindingCases.length === 0 && (
-                      <p className="p-2 text-sm text-slate-400">No cases currently outstanding.</p>
+                      <p className="p-2 text-sm text-slate-500">No cases currently outstanding.</p>
                     )}
                     {outstandingFindingCases.map((fc) => (
                       <label key={fc.id} className="flex items-center gap-2 rounded px-2 py-1 text-sm hover:bg-slate-50">
@@ -1023,7 +1023,7 @@ export function FindingDetailClient({
                 }}
               />
             )}
-            {uploadingEvidence && <p className="text-xs text-slate-400">Uploading...</p>}
+            {uploadingEvidence && <p className="text-xs text-slate-500">Uploading...</p>}
             {evidence.filter((e) => !e.commentId).length === 0 ? (
               <p className="text-sm text-slate-500">No evidence uploaded yet.</p>
             ) : (
@@ -1037,7 +1037,7 @@ export function FindingDetailClient({
                       >
                         {e.fileName}
                       </a>
-                      <p className="text-xs text-slate-400">
+                      <p className="text-xs text-slate-500">
                         {formatBytes(e.size)} · {e.uploadedByName} · {formatDateTime(e.createdAt)}
                       </p>
                     </div>
@@ -1077,7 +1077,7 @@ export function FindingDetailClient({
                             </a>
                           ))}
                           <div className="mt-1 flex items-center gap-2">
-                            <span className="text-xs text-slate-400">{formatDateTime(c.createdAt)}</span>
+                            <span className="text-xs text-slate-500">{formatDateTime(c.createdAt)}</span>
                             {permissions.canComment && (
                               <button
                                 type="button"
@@ -1107,7 +1107,7 @@ export function FindingDetailClient({
                                     📎 {e.fileName} ({formatBytes(e.size)})
                                   </a>
                                 ))}
-                                <span className="text-xs text-slate-400">{formatDateTime(r.createdAt)}</span>
+                                <span className="text-xs text-slate-500">{formatDateTime(r.createdAt)}</span>
                               </div>
                             );
                           })}
@@ -1163,7 +1163,7 @@ export function FindingDetailClient({
                     <span className="font-medium text-slate-900">Case {fc.seq}</span> — {finding.currency}{" "}
                     {formatCurrency(fc.amount)}
                     {fc.status === "RECTIFIED" && fc.rectifiedByName && (
-                      <span className="text-slate-400">
+                      <span className="text-slate-500">
                         {" "}
                         — rectified by {fc.rectifiedByName}
                         {fc.rectifiedAt && ` on ${formatDate(fc.rectifiedAt)}`}
@@ -1201,7 +1201,7 @@ export function FindingDetailClient({
                         <span className="font-medium text-slate-900">{toPeriod?.code ?? t.toPeriodId}</span>
                       </span>
                     </div>
-                    <span className="text-xs text-slate-400">{formatDateTime(t.createdAt)}</span>
+                    <span className="text-xs text-slate-500">{formatDateTime(t.createdAt)}</span>
                   </div>
 
                   {/* §15 Transfer Data — 12 field rows, 2-column layout on wide screens. */}
@@ -1273,9 +1273,9 @@ export function FindingDetailClient({
                 <span className="text-slate-600">
                   <span className="font-medium text-slate-900">{r.submittedByName}</span> recorded {r.rectifiedCases}{" "}
                   case(s) / {finding.currency} {formatCurrency(r.rectifiedAmount)}
-                  {r.note && <span className="text-slate-400"> — {r.note}</span>}
+                  {r.note && <span className="text-slate-500"> — {r.note}</span>}
                 </span>
-                <span className="text-xs text-slate-400">{formatDateTime(r.createdAt)}</span>
+                <span className="text-xs text-slate-500">{formatDateTime(r.createdAt)}</span>
               </div>
             ))}
           </div>
@@ -1292,7 +1292,7 @@ export function FindingDetailClient({
                   <span className="font-medium text-slate-900">{c.submittedByName}</span> verified and closed{" "}
                   {c.closedCases} case(s) / {finding.currency} {formatCurrency(c.closedAmount)}
                 </span>
-                <span className="text-xs text-slate-400">{formatDateTime(c.createdAt)}</span>
+                <span className="text-xs text-slate-500">{formatDateTime(c.createdAt)}</span>
               </div>
             ))}
           </div>
@@ -1316,7 +1316,7 @@ export function FindingDetailClient({
             const header = (
               <span className="text-slate-600">
                 <span className="font-medium text-slate-900">{t.userName}</span> {t.action.replaceAll("_", " ").toLowerCase()}{" "}
-                <span className="text-slate-400">
+                <span className="text-slate-500">
                   ({t.fromStatus.replaceAll("_", " ")} → {t.toStatus.replaceAll("_", " ")})
                 </span>
                 {t.reason && !isReturnEvent && <span className="text-slate-500"> — {t.reason}</span>}
@@ -1332,7 +1332,7 @@ export function FindingDetailClient({
                       <span className={`rounded-md px-2.5 py-1 text-xs font-bold text-on-dark transition-colors ${buttonTone}`}>
                         View Reason
                       </span>
-                      <span className="text-xs text-slate-400">{formatDateTime(t.createdAt)}</span>
+                      <span className="text-xs text-slate-500">{formatDateTime(t.createdAt)}</span>
                     </span>
                   </summary>
                   <p className="mt-1.5 border-t border-slate-100 pt-1.5 text-sm text-slate-600">{t.reason}</p>
@@ -1342,7 +1342,7 @@ export function FindingDetailClient({
             return (
               <div key={t.id} className="flex items-center justify-between px-4 py-2 text-sm">
                 {header}
-                <span className="text-xs text-slate-400">{formatDateTime(t.createdAt)}</span>
+                <span className="text-xs text-slate-500">{formatDateTime(t.createdAt)}</span>
               </div>
             );
           })}

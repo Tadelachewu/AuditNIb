@@ -20,7 +20,7 @@ export default async function ReportTemplatesPage() {
     <div>
       <div>
         <h1 className="text-lg font-semibold text-slate-900">Report Templates</h1>
-        <p className="mt-1 text-sm text-slate-500">
+        <p className="mt-1 text-sm text-slate-600">
           The bank&apos;s own Internal Control Division reports, computed live from current findings data.
         </p>
       </div>
@@ -28,7 +28,7 @@ export default async function ReportTemplatesPage() {
       <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {visible.length === 0 && (
           <Card className="p-4 sm:col-span-2 lg:col-span-3">
-            <p className="text-sm text-slate-400">
+            <p className="text-sm text-slate-500">
               Your role doesn&apos;t currently have access to any report template. Ask an administrator to grant one under Roles &amp;
               Permissions → Report Templates.
             </p>

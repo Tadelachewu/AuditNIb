@@ -286,9 +286,9 @@ export function BranchDashboard({
     <div className="flex flex-col gap-5">
       <div>
         <h1 className="text-lg font-semibold text-slate-900">
-          {branch.name} <span className="font-mono text-sm font-normal text-slate-400">({branch.code})</span>
+          {branch.name} <span className="font-mono text-sm font-normal text-slate-500">({branch.code})</span>
         </h1>
-        <p className="mt-1 text-sm text-slate-500">
+        <p className="mt-1 text-sm text-slate-600">
           {district?.name ?? "Unknown district"} · Manager: {manager?.name ?? "Unassigned"}
           {subManager && <> · Sub-Manager: {subManager.name}</>} · Controller: {controller?.name ?? "Unassigned"}
         </p>
@@ -382,7 +382,7 @@ export function BranchDashboard({
           />
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
-              <thead className="border-b border-slate-100 text-xs uppercase text-slate-400">
+              <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-600">
                 <tr>
                   <th className="px-4 py-2 font-medium">Rank</th>
                   <th className="px-4 py-2 font-medium">Branch</th>
@@ -392,14 +392,14 @@ export function BranchDashboard({
               <tbody className="divide-y divide-slate-100">
                 {branchRanking.length === 0 && (
                   <tr>
-                    <td colSpan={3} className="px-4 py-6 text-center text-slate-400">
+                    <td colSpan={3} className="px-4 py-6 text-center text-slate-500">
                       No peer branches in this district yet.
                     </td>
                   </tr>
                 )}
                 {branchRanking.map((row, i) => (
                   <tr key={row.branch.id} className={row.branch.id === branch.id ? "bg-blue-50" : undefined}>
-                    <td className="px-4 py-2 text-slate-400">{i + 1}</td>
+                    <td className="px-4 py-2 text-slate-500">{i + 1}</td>
                     <td className="px-4 py-2 text-slate-900">
                       <span className="flex items-center gap-2">
                         {row.branch.name}
@@ -416,7 +416,7 @@ export function BranchDashboard({
       ) : (
         <Card>
           <CardHeader title="Branch Ranking" />
-          <p className="p-4 text-sm text-slate-400">Branch ranking visibility is disabled by your administrator.</p>
+          <p className="p-4 text-sm text-slate-500">Branch ranking visibility is disabled by your administrator.</p>
         </Card>
       )}
 
@@ -434,10 +434,10 @@ export function BranchDashboard({
                   {otherCaseTotal} / {otherCaseRectified} / {otherCaseTotal - otherCaseRectified}
                 </span>
               </p>
-              {activeScoringRule && <p className="mt-1 text-xs text-slate-400">Live formula: {activeScoringRule.basis}</p>}
+              {activeScoringRule && <p className="mt-1 text-xs text-slate-500">Live formula: {activeScoringRule.basis}</p>}
             </>
           ) : (
-            <p className="text-slate-400">Ask an administrator to configure one under Scoring Rules.</p>
+            <p className="text-slate-500">Ask an administrator to configure one under Scoring Rules.</p>
           )}
         </div>
       </Card>
@@ -446,7 +446,7 @@ export function BranchDashboard({
         <CardHeader title="Category Totals" description="Every active classified case category for this branch, current period" />
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-100 text-xs uppercase text-slate-400">
+            <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-600">
               <tr>
                 <th className="px-4 py-2 font-medium">Category</th>
                 <th className="px-4 py-2 font-medium">Total Cases</th>
@@ -499,7 +499,7 @@ export function BranchDashboard({
         <Card>
           <CardHeader title="Work Queue" description="Findings awaiting your action" />
           <div className="divide-y divide-slate-100">
-            {workQueue.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-400">Nothing pending.</p>}
+            {workQueue.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-500">Nothing pending.</p>}
             {workQueue.map((f) => (
               <Link key={f.id} href={`/findings/${f.id}`} className="flex items-center justify-between px-4 py-2 text-sm hover:bg-slate-50">
                 <span className="font-mono text-xs text-blue-800">{f.reference}</span>
@@ -512,13 +512,13 @@ export function BranchDashboard({
         <Card>
           <CardHeader title="Recent Activity" description="Submit, approve, return, and rectification events for this branch" />
           <div className="divide-y divide-slate-100">
-            {recentActivity.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-400">No activity yet.</p>}
+            {recentActivity.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-500">No activity yet.</p>}
             {recentActivity.map((t) => (
               <div key={t.id} className="flex items-center justify-between px-4 py-2 text-sm">
                 <span className="text-slate-600">
                   <span className="font-medium text-slate-900">{t.userName}</span> {t.action.replaceAll("_", " ").toLowerCase()}
                 </span>
-                <span className="text-xs text-slate-400">{formatDateTime(t.createdAt)}</span>
+                <span className="text-xs text-slate-500">{formatDateTime(t.createdAt)}</span>
               </div>
             ))}
           </div>

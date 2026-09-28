@@ -143,7 +143,7 @@ export default function RolesPage() {
   return (
     <div>
       <h1 className="text-lg font-semibold text-slate-900">Roles &amp; Permissions</h1>
-      <p className="mt-1 text-sm text-slate-500">
+      <p className="mt-1 text-sm text-slate-600">
         Roles are data, not code: create as many as your organization needs, and grant each one page-by-page,
         action-by-action access. The Administrator role can be narrowed like any other, except it always keeps
         &quot;Roles &amp; Permissions: Manage&quot;, so there&apos;s always a way back in.
@@ -239,7 +239,7 @@ export default function RolesPage() {
       <Card className="mt-5">
         <CardHeader title="All Roles" description={`${roles.length} total`} />
         <div className="divide-y divide-slate-100">
-          {loading && <p className="px-4 py-4 text-sm text-slate-400">Loading...</p>}
+          {loading && <p className="px-4 py-4 text-sm text-slate-500">Loading...</p>}
           {!loading &&
             roles.map((role) => {
               const isAdminRole = role.code === "ADMIN";
@@ -249,13 +249,13 @@ export default function RolesPage() {
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
                       <span className="text-sm font-medium text-slate-900">{role.name}</span>{" "}
-                      <span className="font-mono text-xs text-slate-400">{role.code}</span>{" "}
+                      <span className="font-mono text-xs text-slate-500">{role.code}</span>{" "}
                       <Badge tone="blue">{ORG_SCOPE_LABELS[role.orgScope]}</Badge>{" "}
                       {role.isSystem && <Badge tone="gray">System</Badge>}{" "}
                       <Badge tone={role.status === "ACTIVE" ? "green" : "gray"}>{role.status}</Badge>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="text-xs text-slate-400">{role.permissions.length} permission(s)</span>
+                      <span className="text-xs text-slate-500">{role.permissions.length} permission(s)</span>
                       <Button
                         variant="secondary"
                         onClick={() => (isExpanded ? setExpandedRoleId(null) : startEditing(role))}

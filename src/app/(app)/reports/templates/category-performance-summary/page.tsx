@@ -37,7 +37,7 @@ export default async function CategoryPerformanceSummaryPage({
             ← Back
           </Link>
           <h1 className="mt-1 text-lg font-semibold text-slate-900">Category Performance Summary</h1>
-          <p className="mt-1 text-sm text-slate-500">Bank-wide rectification rate per category, with the district range.</p>
+          <p className="mt-1 text-sm text-slate-600">Bank-wide rectification rate per category, with the district range.</p>
         </div>
         <div className="flex gap-2">
           <a href={`/api/report-templates/category-performance-summary/export?periodId=${periodId}`}>
@@ -71,7 +71,7 @@ export default async function CategoryPerformanceSummaryPage({
         />
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-100 text-xs uppercase text-slate-400">
+            <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-600">
               <tr>
                 <th className="px-4 py-2 font-medium">SN</th>
                 <th className="px-4 py-2 font-medium">Types of cases</th>
@@ -86,14 +86,14 @@ export default async function CategoryPerformanceSummaryPage({
             <tbody className="divide-y divide-slate-100">
               {rows.length === 0 && (
                 <tr>
-                  <td className="px-4 py-6 text-center text-slate-400" colSpan={8}>
+                  <td className="px-4 py-6 text-center text-slate-500" colSpan={8}>
                     No classified categories configured yet.
                   </td>
                 </tr>
               )}
               {rows.map((r, i) => (
                 <tr key={r.category.id}>
-                  <td className="px-4 py-2 text-slate-400">{i + 1}</td>
+                  <td className="px-4 py-2 text-slate-500">{i + 1}</td>
                   <td className="px-4 py-2 text-slate-900">{r.category.name}</td>
                   <td className="px-4 py-2 text-slate-700">{formatNumber(r.totalCases)}</td>
                   <td className="px-4 py-2 text-slate-700">{formatNumber(r.rectifiedCases)}</td>

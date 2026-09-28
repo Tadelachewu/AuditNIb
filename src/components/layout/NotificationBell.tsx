@@ -112,7 +112,7 @@ export function NotificationBell() {
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="relative rounded-full p-2 text-on-dark/70 hover:bg-on-dark/10 hover:text-on-dark"
+        className="relative rounded-full p-2 text-on-dark/90 hover:bg-on-dark/10 hover:text-on-dark"
         aria-label="Notifications"
       >
         <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
@@ -152,7 +152,7 @@ export function NotificationBell() {
                   >
                     <p className="font-medium text-slate-900">{n.title}</p>
                     <p className="text-xs text-slate-500">{n.message}</p>
-                    <p className="mt-0.5 text-[10px] text-slate-400">{formatDateTime(n.createdAt)}</p>
+                    <p className="mt-0.5 text-[10px] text-slate-500">{formatDateTime(n.createdAt)}</p>
                   </button>
                   {respondingTo === n.id && (
                     <div className="flex flex-col gap-1.5 px-3 pb-2.5">

@@ -42,7 +42,7 @@ export default async function DistrictRankingOtherCasesPage({
             ← Back
           </Link>
           <h1 className="mt-1 text-lg font-semibold text-slate-900">District Ranking - Other Cases</h1>
-          <p className="mt-1 text-sm text-slate-500">Cumulative district ranking on the official scored category.</p>
+          <p className="mt-1 text-sm text-slate-600">Cumulative district ranking on the official scored category.</p>
         </div>
         <div className="flex gap-2">
           <a href={`/api/report-templates/district-ranking-other-cases/export?${exportQuery.toString()}`}>
@@ -71,7 +71,7 @@ export default async function DistrictRankingOtherCasesPage({
         />
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-100 text-xs uppercase text-slate-400">
+            <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-600">
               <tr>
                 <th className="px-4 py-2 font-medium">SN</th>
                 <th className="px-4 py-2 font-medium">Total No. of Branches</th>
@@ -85,14 +85,14 @@ export default async function DistrictRankingOtherCasesPage({
             <tbody className="divide-y divide-slate-100">
               {rows.length === 0 && (
                 <tr>
-                  <td className="px-4 py-6 text-center text-slate-400" colSpan={7}>
+                  <td className="px-4 py-6 text-center text-slate-500" colSpan={7}>
                     No districts configured yet.
                   </td>
                 </tr>
               )}
               {rows.map((r, i) => (
                 <tr key={r.district.id}>
-                  <td className="px-4 py-2 text-slate-400">{i + 1}</td>
+                  <td className="px-4 py-2 text-slate-500">{i + 1}</td>
                   <td className="px-4 py-2 text-slate-700">{formatNumber(r.totalBranches)}</td>
                   <td className="px-4 py-2 text-slate-900">{r.district.name}</td>
                   <td className="px-4 py-2 text-slate-700">{formatNumber(r.totalCases)}</td>

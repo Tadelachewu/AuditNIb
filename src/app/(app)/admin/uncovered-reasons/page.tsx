@@ -18,7 +18,7 @@ export default async function UncoveredReasonsPage() {
   return (
     <div>
       <h1 className="text-lg font-semibold text-slate-900">Uncovered Branch Reasons</h1>
-      <p className="mt-1 text-sm text-slate-500">
+      <p className="mt-1 text-sm text-slate-600">
         The canned reasons offered on the Uncovered Branches report when recording why a branch has no findings this
         period.
       </p>

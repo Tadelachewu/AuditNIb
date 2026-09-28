@@ -253,9 +253,9 @@ export function DistrictDashboard({
     <div className="flex flex-col gap-5">
       <div>
         <h1 className="text-lg font-semibold text-slate-900">
-          {district.name} <span className="font-mono text-sm font-normal text-slate-400">({district.code})</span>
+          {district.name} <span className="font-mono text-sm font-normal text-slate-500">({district.code})</span>
         </h1>
-        <p className="mt-1 text-sm text-slate-500">{branches.length} branch(es)</p>
+        <p className="mt-1 text-sm text-slate-600">{branches.length} branch(es)</p>
       </div>
 
       <FilterBar
@@ -313,7 +313,7 @@ export function DistrictDashboard({
       <Card>
         <CardHeader title="Pending Verify" description={`${pendingVerifyFindings.length} rectified, awaiting your verification`} />
         <div className="divide-y divide-slate-100">
-          {pendingVerifyFindings.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-400">Nothing pending.</p>}
+          {pendingVerifyFindings.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-500">Nothing pending.</p>}
           {pendingVerifyFindings
             .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
             .slice(0, 8)
@@ -338,7 +338,7 @@ export function DistrictDashboard({
           <Card>
             <CardHeader title="Top Performers" description={`Branches at or above ${topPercent}% this period`} />
             <div className="divide-y divide-slate-100">
-              {topBranches.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-400">No performance data yet.</p>}
+              {topBranches.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-500">No performance data yet.</p>}
               {topBranches.map((row, i) => (
                 <Link
                   key={row.branch.id}
@@ -358,7 +358,7 @@ export function DistrictDashboard({
           <Card>
             <CardHeader title="Bottom Performers" description={`Branches at or below ${bottomPercent}% this period`} />
             <div className="divide-y divide-slate-100">
-              {bottomBranches.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-400">No performance data yet.</p>}
+              {bottomBranches.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-500">No performance data yet.</p>}
               {bottomBranches.map((row) => (
                 <Link
                   key={row.branch.id}
@@ -404,7 +404,7 @@ export function DistrictDashboard({
       ) : (
         <Card>
           <CardHeader title="District Ranking" />
-          <p className="p-4 text-sm text-slate-400">District ranking visibility is disabled by your administrator.</p>
+          <p className="p-4 text-sm text-slate-500">District ranking visibility is disabled by your administrator.</p>
         </Card>
       )}
 
@@ -420,7 +420,7 @@ export function DistrictDashboard({
       ) : (
         <Card>
           <CardHeader title="Branch Ranking" />
-          <p className="p-4 text-sm text-slate-400">Branch ranking visibility is disabled by your administrator.</p>
+          <p className="p-4 text-sm text-slate-500">Branch ranking visibility is disabled by your administrator.</p>
         </Card>
       )}
 
@@ -443,7 +443,7 @@ export function DistrictDashboard({
         <CardHeader title="Category Totals" description="Every active classified case category for this district, current period" />
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-100 text-xs uppercase text-slate-400">
+            <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-600">
               <tr>
                 <th className="px-4 py-2 font-medium">Category</th>
                 <th className="px-4 py-2 font-medium">Total Cases</th>
@@ -486,7 +486,7 @@ export function DistrictDashboard({
         <Card>
           <CardHeader title="Work Queue" description="Every finding awaiting your action, all categories" />
           <div className="divide-y divide-slate-100">
-            {workQueue.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-400">Nothing pending.</p>}
+            {workQueue.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-500">Nothing pending.</p>}
             {workQueue.map((f) => (
               <Link key={f.id} href={`/findings/${f.id}`} className="flex items-center justify-between px-4 py-2 text-sm hover:bg-slate-50">
                 <span className="font-mono text-xs text-blue-800">{f.reference}</span>
@@ -499,13 +499,13 @@ export function DistrictDashboard({
         <Card>
           <CardHeader title="Recent Activity" description="Submit, approve, return, and rectification events for this district" />
           <div className="divide-y divide-slate-100">
-            {recentActivity.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-400">No activity yet.</p>}
+            {recentActivity.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-500">No activity yet.</p>}
             {recentActivity.map((t) => (
               <div key={t.id} className="flex items-center justify-between px-4 py-2 text-sm">
                 <span className="text-slate-600">
                   <span className="font-medium text-slate-900">{t.userName}</span> {t.action.replaceAll("_", " ").toLowerCase()}
                 </span>
-                <span className="text-xs text-slate-400">{formatDateTime(t.createdAt)}</span>
+                <span className="text-xs text-slate-500">{formatDateTime(t.createdAt)}</span>
               </div>
             ))}
           </div>

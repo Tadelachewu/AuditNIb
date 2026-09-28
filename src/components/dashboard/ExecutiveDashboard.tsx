@@ -188,7 +188,7 @@ export function ExecutiveDashboard({
     <div className="flex flex-col gap-5">
       <div>
         <h1 className="text-lg font-semibold text-slate-900">Executive Dashboard</h1>
-        <p className="mt-1 text-sm text-slate-500">Bank-wide summary, view-only</p>
+        <p className="mt-1 text-sm text-slate-600">Bank-wide summary, view-only</p>
       </div>
 
       <FilterBar
@@ -251,7 +251,7 @@ export function ExecutiveDashboard({
           <Card>
             <CardHeader title="Top Districts" description={`At or above ${topPercent}%, current period`} />
             <div className="divide-y divide-slate-100">
-              {topDistricts.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-400">No data yet.</p>}
+              {topDistricts.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-500">No data yet.</p>}
               {topDistricts.map((row, i) => (
                 <div key={row.district.id} className="flex items-center justify-between px-4 py-2 text-sm">
                   <span className="flex items-center gap-2 text-slate-900">
@@ -267,7 +267,7 @@ export function ExecutiveDashboard({
           <Card>
             <CardHeader title="Bottom Districts" description={`At or below ${bottomPercent}%, current period`} />
             <div className="divide-y divide-slate-100">
-              {bottomDistricts.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-400">No data yet.</p>}
+              {bottomDistricts.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-500">No data yet.</p>}
               {bottomDistricts.map((row) => (
                 <div key={row.district.id} className="flex items-center justify-between px-4 py-2 text-sm">
                   <span className="flex items-center gap-2 text-slate-900">
@@ -283,7 +283,7 @@ export function ExecutiveDashboard({
       ) : (
         <Card>
           <CardHeader title="District Performance Comparison" />
-          <p className="p-4 text-sm text-slate-400">District ranking visibility is disabled by your administrator.</p>
+          <p className="p-4 text-sm text-slate-500">District ranking visibility is disabled by your administrator.</p>
         </Card>
       )}
 
@@ -292,7 +292,7 @@ export function ExecutiveDashboard({
           <Card>
             <CardHeader title="Top Branches" description={`At or above ${topPercent}%, current period`} />
             <div className="divide-y divide-slate-100">
-              {topBranches.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-400">No data yet.</p>}
+              {topBranches.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-500">No data yet.</p>}
               {topBranches.map((row, i) => (
                 <div key={row.branch.id} className="flex items-center justify-between px-4 py-2 text-sm">
                   <span className="flex items-center gap-2 text-slate-900">
@@ -308,7 +308,7 @@ export function ExecutiveDashboard({
           <Card>
             <CardHeader title="Bottom Branches" description={`At or below ${bottomPercent}%, current period`} />
             <div className="divide-y divide-slate-100">
-              {bottomBranches.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-400">No data yet.</p>}
+              {bottomBranches.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-500">No data yet.</p>}
               {bottomBranches.map((row) => (
                 <div key={row.branch.id} className="flex items-center justify-between px-4 py-2 text-sm">
                   <span className="flex items-center gap-2 text-slate-900">
@@ -324,7 +324,7 @@ export function ExecutiveDashboard({
       ) : (
         <Card>
           <CardHeader title="Branch Performance Comparison" />
-          <p className="p-4 text-sm text-slate-400">Branch ranking visibility is disabled by your administrator.</p>
+          <p className="p-4 text-sm text-slate-500">Branch ranking visibility is disabled by your administrator.</p>
         </Card>
       )}
 
@@ -358,7 +358,7 @@ export function ExecutiveDashboard({
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-100 text-xs uppercase text-slate-400">
+            <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-600">
               <tr>
                 <th className="px-4 py-2 font-medium">Source</th>
                 <th className="px-4 py-2 font-medium">Total Cases</th>

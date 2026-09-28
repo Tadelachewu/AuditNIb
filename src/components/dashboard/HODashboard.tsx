@@ -304,7 +304,7 @@ export function HODashboard({
     <div className="flex flex-col gap-5">
       <div>
         <h1 className="text-lg font-semibold text-slate-900">Head Office Dashboard</h1>
-        <p className="mt-1 text-sm text-slate-500">Bank-wide view across {db.districts.length} district(s)</p>
+        <p className="mt-1 text-sm text-slate-600">Bank-wide view across {db.districts.length} district(s)</p>
       </div>
 
       <FilterBar
@@ -366,7 +366,7 @@ export function HODashboard({
             description={`${pendingApprovalFindings.length} awaiting your review decision${isBankApprover ? " (HO review + bank approval)" : ""}`}
           />
           <div className="divide-y divide-slate-100">
-            {pendingApprovalFindings.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-400">Nothing pending.</p>}
+            {pendingApprovalFindings.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-500">Nothing pending.</p>}
             {pendingApprovalFindings
               .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
               .slice(0, 8)
@@ -385,7 +385,7 @@ export function HODashboard({
             description={`${pendingCloseFindings.length} district-verified, awaiting close`}
           />
           <div className="divide-y divide-slate-100">
-            {pendingCloseFindings.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-400">Nothing pending.</p>}
+            {pendingCloseFindings.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-500">Nothing pending.</p>}
             {pendingCloseFindings
               .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
               .slice(0, 8)
@@ -411,7 +411,7 @@ export function HODashboard({
           <Card>
             <CardHeader title="Top-Performing Districts" description={`Performance at or above ${topPercent}% this period, bank-wide`} />
             <div className="divide-y divide-slate-100">
-              {topDistricts.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-400">No performance data yet.</p>}
+              {topDistricts.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-500">No performance data yet.</p>}
               {topDistricts.map((row, i) => (
                 <Link
                   key={row.district.id}
@@ -431,7 +431,7 @@ export function HODashboard({
           <Card>
             <CardHeader title="Bottom-Performing Districts" description={`Performance at or below ${bottomPercent}% this period, bank-wide`} />
             <div className="divide-y divide-slate-100">
-              {bottomDistricts.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-400">No performance data yet.</p>}
+              {bottomDistricts.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-500">No performance data yet.</p>}
               {bottomDistricts.map((row) => (
                 <Link
                   key={row.district.id}
@@ -477,7 +477,7 @@ export function HODashboard({
       ) : (
         <Card>
           <CardHeader title="District Ranking" />
-          <p className="p-4 text-sm text-slate-400">District ranking visibility is disabled by your administrator.</p>
+          <p className="p-4 text-sm text-slate-500">District ranking visibility is disabled by your administrator.</p>
         </Card>
       )}
 
@@ -487,7 +487,7 @@ export function HODashboard({
             <Card>
               <CardHeader title="Top-Performing Branches" description={`Performance at or above ${topPercent}% this period, bank-wide`} />
               <div className="divide-y divide-slate-100">
-                {topBranches.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-400">No performance data yet.</p>}
+                {topBranches.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-500">No performance data yet.</p>}
                 {topBranches.map((row, i) => (
                   <Link
                     key={row.branch.id}
@@ -507,7 +507,7 @@ export function HODashboard({
             <Card>
               <CardHeader title="Bottom-Performing Branches" description={`Performance at or below ${bottomPercent}% this period, bank-wide`} />
               <div className="divide-y divide-slate-100">
-                {bottomBranches.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-400">No performance data yet.</p>}
+                {bottomBranches.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-500">No performance data yet.</p>}
                 {bottomBranches.map((row) => (
                   <Link
                     key={row.branch.id}
@@ -589,7 +589,7 @@ export function HODashboard({
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-100 text-xs uppercase text-slate-400">
+            <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-600">
               <tr>
                 <th className="px-4 py-2 font-medium">Source</th>
                 <th className="px-4 py-2 font-medium">Total Cases</th>
@@ -625,7 +625,7 @@ export function HODashboard({
         <CardHeader title="Category Totals" description="Every active classified case category, bank-wide, current period" />
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-100 text-xs uppercase text-slate-400">
+            <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-600">
               <tr>
                 <th className="px-4 py-2 font-medium">Category</th>
                 <th className="px-4 py-2 font-medium">Total Cases</th>
@@ -680,13 +680,13 @@ export function HODashboard({
         <Card>
           <CardHeader title="Recent Activity" description="Submit, approve, return, and rectification events bank-wide" />
           <div className="divide-y divide-slate-100">
-            {recentActivity.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-400">No activity yet.</p>}
+            {recentActivity.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-500">No activity yet.</p>}
             {recentActivity.map((t) => (
               <div key={t.id} className="flex items-center justify-between px-4 py-2 text-sm">
                 <span className="text-slate-600">
                   <span className="font-medium text-slate-900">{t.userName}</span> {t.action.replaceAll("_", " ").toLowerCase()}
                 </span>
-                <span className="text-xs text-slate-400">{formatDateTime(t.createdAt)}</span>
+                <span className="text-xs text-slate-500">{formatDateTime(t.createdAt)}</span>
               </div>
             ))}
           </div>

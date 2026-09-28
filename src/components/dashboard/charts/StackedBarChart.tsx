@@ -42,7 +42,7 @@ export function StackedBarChart({
       </div>
 
       {!hasData ? (
-        <p className="py-4 text-center text-sm text-slate-400">{emptyText}</p>
+        <p className="py-4 text-center text-sm text-slate-500">{emptyText}</p>
       ) : (
         <div className="flex flex-col gap-2.5">
           {rows.map((row) => {
