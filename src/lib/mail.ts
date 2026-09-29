@@ -1,4 +1,5 @@
 import nodemailer, { type Transporter } from "nodemailer";
+import { isEmailEnabled } from "@/lib/notificationEvents";
 import type { Database, Notification, NotificationSettings } from "@/types";
 
 /**
@@ -73,6 +74,10 @@ function notificationPath(notification: Notification): string {
  */
 export function sendNotificationEmail(db: Database, recipientUserId: string, notification: Notification): void {
   try {
+    // Admin → Settings → Email Events: this event switched off for email
+    // (the in-app notification was still created by the caller).
+    if (!isEmailEnabled(db.settings.notification.emailEvents, notification.type)) return;
+
     const recipient = db.users.find((u) => u.id === recipientUserId);
     if (!recipient?.email) return;
 

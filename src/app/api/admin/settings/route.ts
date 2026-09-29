@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { NOTIFICATION_EVENT_TYPES } from "@/lib/notificationEvents";
 import { z } from "zod";
 import { requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
@@ -23,6 +24,8 @@ const updateSchema = z.object({
     fromAddress: z.string(),
     smtpHost: z.string().optional(),
     smtpPort: z.number().int().optional(),
+    // Per-event email on/off (src/lib/notificationEvents.ts); keys checked below.
+    emailEvents: z.record(z.string(), z.boolean()).optional(),
   }),
   autoTransferOnLock: z.boolean(),
   rankingVisibility: z.object({
@@ -163,6 +166,11 @@ export async function PATCH(request: Request) {
     if (bad.length > 0) {
       return NextResponse.json({ error: `Template "${slug}" references unknown source ID(s): ${bad.join(", ")}` }, { status: 400 });
     }
+  }
+
+  const unknownEvents = Object.keys(parsed.data.notification.emailEvents ?? {}).filter((t) => !NOTIFICATION_EVENT_TYPES.includes(t));
+  if (unknownEvents.length > 0) {
+    return NextResponse.json({ error: `Unknown notification event(s): ${unknownEvents.join(", ")}` }, { status: 400 });
   }
 
   const updated = await updateDb((current) => {

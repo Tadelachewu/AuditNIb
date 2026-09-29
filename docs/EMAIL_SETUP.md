@@ -50,6 +50,10 @@ mail server can never block real work).
    reason inline. This is the concrete way to confirm delivery actually
    works, not just that the form saved.
 
+## Choosing which events are emailed
+
+Once delivery works, **Admin → Settings → Email Events** lets you switch email on or off per notification type (Submitted, Returned, Rectified, Period locked, Comment, …). A switched-off event still appears in the notification bell; only its email is skipped. All events are on by default. See [email-events.md](email-events.md).
+
 ## Worked examples
 
 ### A bank/corporate SMTP relay (typical for production)

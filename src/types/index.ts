@@ -244,6 +244,11 @@ export interface NotificationSettings {
   fromAddress: string;
   smtpHost?: string;
   smtpPort?: number;
+  // Which notification types are also emailed, keyed by notification type
+  // (catalog: src/lib/notificationEvents.ts). Only `false` switches one off;
+  // absent = emailed, so installs that never set this keep emailing every
+  // event. The in-app bell notification is sent regardless.
+  emailEvents?: Partial<Record<string, boolean>>;
 }
 
 // The candidate fields the Register Finding form's duplicate-suggestion

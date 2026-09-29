@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { StickyActions } from "@/components/ui/StickyActions";
 import { Input, Select, Label } from "@/components/ui/Field";
 import { SettingsListEditor } from "@/components/admin/SettingsListEditor";
+import { EmailEventsEditor } from "@/components/admin/EmailEventsEditor";
 import { REPORT_TEMPLATES } from "@/lib/reportTemplateMeta";
 import { SIMILAR_FINDING_FIELDS, REQUIRABLE_FINDING_FIELDS, OTHER_VALUE_ALLOWED_FIELDS } from "@/types";
 import { usePermissions } from "@/lib/permissions/PermissionsContext";
@@ -234,6 +235,17 @@ export default function SettingsPage() {
           )}
         </div>
         )}
+      </CollapsibleCard>
+
+      <CollapsibleCard disabled={!canEdit}
+        className="xl:col-span-2"
+        title="Email Events"
+        description="Choose which notifications are also sent by email. The in-app bell always gets every notification."
+      >
+        <EmailEventsEditor
+          notification={settings.notification}
+          onChange={(emailEvents) => setSettings({ ...settings, notification: { ...settings.notification, emailEvents } })}
+        />
       </CollapsibleCard>
 
       <CollapsibleCard disabled={!canEdit}

@@ -201,6 +201,7 @@ column contains.
 | 21 | Rectified Amount | Status-conditional | N/A (number) | **No — import-only** |
 | 22 | Transferred To Period Code | Status-conditional | Yes | **No — import-only** |
 | 23 | External Reference | Never | N/A (free text) | **No — import-only** |
+| 24 | Root Cause | **Admin setting** | N/A (free text) | Yes — Root cause (added last so existing columns keep their positions; older templates without it still import unless Root cause is set to required) |
 
 **Not present on the import template at all**: `Root Cause` — despite being one of the admin-configurable
 `REQUIRABLE_FINDING_FIELDS`, there is no import column for it whatsoever (`import.ts:100-102`, a gap the

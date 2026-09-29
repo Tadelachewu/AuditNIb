@@ -20,8 +20,8 @@ import type { District } from "@/types";
 type DistrictRow = District & { controllerNames: string[]; directorNames: string[] };
 
 /** Comma-joined names, or a literal "--" when nobody is assigned. */
-function namesOrDash(names: string[]) {
-  return names.length > 0 ? names.join(", ") : "--";
+function namesOrDash(names: string[] | undefined) {
+  return names && names.length > 0 ? names.join(", ") : "--";
 }
 
 export default function DistrictsPage() {

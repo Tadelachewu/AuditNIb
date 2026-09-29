@@ -1,10 +1,13 @@
 import { v4 as uuid } from "uuid";
 import { permissionKey } from "@/lib/permissions/registry";
 import { sendNotificationEmail } from "@/lib/mail";
+import type { NotificationEventType } from "@/lib/notificationEvents";
 import type { Database } from "@/types";
 
 export interface NotifyOptions {
-  type: string;
+  // Must be in the email-events catalog (src/lib/notificationEvents.ts),
+  // so every type can be switched on/off for email in Settings.
+  type: NotificationEventType;
   title: string;
   message: string;
   entityType: string;

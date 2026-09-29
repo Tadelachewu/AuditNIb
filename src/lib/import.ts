@@ -81,6 +81,10 @@ const IMPORT_COLUMNS = [
     required: false,
   },
   { key: "externalReference", header: "External Reference (optional)", required: false },
+  // Last, not beside Recommendation, so every existing column keeps its
+  // position; columns are matched by header, so older templates without
+  // it still import (as long as Root cause isn't set to required).
+  { key: "rootCause", header: "Root Cause", required: false },
 ] as const;
 
 type ImportColumnKey = (typeof IMPORT_COLUMNS)[number]["key"];
@@ -97,9 +101,6 @@ type ImportColumnKey = (typeof IMPORT_COLUMNS)[number]["key"];
 // branchCode, periodCode, amount, caseCount, externalReference) keeps its
 // own static `required` flag above - none of the five hard-required
 // fields are configurable, and externalReference is always optional.
-// rootCause has no import column at all (a pre-existing gap, not
-// introduced here), so a required/optional toggle for it has nothing to
-// affect on this path.
 const IMPORT_COLUMN_REQUIRABLE_KEY: Partial<Record<ImportColumnKey, RequirableFindingField>> = {
   title: "title",
   sourceCode: "sourceId",
@@ -114,6 +115,7 @@ const IMPORT_COLUMN_REQUIRABLE_KEY: Partial<Record<ImportColumnKey, RequirableFi
   description: "description",
   recommendation: "recommendation",
   evidenceNote: "evidenceNote",
+  rootCause: "rootCause",
 };
 
 // Whether this column is currently required - Settings.requiredFindingFields
@@ -619,6 +621,7 @@ export function validateImportRow(
     priority: (row.priority ?? "").trim(),
     description: (row.description ?? "").trim(),
     recommendation: row.recommendation?.trim() || undefined,
+    rootCause: row.rootCause?.trim() || undefined,
     evidenceNote: row.evidenceNote?.trim() || undefined,
     externalReference: row.externalReference?.trim() || undefined,
     importBatchId: opts.importBatchId,

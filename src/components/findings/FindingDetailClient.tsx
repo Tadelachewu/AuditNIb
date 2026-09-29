@@ -574,6 +574,22 @@ export function FindingDetailClient({
               <dd className="text-slate-900">{finding.findingDate}</dd>
             </div>
             <div>
+              <dt className="text-xs text-slate-500">Case age</dt>
+              <dd className="text-slate-900">
+                {caseAgeDays} day{caseAgeDays === 1 ? "" : "s"}
+              </dd>
+            </div>
+            {/* Imported findings only: the source system's own id for it
+                (Excel import's "External Reference" column). */}
+            {(finding.importBatchId || finding.externalReference) && (
+              <div>
+                <dt className="text-xs text-slate-500">External reference</dt>
+                <dd className={finding.externalReference ? "font-mono text-slate-900" : "italic text-slate-500"}>
+                  {finding.externalReference || "Not provided"}
+                </dd>
+              </div>
+            )}
+            <div>
               <dt className="text-xs text-slate-500">Risk level</dt>
               <dd className="text-slate-900">{finding.riskLevel}</dd>
             </div>
@@ -625,24 +641,20 @@ export function FindingDetailClient({
               <dt className="text-xs text-slate-500">Description</dt>
               <dd className="text-slate-900">{finding.description}</dd>
             </div>
-            {finding.rootCause && (
-              <div className="sm:col-span-2">
-                <dt className="text-xs text-slate-500">Root cause</dt>
-                <dd className="text-slate-900">{finding.rootCause}</dd>
+            {/* Always shown (optional fields) - "Not provided" rather than
+                a missing row, so a blank field reads as blank, not as lost. */}
+            {(
+              [
+                ["Root cause", finding.rootCause],
+                ["Recommendation", finding.recommendation],
+                ["Evidence note", finding.evidenceNote],
+              ] as const
+            ).map(([label, value]) => (
+              <div key={label} className="sm:col-span-2">
+                <dt className="text-xs text-slate-500">{label}</dt>
+                <dd className={value ? "whitespace-pre-wrap text-slate-900" : "italic text-slate-500"}>{value || "Not provided"}</dd>
               </div>
-            )}
-            {finding.recommendation && (
-              <div className="sm:col-span-2">
-                <dt className="text-xs text-slate-500">Recommendation</dt>
-                <dd className="text-slate-900">{finding.recommendation}</dd>
-              </div>
-            )}
-            {finding.evidenceNote && (
-              <div className="sm:col-span-2">
-                <dt className="text-xs text-slate-500">Evidence note</dt>
-                <dd className="text-slate-900">{finding.evidenceNote}</dd>
-              </div>
-            )}
+            ))}
           </dl>
         )}
       </Card>

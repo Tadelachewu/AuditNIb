@@ -511,3 +511,7 @@ Each `ImportBatchRow` in the response is `{ rowNumber, outcome, error?, duplicat
 | Rectified full balance on TRANSFERRED | `"Rectified cases and amount can't equal the full finding — nothing would be outstanding …"` | 3a |
 | Dimensions exhausted on only one axis | two case/amount parity messages | 3b |
 | Duplicate | outcome: `duplicate` (not an error) | dedupe key section |
+
+### I24. `Root Cause` (rootCause) — requirable
+
+Free text, same rule as Recommendation / Evidence Note: checked for presence only when **Settings → Required Fields → Root cause** is on. It is the template's last column; columns are matched by header, so a template downloaded before this column existed still imports, unless Root cause is set to required (then every row fails with *Missing required value(s): Root Cause*; download a fresh template).

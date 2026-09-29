@@ -143,7 +143,10 @@ export function AdminTable<T extends MRT_RowData>({
       },
     },
     enableColumnResizing: false,
-    enableFacetedValues: true,
+    // Not while loading: MRT fills the skeleton with empty placeholder rows,
+    // and computing filter dropdown values runs every accessorFn on them
+    // (a column reading `row.names.length` would crash the whole page).
+    enableFacetedValues: !isLoading,
     enableStickyHeader: false,
     enableDensityToggle: true,
     enableFullScreenToggle: true,

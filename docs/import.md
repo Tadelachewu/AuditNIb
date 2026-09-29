@@ -69,6 +69,7 @@ The literal header text shown in a downloaded file also changes: for a config-dr
 | 21 | Rectified Amount (optional…) | Status-conditional — only read when Status = `TRANSFERRED` | Number | `0 <= n <= amount`; must "complete together" with Rectified Cases (see §4) |
 | 22 | Transferred To Period Code (required only if Status is TRANSFERRED) | **Required iff Status = TRANSFERRED** | Period code, e.g. `2026-10` | Must exist, must differ from column 3, and its status must be `OPEN` |
 | 23 | External Reference (optional) | Always optional | Free text | Never validated or used for matching/numbering — purely informational |
+| 24 | Root Cause | Admin setting (`requiredFindingFields.rootCause`) | Free text | Presence only when required. Added as the last column; files are matched by header, so older templates without it still import unless Root cause is required |
 
 Row/column source: `IMPORT_COLUMNS` (`src/lib/import.ts:44-84`), condensed further in the in-app guide table (`src/components/findings/ImportGuide.tsx:17-76`).
 

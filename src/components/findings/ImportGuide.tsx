@@ -48,8 +48,8 @@ const COLUMNS: {
   { n: 14, name: "Risk Level", req: "config", format: "Low / Medium / High / Critical" },
   { n: 15, name: "Priority", req: "config", format: "Low / Medium / High / Urgent" },
   { n: 16, name: "Description", req: "config", format: "Free text" },
-  { n: 17, name: "Recommendation", req: "opt", format: "Free text" },
-  { n: 18, name: "Evidence Note", req: "opt", format: "Free text", note: "A note only - no file attachment via import." },
+  { n: 17, name: "Recommendation", req: "config", format: "Free text" },
+  { n: 18, name: "Evidence Note", req: "config", format: "Free text", note: "A note only - no file attachment via import." },
   {
     n: 19,
     name: "Status",
@@ -73,6 +73,7 @@ const COLUMNS: {
     note: "The period it moved into. Must be open, and later than Reporting Period Code.",
   },
   { n: 23, name: "External Reference", req: "opt", format: "Your own legacy file/ledger number", note: "Purely informational - never used for matching or numbering." },
+  { n: 24, name: "Root Cause", req: "config", format: "Free text", note: "Why it happened (the form's Root cause field)." },
 ];
 
 const REQ_LABEL: Record<(typeof COLUMNS)[number]["req"], { label: string; tone: "red" | "amber" | "blue" | "gray" }> = {

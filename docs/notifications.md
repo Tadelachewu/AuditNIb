@@ -1,6 +1,6 @@
 # Notifications: Who Receives What
 
-Every notification appears in the **bell** in the top bar. It is also **emailed** to the recipient when email delivery is configured (Admin → Settings → Notification Delivery, see [EMAIL_SETUP.md](EMAIL_SETUP.md)) and the user has an email address.
+Every notification appears in the **bell** in the top bar. It is also **emailed** to the recipient when email delivery is configured (Admin → Settings → Notification Delivery, see [EMAIL_SETUP.md](EMAIL_SETUP.md)) and the user has an email address, **and** that event is switched on for email in Admin → Settings → **Email Events** (all are on by default; see [email-events.md](email-events.md)).
 
 This page lists which notification each role receives, and why.
 
