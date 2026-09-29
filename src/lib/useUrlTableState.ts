@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { ALL_ROWS } from "@/lib/pagination";
 import type { MRT_TableOptions, MRT_RowData, MRT_Updater, MRT_PaginationState, MRT_SortingState } from "material-react-table";
 
 /**
@@ -60,7 +61,7 @@ export function useUrlTableState<T extends MRT_RowData>({
       const next = typeof updater === "function" ? updater(current) : updater;
       setParams({
         page: next.pageSize !== current.pageSize || next.pageIndex === 0 ? null : String(next.pageIndex + 1),
-        pageSize: next.pageSize === defaultPageSize ? null : String(next.pageSize),
+        pageSize: next.pageSize === defaultPageSize ? null : next.pageSize === ALL_ROWS ? "all" : String(next.pageSize),
       });
     },
     onSortingChange: (updater: MRT_Updater<MRT_SortingState>) => {
@@ -70,9 +71,12 @@ export function useUrlTableState<T extends MRT_RowData>({
     },
   };
 
-  /** Download every matching row via a server CSV endpoint, with the current URL filters. */
-  function exportFrom(endpoint: string) {
-    const qs = new URLSearchParams(searchParams.toString());
+  /**
+   * Download via a server CSV endpoint: "shown" = every row matching the
+   * current URL filters / search / sort; "all" = the whole list (no filters).
+   */
+  function exportFrom(endpoint: string, scope: "shown" | "all" = "shown") {
+    const qs = scope === "all" ? new URLSearchParams() : new URLSearchParams(searchParams.toString());
     qs.delete("page");
     qs.delete("pageSize");
     const a = document.createElement("a");

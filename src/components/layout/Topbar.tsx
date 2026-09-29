@@ -5,7 +5,7 @@ import { UserMenu } from "@/components/layout/UserMenu";
 
 export function Topbar({ user }: { user: SessionData }) {
   return (
-    <header className="sticky top-0 z-20 flex items-center justify-between border-b border-chrome-border bg-chrome-bg px-6 py-3">
+    <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-chrome-border bg-chrome-bg px-6">
       <div />
       <div className="flex items-center gap-3">
         <ThemeToggle />

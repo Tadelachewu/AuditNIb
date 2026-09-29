@@ -1,5 +1,11 @@
 export const DEFAULT_PAGE_SIZE = 25;
 
+/**
+ * The "All" choice in a table's rows-per-page menu (and `pageSize=all` in a
+ * list's URL): one page big enough for every row.
+ */
+export const ALL_ROWS = 100_000;
+
 /** Parses a page number from a query-string value, defaulting to 1 for anything absent, non-numeric, or out of range. */
 export function parsePage(value: string | number | undefined): number {
   const n = typeof value === "number" ? value : value ? parseInt(value, 10) : 1;

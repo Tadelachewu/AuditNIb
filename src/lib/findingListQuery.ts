@@ -1,4 +1,5 @@
 import type { Finding } from "@/types";
+import { ALL_ROWS } from "@/lib/pagination";
 
 /**
  * Text search + column sort for the Findings list (src/app/(app)/findings)
@@ -87,8 +88,9 @@ export function sortFindings<T extends { finding: Finding; amount?: number }>(
   });
 }
 
-/** Allowed page sizes for the Findings list. */
+/** Allowed page sizes for the Findings list ("all" = every row on one page). */
 export function parsePageSize(v: string | null | undefined): number {
+  if (v === "all") return ALL_ROWS;
   const n = Number(v);
   return [10, 25, 50, 100].includes(n) ? n : 25;
 }

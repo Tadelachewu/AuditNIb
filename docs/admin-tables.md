@@ -14,10 +14,11 @@ Every list in the Administration area, plus the Findings list, the dashboards' r
 | **Show/hide columns** | The columns icon in the toolbar. |
 | **Density** | Compact, normal or comfortable rows. |
 | **Full screen** | The expand icon. |
-| **Paging** | 10 / 25 / 50 / 100 per page, with first/last buttons. The page bar stays pinned to the bottom of the screen while you scroll. |
+| **Paging** | 10 / 25 / 50 / 100 / **All** per page, with first/last buttons. **All** shows every row on one page (on the Findings list it is saved in the address as `pageSize=all`). On very large lists All can take a moment to load. The page bar stays pinned to the bottom of the screen while you scroll. |
 | **Row actions** | The **Actions ▾** menu in the last column (Edit, Activate/Deactivate, Delete, …), unchanged. |
 | **Loading** | Skeleton rows while data loads. |
-| **Export CSV** | Exports **exactly what you see**: search, filters and sort applied, **all pages** (not only the current one), visible columns only. Opens correctly in Excel, including Amharic text. |
+| **Export CSV** | A menu with two choices. **Rows shown** exports what you see: search, filters and sort applied, **all pages** (not only the current one). **Full table** exports every row, ignoring search and filters; on the Findings list and Findings Report that means every finding you have access to. Both export visible columns only and open correctly in Excel, including Amharic text. |
+| **Bulk actions** | When rows are ticked (Findings, Uncovered Branches), the bulk-action bar sticks just under the top bar while you scroll, so the actions are always in reach. |
 | **Import CSV** | On the reference-data lists (§4). |
 | **Print** | Toolbars and page bars are left out of printouts and Print-to-PDF; only the rows print. |
 

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requirePermission } from "@/lib/guard";
 import { readDb } from "@/lib/db";
-import { paginate, parsePage } from "@/lib/pagination";
+import { ALL_ROWS, paginate, parsePage } from "@/lib/pagination";
 import { verifyAuditLogChain } from "@/lib/audit";
 import { toCsv } from "@/lib/csv";
 import type { AuditLogEntry } from "@/types";
@@ -21,7 +21,7 @@ function seqCompare(a: string, b: string): number {
  *   actor      - text match on the actor's name
  *   from, to   - ISO dates (inclusive), by entry timestamp
  *   sort       - "asc" | "desc" (by sequence = time order; default desc)
- *   page, pageSize (max 200)
+ *   page, pageSize (max ALL_ROWS - the "All" choice)
  *   format=csv - every matching entry (not just one page) as a CSV file
  */
 export async function GET(request: Request) {
@@ -72,7 +72,8 @@ export async function GET(request: Request) {
     });
   }
 
-  const pageSize = Math.min(200, Math.max(1, Number(sp.get("pageSize")) || 50));
+  // Up to ALL_ROWS: the table's "All" rows-per-page choice.
+  const pageSize = Math.min(ALL_ROWS, Math.max(1, Number(sp.get("pageSize")) || 50));
   const result = paginate(filtered, parsePage(sp.get("page") ?? undefined), pageSize);
   const chain = verifyAuditLogChain(db.auditLogs);
   return NextResponse.json({

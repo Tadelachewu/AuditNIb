@@ -111,7 +111,7 @@ export function ReportFindingsGrid({
       columns={columns}
       data={rows}
       getRowId={(r) => r.id}
-      onExport={() => url.exportFrom("/api/findings/export")}
+      onExport={(scope) => url.exportFrom("/api/findings/export", scope)}
       emptyText="No findings match these filters."
       tableOptions={{
         ...url.tableOptions,

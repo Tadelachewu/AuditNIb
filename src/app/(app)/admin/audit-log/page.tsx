@@ -6,7 +6,7 @@ import { apiGet } from "@/lib/api-client";
 import { formatDateTime } from "@/lib/format";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
-import { AdminTable } from "@/components/ui/AdminTable";
+import { AdminTable, PAGE_SIZE_OPTIONS, type ExportScope } from "@/components/ui/AdminTable";
 import type { AuditLogEntry } from "@/types";
 
 interface AuditResponse {
@@ -97,8 +97,9 @@ export default function AuditLogPage() {
 
   const chain = data ? { valid: data.chainValid, brokenAtSequence: data.chainBrokenAtSequence } : null;
 
-  function exportAll() {
-    const qs = new URLSearchParams(query);
+  // "shown" = every entry matching the search / filters; "all" = the whole log.
+  function exportAll(scope: ExportScope) {
+    const qs = scope === "all" ? new URLSearchParams() : new URLSearchParams(query);
     qs.delete("page");
     qs.delete("pageSize");
     qs.set("format", "csv");
@@ -149,7 +150,7 @@ export default function AuditLogPage() {
             onSortingChange: setSorting,
             state: { pagination, globalFilter, columnFilters, sorting, isLoading: loading && !data, showProgressBars: loading && !!data },
             initialState: { density: "compact", showGlobalFilter: true },
-            muiPaginationProps: { rowsPerPageOptions: [25, 50, 100, 200], showFirstButton: true, showLastButton: true },
+            muiPaginationProps: { rowsPerPageOptions: PAGE_SIZE_OPTIONS, showFirstButton: true, showLastButton: true },
           }}
         />
       </Card>

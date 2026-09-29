@@ -1,6 +1,9 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
+import Menu from "@mui/material/Menu";
+import MenuItem from "@mui/material/MenuItem";
+import ListItemText from "@mui/material/ListItemText";
 import {
   MaterialReactTable,
   useMaterialReactTable,
@@ -9,8 +12,18 @@ import {
   type MRT_TableInstance,
   type MRT_TableOptions,
 } from "material-react-table";
-import { Download } from "lucide-react";
+import { ChevronDown, Download } from "lucide-react";
 import { toCsv, downloadCsv, datedFileName, type CsvColumn } from "@/lib/csv";
+import { ALL_ROWS } from "@/lib/pagination";
+
+/** Rows-per-page menu of every table: 10 / 25 / 50 / 100 / All. */
+export const PAGE_SIZE_OPTIONS = [...[10, 25, 50, 100].map((n) => ({ label: String(n), value: n })), { label: "All", value: ALL_ROWS }];
+
+/**
+ * What Export CSV downloads: "shown" = the rows the search / filters leave
+ * (sorted, every page); "all" = the whole table, ignoring search and filters.
+ */
+export type ExportScope = "shown" | "all";
 
 /**
  * Every admin list table: Material React Table (material-react-table.com)
@@ -18,8 +31,9 @@ import { toCsv, downloadCsv, datedFileName, type CsvColumn } from "@/lib/csv";
  *   global search + per-column filters, click-to-sort headers, show/hide
  *   columns, density, full screen, 25/page pagination (pinned to the
  *   bottom of the screen while scrolling), skeleton rows while loading,
- *   the row "Actions" menu in the last column, and Export CSV of exactly
- *   what's shown (search + filters + sort applied, all pages).
+ *   the row "Actions" menu in the last column, an "All" rows-per-page
+ *   choice, and an Export CSV menu: the rows shown (search + filters +
+ *   sort applied, all pages) or the full table.
  *
  * Columns: `accessorFn`/`accessorKey` should return the plain value used
  * for sorting, filtering and export; `Cell` can render anything richer.
@@ -29,7 +43,7 @@ import { toCsv, downloadCsv, datedFileName, type CsvColumn } from "@/lib/csv";
 
 type ExportMeta<T> = { exportValue?: (row: T) => string | number | boolean | null | undefined };
 
-function exportRows<T extends MRT_RowData>(table: MRT_TableInstance<T>, fileBase: string) {
+function exportRows<T extends MRT_RowData>(table: MRT_TableInstance<T>, fileBase: string, scope: ExportScope) {
   const columns = table
     .getVisibleLeafColumns()
     // Data columns only (not the actions/select display columns).
@@ -45,8 +59,45 @@ function exportRows<T extends MRT_RowData>(table: MRT_TableInstance<T>, fileBase
       },
     };
   });
-  const rows = table.getPrePaginationRowModel().rows;
-  downloadCsv(datedFileName(fileBase), toCsv(rows, csvColumns));
+  const rows = scope === "all" ? table.getCoreRowModel().rows : table.getPrePaginationRowModel().rows;
+  downloadCsv(datedFileName(scope === "all" ? `${fileBase}-all` : fileBase), toCsv(rows, csvColumns));
+}
+
+/** The toolbar's Export CSV button and its "rows shown / full table" menu. */
+function ExportMenu<T extends MRT_RowData>({ table, onPick }: { table: MRT_TableInstance<T>; onPick: (scope: ExportScope) => void }) {
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+  const server = Boolean(table.options.manualPagination);
+  const shown = server ? table.getRowCount() : table.getPrePaginationRowModel().rows.length;
+  const all = server ? null : table.getCoreRowModel().rows.length;
+  function pick(scope: ExportScope) {
+    setAnchor(null);
+    onPick(scope);
+  }
+  return (
+    <>
+      <button
+        type="button"
+        onClick={(e) => setAnchor(e.currentTarget)}
+        aria-haspopup="menu"
+        className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+      >
+        <Download className="h-4 w-4" />
+        Export CSV
+        <ChevronDown className="h-3.5 w-3.5" />
+      </button>
+      <Menu anchorEl={anchor} open={Boolean(anchor)} onClose={() => setAnchor(null)}>
+        <MenuItem onClick={() => pick("shown")}>
+          <ListItemText primary={`Rows shown (${shown.toLocaleString()})`} secondary="Search, filters and sort applied - all pages" />
+        </MenuItem>
+        <MenuItem onClick={() => pick("all")}>
+          <ListItemText
+            primary={all === null ? "Full table" : `Full table (${all.toLocaleString()})`}
+            secondary="Every row, ignoring search and filters"
+          />
+        </MenuItem>
+      </Menu>
+    </>
+  );
 }
 
 export function AdminTable<T extends MRT_RowData>({
@@ -67,7 +118,7 @@ export function AdminTable<T extends MRT_RowData>({
   /** Enables "Export CSV" (client-side, of the current filtered + sorted rows). */
   exportFileName?: string;
   /** Replaces the client-side export (e.g. a server export for server-paged data). */
-  onExport?: () => void;
+  onExport?: (scope: ExportScope) => void;
   /** Extra buttons at the top-left of the toolbar (e.g. Import CSV). */
   toolbarActions?: ReactNode;
   renderRowActions?: (row: T) => ReactNode;
@@ -106,7 +157,7 @@ export function AdminTable<T extends MRT_RowData>({
       pagination: { pageIndex: 0, pageSize: 25 },
     },
     state: { isLoading, showSkeletons: isLoading },
-    muiPaginationProps: { rowsPerPageOptions: [10, 25, 50, 100], showFirstButton: true, showLastButton: true },
+    muiPaginationProps: { rowsPerPageOptions: PAGE_SIZE_OPTIONS, showFirstButton: true, showLastButton: true },
     muiSearchTextFieldProps: { placeholder: "Search all columns", size: "small", variant: "outlined" },
     muiTablePaperProps: { elevation: 0, sx: { borderRadius: 0, overflow: "visible", backgroundColor: "transparent" } },
     muiTableHeadCellProps: {
@@ -128,15 +179,7 @@ export function AdminTable<T extends MRT_RowData>({
         <div className="flex flex-wrap items-center gap-2">
           {toolbarActions}
           {(exportFileName || onExport) && (
-            <button
-              type="button"
-              onClick={() => (onExport ? onExport() : exportRows(t, exportFileName!))}
-              title="Export the rows currently shown (search, filters and sort applied, all pages) as CSV"
-              className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
-            >
-              <Download className="h-4 w-4" />
-              Export CSV
-            </button>
+            <ExportMenu table={t} onPick={(scope) => (onExport ? onExport(scope) : exportRows(t, exportFileName!, scope))} />
           )}
         </div>
       ) : null,

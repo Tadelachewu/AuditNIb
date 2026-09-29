@@ -83,7 +83,7 @@ export function UncoveredBranchesTable({ rows, periodId, reasons }: { rows: Row[
   return (
     <>
       {selected.length > 0 && (
-        <div className="no-print mx-4 mb-3 mt-4 flex flex-wrap items-start gap-3 rounded-md border border-blue-200 bg-blue-50 p-3">
+        <div className="no-print sticky top-16 z-10 mx-4 mb-3 mt-4 flex flex-wrap items-start gap-3 rounded-md border border-blue-200 bg-blue-50 p-3 shadow-sm">
           <span className="mt-2 text-sm font-medium text-slate-700">{selected.length} branch(es) selected</span>
           <ReasonPicker
             reasons={reasons}

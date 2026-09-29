@@ -330,7 +330,9 @@ export function FindingsTable({
         </div>
       )}
       {canBulkAct && selectedRows.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 bg-blue-50/50 px-4 py-2.5">
+        // Sticks just under the top bar (h-16) while the list scrolls, so the
+        // actions stay in reach however far down the selection goes.
+        <div className="no-print sticky top-16 z-10 flex flex-wrap items-center gap-2 border-b border-blue-200 bg-blue-50 px-4 py-2.5 shadow-sm">
           <span className="text-xs font-medium text-slate-600">{selectedRows.length} selected</span>
           {actionKinds.length === 0 ? (
             <span className="text-xs text-slate-500">No bulk actions apply to this selection.</span>
@@ -350,7 +352,7 @@ export function FindingsTable({
         columns={columns}
         data={rows}
         getRowId={(f) => f.id}
-        onExport={() => url.exportFrom("/api/findings/export")}
+        onExport={(scope) => url.exportFrom("/api/findings/export", scope)}
         emptyText={emptyText}
         tableOptions={{
           ...url.tableOptions,
