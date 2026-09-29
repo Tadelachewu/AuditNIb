@@ -1,15 +1,12 @@
-"use client";
+import { LoginClient, type DemoUser } from "@/components/auth/LoginClient";
 
-import { useState } from "react";
-import Image from "next/image";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { apiSend, ApiError } from "@/lib/api-client";
-import { Button } from "@/components/ui/Button";
-import { Input, Label } from "@/components/ui/Field";
-import { AuthBackdrop, AUTH_PANEL_CLASS } from "@/components/auth/AuthBackdrop";
-
-const DEMO_USERS = [
+// The seeded demo accounts (prisma/seedData.ts) - listed on the sign-in
+// page ONLY on a server explicitly marked APP_ENV=development. Anywhere
+// else this is null, so the credentials never reach the browser - not in
+// the page, not in its JavaScript. Seeded accounts on a non-development
+// database must change these passwords at first login anyway (seedData.ts).
+// See docs/PRODUCTION.md.
+const DEMO_USERS: DemoUser[] = [
   { role: "Administrator", username: "admin", password: "Admin@123" },
   { role: "HO Internal Controller", username: "ho.controller", password: "Ho@12345" },
   { role: "District Internal Controller", username: "district.controller", password: "District@123" },
@@ -19,100 +16,11 @@ const DEMO_USERS = [
   { role: "Executive (Read-only)", username: "executive", password: "Executive@123" },
 ];
 
+// Read per request (not at build time), so a built app follows the
+// server's .env - the same switch as the /dev-reset tool.
+export const dynamic = "force-dynamic";
+
 export default function LoginPage() {
-  const router = useRouter();
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [showDemo, setShowDemo] = useState(false);
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-    setLoading(true);
-    try {
-      await apiSend("/api/auth/login", "POST", { username, password });
-      router.push("/dashboard");
-      router.refresh();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Something went wrong. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  return (
-    <AuthBackdrop>
-      <div className={AUTH_PANEL_CLASS}>
-        <div className="mb-6 flex flex-col items-center text-center">
-          <Image src="/Nib_International_Bank.png" alt="NIB International Bank" width={64} height={64} className="mb-3" priority />
-          <h1 className="text-xl font-bold text-brand-ink">NIB Control360</h1>
-          <p className="text-sm font-medium text-brand-ink">Internal Control Findings Management System</p>
-        </div>
-
-        <form onSubmit={handleSubmit}>
-          <div className="mb-4">
-            <Label htmlFor="username" brand>Username</Label>
-            <Input
-              id="username"
-              autoFocus
-              autoComplete="username"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              required
-            />
-          </div>
-          <div className="mb-4">
-            <Label htmlFor="password" brand>Password</Label>
-            <Input
-              id="password"
-              type="password"
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
-            <div className="mt-1.5 text-right">
-              <Link
-                href="/forgot-password"
-                className="text-xs font-medium text-brand-ink hover:underline"
-              >
-                Forgot password?
-              </Link>
-            </div>
-          </div>
-
-          {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
-
-          <Button type="submit" disabled={loading} className="w-full">
-            {loading ? "Signing in..." : "Sign in"}
-          </Button>
-        </form>
-
-        <div className="mt-4 rounded-lg border border-slate-200 bg-white">
-          <button
-            type="button"
-            onClick={() => setShowDemo((v) => !v)}
-            className="flex w-full items-center justify-between px-4 py-2.5 text-left text-xs font-medium text-brand-ink"
-          >
-            Demo accounts (one per role)
-            <span>{showDemo ? "−" : "+"}</span>
-          </button>
-          {showDemo && (
-            <div className="max-h-56 overflow-y-auto border-t border-slate-100 px-4 py-2 text-xs">
-              {DEMO_USERS.map((u) => (
-                <div key={u.username} className="flex items-center justify-between gap-2 py-1.5">
-                  <span className="text-brand-ink/80">{u.role}</span>
-                  <span className="whitespace-nowrap font-mono text-brand-ink">
-                    {u.username} / {u.password}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-    </AuthBackdrop>
-  );
+  const isDevelopment = (process.env.APP_ENV ?? "").trim().toLowerCase() === "development";
+  return <LoginClient demoUsers={isDevelopment ? DEMO_USERS : null} />;
 }

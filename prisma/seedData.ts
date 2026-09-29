@@ -579,6 +579,18 @@ export function buildSeedDatabase(): Database {
     },
   ];
 
+  // The seed passwords above are fixed and published (README, and the
+  // login page's demo panel in development) - fine for a dev/demo database,
+  // never acceptable on a real one. Unless this is explicitly a development
+  // environment (APP_ENV=development, see docs/reset-data.md), every seeded
+  // account must set its own password at first login before it can reach
+  // anything but its Profile page (src/proxy.ts). No passwordExpiresAt:
+  // an install may sit unused for days after seeding, and the user still
+  // needs to be able to sign in once to change it. See docs/PRODUCTION.md.
+  if ((process.env.APP_ENV ?? "").trim().toLowerCase() !== "development") {
+    for (const u of users) u.mustChangePassword = true;
+  }
+
   return {
     users,
     roles,

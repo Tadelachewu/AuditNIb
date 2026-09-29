@@ -17,6 +17,7 @@ It depends on **one setting only: `APP_ENV`** in the server's `.env`. It does **
 | **not set / empty** | ❌ disabled | ❌ disabled |
 | anything else (`dev`, `staging`, `test`, …) | ❌ disabled | ❌ disabled |
 
+- **The same switch hides the login page's "Demo accounts" panel.** Demo credentials are shown, and sent to the browser, only when `APP_ENV=development`. On production, seeding also marks every seeded account "must change password" ([PRODUCTION.md §5](PRODUCTION.md)).
 - **Only the exact word `development` turns it on.** Upper/lower case and surrounding spaces don't matter.
 - **Unset means off,** so a newly installed server can't be wiped by accident. You have to opt in deliberately.
 - **`NODE_ENV` has no effect.** Next.js sets it on its own (`development` under `npm run dev`, `production` for any build), so it says nothing about whether a server's data is disposable. It used to control this tool, which meant a built UAT server could never reset and any dev server always could.

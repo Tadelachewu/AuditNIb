@@ -106,6 +106,8 @@ HOST=0.0.0.0     # optional: bind address (0.0.0.0 = reachable from the network)
 ```
 
 A `PORT` set in the real environment (e.g. `PORT=8080 npm start`) wins over `.env`.
+
+**Running on a real server?** Follow [docs/PRODUCTION.md](docs/PRODUCTION.md): a built app behind HTTPS, fresh secrets, `APP_ENV=production`, backups, and a go-live checklist.
 Log in with any of the [default users](#default-users--roles) below.
 
 To let someone outside this machine reach the running app (a demo, a
