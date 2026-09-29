@@ -369,7 +369,7 @@ picking one:
 | KPI pair | What it counts |
 |---|---|
 | Total Findings / Total Cases | Finding records vs. sum of `caseCount` |
-| Rectified Findings / Rectified Cases | Records at `RECTIFIED`/`CLOSED` vs. sum of `rectifiedCases` |
+| Rectified Findings / Rectified Cases | Findings formally `CLOSED`, counted once, in the period the finding was finished in (a finding that transferred out of a period never counts as closed there) vs. cases formally closed in that period |
 | Transferred Findings / Transferred Cases | Distinct findings with a transfer out of period vs. sum of `FindingTransfer.casesTransferred` |
 
 (The old HO Dashboard "Transferred Cases" label was actually counting

@@ -77,7 +77,7 @@ Findings feeding this dashboard are pre-scoped to `f.branchId === branch.id` (`B
 |---|---|---|---|
 | Total Findings | `findingCaseTotals`/`findingCaseTotalsInPeriod(...).totalFindings` (`BranchDashboard.tsx:111-112,314-319`) | Branch, current/selected period | `totalFindings` → blue |
 | Total Cases | `.totalCases`, same call (`BranchDashboard.tsx:320`) | Branch | `totalCases` → blue |
-| Rectified Findings | `.rectifiedFindings` — `status === CLOSED` only (`BranchDashboard.tsx:321`) | Branch | `rectified` → emerald |
+| Rectified Findings | `.rectifiedFindings` — the whole finding formally `CLOSED`, counted **only in its final period** (`findingCaseTotalsInPeriod()` in `src/lib/findings.ts`). A finding that transferred out of a period never counts as closed there, even if the cases it left behind were closed: 2 cases in 10/2026, 1 closed, 1 transferred to 11/2026 → 0 closed findings in 10/2026, 1 in 11/2026 once the last case closes. The closed *case* still counts in 10/2026's Rectified Cases and Performance %. | Branch | `rectified` → emerald |
 | Rectified Cases | `.rectifiedCases` — `closedCases` (`BranchDashboard.tsx:322`) | Branch | `rectified` → emerald |
 | Outstanding Cases | `totalCases - rectifiedCases` (`BranchDashboard.tsx:323`) | Branch | `outstandingCases` → amber |
 | Outstanding | count of `approvedPeriodFindings` not in `RECTIFIED/CLOSED/REJECTED` (`BranchDashboard.tsx:123,324`) | Branch | `outstanding` → amber |

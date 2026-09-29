@@ -295,12 +295,16 @@ export function findingCaseTotals(findings: Finding[]): {
  * "kept" in both its origin and destination period's Total Findings, each
  * for the portion of work that genuinely happened there) - it is not a
  * global per-finding count, the same way Total Cases isn't either.
- * `rectifiedFindings` counts a finding as rectified *for this period* only
- * once every case attributable to this period has actually been closed
- * (slice.closedCases >= slice.eligibleCases, with at least one eligible
- * case) - a finding that transferred out with only some cases closed here
- * isn't "rectified" for this period's own tally, even if it's fully
- * closed today somewhere downstream.
+ * `rectifiedFindings` ("Rectified Findings - formally closed") counts a
+ * finding only in its *final* period, and only once the whole finding is
+ * formally CLOSED. A finding that transferred out of this period never
+ * counts here, even when every case it left behind was closed: e.g. 2
+ * cases in 10/2026, 1 closed there, 1 transferred to 11/2026 - it is not a
+ * closed finding in 10/2026 (it isn't closed, it moved on), and counts as
+ * one in 11/2026 once the transferred case is closed there. So a finding
+ * is counted as closed exactly once, in the period it was finished in.
+ * The closed *case* in 10/2026 still counts in that period's rectifiedCases
+ * (and Performance %) - that case genuinely was closed there.
  */
 export function findingCaseTotalsInPeriod(
   db: Database,
@@ -311,7 +315,7 @@ export function findingCaseTotalsInPeriod(
   return {
     totalFindings: resident.length,
     totalCases: resident.reduce((sum, r) => sum + r.slice.eligibleCases, 0),
-    rectifiedFindings: resident.filter((r) => r.slice.eligibleCases > 0 && r.slice.closedCases >= r.slice.eligibleCases).length,
+    rectifiedFindings: resident.filter((r) => r.slice.isCurrentPeriod && r.finding.status === "CLOSED").length,
     rectifiedCases: resident.reduce((sum, r) => sum + r.slice.closedCases, 0),
   };
 }
