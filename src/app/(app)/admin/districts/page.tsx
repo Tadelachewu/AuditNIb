@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import type { MRT_ColumnDef } from "material-react-table";
 import { apiGet, apiSend, ApiError } from "@/lib/api-client";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -10,9 +11,8 @@ import { StatusBadge } from "@/components/ui/Badge";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { AddDialog } from "@/components/ui/AddDialog";
 import { RowAction, RowActions, StatusToggleAction } from "@/components/ui/RowActions";
-import { TableSkeletonRows } from "@/components/ui/Skeleton";
-import { Pagination } from "@/components/ui/Pagination";
-import { useClientPagination } from "@/lib/useClientPagination";
+import { AdminTable } from "@/components/ui/AdminTable";
+import { ImportCsvDialog } from "@/components/ui/ImportCsvDialog";
 import { usePermissions } from "@/lib/permissions/PermissionsContext";
 import { hasPermission } from "@/lib/permissions/registry";
 import type { District } from "@/types";
@@ -40,7 +40,6 @@ export default function DistrictsPage() {
   const canEdit = hasPermission(permissions, "districts.edit");
   const canToggle = hasPermission(permissions, "districts.toggle-status");
   const canDelete = hasPermission(permissions, "districts.delete");
-  const pager = useClientPagination(districts);
 
   async function load() {
     setLoading(true);
@@ -129,6 +128,45 @@ export default function DistrictsPage() {
     }
   }
 
+  const columns = useMemo<MRT_ColumnDef<DistrictRow>[]>(
+    () => [
+      {
+        accessorKey: "code",
+        header: "Code",
+        size: 90,
+        Cell: ({ row }) => <span className="font-mono text-xs text-slate-600">{row.original.code}</span>,
+      },
+      {
+        accessorKey: "name",
+        header: "Name",
+        Cell: ({ row }) => {
+          const d = row.original;
+          if (editingId !== d.id) return <span className="font-medium text-slate-900">{d.name}</span>;
+          return (
+            <div>
+              <Input value={editName} onChange={(e) => setEditName(e.target.value)} className="max-w-56" autoFocus />
+              {editError && <p className="mt-1 text-xs text-red-600">{editError}</p>}
+            </div>
+          );
+        },
+      },
+      { id: "controllers", header: "District Controller(s)", accessorFn: (d) => namesOrDash(d.controllerNames) },
+      { id: "directors", header: "District Director(s)", accessorFn: (d) => namesOrDash(d.directorNames) },
+      {
+        accessorKey: "status",
+        header: "Status",
+        size: 110,
+        filterVariant: "select",
+        filterSelectOptions: [
+          { value: "ACTIVE", label: "Active" },
+          { value: "INACTIVE", label: "Inactive" },
+        ],
+        Cell: ({ row }) => <StatusBadge status={row.original.status} />,
+      },
+    ],
+    [editingId, editName, editError]
+  );
+
   return (
     <div>
       <h1 className="text-lg font-semibold text-slate-900">Districts</h1>
@@ -161,68 +199,47 @@ export default function DistrictsPage() {
             </AddDialog>
           )}
         />
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-600">
-              <tr>
-                <th className="px-4 py-2 font-medium">Code</th>
-                <th className="px-4 py-2 font-medium">Name</th>
-                <th className="px-4 py-2 font-medium">District Controller(s)</th>
-                <th className="px-4 py-2 font-medium">District Director(s)</th>
-                <th className="px-4 py-2 font-medium">Status</th>
-                <th className="px-4 py-2" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {loading && <TableSkeletonRows cols={6} />}
-              {!loading && districts.length === 0 && (
-                <tr>
-                  <td className="px-4 py-6 text-center text-slate-500" colSpan={6}>
-                    No districts yet.
-                  </td>
-                </tr>
-              )}
-              {!loading &&
-                pager.pageItems.map((d) => (
-                  <tr key={d.id}>
-                    <td className="px-4 py-2 font-mono text-xs text-slate-600">{d.code}</td>
-                    <td className="px-4 py-2 font-medium text-slate-900">
-                      {editingId === d.id ? (
-                        <div className="flex items-center gap-2">
-                          <Input value={editName} onChange={(e) => setEditName(e.target.value)} className="max-w-56" />
-                        </div>
-                      ) : (
-                        d.name
-                      )}
-                      {editingId === d.id && editError && <p className="mt-1 text-xs text-red-600">{editError}</p>}
-                    </td>
-                    <td className="px-4 py-2 text-slate-600">{namesOrDash(d.controllerNames)}</td>
-                    <td className="px-4 py-2 text-slate-600">{namesOrDash(d.directorNames)}</td>
-                    <td className="px-4 py-2">
-                      <StatusBadge status={d.status} />
-                    </td>
-                    <td className="px-4 py-2 text-right">
-                      {editingId === d.id ? (
-                        <RowActions inline>
-                          <RowAction kind="cancel" onClick={() => setEditingId(null)} />
-                          <RowAction kind="save" busy={rowBusy === d.id} label={rowBusy === d.id ? "Saving..." : "Save"} onClick={() => saveEdit(d)} />
-                        </RowActions>
-                      ) : (
-                        <RowActions>
-                          {canEdit && <RowAction kind="edit" onClick={() => startEdit(d)} />}
-                          {canToggle && (
-                            <StatusToggleAction active={d.status === "ACTIVE"} busy={rowBusy === d.id} onClick={() => toggleStatus(d)} />
-                          )}
-                          {canDelete && <RowAction kind="delete" busy={rowBusy === d.id} onClick={() => deleteDistrict(d)} />}
-                        </RowActions>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-            </tbody>
-          </table>
-        </div>
-        <Pagination page={pager.page} totalPages={pager.totalPages} total={pager.total} pageSize={pager.pageSize} onPageChange={pager.setPage} />
+        <AdminTable
+          columns={columns}
+          data={districts}
+          isLoading={loading}
+          getRowId={(d) => d.id}
+          exportFileName="districts"
+          emptyText="No districts yet."
+          toolbarActions={
+            canCreate && (
+              <ImportCsvDialog
+                entityLabel="districts"
+                templateName="districts-import"
+                columns={[
+                  { key: "code", required: true, example: "AA", help: "Unique district code" },
+                  { key: "name", required: true, example: "Addis Ababa District", help: "District name" },
+                ]}
+                toPayload={(row) =>
+                  !row.code || !row.name
+                    ? { error: "code and name are required", label: row.code || row.name || "(blank)" }
+                    : { payload: { code: row.code, name: row.name }, label: `${row.code} - ${row.name}` }
+                }
+                submit={(payload) => apiSend("/api/admin/districts", "POST", payload)}
+                onDone={load}
+              />
+            )
+          }
+          renderRowActions={(d) =>
+            editingId === d.id ? (
+              <RowActions inline>
+                <RowAction kind="cancel" onClick={() => setEditingId(null)} />
+                <RowAction kind="save" busy={rowBusy === d.id} label={rowBusy === d.id ? "Saving..." : "Save"} onClick={() => saveEdit(d)} />
+              </RowActions>
+            ) : (
+              <RowActions>
+                {canEdit && <RowAction kind="edit" onClick={() => startEdit(d)} />}
+                {canToggle && <StatusToggleAction active={d.status === "ACTIVE"} busy={rowBusy === d.id} onClick={() => toggleStatus(d)} />}
+                {canDelete && <RowAction kind="delete" busy={rowBusy === d.id} onClick={() => deleteDistrict(d)} />}
+              </RowActions>
+            )
+          }
+        />
       </Card>
       {dialog}
     </div>

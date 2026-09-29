@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/session";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Topbar } from "@/components/layout/Topbar";
 import { PermissionsProvider } from "@/lib/permissions/PermissionsContext";
+import { MuiProvider } from "@/components/ui/MuiProvider";
 import { prisma } from "@/lib/prismaClient";
 import { normalizeTypography, typographyCss } from "@/lib/typography";
 
@@ -33,7 +34,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <div className="flex min-h-screen flex-col bg-slate-100">
         {typographyStyle}
         <Topbar user={user} />
-        <main className="min-w-0 flex-1 overflow-x-clip p-6">{children}</main>
+        <main className="min-w-0 flex-1 overflow-x-clip p-6">
+          <MuiProvider>{children}</MuiProvider>
+        </main>
       </div>
     );
   }
@@ -45,7 +48,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <Sidebar permissions={user.permissions ?? []} role={user.role ?? ""} />
         <div className="flex min-w-0 flex-1 flex-col">
           <Topbar user={user} />
-          <main className="min-w-0 flex-1 overflow-x-clip p-6">{children}</main>
+          <main className="min-w-0 flex-1 overflow-x-clip p-6">
+          <MuiProvider>{children}</MuiProvider>
+        </main>
         </div>
       </div>
     </PermissionsProvider>

@@ -3,20 +3,18 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 import { readDb } from "@/lib/db";
 import { findingsInScope } from "@/lib/findings-scope";
-import { computePerformance, findingsResidentInPeriod, type FindingPeriodSlice, getActiveScoringAdjustment } from "@/lib/findings";
+import { computePerformance, computeEligibleCaseCounts, findingsResidentInPeriod, type FindingPeriodSlice, getActiveScoringAdjustment } from "@/lib/findings";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
 import { paginate, parsePage } from "@/lib/pagination";
-import { formatDateTime, formatNumber, formatCurrency } from "@/lib/format";
 import { Card, CardHeader } from "@/components/ui/Card";
-import { Badge } from "@/components/ui/Badge";
-import { Pagination } from "@/components/ui/Pagination";
-import { FindingStatusBadge } from "@/components/findings/FindingStatusBadge";
 import { FilterBar } from "@/components/dashboard/FilterBar";
 import { TimeRangeFilter } from "@/components/reports/TimeRangeFilter";
 import { PrintButton } from "@/components/reports/PrintButton";
 import { FILTERABLE_FINDING_STATUSES, type Finding } from "@/types";
 import { matchesOperationAndIrregularity } from "@/lib/dashboardFilters";
-import { AdjustedBadge } from "@/components/ui/AdjustedBadge";
+import { RankingGrid, type RankingRow } from "@/components/dashboard/RankingGrid";
+import { ReportFindingsGrid, TransfersGrid, type ReportFindingRow, type TransferRow } from "@/components/reports/ReportGrids";
+import { filterFindingsByText, sortFindings, parseFindingSort, parsePageSize } from "@/lib/findingListQuery";
 
 // master.txt §18's 14 named reports, covered as a small number of real,
 // data-backed views rather than 14 separate pages (see PHASE7.md): the
@@ -90,7 +88,8 @@ export default async function ReportsPage({
   const branch = db.branches.find((b) => b.id === user.branchId);
 
   const exportQuery = new URLSearchParams();
-  for (const [k, v] of Object.entries({ periodId, districtId, branchId, sourceId, categoryId, risk, status, operationArea, irregularityType, dateFrom, dateTo })) {
+  const searchText = get("q");
+  for (const [k, v] of Object.entries({ periodId, districtId, branchId, sourceId, categoryId, risk, status, operationArea, irregularityType, dateFrom, dateTo, q: searchText, sort: get("sort"), dir: get("dir") })) {
     if (v) exportQuery.set(k, v);
   }
 
@@ -102,15 +101,36 @@ export default async function ReportsPage({
   const inScopeBranches = user.orgScope === "BANK" ? db.branches : user.orgScope === "DISTRICT" ? db.branches.filter((b) => b.districtId === user.districtId) : branch ? [branch] : [];
   const inScopeDistricts = user.orgScope === "BANK" ? db.districts : district ? [district] : [];
 
-  const branchPerformance = inScopeBranches
-    .map((b) => ({ branch: b, performance: computePerformance(db, { branchId: b.id, periodId: periodId || undefined }), adjustment: getActiveScoringAdjustment(db, { branchId: b.id, periodId: periodId || undefined }) }))
-    .filter((r) => r.performance !== null)
-    .sort((a, b) => (b.performance ?? 0) - (a.performance ?? 0));
+  // Same numbers as the dashboards' ranking tables (RankingGrid): % plus
+  // the eligible / solved / unsolved case counts behind it.
+  const perfPeriod = periodId || undefined;
+  function rankingRows(items: { id: string; name: string }[], kind: "branch" | "district"): RankingRow[] {
+    return items
+      .map((o) => {
+        const scope = kind === "branch" ? { branchId: o.id, periodId: perfPeriod } : { districtId: o.id, periodId: perfPeriod };
+        const counts = computeEligibleCaseCounts(db, scope);
+        const totalCases = counts?.totalCases ?? 0;
+        const rectifiedCases = counts?.rectifiedCases ?? 0;
+        return {
+          id: o.id,
+          rank: 0,
+          name: o.name,
+          href: `/findings?${kind === "branch" ? "branchId" : "districtId"}=${o.id}`,
+          branchCount: kind === "district" ? db.branches.filter((b) => b.districtId === o.id).length : undefined,
+          totalCases,
+          rectifiedCases,
+          outstandingCases: totalCases - rectifiedCases,
+          performance: computePerformance(db, scope),
+          adjustmentReason: getActiveScoringAdjustment(db, scope)?.reason ?? null,
+        };
+      })
+      .filter((r) => r.performance !== null)
+      .sort((a, b) => (b.performance ?? 0) - (a.performance ?? 0))
+      .map((r, i) => ({ ...r, rank: i + 1 }));
+  }
+  const branchPerformance = rankingRows(inScopeBranches, "branch");
 
-  const districtPerformance = inScopeDistricts
-    .map((d) => ({ district: d, performance: computePerformance(db, { districtId: d.id, periodId: periodId || undefined }), adjustment: getActiveScoringAdjustment(db, { districtId: d.id, periodId: periodId || undefined }) }))
-    .filter((r) => r.performance !== null)
-    .sort((a, b) => (b.performance ?? 0) - (a.performance ?? 0));
+  const districtPerformance = rankingRows(inScopeDistricts, "district");
 
   const categoryBreakdown = db.categories
     .filter((c) => c.active)
@@ -135,22 +155,51 @@ export default async function ReportsPage({
     .filter((t) => findingIdsInScope.has(t.findingId))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
-  // Server-side pagination for the two tables on this page that can grow
-  // unboundedly (every finding matching the filters, every transfer ever
-  // recorded) - the rest (performance/category/risk breakdowns) are
-  // small, fixed-size aggregates by nature, not raw per-record lists.
-  function hrefWithPage(param: string, targetPage: number) {
-    const q = new URLSearchParams();
-    for (const [key, value] of Object.entries(params)) {
-      if (key === param) continue;
-      if (typeof value === "string" && value) q.set(key, value);
-    }
-    if (targetPage > 1) q.set(param, String(targetPage));
-    const qs = q.toString();
-    return qs ? `/reports?${qs}` : "/reports";
-  }
-  const findingsPage = paginate(resident, parsePage(get("page")));
-  const transfersPage = paginate(transfers, parsePage(get("transfersPage")));
+  const transferRows: TransferRow[] = transfers.map((t) => {
+    const finding = db.findings.find((f) => f.id === t.findingId);
+    return {
+      id: t.id,
+      findingId: t.findingId,
+      reference: finding?.reference ?? t.findingId,
+      fromCode: db.reportingPeriods.find((p) => p.id === t.fromPeriodId)?.code ?? t.fromPeriodId,
+      toCode: db.reportingPeriods.find((p) => p.id === t.toPeriodId)?.code ?? t.toPeriodId,
+      currency: finding?.currency ?? "",
+      originalAmount: t.originalAmount,
+      outstandingAmount: t.amountTransferred,
+      originalCases: t.originalCaseCount,
+      outstandingCases: t.casesTransferred,
+      caseAgeDays: t.caseAgeAtTransferDays,
+      method: t.method,
+      createdByName: t.createdByName,
+      createdAt: t.createdAt,
+      reason: t.reason,
+    };
+  });
+
+  // Findings Report: search / sort / page applied server-side, exactly as
+  // the Findings list does (src/lib/findingListQuery.ts), so its Export
+  // CSV (/api/findings/export) returns what the grid shows. The aggregates
+  // above use every filtered finding, not just the searched ones.
+  const names = { branchName, departmentName, categoryName, sourceName };
+  const sort = parseFindingSort(get("sort"), get("dir"));
+  const amountOf = (r: ResidentFinding) => (r.slice ? r.slice.eligibleAmount : r.finding.amount);
+  const listed = sortFindings(filterFindingsByText(resident, searchText, names), sort, names, amountOf);
+  const findingsPage = paginate(listed, parsePage(get("page")), parsePageSize(get("pageSize")));
+  const findingRows: ReportFindingRow[] = findingsPage.items.map(({ finding: f, slice }) => ({
+    id: f.id,
+    reference: f.reference,
+    title: f.title,
+    branchName: branchName(f.branchId),
+    departmentName: departmentName(f.departmentId),
+    categoryName: categoryName(f.categoryId),
+    sourceName: sourceName(f.sourceId),
+    currency: f.currency,
+    amount: amountOf({ finding: f, slice }),
+    outstanding: slice ? slice.eligibleAmount - slice.closedAmount : f.amount - f.rectifiedAmount,
+    status: f.status,
+    isHistorical: slice ? !slice.isCurrentPeriod : false,
+    transferredOutToCode: slice?.transferredOutToCode ?? null,
+  }));
 
   return (
     <div className="flex flex-col gap-5">
@@ -196,105 +245,23 @@ export default async function ReportsPage({
 
       <Card>
         <CardHeader title="Findings Report" description={`${findings.length} finding(s) matching the current filters`} />
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-600">
-              <tr>
-                <th className="px-4 py-2 font-medium">Reference</th>
-                <th className="px-4 py-2 font-medium">Title</th>
-                <th className="px-4 py-2 font-medium">Branch</th>
-                <th className="px-4 py-2 font-medium">Department</th>
-                <th className="px-4 py-2 font-medium">Category</th>
-                <th className="px-4 py-2 font-medium">Source</th>
-                <th className="px-4 py-2 font-medium">Amount</th>
-                <th className="px-4 py-2 font-medium">Outstanding</th>
-                <th className="px-4 py-2 font-medium">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {findingsPage.items.length === 0 && (
-                <tr>
-                  <td className="px-4 py-6 text-center text-slate-500" colSpan={9}>
-                    No findings match these filters.
-                  </td>
-                </tr>
-              )}
-              {findingsPage.items.map(({ finding: f, slice }) => {
-                const amount = slice ? slice.eligibleAmount : f.amount;
-                const outstanding = slice ? slice.eligibleAmount - slice.closedAmount : f.amount - f.rectifiedAmount;
-                const isHistorical = slice ? !slice.isCurrentPeriod : false;
-                return (
-                  <tr key={f.id}>
-                    <td className="px-4 py-2 font-mono text-xs text-slate-700">{f.reference}</td>
-                    <td className="px-4 py-2 text-slate-900">{f.title}</td>
-                    <td className="px-4 py-2 text-slate-600">{branchName(f.branchId)}</td>
-                    <td className="px-4 py-2 text-slate-600">{departmentName(f.departmentId)}</td>
-                    <td className="px-4 py-2 text-slate-600">{categoryName(f.categoryId)}</td>
-                    <td className="px-4 py-2 text-slate-600">{sourceName(f.sourceId)}</td>
-                    <td className="px-4 py-2 text-slate-900">
-                      {f.currency} {formatCurrency(amount)}
-                    </td>
-                    <td className="px-4 py-2 text-slate-900">
-                      {f.currency} {formatCurrency(outstanding)}
-                    </td>
-                    <td className="px-4 py-2">
-                      {isHistorical ? (
-                        <span
-                          className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500"
-                          title="This period's own record for this finding - it has since transferred on."
-                        >
-                          Transferred → {slice?.transferredOutToCode ?? "—"}
-                        </span>
-                      ) : (
-                        <FindingStatusBadge status={f.status} />
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-        <Pagination
-          page={findingsPage.page}
-          totalPages={findingsPage.totalPages}
-          total={findingsPage.total}
-          pageSize={findingsPage.pageSize}
-          hrefFor={(p) => hrefWithPage("page", p)}
+        <ReportFindingsGrid
+          rows={findingRows}
+          paging={{ page: findingsPage.page, pageSize: findingsPage.pageSize, total: findingsPage.total }}
+          sort={{ id: sort.key, desc: sort.desc }}
+          searchText={searchText}
         />
       </Card>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader title="Branch Performance" description={periodId ? "Filtered period" : "All periods"} />
-          <div className="divide-y divide-slate-100">
-            {branchPerformance.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-500">No data yet.</p>}
-            {branchPerformance.map((row, i) => (
-              <div key={row.branch.id} className="flex items-center justify-between px-4 py-2 text-sm">
-                <span className="text-slate-900">
-                  <span className="mr-2 text-slate-500">#{i + 1}</span>
-                  {row.branch.name}
-                </span>
-                <span className="font-medium text-slate-700">{row.performance!.toFixed(1)}%<AdjustedBadge adjustment={row.adjustment} /></span>
-              </div>
-            ))}
-          </div>
+          <RankingGrid kind="branch" hasScope rows={branchPerformance} exportFileName="report-branch-performance" />
         </Card>
 
         <Card>
           <CardHeader title="District Performance" description={periodId ? "Filtered period" : "All periods"} />
-          <div className="divide-y divide-slate-100">
-            {districtPerformance.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-500">No data yet.</p>}
-            {districtPerformance.map((row, i) => (
-              <div key={row.district.id} className="flex items-center justify-between px-4 py-2 text-sm">
-                <span className="text-slate-900">
-                  <span className="mr-2 text-slate-500">#{i + 1}</span>
-                  {row.district.name}
-                </span>
-                <span className="font-medium text-slate-700">{row.performance!.toFixed(1)}%<AdjustedBadge adjustment={row.adjustment} /></span>
-              </div>
-            ))}
-          </div>
+          <RankingGrid kind="district" hasScope rows={districtPerformance} exportFileName="report-district-performance" />
         </Card>
       </div>
 
@@ -340,74 +307,7 @@ export default async function ReportsPage({
 
       <Card>
         <CardHeader title="Transfers" description="Findings carried into a later reporting period, matching the current filters" />
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-600">
-              <tr>
-                <th className="px-4 py-2 font-medium">Finding</th>
-                <th className="px-4 py-2 font-medium">From → To Period</th>
-                <th className="px-4 py-2 font-medium">Original Amount</th>
-                <th className="px-4 py-2 font-medium">Outstanding Amount</th>
-                <th className="px-4 py-2 font-medium">Original Case Count</th>
-                <th className="px-4 py-2 font-medium">Outstanding Case Count</th>
-                <th className="px-4 py-2 font-medium">Case Age</th>
-                <th className="px-4 py-2 font-medium">Method</th>
-                <th className="px-4 py-2 font-medium">Transferred By</th>
-                <th className="px-4 py-2 font-medium">Transfer Date</th>
-                <th className="px-4 py-2 font-medium">Transfer Reason</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {transfersPage.items.length === 0 && (
-                <tr>
-                  <td className="px-4 py-6 text-center text-slate-500" colSpan={11}>
-                    No transfers recorded.
-                  </td>
-                </tr>
-              )}
-              {transfersPage.items.map((t) => {
-                const finding = db.findings.find((f) => f.id === t.findingId);
-                const fromPeriod = db.reportingPeriods.find((p) => p.id === t.fromPeriodId);
-                const toPeriod = db.reportingPeriods.find((p) => p.id === t.toPeriodId);
-                const currency = finding?.currency ?? "";
-                return (
-                  <tr key={t.id}>
-                    <td className="px-4 py-2">
-                      <Link href={`/findings/${t.findingId}`} className="font-mono text-xs text-blue-800 hover:underline">
-                        {finding?.reference ?? t.findingId}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-2 text-xs text-slate-600">
-                      {fromPeriod?.code ?? t.fromPeriodId} → {toPeriod?.code ?? t.toPeriodId}
-                    </td>
-                    <td className="px-4 py-2 text-slate-700">
-                      {currency} {formatCurrency(t.originalAmount)}
-                    </td>
-                    <td className="px-4 py-2 text-slate-700">
-                      {currency} {formatCurrency(t.amountTransferred)}
-                    </td>
-                    <td className="px-4 py-2 text-slate-700">{formatNumber(t.originalCaseCount)}</td>
-                    <td className="px-4 py-2 text-slate-700">{formatNumber(t.casesTransferred)}</td>
-                    <td className="px-4 py-2 text-slate-700">{t.caseAgeAtTransferDays}d</td>
-                    <td className="px-4 py-2">
-                      <Badge tone={t.method === "AUTOMATIC" ? "blue" : "gray"}>{t.method === "AUTOMATIC" ? "Automatic" : "Manual"}</Badge>
-                    </td>
-                    <td className="px-4 py-2 text-slate-900">{t.createdByName}</td>
-                    <td className="px-4 py-2 text-xs text-slate-500">{formatDateTime(t.createdAt)}</td>
-                    <td className="px-4 py-2 text-xs text-slate-500">{t.reason}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-        <Pagination
-          page={transfersPage.page}
-          totalPages={transfersPage.totalPages}
-          total={transfersPage.total}
-          pageSize={transfersPage.pageSize}
-          hrefFor={(p) => hrefWithPage("transfersPage", p)}
-        />
+        <TransfersGrid rows={transferRows} />
       </Card>
 
       <Card className="no-print">

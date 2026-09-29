@@ -1,8 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import type { MRT_ColumnDef, MRT_RowSelectionState } from "material-react-table";
+import { AdminTable } from "@/components/ui/AdminTable";
+import { useUrlTableState } from "@/lib/useUrlTableState";
 import { Button } from "@/components/ui/Button";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { FindingStatusBadge } from "@/components/findings/FindingStatusBadge";
@@ -142,26 +145,50 @@ const ACTION_VARIANTS: Record<BulkActionKind, "primary" | "danger" | "success"> 
 };
 
 /**
- * Bulk selection + bulk actions for the Findings list - "select all" (on
- * this page; a bulk action against every filtered result across every
- * page is a much bigger blast radius than this asks for) plus per-row
- * checkboxes, and a toolbar offering only the review/verify/close actions
- * the signed-in session can actually attempt on at least one selected row
- * right now. Each action still dispatches through the exact same
- * permission-gated single-finding routes the detail page uses (submit/
- * district-review/ho-review/bank-approval/verify-rectification/return-
- * rectification/close) - looped client-side, one request per eligible
- * finding - so there is no separate bulk business logic to keep in sync
- * with the single-finding rules (closable-amount bounds, period-locked
- * checks, org-scope checks, submit's own-creator-only rule, etc. all still
- * apply per item).
+ * The Findings list - Material React Table (see AdminTable) in SERVER mode:
+ * the page (src/app/(app)/findings/page.tsx) filters (FilterBar), searches
+ * (q), sorts (sort/dir) and pages (page/pageSize) every matching finding
+ * server-side and sends only the current page. This table drives those
+ * through the URL, so a view is shareable and survives refresh; Export CSV
+ * downloads every matching finding (not just this page) via
+ * /api/findings/export with the same parameters.
+ *
+ * Bulk selection + bulk actions: "select all" covers this page (a bulk
+ * action against every filtered result across every page is a much bigger
+ * blast radius than this asks for), and the toolbar offers only the
+ * review/verify/close actions the signed-in session can actually attempt on
+ * at least one selected row. Each action still dispatches through the exact
+ * same permission-gated single-finding routes the detail page uses - looped
+ * client-side, one request per eligible finding - so there is no separate
+ * bulk business logic to keep in sync with the single-finding rules.
  */
-export function FindingsTable({ rows, permissions, emptyText }: { rows: FindingRow[]; permissions: BulkPermissions; emptyText: string }) {
+export function FindingsTable({
+  rows,
+  permissions,
+  emptyText,
+  paging,
+  sort,
+  searchText,
+}: {
+  rows: FindingRow[];
+  permissions: BulkPermissions;
+  emptyText: string;
+  paging: { page: number; pageSize: number; total: number };
+  sort: { id: string; desc: boolean };
+  searchText: string;
+}) {
   const router = useRouter();
   const { confirm, dialog } = useConfirm();
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [rowSelection, setRowSelection] = useState<MRT_RowSelectionState>({});
   const [busy, setBusy] = useState(false);
   const [summary, setSummary] = useState<string | null>(null);
+  // Page / page size / sort / search live in the URL; the page applies them.
+  const url = useUrlTableState<FindingRow>({ paging, sort, searchText });
+
+  // A new page of data (navigation) clears the selection.
+  useEffect(() => {
+    setRowSelection({});
+  }, [rows]);
 
   // The whole row opens its finding, not just the reference link - which
   // stays a real <a> for keyboard users and right-click "open in new tab".
@@ -170,7 +197,7 @@ export function FindingsTable({ rows, permissions, emptyText }: { rows: FindingR
   // checkbox...) or ended a text selection (copying a title/reference).
   function openFromRow(e: React.MouseEvent<HTMLTableRowElement>, id: string) {
     if (e.button !== 0 && e.button !== 1) return;
-    if ((e.target as HTMLElement).closest("a, button, input, select, textarea, label")) return;
+    if ((e.target as HTMLElement).closest("a, button, input, select, textarea, label, [role=checkbox]")) return;
     if (window.getSelection()?.toString()) return;
     const href = `/findings/${id}`;
     if (e.button === 1 || e.ctrlKey || e.metaKey) {
@@ -189,23 +216,7 @@ export function FindingsTable({ rows, permissions, emptyText }: { rows: FindingR
     permissions.canReturnRectification ||
     permissions.canClose;
 
-  const actionableRows = rows.filter((f) => !f.isHistorical);
-  const allSelected = actionableRows.length > 0 && actionableRows.every((f) => selected.has(f.id));
-
-  function toggleAll() {
-    setSelected(allSelected ? new Set() : new Set(actionableRows.map((f) => f.id)));
-  }
-
-  function toggleOne(id: string) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
-
-  const selectedRows = rows.filter((f) => selected.has(f.id));
+  const selectedRows = rows.filter((f) => rowSelection[f.id]);
   const actionKinds: BulkActionKind[] = (["submit", "approve", "return-review", "reject", "verify", "return-rectification", "close"] as const).filter(
     (kind) => eligibleFor(kind, selectedRows, permissions).length > 0
   );
@@ -221,7 +232,7 @@ export function FindingsTable({ rows, permissions, emptyText }: { rows: FindingR
       title: `${label} ${eligible.length} finding(s)?`,
       message:
         skipped > 0
-          ? `${skipped} of your ${selectedRows.length} selected finding(s) aren't eligible for "${label}" and will be skipped.`
+          ? `${skipped} of your ${selectedRows.length} selected finding(s) are not eligible for "${label}" and will be skipped.`
           : `This applies "${label}" to all ${eligible.length} selected finding(s).`,
       confirmLabel: label,
       tone: kind === "reject" ? "danger" : kind === "close" ? "success" : "default",
@@ -244,13 +255,68 @@ export function FindingsTable({ rows, permissions, emptyText }: { rows: FindingR
       }
     }
     setBusy(false);
-    setSelected(new Set());
+    setRowSelection({});
     const parts = [`${succeeded} succeeded`];
     if (skipped > 0) parts.push(`${skipped} skipped (not eligible)`);
     if (failures.length > 0) parts.push(`${failures.length} failed`);
     setSummary(`${label}: ${parts.join(", ")}.${failures.length > 0 ? " " + failures.slice(0, 3).join("; ") : ""}`);
     router.refresh();
   }
+
+  const columns = useMemo<MRT_ColumnDef<FindingRow>[]>(
+    () => [
+      {
+        id: "reference",
+        accessorKey: "reference",
+        header: "Reference",
+        size: 150,
+        Cell: ({ row }) => (
+          <Link href={`/findings/${row.original.id}`} className="font-mono text-xs text-blue-800 hover:underline">
+            {row.original.reference}
+          </Link>
+        ),
+      },
+      { id: "title", accessorKey: "title", header: "Title", Cell: ({ row }) => <span className="text-slate-900">{row.original.title}</span> },
+      { id: "branch", accessorKey: "branchName", header: "Branch" },
+      { id: "department", accessorKey: "departmentName", header: "Department" },
+      { id: "category", accessorKey: "categoryName", header: "Category" },
+      { id: "source", accessorKey: "sourceName", header: "Source" },
+      { id: "risk", accessorKey: "riskLevel", header: "Risk", size: 90 },
+      {
+        id: "amount",
+        accessorKey: "amount",
+        header: "Amount",
+        Cell: ({ row }) => (
+          <span className="whitespace-nowrap tabular-nums text-slate-900">
+            {row.original.currency} {formatCurrency(row.original.amount)}
+          </span>
+        ),
+      },
+      {
+        id: "status",
+        accessorKey: "status",
+        header: "Status",
+        Cell: ({ row }) =>
+          row.original.isHistorical ? (
+            <span
+              className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500"
+              title="This period's own record for this finding - it has since transferred on. Its current status lives under the period it transferred to."
+            >
+              Transferred → {row.original.transferredOutToCode ?? "—"}
+            </span>
+          ) : (
+            <FindingStatusBadge status={row.original.status} />
+          ),
+      },
+      {
+        id: "updatedAt",
+        accessorKey: "updatedAt",
+        header: "Updated",
+        Cell: ({ row }) => <span className="whitespace-nowrap text-xs text-slate-500">{formatDateTime(row.original.updatedAt)}</span>,
+      },
+    ],
+    []
+  );
 
   return (
     <div>
@@ -263,9 +329,9 @@ export function FindingsTable({ rows, permissions, emptyText }: { rows: FindingR
           </button>
         </div>
       )}
-      {canBulkAct && selected.size > 0 && (
+      {canBulkAct && selectedRows.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 bg-blue-50/50 px-4 py-2.5">
-          <span className="text-xs font-medium text-slate-600">{selected.size} selected</span>
+          <span className="text-xs font-medium text-slate-600">{selectedRows.length} selected</span>
           {actionKinds.length === 0 ? (
             <span className="text-xs text-slate-500">No bulk actions apply to this selection.</span>
           ) : (
@@ -275,94 +341,37 @@ export function FindingsTable({ rows, permissions, emptyText }: { rows: FindingR
               </Button>
             ))
           )}
-          <button type="button" onClick={() => setSelected(new Set())} className="ml-auto text-xs text-slate-500 hover:underline">
+          <button type="button" onClick={() => setRowSelection({})} className="ml-auto text-xs text-slate-500 hover:underline">
             Clear selection
           </button>
         </div>
       )}
-      <div className="overflow-x-auto">
-        <table className="w-full text-left text-sm">
-          <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-600">
-            <tr>
-              {canBulkAct && (
-                <th className="w-8 px-4 py-2">
-                  <input type="checkbox" checked={allSelected} onChange={toggleAll} aria-label="Select all on this page" />
-                </th>
-              )}
-              <th className="px-4 py-2 font-medium">Reference</th>
-              <th className="px-4 py-2 font-medium">Title</th>
-              <th className="px-4 py-2 font-medium">Branch</th>
-              <th className="px-4 py-2 font-medium">Department</th>
-              <th className="px-4 py-2 font-medium">Category</th>
-              <th className="px-4 py-2 font-medium">Source</th>
-              <th className="px-4 py-2 font-medium">Risk</th>
-              <th className="px-4 py-2 font-medium">Amount</th>
-              <th className="px-4 py-2 font-medium">Status</th>
-              <th className="px-4 py-2 font-medium">Updated</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {rows.length === 0 && (
-              <tr>
-                <td className="px-4 py-6 text-center text-slate-500" colSpan={canBulkAct ? 11 : 10}>
-                  {emptyText}
-                </td>
-              </tr>
-            )}
-            {rows.map((f) => (
-              <tr
-                key={f.id}
-                onClick={(e) => openFromRow(e, f.id)}
-                onAuxClick={(e) => openFromRow(e, f.id)}
-                title={`Open ${f.reference}`}
-                className={`cursor-pointer transition-colors hover:bg-slate-50 ${selected.has(f.id) ? "bg-blue-50/40" : ""}`}
-              >
-                {canBulkAct && (
-                  // The selection cell never opens the row - a slightly
-                  // missed click on the checkbox shouldn't navigate away.
-                  <td className="px-4 py-2" onClick={(e) => e.stopPropagation()} onAuxClick={(e) => e.stopPropagation()}>
-                    <input
-                      type="checkbox"
-                      checked={selected.has(f.id)}
-                      onChange={() => toggleOne(f.id)}
-                      disabled={f.isHistorical}
-                      title={f.isHistorical ? "Historical record for this period - not actionable here." : undefined}
-                      aria-label={`Select ${f.reference}`}
-                    />
-                  </td>
-                )}
-                <td className="px-4 py-2">
-                  <Link href={`/findings/${f.id}`} className="font-mono text-xs text-blue-800 hover:underline">
-                    {f.reference}
-                  </Link>
-                </td>
-                <td className="px-4 py-2 text-slate-900">{f.title}</td>
-                <td className="px-4 py-2 text-slate-600">{f.branchName}</td>
-                <td className="px-4 py-2 text-slate-600">{f.departmentName}</td>
-                <td className="px-4 py-2 text-slate-600">{f.categoryName}</td>
-                <td className="px-4 py-2 text-slate-600">{f.sourceName}</td>
-                <td className="px-4 py-2 text-slate-600">{f.riskLevel}</td>
-                <td className="px-4 py-2 text-slate-900">
-                  {f.currency} {formatCurrency(f.amount)}
-                </td>
-                <td className="px-4 py-2">
-                  {f.isHistorical ? (
-                    <span
-                      className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500"
-                      title="This period's own record for this finding - it has since transferred on. Its current status lives under the period it transferred to."
-                    >
-                      Transferred → {f.transferredOutToCode ?? "—"}
-                    </span>
-                  ) : (
-                    <FindingStatusBadge status={f.status} />
-                  )}
-                </td>
-                <td className="px-4 py-2 text-xs text-slate-500">{formatDateTime(f.updatedAt)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <AdminTable
+        columns={columns}
+        data={rows}
+        getRowId={(f) => f.id}
+        onExport={() => url.exportFrom("/api/findings/export")}
+        emptyText={emptyText}
+        tableOptions={{
+          ...url.tableOptions,
+          enableColumnFilters: false, // filtering is the FilterBar above
+          enableRowSelection: canBulkAct ? (row) => !row.original.isHistorical : false,
+          enableSelectAll: canBulkAct,
+          selectAllMode: "page",
+          onRowSelectionChange: setRowSelection,
+          state: { ...url.state, rowSelection },
+          muiSearchTextFieldProps: { placeholder: "Search reference, title, branch, category...", size: "small", variant: "outlined" },
+          muiTableBodyRowProps: ({ row }) => ({
+            onClick: (e) => openFromRow(e, row.original.id),
+            onAuxClick: (e) => openFromRow(e, row.original.id),
+            title: `Open ${row.original.reference}`,
+            sx: { cursor: "pointer" },
+          }),
+          muiSelectCheckboxProps: ({ row }) => ({
+            title: row.original.isHistorical ? "Historical record for this period - not actionable here." : undefined,
+          }),
+        }}
+      />
     </div>
   );
 }

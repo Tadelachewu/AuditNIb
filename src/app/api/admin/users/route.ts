@@ -34,6 +34,14 @@ export async function GET(request: Request) {
     return NextResponse.json({ users: filtered.map(toSafeUser), total: filtered.length, page: 1, pageSize: filtered.length, totalPages: 1 });
   }
 
+  // The Users admin table searches, filters, sorts and pages client-side
+  // (Material React Table), so it asks for everyone at once. Same
+  // permission, same sanitized shape (no password hashes).
+  if (searchParams.get("all") === "1") {
+    const all = sorted.map(toSafeUser);
+    return NextResponse.json({ users: all, total: all.length, page: 1, pageSize: all.length, totalPages: 1 });
+  }
+
   const result = paginate(sorted.map(toSafeUser), parsePage(searchParams.get("page") ?? undefined), 25);
   return NextResponse.json({ users: result.items, total: result.total, page: result.page, pageSize: result.pageSize, totalPages: result.totalPages });
 }

@@ -3,36 +3,77 @@ import { requirePermission } from "@/lib/guard";
 import { readDb } from "@/lib/db";
 import { paginate, parsePage } from "@/lib/pagination";
 import { verifyAuditLogChain } from "@/lib/audit";
+import { toCsv } from "@/lib/csv";
+import type { AuditLogEntry } from "@/types";
 
-// Compares two audit-log sequence strings (bigint-as-decimal) with "newest
-// first" semantics.  `b - a` on a number isn't safe past 2^53, so we do an
-// explicit bigint comparison via sign() — matches cmpSeq in audit.ts but
-// kept inline here to avoid pulling server-only deps into a shared helper.
-function seqDesc(a: string, b: string): number {
+function seqCompare(a: string, b: string): number {
   const ai = BigInt(a);
   const bi = BigInt(b);
-  return ai < bi ? 1 : ai > bi ? -1 : 0;
+  return ai < bi ? -1 : ai > bi ? 1 : 0;
 }
 
-// The audit log is append-only and grows forever - every workflow,
-// config, and auth event ever logged. Previously this returned a flat
-// slice(0, 300) with no way to see anything older; now it's genuinely
-// paginated so the full history stays reachable, page by page, without
-// ever sending more than one page's worth of rows per request.
+/**
+ * Server-side search / filter / sort / paging for the Audit Log table (the
+ * log can grow far too large to ship to the browser whole):
+ *   q          - text search across actor, action, entity type/id, reason
+ *   action     - exact action (e.g. UPDATE, EVIDENCE_DOWNLOAD)
+ *   entityType - exact entity type (e.g. Finding, Settings)
+ *   actor      - text match on the actor's name
+ *   from, to   - ISO dates (inclusive), by entry timestamp
+ *   sort       - "asc" | "desc" (by sequence = time order; default desc)
+ *   page, pageSize (max 200)
+ *   format=csv - every matching entry (not just one page) as a CSV file
+ */
 export async function GET(request: Request) {
   const auth = await requirePermission("audit-log.view");
   if (!auth.ok) return auth.response;
-  const { searchParams } = new URL(request.url);
+  const { searchParams: sp } = new URL(request.url);
   const db = await readDb();
-  // Newest first by `sequence`, the chain's own authoritative order - not
-  // array/read order, which Postgres doesn't guarantee without this
-  // explicit sort (see src/lib/audit.ts's own doc comment on why sequence
-  // exists at all).
-  const sorted = [...db.auditLogs].sort((a, b) => seqDesc(a.sequence, b.sequence));
-  const result = paginate(sorted, parsePage(searchParams.get("page") ?? undefined), 50);
-  // O(n) over the whole log, but only on this admin-only viewer request,
-  // not on every write - confirms no past entry has been altered, deleted,
-  // or reordered directly in the database, bypassing appendAuditLog().
+
+  const q = (sp.get("q") ?? "").trim().toLowerCase();
+  const words = q ? q.split(/\s+/) : [];
+  const action = sp.get("action") ?? "";
+  const entityType = sp.get("entityType") ?? "";
+  const actor = (sp.get("actor") ?? "").trim().toLowerCase();
+  const from = sp.get("from") ?? "";
+  const to = sp.get("to") ?? "";
+  const dir = sp.get("sort") === "asc" ? 1 : -1;
+
+  const matches = (l: AuditLogEntry) => {
+    if (action && l.action !== action) return false;
+    if (entityType && l.entityType !== entityType) return false;
+    if (actor && !(l.userName ?? "").toLowerCase().includes(actor)) return false;
+    if (from && l.timestamp.slice(0, 10) < from) return false;
+    if (to && l.timestamp.slice(0, 10) > to) return false;
+    if (words.length) {
+      const hay = [l.userName, l.action, l.entityType, l.entityId, l.reason].filter(Boolean).join(" ").toLowerCase();
+      if (!words.every((w) => hay.includes(w))) return false;
+    }
+    return true;
+  };
+  const filtered = db.auditLogs.filter(matches).sort((a, b) => seqCompare(a.sequence, b.sequence) * dir);
+
+  if (sp.get("format") === "csv") {
+    const csv = toCsv(filtered, [
+      { header: "Sequence", value: (l) => l.sequence },
+      { header: "Time (UTC)", value: (l) => l.timestamp },
+      { header: "Actor", value: (l) => l.userName },
+      { header: "Action", value: (l) => l.action },
+      { header: "Entity", value: (l) => l.entityType },
+      { header: "Entity ID", value: (l) => l.entityId },
+      { header: "Reason", value: (l) => l.reason ?? "" },
+    ]);
+    return new NextResponse("﻿" + csv, {
+      headers: {
+        "Content-Type": "text/csv; charset=utf-8",
+        "Content-Disposition": `attachment; filename="audit-log-${new Date().toISOString().slice(0, 10)}.csv"`,
+        "Cache-Control": "private, no-store",
+      },
+    });
+  }
+
+  const pageSize = Math.min(200, Math.max(1, Number(sp.get("pageSize")) || 50));
+  const result = paginate(filtered, parsePage(sp.get("page") ?? undefined), pageSize);
   const chain = verifyAuditLogChain(db.auditLogs);
   return NextResponse.json({
     auditLogs: result.items,
@@ -40,6 +81,9 @@ export async function GET(request: Request) {
     page: result.page,
     pageSize: result.pageSize,
     totalPages: result.totalPages,
+    // Filter choices for the table's dropdowns.
+    actions: [...new Set(db.auditLogs.map((l) => l.action))].sort(),
+    entityTypes: [...new Set(db.auditLogs.map((l) => l.entityType))].sort(),
     chainValid: chain.valid,
     chainBrokenAtSequence: chain.brokenAtSequence,
   });

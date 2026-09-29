@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import type { MRT_ColumnDef } from "material-react-table";
 import { useRouter } from "next/navigation";
 import { apiSend, ApiError } from "@/lib/api-client";
 import { Card, CardHeader } from "@/components/ui/Card";
@@ -11,9 +12,9 @@ import { Badge } from "@/components/ui/Badge";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { AddDialog } from "@/components/ui/AddDialog";
 import { RowAction, RowActions, StatusToggleAction } from "@/components/ui/RowActions";
-import { Pagination } from "@/components/ui/Pagination";
-import { useClientPagination } from "@/lib/useClientPagination";
 import type { UncoveredReason } from "@/types";
+import { AdminTable } from "@/components/ui/AdminTable";
+import { ImportCsvDialog } from "@/components/ui/ImportCsvDialog";
 
 // Same convention as SourcesManager: the list is a prop refreshed via
 // router.refresh() after every mutation, not a duplicated client copy -
@@ -30,7 +31,6 @@ export function UncoveredReasonsManager({ initialReasons }: { initialReasons: Un
   const [editName, setEditName] = useState("");
   const [editError, setEditError] = useState<string | null>(null);
   const { confirm, dialog } = useConfirm();
-  const pager = useClientPagination(reasons);
 
   async function handleCreate(e: React.FormEvent, close: () => void) {
     e.preventDefault();
@@ -108,6 +108,40 @@ export function UncoveredReasonsManager({ initialReasons }: { initialReasons: Un
     }
   }
 
+  const columns = useMemo<MRT_ColumnDef<UncoveredReason>[]>(
+    () => [
+      {
+        accessorKey: "code",
+        header: "Code",
+        size: 90,
+        Cell: ({ row }) => <span className="font-mono text-xs text-slate-600">{row.original.code}</span>,
+      },
+      {
+        accessorKey: "name",
+        header: "Name",
+        Cell: ({ row }) =>
+          editingId === row.original.id ? (
+            <div>
+              <Input value={editName} onChange={(e) => setEditName(e.target.value)} className="max-w-56" autoFocus />
+              {editError && <p className="mt-1 text-xs text-red-600">{editError}</p>}
+            </div>
+          ) : (
+            <span className="font-medium text-slate-900">{row.original.name}</span>
+          ),
+      },
+      {
+        id: "status",
+        header: "Status",
+        size: 110,
+        accessorFn: (x) => (x.active ? "Active" : "Inactive"),
+        filterVariant: "select",
+        filterSelectOptions: ["Active", "Inactive"],
+        Cell: ({ row }) => <Badge tone={row.original.active ? "green" : "gray"}>{row.original.active ? "Active" : "Inactive"}</Badge>,
+      },
+    ],
+    [editingId, editName, editError]
+  );
+
   return (
     <>
       <Card className="mt-5">
@@ -137,56 +171,44 @@ export function UncoveredReasonsManager({ initialReasons }: { initialReasons: Un
             </AddDialog>
           )}
         />
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-600">
-              <tr>
-                <th className="px-4 py-2 font-medium">Code</th>
-                <th className="px-4 py-2 font-medium">Name</th>
-                <th className="px-4 py-2 font-medium">Status</th>
-                <th className="px-4 py-2" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {pager.pageItems.map((r) => {
-                const isEditing = editingId === r.id;
-                return (
-                  <tr key={r.id}>
-                    <td className="px-4 py-2 font-mono text-xs text-slate-600">{r.code}</td>
-                    <td className="px-4 py-2 font-medium text-slate-900">
-                      {isEditing ? (
-                        <>
-                          <Input value={editName} onChange={(e) => setEditName(e.target.value)} className="max-w-56" />
-                          {editError && <p className="mt-1 text-xs text-red-600">{editError}</p>}
-                        </>
-                      ) : (
-                        r.name
-                      )}
-                    </td>
-                    <td className="px-4 py-2">
-                      <Badge tone={r.active ? "green" : "gray"}>{r.active ? "Active" : "Inactive"}</Badge>
-                    </td>
-                    <td className="px-4 py-2 text-right">
-                      {isEditing ? (
-                        <RowActions inline>
-                          <RowAction kind="cancel" onClick={() => setEditingId(null)} />
-                          <RowAction kind="save" busy={rowBusy === r.id} label={rowBusy === r.id ? "Saving..." : "Save"} onClick={() => saveEdit(r)} />
-                        </RowActions>
-                      ) : (
-                        <RowActions>
-                          <RowAction kind="edit" onClick={() => startEdit(r)} />
-                          <StatusToggleAction active={r.active} busy={rowBusy === r.id} onClick={() => toggleActive(r)} />
-                          <RowAction kind="delete" busy={rowBusy === r.id} onClick={() => deleteReason(r)} />
-                        </RowActions>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-        <Pagination page={pager.page} totalPages={pager.totalPages} total={pager.total} pageSize={pager.pageSize} onPageChange={pager.setPage} />
+        <AdminTable
+          columns={columns}
+          data={reasons}
+          getRowId={(r) => r.id}
+          exportFileName="uncovered-branch-reasons"
+          emptyText="No reasons yet."
+          toolbarActions={
+              <ImportCsvDialog
+                entityLabel="reasons"
+                templateName="uncovered-reasons-import"
+                columns={[
+                  { key: "code", required: true, example: "NOSTAFF", help: "Unique code" },
+                  { key: "name", required: true, example: "No staff available", help: "Name" },
+                ]}
+                toPayload={(row) =>
+                  !row.code || !row.name
+                    ? { error: "code and name are required", label: row.code || row.name || "(blank)" }
+                    : { payload: { code: row.code, name: row.name }, label: `${row.code} - ${row.name}` }
+                }
+                submit={(payload) => apiSend("/api/admin/uncovered-reasons", "POST", payload)}
+                onDone={() => router.refresh()}
+              />
+          }
+          renderRowActions={(r) =>
+            editingId === r.id ? (
+              <RowActions inline>
+                <RowAction kind="cancel" onClick={() => setEditingId(null)} />
+                <RowAction kind="save" busy={rowBusy === r.id} label={rowBusy === r.id ? "Saving..." : "Save"} onClick={() => saveEdit(r)} />
+              </RowActions>
+            ) : (
+              <RowActions>
+                <RowAction kind="edit" onClick={() => startEdit(r)} />
+                <StatusToggleAction active={r.active} busy={rowBusy === r.id} onClick={() => toggleActive(r)} />
+                <RowAction kind="delete" busy={rowBusy === r.id} onClick={() => deleteReason(r)} />
+              </RowActions>
+            )
+          }
+        />
       </Card>
       {dialog}
     </>

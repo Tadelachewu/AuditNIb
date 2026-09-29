@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import type { MRT_ColumnDef } from "material-react-table";
 import { apiGet, apiSend, ApiError } from "@/lib/api-client";
 import { formatDateTime } from "@/lib/format";
 import { Card, CardHeader } from "@/components/ui/Card";
@@ -12,12 +13,10 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { Tag } from "lucide-react";
 import { AddDialog } from "@/components/ui/AddDialog";
 import { RowAction, RowActions } from "@/components/ui/RowActions";
-import { TableSkeletonRows } from "@/components/ui/Skeleton";
-import { Pagination } from "@/components/ui/Pagination";
-import { useClientPagination } from "@/lib/useClientPagination";
 import { usePermissions } from "@/lib/permissions/PermissionsContext";
 import { hasPermission } from "@/lib/permissions/registry";
 import type { ReportingPeriod } from "@/types";
+import { AdminTable } from "@/components/ui/AdminTable";
 
 // The GET route annotates each period with a live transfer preview (see
 // outstandingTransferPreview() in src/lib/findings.ts) so the Lock dialog
@@ -87,7 +86,6 @@ export default function ReportingPeriodsPage() {
   // registry for this page) - gated identically to Lock/Unlock itself.
   const canLock = hasPermission(permissions, "reporting-periods.lock");
   const canDelete = hasPermission(permissions, "reporting-periods.delete");
-  const pager = useClientPagination(periods);
 
   function handleStartsAtChange(value: string) {
     setForm((f) => ({ ...f, startsAt: value, submissionStartsAt: f.submissionStartsAt === f.startsAt ? value : f.submissionStartsAt }));
@@ -342,6 +340,98 @@ export default function ReportingPeriodsPage() {
     }
   }
 
+  const columns = useMemo<MRT_ColumnDef<PeriodWithTransferPreview>[]>(
+    () => [
+      {
+        accessorKey: "code",
+        header: "Period",
+        meta: { exportValue: (p: PeriodWithTransferPreview) => (p.name ? `${p.code} (${p.name})` : p.code) },
+        Cell: ({ row }) => {
+          const p = row.original;
+          return (
+            <div className="font-medium text-slate-900">
+              {p.code}
+              {renamingId === p.id ? (
+                <div className="mt-1 flex flex-col gap-1">
+                  <Input value={renameValue} onChange={(e) => setRenameValue(e.target.value)} placeholder="e.g. September 2026 Monthly Review" className="max-w-56 text-xs" />
+                  <Input value={renameReason} onChange={(e) => setRenameReason(e.target.value)} placeholder="Reason (required, 5+ chars)" className="max-w-56 text-xs" />
+                  {renameError && <p className="text-xs text-red-600">{renameError}</p>}
+                  <div className="flex gap-1.5">
+                    <RowAction kind="cancel" onClick={() => setRenamingId(null)} disabled={renameBusy} />
+                    <RowAction kind="save" busy={renameBusy} label={renameBusy ? "Saving..." : "Save"} onClick={() => saveRename(p)} />
+                  </div>
+                </div>
+              ) : (
+                p.name && <div className="mt-0.5 text-xs font-normal text-slate-500">{p.name}</div>
+              )}
+            </div>
+          );
+        },
+      },
+      {
+        id: "range",
+        header: "Date/Time Range",
+        accessorFn: (p) => p.startsAt,
+        meta: { exportValue: (p: PeriodWithTransferPreview) => `${formatDateTime(p.startsAt)} - ${formatDateTime(p.endsAt)}` },
+        Cell: ({ row }) => {
+          const p = row.original;
+          return (
+            <div className="text-xs text-slate-500">
+              {formatDateTime(p.startsAt)} — {formatDateTime(p.endsAt)}
+              <div className="mt-0.5">
+                Submissions: {formatDateTime(p.submissionStartsAt)} – {formatDateTime(p.submissionEndsAt)}{" "}
+                {canLock && (
+                  <button type="button" onClick={() => openWindowDialog(p)} className="text-blue-800 hover:underline">
+                    Edit
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        },
+      },
+      {
+        accessorKey: "status",
+        header: "Status",
+        filterVariant: "select",
+        filterSelectOptions: ["OPEN", "LOCKED"],
+        meta: {
+          exportValue: (p: PeriodWithTransferPreview) =>
+            p.status === "LOCKED" ? `LOCKED (${p.draftsAllowedWhileLocked ? "drafts allowed" : "drafts blocked"})` : p.status,
+        },
+        Cell: ({ row }) => {
+          const p = row.original;
+          return (
+            <>
+              <Badge tone={p.status === "OPEN" ? "green" : "red"}>{p.status}</Badge>
+              {p.status === "LOCKED" && (
+                <>
+                  <Badge tone={p.draftsAllowedWhileLocked ? "blue" : "gray"} className="ml-1">
+                    {p.draftsAllowedWhileLocked ? "Drafts allowed" : "Drafts blocked"}
+                  </Badge>
+                  {canLock && (
+                    <button type="button" onClick={() => openLockDialog(p)} className="ml-1.5 text-xs text-blue-800 hover:underline">
+                      Edit
+                    </button>
+                  )}
+                </>
+              )}
+            </>
+          );
+        },
+      },
+      { accessorKey: "findingCount", header: "Findings", size: 90 },
+      {
+        id: "lastChange",
+        header: "Last Change",
+        accessorFn: (p) => (p.lockReason ? `${p.lockReason} · ${formatDateTime(p.updatedAt)}` : ""),
+        Cell: ({ cell }) => <span className="text-xs text-slate-500">{cell.getValue<string>() || "—"}</span>,
+      },
+    ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [renamingId, renameValue, renameReason, renameError, renameBusy, canLock]
+  );
+
   return (
     <div>
       <h1 className="text-lg font-semibold text-slate-900">Reporting Periods</h1>
@@ -415,126 +505,44 @@ export default function ReportingPeriodsPage() {
             </AddDialog>
           )}
         />
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-600">
-              <tr>
-                <th className="px-4 py-2 font-medium">Period</th>
-                <th className="px-4 py-2 font-medium">Date/Time Range</th>
-                <th className="px-4 py-2 font-medium">Status</th>
-                <th className="px-4 py-2 font-medium">Last Change</th>
-                <th className="px-4 py-2" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {loading && <TableSkeletonRows cols={5} />}
-              {!loading && periods.length === 0 && (
-                <tr>
-                  <td className="px-4 py-6 text-center text-slate-500" colSpan={5}>
-                    No reporting periods yet.
-                  </td>
-                </tr>
+        <AdminTable
+          columns={columns}
+          data={periods}
+          isLoading={loading}
+          getRowId={(p) => p.id}
+          exportFileName="reporting-periods"
+          emptyText="No reporting periods yet."
+          renderRowActions={(p) => (
+            <RowActions>
+              {canLock && (
+                <RowAction
+                  kind="edit"
+                  label="Edit period"
+                  disabled={p.findingCount > 0}
+                  title={
+                    p.findingCount > 0
+                      ? `Can't change this period's date range - ${p.findingCount} finding(s) already reference it`
+                      : "Edit this period's date range"
+                  }
+                  onClick={() => openPeriodEditDialog(p)}
+                />
               )}
-              {!loading &&
-                pager.pageItems.map((p) => (
-                  <tr key={p.id}>
-                    <td className="px-4 py-2 font-medium text-slate-900">
-                      {p.code}
-                      {renamingId === p.id ? (
-                        <div className="mt-1 flex flex-col gap-1">
-                          <Input
-                            value={renameValue}
-                            onChange={(e) => setRenameValue(e.target.value)}
-                            placeholder="e.g. September 2026 Monthly Review"
-                            className="max-w-56 text-xs"
-                          />
-                          <Input
-                            value={renameReason}
-                            onChange={(e) => setRenameReason(e.target.value)}
-                            placeholder="Reason (required, 5+ chars)"
-                            className="max-w-56 text-xs"
-                          />
-                          {renameError && <p className="text-xs text-red-600">{renameError}</p>}
-                          <div className="flex gap-1.5">
-                            <RowAction kind="cancel" onClick={() => setRenamingId(null)} disabled={renameBusy} />
-                            <RowAction kind="save" busy={renameBusy} label={renameBusy ? "Saving..." : "Save"} onClick={() => saveRename(p)} />
-                          </div>
-                        </div>
-                      ) : (
-                        p.name && <div className="mt-0.5 text-xs font-normal text-slate-500">{p.name}</div>
-                      )}
-                    </td>
-                    <td className="px-4 py-2 text-xs text-slate-500">
-                      {formatDateTime(p.startsAt)} — {formatDateTime(p.endsAt)}
-                      <div className="mt-0.5 text-slate-500">
-                        Submissions: {formatDateTime(p.submissionStartsAt)} – {formatDateTime(p.submissionEndsAt)}{" "}
-                        {canLock && (
-                          <button type="button" onClick={() => openWindowDialog(p)} className="text-blue-800 hover:underline">
-                            Edit
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-4 py-2">
-                      <Badge tone={p.status === "OPEN" ? "green" : "red"}>{p.status}</Badge>
-                      {p.status === "LOCKED" && (
-                        <>
-                          <Badge tone={p.draftsAllowedWhileLocked ? "blue" : "gray"} className="ml-1">
-                            {p.draftsAllowedWhileLocked ? "Drafts allowed" : "Drafts blocked"}
-                          </Badge>
-                          {canLock && (
-                            <button
-                              type="button"
-                              onClick={() => openLockDialog(p)}
-                              className="ml-1.5 text-xs text-blue-800 hover:underline"
-                            >
-                              Edit
-                            </button>
-                          )}
-                        </>
-                      )}
-                    </td>
-                    <td className="px-4 py-2 text-xs text-slate-500">
-                      {p.lockReason ? `${p.lockReason} · ${formatDateTime(p.updatedAt)}` : "—"}
-                    </td>
-                    <td className="px-4 py-2 text-right">
-                      <RowActions>
-                        {canLock && (
-                          <RowAction
-                            kind="edit"
-                            label="Edit period"
-                            disabled={p.findingCount > 0}
-                            title={
-                              p.findingCount > 0
-                                ? `Can't change this period's date range - ${p.findingCount} finding(s) already reference it`
-                                : "Edit this period's date range"
-                            }
-                            onClick={() => openPeriodEditDialog(p)}
-                          />
-                        )}
-                        {canLock && renamingId !== p.id && (
-                          <RowAction kind="edit" icon={Tag} label={p.name ? "Rename" : "Add name"} onClick={() => openRename(p)} />
-                        )}
-                        {canLock && (
-                          <RowAction kind={p.status === "OPEN" ? "lock" : "unlock"} busy={rowBusy === p.id} onClick={() => toggleLock(p)} />
-                        )}
-                        {canDelete && (
-                          <RowAction
-                            kind="delete"
-                            busy={rowBusy === p.id}
-                            disabled={p.findingCount > 0}
-                            title={p.findingCount > 0 ? `${p.findingCount} finding(s) reference this period` : "Delete"}
-                            onClick={() => deletePeriod(p)}
-                          />
-                        )}
-                      </RowActions>
-                    </td>
-                  </tr>
-                ))}
-            </tbody>
-          </table>
-        </div>
-        <Pagination page={pager.page} totalPages={pager.totalPages} total={pager.total} pageSize={pager.pageSize} onPageChange={pager.setPage} />
+              {canLock && renamingId !== p.id && (
+                <RowAction kind="edit" icon={Tag} label={p.name ? "Rename" : "Add name"} onClick={() => openRename(p)} />
+              )}
+              {canLock && <RowAction kind={p.status === "OPEN" ? "lock" : "unlock"} busy={rowBusy === p.id} onClick={() => toggleLock(p)} />}
+              {canDelete && (
+                <RowAction
+                  kind="delete"
+                  busy={rowBusy === p.id}
+                  disabled={p.findingCount > 0}
+                  title={p.findingCount > 0 ? `${p.findingCount} finding(s) reference this period` : "Delete"}
+                  onClick={() => deletePeriod(p)}
+                />
+              )}
+            </RowActions>
+          )}
+        />
       </Card>
       {dialog}
 

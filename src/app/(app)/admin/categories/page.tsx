@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import type { MRT_ColumnDef } from "material-react-table";
 import { apiGet, apiSend, ApiError } from "@/lib/api-client";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -10,12 +11,11 @@ import { Badge } from "@/components/ui/Badge";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { AddDialog } from "@/components/ui/AddDialog";
 import { RowAction, RowActions, StatusToggleAction } from "@/components/ui/RowActions";
-import { TableSkeletonRows } from "@/components/ui/Skeleton";
-import { Pagination } from "@/components/ui/Pagination";
-import { useClientPagination } from "@/lib/useClientPagination";
 import { usePermissions } from "@/lib/permissions/PermissionsContext";
 import { hasPermission } from "@/lib/permissions/registry";
 import type { ClassifiedCategory } from "@/types";
+import { AdminTable } from "@/components/ui/AdminTable";
+import { ImportCsvDialog } from "@/components/ui/ImportCsvDialog";
 
 export default function CategoriesPage() {
   const [categories, setCategories] = useState<ClassifiedCategory[]>([]);
@@ -33,7 +33,6 @@ export default function CategoriesPage() {
   const canEdit = hasPermission(permissions, "categories.edit");
   const canToggle = hasPermission(permissions, "categories.toggle-status");
   const canDelete = hasPermission(permissions, "categories.delete");
-  const pager = useClientPagination(categories);
 
   async function load() {
     setLoading(true);
@@ -144,6 +143,59 @@ export default function CategoriesPage() {
     }
   }
 
+  const columns = useMemo<MRT_ColumnDef<ClassifiedCategory>[]>(
+    () => [
+      {
+        accessorKey: "code",
+        header: "Code",
+        size: 90,
+        Cell: ({ row }) => <span className="font-mono text-xs text-slate-600">{row.original.code}</span>,
+      },
+      {
+        accessorKey: "name",
+        header: "Name",
+        Cell: ({ row }) =>
+          editingId === row.original.id ? (
+            <div>
+              <Input value={editName} onChange={(e) => setEditName(e.target.value)} className="max-w-56" autoFocus />
+              {editError && <p className="mt-1 text-xs text-red-600">{editError}</p>}
+            </div>
+          ) : (
+            <span className="font-medium text-slate-900">{row.original.name}</span>
+          ),
+      },
+      {
+        id: "scored",
+        header: "Scored",
+        accessorFn: (c) => (c.scored ? "Scored" : "Informational"),
+        filterVariant: "select",
+        filterSelectOptions: ["Scored", "Informational"],
+        Cell: ({ row }) => {
+          const c = row.original;
+          const badge = <Badge tone={c.scored ? "blue" : "gray"}>{c.scored ? "Scored" : "Informational"}</Badge>;
+          return canEdit ? (
+            <button type="button" onClick={() => toggleScored(c)} disabled={rowBusy === c.id} title="Click to switch Scored / Informational">
+              {badge}
+            </button>
+          ) : (
+            badge
+          );
+        },
+      },
+      {
+        id: "status",
+        header: "Status",
+        size: 110,
+        accessorFn: (c) => (c.active ? "Active" : "Inactive"),
+        filterVariant: "select",
+        filterSelectOptions: ["Active", "Inactive"],
+        Cell: ({ row }) => <Badge tone={row.original.active ? "green" : "gray"}>{row.original.active ? "Active" : "Inactive"}</Badge>,
+      },
+    ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [editingId, editName, editError, rowBusy, canEdit]
+  );
+
   return (
     <div>
       <h1 className="text-lg font-semibold text-slate-900">Classified Case Categories</h1>
@@ -189,74 +241,50 @@ export default function CategoriesPage() {
             </AddDialog>
           )}
         />
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-600">
-              <tr>
-                <th className="px-4 py-2 font-medium">Code</th>
-                <th className="px-4 py-2 font-medium">Name</th>
-                <th className="px-4 py-2 font-medium">Scored</th>
-                <th className="px-4 py-2 font-medium">Status</th>
-                <th className="px-4 py-2" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {loading && <TableSkeletonRows cols={5} />}
-              {!loading &&
-                pager.pageItems.map((c) => {
-                  const isEditing = editingId === c.id;
-                  return (
-                    <tr key={c.id}>
-                      <td className="px-4 py-2 font-mono text-xs text-slate-600">{c.code}</td>
-                      <td className="px-4 py-2 font-medium text-slate-900">
-                        {isEditing ? (
-                          <>
-                            <Input value={editName} onChange={(e) => setEditName(e.target.value)} className="max-w-56" />
-                            {editError && <p className="mt-1 text-xs text-red-600">{editError}</p>}
-                          </>
-                        ) : (
-                          c.name
-                        )}
-                      </td>
-                      <td className="px-4 py-2">
-                        {canEdit ? (
-                          <button onClick={() => toggleScored(c)} disabled={rowBusy === c.id}>
-                            <Badge tone={c.scored ? "blue" : "gray"}>{c.scored ? "Scored" : "Informational"}</Badge>
-                          </button>
-                        ) : (
-                          <Badge tone={c.scored ? "blue" : "gray"}>{c.scored ? "Scored" : "Informational"}</Badge>
-                        )}
-                      </td>
-                      <td className="px-4 py-2">
-                        <Badge tone={c.active ? "green" : "gray"}>{c.active ? "Active" : "Inactive"}</Badge>
-                      </td>
-                      <td className="px-4 py-2 text-right">
-                        {isEditing ? (
-                          <RowActions inline>
-                            <RowAction kind="cancel" onClick={() => setEditingId(null)} />
-                            <RowAction kind="save" busy={rowBusy === c.id} label={rowBusy === c.id ? "Saving..." : "Save"} onClick={() => saveEdit(c)} />
-                          </RowActions>
-                        ) : (
-                          <RowActions>
-                            {canEdit && (
-                              <RowAction kind="edit" onClick={() => startEdit(c)} />
-                            )}
-                            {canToggle && (
-                              <StatusToggleAction active={c.active} busy={rowBusy === c.id} onClick={() => toggleActive(c)} />
-                            )}
-                            {canDelete && (
-                              <RowAction kind="delete" busy={rowBusy === c.id} onClick={() => deleteCategory(c)} />
-                            )}
-                          </RowActions>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-            </tbody>
-          </table>
-        </div>
-        <Pagination page={pager.page} totalPages={pager.totalPages} total={pager.total} pageSize={pager.pageSize} onPageChange={pager.setPage} />
+        <AdminTable
+          columns={columns}
+          data={categories}
+          isLoading={loading}
+          getRowId={(c) => c.id}
+          exportFileName="classified-categories"
+          emptyText="No categories yet."
+          toolbarActions={
+            canCreate && (
+              <ImportCsvDialog
+                entityLabel="categories"
+                templateName="categories-import"
+                columns={[
+                  { key: "code", required: true, example: "OTHER", help: "Unique category code" },
+                  { key: "name", required: true, example: "Other Cases", help: "Category name" },
+                  { key: "scored", example: "yes", help: "yes = counts toward performance; no (or blank) = informational only" },
+                ]}
+                toPayload={(row) => {
+                  const label = row.code ? `${row.code} - ${row.name}` : row.name || "(blank)";
+                  if (!row.code || !row.name) return { error: "code and name are required", label };
+                  const flag = (row.scored ?? "").trim().toLowerCase();
+                  if (flag && !["yes", "no", "true", "false", "1", "0", "y", "n"].includes(flag)) return { error: `scored must be yes or no, not "${row.scored}"`, label };
+                  return { payload: { code: row.code, name: row.name, scored: ["yes", "true", "1", "y"].includes(flag) }, label };
+                }}
+                submit={(payload) => apiSend("/api/admin/categories", "POST", payload)}
+                onDone={load}
+              />
+            )
+          }
+          renderRowActions={(c) =>
+            editingId === c.id ? (
+              <RowActions inline>
+                <RowAction kind="cancel" onClick={() => setEditingId(null)} />
+                <RowAction kind="save" busy={rowBusy === c.id} label={rowBusy === c.id ? "Saving..." : "Save"} onClick={() => saveEdit(c)} />
+              </RowActions>
+            ) : (
+              <RowActions>
+                {canEdit && <RowAction kind="edit" onClick={() => startEdit(c)} />}
+                {canToggle && <StatusToggleAction active={c.active} busy={rowBusy === c.id} onClick={() => toggleActive(c)} />}
+                {canDelete && <RowAction kind="delete" busy={rowBusy === c.id} onClick={() => deleteCategory(c)} />}
+              </RowActions>
+            )
+          }
+        />
       </Card>
       {dialog}
     </div>

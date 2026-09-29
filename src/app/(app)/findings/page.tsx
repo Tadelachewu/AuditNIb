@@ -6,10 +6,10 @@ import { findingsInScope } from "@/lib/findings-scope";
 import { queueStatusesForSession, findingsResidentInPeriod, type FindingPeriodSlice } from "@/lib/findings";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
 import { paginate, parsePage } from "@/lib/pagination";
+import { filterFindingsByText, sortFindings, parseFindingSort, parsePageSize } from "@/lib/findingListQuery";
 import { inDateRange } from "@/lib/dateRange";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { Pagination } from "@/components/ui/Pagination";
 import { TimeRangeFilter } from "@/components/reports/TimeRangeFilter";
 import { FilterBar } from "@/components/dashboard/FilterBar";
 import { FindingsTable, type FindingRow } from "@/components/findings/FindingsTable";
@@ -76,23 +76,21 @@ export default async function FindingsPage({
   const isQueued = queueStatusesForSession(user, db);
   if (queueOnly) resident = resident.filter((r) => (r.slice === null || r.slice.isCurrentPeriod) && isQueued(r.finding));
 
-  resident = [...resident].sort((a, b) => b.finding.updatedAt.localeCompare(a.finding.updatedAt));
+  // The table's own search box (q) and column sort (sort + dir) - applied
+  // here, server-side, across every matching finding rather than just the
+  // visible page; the CSV export reuses the same helpers so it always
+  // matches the list (src/lib/findingListQuery.ts).
+  const names = { branchName, departmentName, categoryName, sourceName };
+  const searchText = get("q");
+  const sort = parseFindingSort(get("sort"), get("dir"));
+  resident = filterFindingsByText(resident, searchText, names);
+  resident = sortFindings(resident, sort, names, (r) => (r.slice ? r.slice.eligibleAmount : r.finding.amount));
 
   // Server-side pagination: only the current page's rows are ever
   // rendered/sent to the client, no matter how large the filtered result
   // set grows - the Findings table is the one dataset in this app with
   // genuinely unbounded growth (every registered finding, forever).
-  const { items: pageResident, page, pageSize, totalPages, total } = paginate(resident, parsePage(get("page")));
-  function hrefFor(targetPage: number) {
-    const q = new URLSearchParams();
-    for (const [key, value] of Object.entries(params)) {
-      if (key === "page") continue;
-      if (typeof value === "string" && value) q.set(key, value);
-    }
-    if (targetPage > 1) q.set("page", String(targetPage));
-    const qs = q.toString();
-    return qs ? `/findings?${qs}` : "/findings";
-  }
+  const { items: pageResident, page, pageSize, total } = paginate(resident, parsePage(get("page")), parsePageSize(get("pageSize")));
 
   const district = db.districts.find((d) => d.id === user.districtId);
   const branch = db.branches.find((b) => b.id === user.branchId);
@@ -208,8 +206,10 @@ export default async function FindingsPage({
           rows={rows}
           permissions={bulkPermissions}
           emptyText={queueOnly ? "Nothing in your queue." : "No findings match these filters."}
+          paging={{ page, pageSize, total }}
+          sort={{ id: sort.key, desc: sort.desc }}
+          searchText={searchText}
         />
-        <Pagination page={page} totalPages={totalPages} total={total} pageSize={pageSize} hrefFor={hrefFor} />
       </Card>
     </div>
   );

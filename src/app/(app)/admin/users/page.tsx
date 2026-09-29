@@ -1,6 +1,7 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import type { MRT_ColumnDef } from "material-react-table";
 import { apiGet, apiSend, ApiError } from "@/lib/api-client";
 import { formatDateTime } from "@/lib/format";
 import { Card, CardHeader } from "@/components/ui/Card";
@@ -8,14 +9,13 @@ import { Button } from "@/components/ui/Button";
 import { StickyActions } from "@/components/ui/StickyActions";
 import { Input, Select, Label } from "@/components/ui/Field";
 import { StatusBadge } from "@/components/ui/Badge";
-import { Pagination } from "@/components/ui/Pagination";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { AddDialog, Modal } from "@/components/ui/AddDialog";
 import { RowAction, RowActions, StatusToggleAction } from "@/components/ui/RowActions";
-import { TableSkeletonRows } from "@/components/ui/Skeleton";
 import { usePermissions } from "@/lib/permissions/PermissionsContext";
 import { hasPermission } from "@/lib/permissions/registry";
 import type { SafeUser, District, Branch, Department, RoleDefinition } from "@/types";
+import { AdminTable } from "@/components/ui/AdminTable";
 
 const emptyForm = { name: "", username: "", email: "", phone: "", password: "", role: "", districtId: "", branchId: "", departmentId: "" };
 const emptyEditForm = { name: "", email: "", phone: "", role: "", districtId: "", branchId: "", departmentId: "", password: "" };
@@ -35,8 +35,6 @@ export default function UsersPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState(emptyEditForm);
   const [editError, setEditError] = useState<string | null>(null);
-  const [page, setPage] = useState(1);
-  const [pageInfo, setPageInfo] = useState({ total: 0, pageSize: 25, totalPages: 1 });
   const { confirm, dialog } = useConfirm();
   const permissions = usePermissions();
   const canCreate = hasPermission(permissions, "users.create");
@@ -47,12 +45,12 @@ export default function UsersPage() {
   async function loadAll() {
     setLoading(true);
     const [u, d, b] = await Promise.all([
-      apiGet<{ users: SafeUser[]; total: number; pageSize: number; totalPages: number }>(`/api/admin/users?page=${page}`),
+      // Everyone at once - the table searches, filters and pages client-side.
+      apiGet<{ users: SafeUser[] }>("/api/admin/users?all=1"),
       apiGet<{ districts: District[] }>("/api/admin/districts"),
       apiGet<{ branches: Branch[] }>("/api/admin/branches"),
     ]);
     setUsers(u.users);
-    setPageInfo({ total: u.total, pageSize: u.pageSize, totalPages: u.totalPages });
     setDistricts(d.districts);
     setBranches(b.branches);
 
@@ -88,8 +86,7 @@ export default function UsersPage() {
 
   useEffect(() => {
     loadAll();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page]);
+  }, []);
 
   const activeRoles = useMemo(() => roles.filter((r) => r.status === "ACTIVE"), [roles]);
   const selectedRole = useMemo(() => roles.find((r) => r.code === form.role), [roles, form.role]);
@@ -253,6 +250,49 @@ export default function UsersPage() {
   const editIsBranchScoped = editSelectedRole?.orgScope === "BRANCH";
   const editIsDistrictScoped = editSelectedRole?.orgScope === "DISTRICT";
 
+  const editingUser = users.find((u) => u.id === editingId) ?? null;
+
+  const columns = useMemo<MRT_ColumnDef<SafeUser>[]>(
+    () => [
+      { accessorKey: "name", header: "Name", Cell: ({ row }) => <span className="font-medium text-slate-900">{row.original.name}</span> },
+      {
+        accessorKey: "username",
+        header: "Username",
+        Cell: ({ row }) => <span className="font-mono text-xs text-slate-600">{row.original.username}</span>,
+      },
+      { id: "email", header: "Email", accessorFn: (u) => u.email || "—" },
+      { id: "phone", header: "Phone", accessorFn: (u) => u.phone || "—" },
+      { id: "role", header: "Role", accessorFn: (u) => roleName(u.role), filterVariant: "select" },
+      {
+        id: "orgUnit",
+        header: "Org Unit",
+        accessorFn: (u) => (u.branchId ? branchName(u.branchId) : u.districtId ? districtName(u.districtId) : "Bank-wide"),
+        filterVariant: "select",
+      },
+      { id: "department", header: "Department", accessorFn: (u) => departmentName(u.departmentId), filterVariant: "select" },
+      {
+        accessorKey: "status",
+        header: "Status",
+        size: 110,
+        filterVariant: "select",
+        filterSelectOptions: [
+          { value: "ACTIVE", label: "Active" },
+          { value: "INACTIVE", label: "Inactive" },
+        ],
+        Cell: ({ row }) => <StatusBadge status={row.original.status} />,
+      },
+      {
+        id: "lastLogin",
+        header: "Last Login",
+        accessorFn: (u) => u.lastLoginAt ?? "",
+        meta: { exportValue: (u: SafeUser) => (u.lastLoginAt ? formatDateTime(u.lastLoginAt) : "Never") },
+        Cell: ({ row }) => <span className="text-xs text-slate-500">{row.original.lastLoginAt ? formatDateTime(row.original.lastLoginAt) : "Never"}</span>,
+      },
+    ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [roles, districts, branches, departments]
+  );
+
   return (
     <div>
       <h1 className="text-lg font-semibold text-slate-900">Users</h1>
@@ -264,7 +304,7 @@ export default function UsersPage() {
       {rolesError && <p className="mt-2 text-sm text-amber-700">{rolesError}</p>}
 
       <Card className="mt-5">
-        <CardHeader title="All Users" description={`${pageInfo.total} total`}
+        <CardHeader title="All Users" description={`${users.length} total`}
           action={canCreate && (
             <AddDialog size="xl" title="Add User">
               {({ close }) => (
@@ -398,196 +438,151 @@ export default function UsersPage() {
             </AddDialog>
           )}
         />
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-600">
-              <tr>
-                <th className="px-4 py-2 font-medium">Name</th>
-                <th className="px-4 py-2 font-medium">Username</th>
-                <th className="px-4 py-2 font-medium">Email</th>
-                <th className="px-4 py-2 font-medium">Phone</th>
-                <th className="px-4 py-2 font-medium">Role</th>
-                <th className="px-4 py-2 font-medium">Org Unit</th>
-                <th className="px-4 py-2 font-medium">Department</th>
-                <th className="px-4 py-2 font-medium">Status</th>
-                <th className="px-4 py-2 font-medium">Last Login</th>
-                <th className="px-4 py-2" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {loading && <TableSkeletonRows cols={10} />}
-              {!loading &&
-                users.map((u) => {
-                  const isEditing = editingId === u.id;
-                  return (
-                    <Fragment key={u.id}>
-                      <tr>
-                        <td className="px-4 py-2 font-medium text-slate-900">{u.name}</td>
-                        <td className="px-4 py-2 font-mono text-xs text-slate-600">{u.username}</td>
-                        <td className="px-4 py-2 text-slate-600">{u.email || "—"}</td>
-                        <td className="px-4 py-2 text-slate-600">{u.phone || "—"}</td>
-                        <td className="px-4 py-2 text-slate-600">{roleName(u.role)}</td>
-                        <td className="px-4 py-2 text-slate-600">
-                          {u.branchId ? branchName(u.branchId) : u.districtId ? districtName(u.districtId) : "Bank-wide"}
-                        </td>
-                        <td className="px-4 py-2 text-slate-600">{departmentName(u.departmentId)}</td>
-                        <td className="px-4 py-2">
-                          <StatusBadge status={u.status} />
-                        </td>
-                        <td className="px-4 py-2 text-xs text-slate-500">
-                          {u.lastLoginAt ? formatDateTime(u.lastLoginAt) : "Never"}
-                        </td>
-                        <td className="px-4 py-2 text-right">
-                          <RowActions>
-                            {canEdit && (
-                              <RowAction
-                                kind="edit"
-                                disabled={isEditing}
-                                title={isEditing ? "Already editing - use Save Changes or Cancel below" : "Edit"}
-                                onClick={() => startEdit(u)}
-                              />
-                            )}
-                            {canToggle && (
-                              <StatusToggleAction active={u.status === "ACTIVE"} busy={rowBusy === u.id} onClick={() => toggleStatus(u)} />
-                            )}
-                            {canDelete && (
-                              <RowAction kind="delete" busy={rowBusy === u.id} onClick={() => deleteUser(u)} />
-                            )}
-                          </RowActions>
-                        </td>
-                      </tr>
-                      {/* The editor opens in a dialog (portalled out of the table),
-                          like Add - an in-row panel sat inside the table's
-                          horizontal-scroll wrapper, where Save couldn't stay pinned. */}
-                      {isEditing && (
-                        <Modal title={`Edit ${u.name}`} description={u.username} size="xl" onClose={() => setEditingId(null)}>
-                          <div className="p-4">
-                            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                              <div>
-                                <Label htmlFor="edit-name">Full name</Label>
-                                <Input
-                                  id="edit-name"
-                                  value={editForm.name}
-                                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                                />
-                              </div>
-                              <div>
-                                <Label htmlFor="edit-email">Email <span className="font-normal text-red-600" aria-hidden="true">*</span></Label>
-                                <Input
-                                  id="edit-email"
-                                  type="email"
-                                  required
-                                  placeholder="someone@nibbank.com.et"
-                                  value={editForm.email}
-                                  onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
-                                />
-                              </div>
-                              <div>
-                                <Label htmlFor="edit-phone">Phone</Label>
-                                <Input
-                                  id="edit-phone"
-                                  type="tel"
-                                  placeholder="+251..."
-                                  value={editForm.phone}
-                                  onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
-                                />
-                              </div>
-                              <div>
-                                <Label htmlFor="edit-role">Role</Label>
-                                <Select
-                                  id="edit-role"
-                                  value={editForm.role}
-                                  onChange={(e) =>
-                                    setEditForm({ ...editForm, role: e.target.value, districtId: "", branchId: "" })
-                                  }
-                                >
-                                  {roles.map((r) => (
-                                    <option key={r.id} value={r.code}>
-                                      {r.name}
-                                      {r.status === "INACTIVE" ? " (inactive)" : ""}
-                                    </option>
-                                  ))}
-                                </Select>
-                              </div>
-                              {(editIsDistrictScoped || editIsBranchScoped) && (
-                                <div>
-                                  <Label htmlFor="edit-districtId">District</Label>
-                                  <Select
-                                    id="edit-districtId"
-                                    value={editForm.districtId}
-                                    onChange={(e) => setEditForm({ ...editForm, districtId: e.target.value, branchId: "", departmentId: "" })}
-                                  >
-                                    <option value="">Select district</option>
-                                    {districts.map((d) => (
-                                      <option key={d.id} value={d.id}>
-                                        {d.name}
-                                      </option>
-                                    ))}
-                                  </Select>
-                                </div>
-                              )}
-                              {editIsBranchScoped && (
-                                <div>
-                                  <Label htmlFor="edit-branchId">Branch</Label>
-                                  <Select
-                                    id="edit-branchId"
-                                    value={editForm.branchId}
-                                    onChange={(e) => setEditForm({ ...editForm, branchId: e.target.value, departmentId: "" })}
-                                  >
-                                    <option value="">Select branch</option>
-                                    {editBranchesInDistrict.map((b) => (
-                                      <option key={b.id} value={b.id}>
-                                        {b.name}
-                                      </option>
-                                    ))}
-                                  </Select>
-                                </div>
-                              )}
-                              <div>
-                                <Label htmlFor="edit-departmentId">Department (optional)</Label>
-                                <Select
-                                  id="edit-departmentId"
-                                  value={editForm.departmentId}
-                                  onChange={(e) => setEditForm({ ...editForm, departmentId: e.target.value })}
-                                >
-                                  <option value="">No department</option>
-                                  {editDepartmentOptions.map((d) => (
-                                    <option key={d.id} value={d.id}>
-                                      {d.name}
-                                    </option>
-                                  ))}
-                                </Select>
-                              </div>
-                              <div>
-                                <Label htmlFor="edit-password">Reset password (optional)</Label>
-                                <Input
-                                  id="edit-password"
-                                  type="password"
-                                  minLength={8}
-                                  placeholder="Leave blank to keep current"
-                                  value={editForm.password}
-                                  onChange={(e) => setEditForm({ ...editForm, password: e.target.value })}
-                                />
-                              </div>
-                            </div>
-                            <StickyActions className="mt-4" error={editError}>
-                              <Button variant="cancel" onClick={() => setEditingId(null)}>
-                                Cancel
-                              </Button>
-                              <Button disabled={rowBusy === u.id} onClick={() => saveEdit(u)}>
-                                {rowBusy === u.id ? "Saving..." : "Save Changes"}
-                              </Button>
-                            </StickyActions>
-                          </div>
-                        </Modal>
-                      )}
-                    </Fragment>
-                  );
-                })}
-            </tbody>
-          </table>
-        </div>
-        <Pagination page={page} totalPages={pageInfo.totalPages} total={pageInfo.total} pageSize={pageInfo.pageSize} onPageChange={setPage} />
+        <AdminTable
+          columns={columns}
+          data={users}
+          isLoading={loading}
+          getRowId={(u) => u.id}
+          exportFileName="users"
+          emptyText="No users yet."
+          renderRowActions={(u) => (
+            <RowActions>
+              {canEdit && (
+                <RowAction
+                  kind="edit"
+                  disabled={editingId === u.id}
+                  title={editingId === u.id ? "Already editing - use Save Changes or Cancel below" : "Edit"}
+                  onClick={() => startEdit(u)}
+                />
+              )}
+              {canToggle && <StatusToggleAction active={u.status === "ACTIVE"} busy={rowBusy === u.id} onClick={() => toggleStatus(u)} />}
+              {canDelete && <RowAction kind="delete" busy={rowBusy === u.id} onClick={() => deleteUser(u)} />}
+            </RowActions>
+          )}
+        />
+        {/* The editor opens in a dialog (portalled out of the table), like Add. */}
+        {editingUser && (
+        <Modal title={`Edit ${editingUser.name}`} description={editingUser.username} size="xl" onClose={() => setEditingId(null)}>
+          <div className="p-4">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div>
+                <Label htmlFor="edit-name">Full name</Label>
+                <Input
+                  id="edit-name"
+                  value={editForm.name}
+                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-email">Email <span className="font-normal text-red-600" aria-hidden="true">*</span></Label>
+                <Input
+                  id="edit-email"
+                  type="email"
+                  required
+                  placeholder="someone@nibbank.com.et"
+                  value={editForm.email}
+                  onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-phone">Phone</Label>
+                <Input
+                  id="edit-phone"
+                  type="tel"
+                  placeholder="+251..."
+                  value={editForm.phone}
+                  onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-role">Role</Label>
+                <Select
+                  id="edit-role"
+                  value={editForm.role}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, role: e.target.value, districtId: "", branchId: "" })
+                  }
+                >
+                  {roles.map((r) => (
+                    <option key={r.id} value={r.code}>
+                      {r.name}
+                      {r.status === "INACTIVE" ? " (inactive)" : ""}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              {(editIsDistrictScoped || editIsBranchScoped) && (
+                <div>
+                  <Label htmlFor="edit-districtId">District</Label>
+                  <Select
+                    id="edit-districtId"
+                    value={editForm.districtId}
+                    onChange={(e) => setEditForm({ ...editForm, districtId: e.target.value, branchId: "", departmentId: "" })}
+                  >
+                    <option value="">Select district</option>
+                    {districts.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.name}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+              )}
+              {editIsBranchScoped && (
+                <div>
+                  <Label htmlFor="edit-branchId">Branch</Label>
+                  <Select
+                    id="edit-branchId"
+                    value={editForm.branchId}
+                    onChange={(e) => setEditForm({ ...editForm, branchId: e.target.value, departmentId: "" })}
+                  >
+                    <option value="">Select branch</option>
+                    {editBranchesInDistrict.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+              )}
+              <div>
+                <Label htmlFor="edit-departmentId">Department (optional)</Label>
+                <Select
+                  id="edit-departmentId"
+                  value={editForm.departmentId}
+                  onChange={(e) => setEditForm({ ...editForm, departmentId: e.target.value })}
+                >
+                  <option value="">No department</option>
+                  {editDepartmentOptions.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.name}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="edit-password">Reset password (optional)</Label>
+                <Input
+                  id="edit-password"
+                  type="password"
+                  minLength={8}
+                  placeholder="Leave blank to keep current"
+                  value={editForm.password}
+                  onChange={(e) => setEditForm({ ...editForm, password: e.target.value })}
+                />
+              </div>
+            </div>
+            <StickyActions className="mt-4" error={editError}>
+              <Button variant="cancel" onClick={() => setEditingId(null)}>
+                Cancel
+              </Button>
+              <Button disabled={rowBusy === editingUser.id} onClick={() => saveEdit(editingUser)}>
+                {rowBusy === editingUser.id ? "Saving..." : "Save Changes"}
+              </Button>
+            </StickyActions>
+          </div>
+        </Modal>
+        )}
       </Card>
       {dialog}
     </div>

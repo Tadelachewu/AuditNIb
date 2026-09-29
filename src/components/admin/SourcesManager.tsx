@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import type { MRT_ColumnDef } from "material-react-table";
 import { useRouter } from "next/navigation";
 import { apiSend, ApiError } from "@/lib/api-client";
 import { Card, CardHeader } from "@/components/ui/Card";
@@ -11,9 +12,9 @@ import { Badge } from "@/components/ui/Badge";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { AddDialog } from "@/components/ui/AddDialog";
 import { RowAction, RowActions, StatusToggleAction } from "@/components/ui/RowActions";
-import { Pagination } from "@/components/ui/Pagination";
-import { useClientPagination } from "@/lib/useClientPagination";
 import type { Source } from "@/types";
+import { AdminTable } from "@/components/ui/AdminTable";
+import { ImportCsvDialog } from "@/components/ui/ImportCsvDialog";
 
 // The list itself is never copied into local state - `sources` is read
 // straight from the prop the Server Component parent passes in, so a
@@ -41,7 +42,6 @@ export function SourcesManager({ initialSources, permissions }: { initialSources
   const [editName, setEditName] = useState("");
   const [editError, setEditError] = useState<string | null>(null);
   const { confirm, dialog } = useConfirm();
-  const pager = useClientPagination(sources);
 
   async function handleCreate(e: React.FormEvent, close: () => void) {
     e.preventDefault();
@@ -134,6 +134,49 @@ export function SourcesManager({ initialSources, permissions }: { initialSources
     }
   }
 
+  const columns = useMemo<MRT_ColumnDef<Source>[]>(
+    () => [
+      {
+        accessorKey: "code",
+        header: "Code",
+        size: 90,
+        Cell: ({ row }) => <span className="font-mono text-xs text-slate-600">{row.original.code}</span>,
+      },
+      {
+        accessorKey: "name",
+        header: "Name",
+        Cell: ({ row }) =>
+          editingId === row.original.id ? (
+            <div>
+              <Input value={editName} onChange={(e) => setEditName(e.target.value)} className="max-w-56" autoFocus />
+              {editError && <p className="mt-1 text-xs text-red-600">{editError}</p>}
+            </div>
+          ) : (
+            <span className="font-medium text-slate-900">{row.original.name}</span>
+          ),
+      },
+      {
+        id: "status",
+        header: "Status",
+        size: 110,
+        accessorFn: (x) => (x.active ? "Active" : "Inactive"),
+        filterVariant: "select",
+        filterSelectOptions: ["Active", "Inactive"],
+        Cell: ({ row }) => <Badge tone={row.original.active ? "green" : "gray"}>{row.original.active ? "Active" : "Inactive"}</Badge>,
+      },
+      {
+        id: "default",
+        header: "Default",
+        size: 110,
+        accessorFn: (s) => (s.isDefault ? "Default" : ""),
+        filterVariant: "select",
+        filterSelectOptions: ["Default"],
+        Cell: ({ row }) => (row.original.isDefault ? <Badge tone="gold">★ Default</Badge> : <span className="text-slate-400">—</span>),
+      },
+    ],
+    [editingId, editName, editError]
+  );
+
   return (
     <>
       <Card className="mt-5">
@@ -163,78 +206,62 @@ export function SourcesManager({ initialSources, permissions }: { initialSources
             </AddDialog>
           )}
         />
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-600">
-              <tr>
-                <th className="px-4 py-2 font-medium">Code</th>
-                <th className="px-4 py-2 font-medium">Name</th>
-                <th className="px-4 py-2 font-medium">Status</th>
-                <th className="px-4 py-2 font-medium">Default</th>
-                <th className="px-4 py-2" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {pager.pageItems.map((s) => {
-                const isEditing = editingId === s.id;
-                return (
-                  <tr
-                    key={s.id}
-                    className={s.isDefault ? "bg-amber-50 shadow-[inset_4px_0_0_0_var(--brand-gold,#feb914)]" : undefined}
-                  >
-                    <td className="px-4 py-2 font-mono text-xs text-slate-600">{s.code}</td>
-                    <td className="px-4 py-2 font-medium text-slate-900">
-                      {isEditing ? (
-                        <>
-                          <Input value={editName} onChange={(e) => setEditName(e.target.value)} className="max-w-56" />
-                          {editError && <p className="mt-1 text-xs text-red-600">{editError}</p>}
-                        </>
-                      ) : (
-                        s.name
-                      )}
-                    </td>
-                    <td className="px-4 py-2">
-                      <Badge tone={s.active ? "green" : "gray"}>{s.active ? "Active" : "Inactive"}</Badge>
-                    </td>
-                    <td className="px-4 py-2">
-                      {s.isDefault ? <Badge tone="gold">★ Default</Badge> : <span className="text-slate-400">—</span>}
-                    </td>
-                    <td className="px-4 py-2 text-right">
-                      {isEditing ? (
-                        <RowActions inline>
-                          <RowAction kind="cancel" onClick={() => setEditingId(null)} />
-                          <RowAction kind="save" busy={rowBusy === s.id} label={rowBusy === s.id ? "Saving..." : "Save"} onClick={() => saveEdit(s)} />
-                        </RowActions>
-                      ) : (
-                        <RowActions>
-                          {canEdit && (
-                            <RowAction kind="edit" onClick={() => startEdit(s)} />
-                          )}
-                          {canEdit && (
-                            <RowAction
-                              kind={s.isDefault ? "undefault" : "default"}
-                              busy={rowBusy === s.id}
-                              disabled={!s.isDefault && !s.active}
-                              title={!s.isDefault && !s.active ? "Activate this source first" : "Pre-fill this source on new findings"}
-                              onClick={() => makeDefault(s)}
-                            />
-                          )}
-                          {canToggle && (
-                            <StatusToggleAction active={s.active} busy={rowBusy === s.id} onClick={() => toggleActive(s)} />
-                          )}
-                          {canDelete && (
-                            <RowAction kind="delete" busy={rowBusy === s.id} onClick={() => deleteSource(s)} />
-                          )}
-                        </RowActions>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-        <Pagination page={pager.page} totalPages={pager.totalPages} total={pager.total} pageSize={pager.pageSize} onPageChange={pager.setPage} />
+        <AdminTable
+          columns={columns}
+          data={sources}
+          getRowId={(s) => s.id}
+          exportFileName="finding-sources"
+          emptyText="No sources yet."
+          tableOptions={{
+            // The default source's row keeps its gold accent.
+            muiTableBodyRowProps: ({ row }) =>
+              row.original.isDefault
+                ? { sx: { backgroundColor: "rgba(254, 185, 20, 0.10)", boxShadow: "inset 4px 0 0 0 #feb914" } }
+                : {},
+          }}
+          toolbarActions={
+            canCreate && (
+              <ImportCsvDialog
+                entityLabel="sources"
+                templateName="sources-import"
+                columns={[
+                  { key: "code", required: true, example: "IC", help: "Unique code" },
+                  { key: "name", required: true, example: "Internal Control", help: "Name" },
+                ]}
+                toPayload={(row) =>
+                  !row.code || !row.name
+                    ? { error: "code and name are required", label: row.code || row.name || "(blank)" }
+                    : { payload: { code: row.code, name: row.name }, label: `${row.code} - ${row.name}` }
+                }
+                submit={(payload) => apiSend("/api/admin/sources", "POST", payload)}
+                onDone={() => router.refresh()}
+              />
+            )
+          }
+          renderRowActions={(s) =>
+            editingId === s.id ? (
+              <RowActions inline>
+                <RowAction kind="cancel" onClick={() => setEditingId(null)} />
+                <RowAction kind="save" busy={rowBusy === s.id} label={rowBusy === s.id ? "Saving..." : "Save"} onClick={() => saveEdit(s)} />
+              </RowActions>
+            ) : (
+              <RowActions>
+                {canEdit && <RowAction kind="edit" onClick={() => startEdit(s)} />}
+                {canEdit && (
+                  <RowAction
+                    kind={s.isDefault ? "undefault" : "default"}
+                    busy={rowBusy === s.id}
+                    disabled={!s.isDefault && !s.active}
+                    title={!s.isDefault && !s.active ? "Activate this source first" : "Pre-fill this source on new findings"}
+                    onClick={() => makeDefault(s)}
+                  />
+                )}
+                {canToggle && <StatusToggleAction active={s.active} busy={rowBusy === s.id} onClick={() => toggleActive(s)} />}
+                {canDelete && <RowAction kind="delete" busy={rowBusy === s.id} onClick={() => deleteSource(s)} />}
+              </RowActions>
+            )
+          }
+        />
       </Card>
       {dialog}
     </>

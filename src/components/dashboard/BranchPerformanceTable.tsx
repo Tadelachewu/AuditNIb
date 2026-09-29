@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { Database, Branch, ReportingPeriod, ScoringAdjustment } from "@/types";
 import { computePerformance, computeEligibleCaseCounts, findPreviousPeriod, isHoApproved, getActiveScoringAdjustment } from "@/lib/findings";
-import { AdjustedBadge } from "@/components/ui/AdjustedBadge";
+import { RankingGrid } from "@/components/dashboard/RankingGrid";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 
@@ -15,33 +15,6 @@ interface Row {
   adjustment: ScoringAdjustment | null;
   improvement: number | null;
   highRiskCount: number;
-}
-
-/** Performance %'s own math, revealed on click - see StatCard's `detail` prop for the same pattern. */
-function PerformanceDetail({ row }: { row: Row }) {
-  if (row.performance === null) return null;
-  return (
-    <details className="group">
-      <summary className="cursor-pointer list-none text-slate-700 marker:content-none hover:underline">
-        {row.performance.toFixed(1)}%
-        <AdjustedBadge adjustment={row.adjustment} />
-      </summary>
-      <div className="mt-1 max-w-[14rem] text-xs leading-relaxed text-slate-500">
-        {row.adjustment ? (
-          <>
-            Manually adjusted to {row.performance.toFixed(1)}% (Scoring Adjustments): &quot;{row.adjustment.reason}&quot;. The formula
-            would give {row.rectifiedCases} ÷ {row.totalCases} eligible case(s)
-            {row.totalCases > 0 ? ` = ${((row.rectifiedCases / row.totalCases) * 100).toFixed(1)}%` : ""}.
-          </>
-        ) : (
-          <>
-            {row.rectifiedCases} of {row.totalCases} eligible case(s) closed (unless it&apos;s closed, it never counts as rectified):{" "}
-            {row.rectifiedCases} ÷ {row.totalCases} × 100 = {row.performance.toFixed(1)}%.
-          </>
-        )}
-      </div>
-    </details>
-  );
 }
 
 function Callout({
@@ -194,43 +167,22 @@ export function BranchPerformanceTable({
           tone="blue"
         />
       </div>
-      <div className="overflow-x-auto">
-        <table className="w-full text-left text-sm">
-          <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-600">
-            <tr>
-              <th className="px-4 py-2 font-medium">Rank</th>
-              <th className="px-4 py-2 font-medium">Branch</th>
-              <th className="px-4 py-2 font-medium">Total Eligible Cases</th>
-              <th className="px-4 py-2 font-medium">Solved</th>
-              <th className="px-4 py-2 font-medium">Unsolved</th>
-              <th className="px-4 py-2 font-medium">Performance</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {ranked.length === 0 && (
-              <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-slate-500">
-                  No branches configured yet.
-                </td>
-              </tr>
-            )}
-            {ranked.map((row, i) => (
-              <tr key={row.branch.id}>
-                <td className="px-4 py-2 text-slate-500">{i + 1}</td>
-                <td className="px-4 py-2">
-                  <Link href={`/findings?branchId=${row.branch.id}`} className="text-blue-800 hover:underline">
-                    {row.branch.name}
-                  </Link>
-                </td>
-                <td className="px-4 py-2 text-slate-700">{hasScope ? row.totalCases : "--"}</td>
-                <td className="px-4 py-2 text-slate-700">{hasScope ? row.rectifiedCases : "--"}</td>
-                <td className="px-4 py-2 text-slate-700">{hasScope ? row.outstandingCases : "--"}</td>
-                <td className="px-4 py-2 text-slate-700">{row.performance !== null ? <PerformanceDetail row={row} /> : "--"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <RankingGrid
+        kind="branch"
+        hasScope={hasScope}
+        exportFileName="branch-performance"
+        rows={ranked.map((row, i) => ({
+          id: row.branch.id,
+          rank: i + 1,
+          name: row.branch.name,
+          href: `/findings?branchId=${row.branch.id}`,
+          totalCases: row.totalCases,
+          rectifiedCases: row.rectifiedCases,
+          outstandingCases: row.outstandingCases,
+          performance: row.performance,
+          adjustmentReason: row.adjustment?.reason ?? null,
+        }))}
+      />
     </Card>
   );
 }

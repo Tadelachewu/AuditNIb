@@ -2,19 +2,27 @@ import { NextResponse } from "next/server";
 import { requirePermission } from "@/lib/guard";
 import { readDb } from "@/lib/db";
 import { findingsInScope } from "@/lib/findings-scope";
-import { findingsResidentInPeriod } from "@/lib/findings";
+import { findingsResidentInPeriod, queueStatusesForSession, type FindingPeriodSlice } from "@/lib/findings";
+import type { Finding } from "@/types";
+import { filterFindingsByText, sortFindings, parseFindingSort } from "@/lib/findingListQuery";
 import { matchesOperationAndIrregularity } from "@/lib/dashboardFilters";
 
 // master.txt §18's report set, as a real text/csv export - same
 // org-scope + filter logic as GET /api/findings (src/app/api/findings/route.ts),
 // so an export always matches exactly what's on screen for that filter set.
+// A text cell starting with = + - @ would be run as a formula by Excel /
+// Sheets ("CSV injection"); a leading quote makes it plain text. Numbers
+// are left alone (a negative amount is still a number).
 function csvCell(value: string | number): string {
-  const s = String(value);
-  return /[",\n]/.test(s) ? `"${s.replaceAll('"', '""')}"` : s;
+  let s = String(value);
+  if (typeof value === "string" && /^[=+\-@\t\r]/.test(s)) s = `'${s}`;
+  return /[",\r\n]/.test(s) ? `"${s.replaceAll('"', '""')}"` : s;
 }
 
 export async function GET(request: Request) {
-  const auth = await requirePermission("reports.view");
+  // Used by both the Reports page and the Findings list's Export CSV - either
+  // permission is enough (the data is still limited to the caller's scope).
+  const auth = await requirePermission("reports.view", "findings.view");
   if (!auth.ok) return auth.response;
 
   const db = await readDb();
@@ -39,7 +47,11 @@ export async function GET(request: Request) {
   if (categoryId) findings = findings.filter((f) => f.categoryId === categoryId);
   if (risk) findings = findings.filter((f) => f.riskLevel === risk);
   if (operationArea || irregularityType) findings = findings.filter((f) => matchesOperationAndIrregularity(f, { operationArea, irregularityType }));
-  if (status) findings = findings.filter((f) => f.status === status);
+  // Comma-separated, same as the Findings list (e.g. a status-donut bucket).
+  if (status) {
+    const statuses = new Set(status.split(","));
+    findings = findings.filter((f) => statuses.has(f.status));
+  }
   if (dateFrom) findings = findings.filter((f) => f.findingDate >= dateFrom);
   if (dateTo) findings = findings.filter((f) => f.findingDate <= dateTo);
 
@@ -48,16 +60,30 @@ export async function GET(request: Request) {
   // see findingsResidentInPeriod()'s doc comment in src/lib/findings.ts.
   // Without a period filter, every finding still exports once with its
   // live fields, exactly as before.
-  const resident = periodId
-    ? findingsResidentInPeriod(db, periodId, findings)
-    : findings.map((f) => ({ finding: f, slice: null }));
-  resident.sort((a, b) => b.finding.updatedAt.localeCompare(a.finding.updatedAt));
-
   const branchName = (id: string) => db.branches.find((b) => b.id === id)?.name ?? "";
   const districtName = (id: string) => db.districts.find((d) => d.id === id)?.name ?? "";
   const sourceName = (id: string) => db.sources.find((s) => s.id === id)?.name ?? "";
   const departmentName = (id: string) => db.departments.find((d) => d.id === id)?.name ?? "";
   const categoryName = (id: string) => db.categories.find((c) => c.id === id)?.name ?? id;
+
+  let resident: { finding: Finding; slice: FindingPeriodSlice | null }[] = periodId
+    ? findingsResidentInPeriod(db, periodId, findings)
+    : findings.map((f) => ({ finding: f, slice: null }));
+
+  // Same "My Queue" / search / sort as the Findings list
+  // (src/lib/findingListQuery.ts), so an export matches what's on screen.
+  if (url.searchParams.get("queue") === "1") {
+    const isQueued = queueStatusesForSession(auth.session, db);
+    resident = resident.filter((r) => (r.slice === null || r.slice.isCurrentPeriod) && isQueued(r.finding));
+  }
+  const names = { branchName, departmentName, categoryName, sourceName };
+  resident = filterFindingsByText(resident, url.searchParams.get("q") ?? "", names);
+  resident = sortFindings(
+    resident,
+    parseFindingSort(url.searchParams.get("sort"), url.searchParams.get("dir")),
+    names,
+    (r) => (r.slice ? r.slice.eligibleAmount : r.finding.amount)
+  );
   const periodCode = (id: string) => db.reportingPeriods.find((p) => p.id === id)?.code ?? "";
 
   const header = [
@@ -121,8 +147,10 @@ export async function GET(request: Request) {
 
   const csv = [header.join(","), ...rows].join("\r\n");
 
-  return new NextResponse(csv, {
+  // UTF-8 byte-order mark so Excel shows Amharic text correctly.
+  return new NextResponse("\uFEFF" + csv, {
     headers: {
+      "Cache-Control": "private, no-store",
       "Content-Type": "text/csv; charset=utf-8",
       "Content-Disposition": `attachment; filename="findings-export-${new Date().toISOString().slice(0, 10)}.csv"`,
     },

@@ -1,17 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import type { MRT_ColumnDef } from "material-react-table";
 import { apiGet, apiSend, ApiError } from "@/lib/api-client";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { StickyActions } from "@/components/ui/StickyActions";
 import { Input, Select, Label } from "@/components/ui/Field";
 import { StatusBadge, Badge } from "@/components/ui/Badge";
-import { Pagination } from "@/components/ui/Pagination";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { AddDialog } from "@/components/ui/AddDialog";
 import { RowAction, RowActions, StatusToggleAction } from "@/components/ui/RowActions";
-import { TableSkeletonRows } from "@/components/ui/Skeleton";
+import { AdminTable } from "@/components/ui/AdminTable";
+import { ImportCsvDialog } from "@/components/ui/ImportCsvDialog";
 import { usePermissions } from "@/lib/permissions/PermissionsContext";
 import { hasPermission } from "@/lib/permissions/registry";
 import type { District, Branch } from "@/types";
@@ -29,8 +30,6 @@ export default function BranchesPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ name: "", districtId: "" });
   const [editError, setEditError] = useState<string | null>(null);
-  const [page, setPage] = useState(1);
-  const [pageInfo, setPageInfo] = useState({ total: 0, pageSize: 25, totalPages: 1 });
   const { confirm, dialog } = useConfirm();
   const permissions = usePermissions();
   const canCreate = hasPermission(permissions, "branches.create");
@@ -41,19 +40,19 @@ export default function BranchesPage() {
   async function load() {
     setLoading(true);
     const [b, d] = await Promise.all([
-      apiGet<{ branches: BranchRow[]; total: number; pageSize: number; totalPages: number }>(`/api/admin/branches?page=${page}`),
+      // The whole list (no ?page=) - the table searches, filters, sorts
+      // and pages it client-side, so every branch is always searchable.
+      apiGet<{ branches: BranchRow[] }>("/api/admin/branches"),
       apiGet<{ districts: District[] }>("/api/admin/districts"),
     ]);
     setBranches(b.branches);
-    setPageInfo({ total: b.total, pageSize: b.pageSize, totalPages: b.totalPages });
     setDistricts(d.districts);
     setLoading(false);
   }
 
   useEffect(() => {
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page]);
+  }, []);
 
   function districtName(id: string) {
     return districts.find((d) => d.id === id)?.name ?? "—";
@@ -135,6 +134,73 @@ export default function BranchesPage() {
     }
   }
 
+  const columns = useMemo<MRT_ColumnDef<BranchRow>[]>(
+    () => [
+      {
+        accessorKey: "code",
+        header: "Code",
+        size: 90,
+        Cell: ({ row }) => <span className="font-mono text-xs text-slate-600">{row.original.code}</span>,
+      },
+      {
+        accessorKey: "name",
+        header: "Name",
+        Cell: ({ row }) =>
+          editingId === row.original.id ? (
+            <Input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} className="max-w-48" autoFocus />
+          ) : (
+            <span className="font-medium text-slate-900">{row.original.name}</span>
+          ),
+      },
+      {
+        id: "district",
+        header: "District",
+        accessorFn: (b) => districtName(b.districtId),
+        filterVariant: "select",
+        Cell: ({ row, cell }) =>
+          editingId === row.original.id ? (
+            <Select value={editForm.districtId} onChange={(e) => setEditForm({ ...editForm, districtId: e.target.value })}>
+              {districts.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name}
+                </option>
+              ))}
+            </Select>
+          ) : (
+            <>{cell.getValue<string>()}</>
+          ),
+      },
+      {
+        id: "manager",
+        header: "Manager",
+        accessorFn: (b) => b.managerName ?? "",
+        Cell: ({ row }) => (row.original.managerName ? <>{row.original.managerName}</> : <Badge tone="amber">Unassigned</Badge>),
+        meta: { exportValue: (b: BranchRow) => b.managerName ?? "Unassigned" },
+      },
+      { id: "subManager", header: "Sub-Manager", accessorFn: (b) => b.subManagerName ?? "—" },
+      {
+        id: "controller",
+        header: "Controller",
+        accessorFn: (b) => b.controllerName ?? "",
+        Cell: ({ row }) => (row.original.controllerName ? <>{row.original.controllerName}</> : <Badge tone="amber">Unassigned</Badge>),
+        meta: { exportValue: (b: BranchRow) => b.controllerName ?? "Unassigned" },
+      },
+      {
+        accessorKey: "status",
+        header: "Status",
+        size: 110,
+        filterVariant: "select",
+        filterSelectOptions: [
+          { value: "ACTIVE", label: "Active" },
+          { value: "INACTIVE", label: "Inactive" },
+        ],
+        Cell: ({ row }) => <StatusBadge status={row.original.status} />,
+      },
+    ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [editingId, editForm, districts]
+  );
+
   return (
     <div>
       <h1 className="text-lg font-semibold text-slate-900">Branches</h1>
@@ -143,7 +209,7 @@ export default function BranchesPage() {
       </p>
 
       <Card className="mt-5">
-        <CardHeader title="All Branches" description={`${pageInfo.total} total`}
+        <CardHeader title="All Branches" description={`${branches.length} total`}
           action={canCreate && (
             <AddDialog title="Add Branch">
               {({ close }) => (
@@ -185,98 +251,54 @@ export default function BranchesPage() {
             </AddDialog>
           )}
         />
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-600">
-              <tr>
-                <th className="px-4 py-2 font-medium">Code</th>
-                <th className="px-4 py-2 font-medium">Name</th>
-                <th className="px-4 py-2 font-medium">District</th>
-                <th className="px-4 py-2 font-medium">Manager</th>
-                <th className="px-4 py-2 font-medium">Sub-Manager</th>
-                <th className="px-4 py-2 font-medium">Controller</th>
-                <th className="px-4 py-2 font-medium">Status</th>
-                <th className="px-4 py-2" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {loading && <TableSkeletonRows cols={8} />}
-              {!loading && branches.length === 0 && (
-                <tr>
-                  <td className="px-4 py-6 text-center text-slate-500" colSpan={8}>
-                    No branches yet.
-                  </td>
-                </tr>
-              )}
-              {!loading &&
-                branches.map((b) => {
-                  const isEditing = editingId === b.id;
-                  return (
-                    <tr key={b.id}>
-                      <td className="px-4 py-2 font-mono text-xs text-slate-600">{b.code}</td>
-                      <td className="px-4 py-2 font-medium text-slate-900">
-                        {isEditing ? (
-                          <Input
-                            value={editForm.name}
-                            onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                            className="max-w-48"
-                          />
-                        ) : (
-                          b.name
-                        )}
-                      </td>
-                      <td className="px-4 py-2 text-slate-600">
-                        {isEditing ? (
-                          <Select
-                            value={editForm.districtId}
-                            onChange={(e) => setEditForm({ ...editForm, districtId: e.target.value })}
-                          >
-                            {districts.map((d) => (
-                              <option key={d.id} value={d.id}>
-                                {d.name}
-                              </option>
-                            ))}
-                          </Select>
-                        ) : (
-                          districtName(b.districtId)
-                        )}
-                      </td>
-                      <td className="px-4 py-2">
-                        {b.managerName ? b.managerName : <Badge tone="amber">Unassigned</Badge>}
-                      </td>
-                      <td className="px-4 py-2 text-slate-500">{b.subManagerName ? b.subManagerName : "—"}</td>
-                      <td className="px-4 py-2">
-                        {b.controllerName ? b.controllerName : <Badge tone="amber">Unassigned</Badge>}
-                      </td>
-                      <td className="px-4 py-2">
-                        <StatusBadge status={b.status} />
-                      </td>
-                      <td className="px-4 py-2 text-right">
-                        {isEditing ? (
-                          <div className="flex flex-col items-end gap-1">
-                            {editError && <p className="text-xs text-red-600">{editError}</p>}
-                            <RowActions inline>
-                              <RowAction kind="cancel" onClick={() => setEditingId(null)} />
-                              <RowAction kind="save" busy={rowBusy === b.id} label={rowBusy === b.id ? "Saving..." : "Save"} onClick={() => saveEdit(b)} />
-                            </RowActions>
-                          </div>
-                        ) : (
-                          <RowActions>
-                            {canEdit && <RowAction kind="edit" onClick={() => startEdit(b)} />}
-                            {canToggle && (
-                              <StatusToggleAction active={b.status === "ACTIVE"} busy={rowBusy === b.id} onClick={() => toggleStatus(b)} />
-                            )}
-                            {canDelete && <RowAction kind="delete" busy={rowBusy === b.id} onClick={() => deleteBranch(b)} />}
-                          </RowActions>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-            </tbody>
-          </table>
-        </div>
-        <Pagination page={page} totalPages={pageInfo.totalPages} total={pageInfo.total} pageSize={pageInfo.pageSize} onPageChange={setPage} />
+        <AdminTable
+          columns={columns}
+          data={branches}
+          isLoading={loading}
+          getRowId={(b) => b.id}
+          exportFileName="branches"
+          emptyText="No branches yet."
+          toolbarActions={
+            canCreate && (
+              <ImportCsvDialog
+                entityLabel="branches"
+                templateName="branches-import"
+                columns={[
+                  { key: "code", required: true, example: "BOLE", help: "Unique branch code" },
+                  { key: "name", required: true, example: "Bole Branch", help: "Branch name" },
+                  { key: "district", required: true, example: "AA", help: "The district's code or exact name" },
+                ]}
+                toPayload={(row) => {
+                  const label = row.code ? `${row.code} - ${row.name}` : row.name || "(blank)";
+                  if (!row.code || !row.name || !row.district) return { error: "code, name and district are required", label };
+                  const key = row.district.trim().toLowerCase();
+                  const district = districts.find((d) => d.code.toLowerCase() === key || d.name.toLowerCase() === key);
+                  if (!district) return { error: `Unknown district "${row.district}"`, label };
+                  return { payload: { code: row.code, name: row.name, districtId: district.id }, label };
+                }}
+                submit={(payload) => apiSend("/api/admin/branches", "POST", payload)}
+                onDone={load}
+              />
+            )
+          }
+          renderRowActions={(b) =>
+            editingId === b.id ? (
+              <div className="flex flex-col items-end gap-1">
+                {editError && <p className="text-xs text-red-600">{editError}</p>}
+                <RowActions inline>
+                  <RowAction kind="cancel" onClick={() => setEditingId(null)} />
+                  <RowAction kind="save" busy={rowBusy === b.id} label={rowBusy === b.id ? "Saving..." : "Save"} onClick={() => saveEdit(b)} />
+                </RowActions>
+              </div>
+            ) : (
+              <RowActions>
+                {canEdit && <RowAction kind="edit" onClick={() => startEdit(b)} />}
+                {canToggle && <StatusToggleAction active={b.status === "ACTIVE"} busy={rowBusy === b.id} onClick={() => toggleStatus(b)} />}
+                {canDelete && <RowAction kind="delete" busy={rowBusy === b.id} onClick={() => deleteBranch(b)} />}
+              </RowActions>
+            )
+          }
+        />
       </Card>
       {dialog}
     </div>

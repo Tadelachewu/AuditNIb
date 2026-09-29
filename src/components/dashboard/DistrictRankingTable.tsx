@@ -1,7 +1,6 @@
-import Link from "next/link";
 import type { Database, District, ScoringAdjustment } from "@/types";
 import { computePerformance, computeEligibleCaseCounts, getActiveScoringAdjustment } from "@/lib/findings";
-import { AdjustedBadge } from "@/components/ui/AdjustedBadge";
+import { RankingGrid } from "@/components/dashboard/RankingGrid";
 import { Card, CardHeader } from "@/components/ui/Card";
 
 interface DistrictRow {
@@ -13,33 +12,6 @@ interface DistrictRow {
   performance: number | null;
   // Set when `performance` comes from an active Scoring Adjustment.
   adjustment: ScoringAdjustment | null;
-}
-
-/** Performance %'s own math, revealed on click - same pattern as BranchPerformanceTable's own PerformanceDetail. */
-function PerformanceDetail({ row }: { row: DistrictRow }) {
-  if (row.performance === null) return null;
-  return (
-    <details className="group">
-      <summary className="cursor-pointer list-none text-slate-700 marker:content-none hover:underline">
-        {row.performance.toFixed(1)}%
-        <AdjustedBadge adjustment={row.adjustment} />
-      </summary>
-      <div className="mt-1 max-w-[14rem] text-xs leading-relaxed text-slate-500">
-        {row.adjustment ? (
-          <>
-            Manually adjusted to {row.performance.toFixed(1)}% (Scoring Adjustments): &quot;{row.adjustment.reason}&quot;. The formula
-            would give {row.rectifiedCases} ÷ {row.totalCases} eligible case(s)
-            {row.totalCases > 0 ? ` = ${((row.rectifiedCases / row.totalCases) * 100).toFixed(1)}%` : ""}.
-          </>
-        ) : (
-          <>
-            {row.rectifiedCases} of {row.totalCases} eligible case(s) closed (unless it&apos;s closed, it never counts as rectified):{" "}
-            {row.rectifiedCases} ÷ {row.totalCases} × 100 = {row.performance.toFixed(1)}%.
-          </>
-        )}
-      </div>
-    </details>
-  );
 }
 
 /**
@@ -89,45 +61,23 @@ export function DistrictRankingTable({
   return (
     <Card>
       <CardHeader title={title} description={description} />
-      <div className="overflow-x-auto">
-        <table className="w-full text-left text-sm">
-          <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-600">
-            <tr>
-              <th className="px-4 py-2 font-medium">Rank</th>
-              <th className="px-4 py-2 font-medium">District</th>
-              <th className="px-4 py-2 font-medium">Branches</th>
-              <th className="px-4 py-2 font-medium">Total Eligible Cases</th>
-              <th className="px-4 py-2 font-medium">Solved</th>
-              <th className="px-4 py-2 font-medium">Unsolved</th>
-              <th className="px-4 py-2 font-medium">Performance</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {ranked.length === 0 && (
-              <tr>
-                <td colSpan={7} className="px-4 py-6 text-center text-slate-500">
-                  No districts configured yet.
-                </td>
-              </tr>
-            )}
-            {ranked.map((row, i) => (
-              <tr key={row.district.id}>
-                <td className="px-4 py-2 text-slate-500">{i + 1}</td>
-                <td className="px-4 py-2">
-                  <Link href={`/findings?districtId=${row.district.id}`} className="text-blue-800 hover:underline">
-                    {row.district.name}
-                  </Link>
-                </td>
-                <td className="px-4 py-2 text-slate-700">{row.branchCount}</td>
-                <td className="px-4 py-2 text-slate-700">{hasScope ? row.totalCases : "--"}</td>
-                <td className="px-4 py-2 text-slate-700">{hasScope ? row.rectifiedCases : "--"}</td>
-                <td className="px-4 py-2 text-slate-700">{hasScope ? row.outstandingCases : "--"}</td>
-                <td className="px-4 py-2 text-slate-700">{row.performance !== null ? <PerformanceDetail row={row} /> : "--"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <RankingGrid
+        kind="district"
+        hasScope={hasScope}
+        exportFileName="district-ranking"
+        rows={ranked.map((row, i) => ({
+          id: row.district.id,
+          rank: i + 1,
+          name: row.district.name,
+          href: `/findings?districtId=${row.district.id}`,
+          branchCount: row.branchCount,
+          totalCases: row.totalCases,
+          rectifiedCases: row.rectifiedCases,
+          outstandingCases: row.outstandingCases,
+          performance: row.performance,
+          adjustmentReason: row.adjustment?.reason ?? null,
+        }))}
+      />
     </Card>
   );
 }

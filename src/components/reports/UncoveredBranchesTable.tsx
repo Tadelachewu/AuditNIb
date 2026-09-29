@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import type { MRT_ColumnDef, MRT_RowSelectionState } from "material-react-table";
 import { useRouter } from "next/navigation";
 import { apiSend, ApiError } from "@/lib/api-client";
 import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Field";
+import { AdminTable } from "@/components/ui/AdminTable";
 import { ReasonPicker, resolveReason } from "@/components/reports/ReasonPicker";
 import { UncoveredBranchNoteForm } from "@/components/reports/UncoveredBranchNoteForm";
 import type { UncoveredReason, Branch, District, BranchCoverageNote } from "@/types";
@@ -15,72 +16,60 @@ interface Row {
   note: BranchCoverageNote | null;
 }
 
-// Owns the one piece of state a plain per-row form can't: which branches
-// are checkbox-selected, shared across every row so a bulk "apply this
-// reason to all of them" toolbar can act on the set. Per-row editing still
-// goes through UncoveredBranchNoteForm unchanged - this only adds the
-// selection layer and the shared ReasonPicker used for the bulk apply.
+// Material React Table (AdminTable) over every uncovered branch: search
+// (branch or district name), sort, column filters, export CSV, and
+// checkbox selection shared across rows so a bulk "apply this reason to
+// all of them" toolbar can act on the set. Per-row editing still goes
+// through UncoveredBranchNoteForm unchanged. No pagination: this is an
+// official template that must print (and scan) every branch at once.
 export function UncoveredBranchesTable({ rows, periodId, reasons }: { rows: Row[]; periodId: string; reasons: UncoveredReason[] }) {
   const router = useRouter();
-  const [search, setSearch] = useState("");
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [rowSelection, setRowSelection] = useState<MRT_RowSelectionState>({});
   const [bulkValue, setBulkValue] = useState("");
   const [bulkCustomText, setBulkCustomText] = useState("");
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkError, setBulkError] = useState<string | null>(null);
+  // Keyed by branch id, so a selection survives narrowing the search.
+  const selected = useMemo(() => Object.keys(rowSelection).filter((id) => rowSelection[id]), [rowSelection]);
 
-  // A long branch list (410+ branches bank-wide) is otherwise a scroll-and-
-  // scan exercise for the one person looking for their own branch to add a
-  // reason - client-side, so it filters instantly against data already on
-  // the page rather than round-tripping the server on every keystroke.
-  // Matches branch name OR district name, so "West" finds every uncovered
-  // branch in the West district too, not just a branch literally named it.
-  const visibleRows = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return rows;
-    return rows.filter((r) => r.branch.name.toLowerCase().includes(q) || (r.district?.name.toLowerCase().includes(q) ?? false));
-  }, [rows, search]);
-
-  // "Select all" only ever selects what's currently visible - selecting a
-  // branch the search has filtered out would be invisible and confusing to
-  // undo. A selection made before narrowing the search still survives
-  // (selected is keyed by branch id, not by row position), it just won't
-  // show a checked checkbox while its row is hidden.
-  const allSelected = visibleRows.length > 0 && visibleRows.every((r) => selected.has(r.branch.id));
-
-  function toggleAll() {
-    setSelected((prev) => {
-      if (allSelected) {
-        const next = new Set(prev);
-        for (const r of visibleRows) next.delete(r.branch.id);
-        return next;
-      }
-      return new Set([...prev, ...visibleRows.map((r) => r.branch.id)]);
-    });
-  }
-  function toggleOne(branchId: string) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(branchId)) next.delete(branchId);
-      else next.add(branchId);
-      return next;
-    });
-  }
+  const columns = useMemo<MRT_ColumnDef<Row>[]>(
+    () => [
+      {
+        id: "serNo",
+        header: "Ser. No",
+        size: 70,
+        enableSorting: false,
+        enableColumnFilter: false,
+        Cell: ({ staticRowIndex }) => <span className="text-slate-500">{(staticRowIndex ?? 0) + 1}</span>,
+      },
+      { id: "branch", header: "Name of Branches", accessorFn: (r) => r.branch.name },
+      { id: "district", header: "Name of Districts", accessorFn: (r) => r.district?.name ?? "—", filterVariant: "select" },
+      {
+        id: "reason",
+        header: "Reasons for failing to uncover",
+        accessorFn: (r) => r.note?.reason ?? "",
+        enableSorting: false,
+        size: 360,
+        Cell: ({ row }) => <UncoveredBranchNoteForm branchId={row.original.branch.id} periodId={periodId} reasons={reasons} note={row.original.note} />,
+      },
+    ],
+    [periodId, reasons]
+  );
 
   const bulkResolved = resolveReason(reasons, bulkValue, bulkCustomText);
 
   async function applyBulk() {
-    if (!bulkResolved || selected.size === 0) return;
+    if (!bulkResolved || selected.length === 0) return;
     setBulkBusy(true);
     setBulkError(null);
     try {
       await apiSend("/api/report-templates/uncovered-branches/note/bulk", "POST", {
-        branchIds: [...selected],
+        branchIds: selected,
         periodId,
         reason: bulkResolved.reason,
         reasonId: bulkResolved.reasonId,
       });
-      setSelected(new Set());
+      setRowSelection({});
       setBulkValue("");
       setBulkCustomText("");
       router.refresh();
@@ -93,9 +82,9 @@ export function UncoveredBranchesTable({ rows, periodId, reasons }: { rows: Row[
 
   return (
     <>
-      {selected.size > 0 && (
+      {selected.length > 0 && (
         <div className="no-print mx-4 mb-3 mt-4 flex flex-wrap items-start gap-3 rounded-md border border-blue-200 bg-blue-50 p-3">
-          <span className="mt-2 text-sm font-medium text-slate-700">{selected.size} branch(es) selected</span>
+          <span className="mt-2 text-sm font-medium text-slate-700">{selected.length} branch(es) selected</span>
           <ReasonPicker
             reasons={reasons}
             value={bulkValue}
@@ -107,9 +96,9 @@ export function UncoveredBranchesTable({ rows, periodId, reasons }: { rows: Row[
             {bulkError && <span className="text-xs text-red-600">{bulkError}</span>}
             <div className="flex gap-2">
               <Button disabled={bulkBusy || !bulkResolved} onClick={applyBulk}>
-                {bulkBusy ? "Applying..." : `Apply to ${selected.size} branch(es)`}
+                {bulkBusy ? "Applying..." : `Apply to ${selected.length} branch(es)`}
               </Button>
-              <Button variant="secondary" onClick={() => setSelected(new Set())}>
+              <Button variant="secondary" onClick={() => setRowSelection({})}>
                 Clear selection
               </Button>
             </div>
@@ -117,79 +106,25 @@ export function UncoveredBranchesTable({ rows, periodId, reasons }: { rows: Row[
         </div>
       )}
 
-      <div className="no-print flex items-center gap-2 px-4 pt-4">
-        <Input
-          type="search"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by branch or district name..."
-          aria-label="Search branches"
-          className="max-w-xs"
-        />
-        {search && (
-          <span className="text-xs text-slate-500">
-            {visibleRows.length} of {rows.length} branch(es)
-          </span>
-        )}
-      </div>
-
-      <div className="overflow-x-auto">
-        <table className="w-full text-left text-sm">
-          <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-600">
-            <tr>
-              <th className="no-print w-8 px-4 py-2">
-                <input
-                  type="checkbox"
-                  checked={allSelected}
-                  onChange={toggleAll}
-                  disabled={visibleRows.length === 0}
-                  aria-label="Select all visible branches"
-                  className="h-3.5 w-3.5 rounded border-slate-300"
-                />
-              </th>
-              <th className="px-4 py-2 font-medium">Ser. No</th>
-              <th className="px-4 py-2 font-medium">Name of Branches</th>
-              <th className="px-4 py-2 font-medium">Name of Districts</th>
-              <th className="px-4 py-2 font-medium">Reasons for failing to uncover</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {rows.length === 0 && (
-              <tr>
-                <td className="px-4 py-6 text-center text-slate-500" colSpan={5}>
-                  Every active branch submitted at least one finding this period.
-                </td>
-              </tr>
-            )}
-            {rows.length > 0 && visibleRows.length === 0 && (
-              <tr>
-                <td className="px-4 py-6 text-center text-slate-500" colSpan={5}>
-                  No branches match &quot;{search}&quot;.
-                </td>
-              </tr>
-            )}
-            {visibleRows.map((r, i) => (
-              <tr key={r.branch.id}>
-                <td className="no-print px-4 py-2">
-                  <input
-                    type="checkbox"
-                    checked={selected.has(r.branch.id)}
-                    onChange={() => toggleOne(r.branch.id)}
-                    aria-label={`Select ${r.branch.name}`}
-                    className="h-3.5 w-3.5 rounded border-slate-300"
-                  />
-                </td>
-                <td className="px-4 py-2 text-slate-500">{i + 1}</td>
-                <td className="px-4 py-2 text-slate-900">{r.branch.name}</td>
-                <td className="px-4 py-2 text-slate-600">{r.district?.name ?? "—"}</td>
-                <td className="px-4 py-2">
-                  <UncoveredBranchNoteForm branchId={r.branch.id} periodId={periodId} reasons={reasons} note={r.note} />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <AdminTable
+        columns={columns}
+        data={rows}
+        getRowId={(r) => r.branch.id}
+        exportFileName="uncovered-branches"
+        emptyText="Every active branch submitted at least one finding this period."
+        tableOptions={{
+          enablePagination: false,
+          enableRowSelection: true,
+          selectAllMode: "all", // "select all" = every row the search/filters leave visible
+          onRowSelectionChange: setRowSelection,
+          state: { rowSelection },
+          initialState: { density: "compact", showGlobalFilter: true },
+          muiSearchTextFieldProps: { placeholder: "Search by branch or district name...", size: "small", variant: "outlined" },
+          displayColumnDefOptions: {
+            "mrt-row-select": { muiTableHeadCellProps: { className: "no-print" }, muiTableBodyCellProps: { className: "no-print" } },
+          },
+        }}
+      />
     </>
   );
 }

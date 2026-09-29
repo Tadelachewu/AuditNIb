@@ -1,37 +1,116 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import type { MRT_ColumnDef, MRT_ColumnFiltersState, MRT_PaginationState, MRT_SortingState } from "material-react-table";
 import { apiGet } from "@/lib/api-client";
 import { formatDateTime } from "@/lib/format";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
-import { Pagination } from "@/components/ui/Pagination";
+import { AdminTable } from "@/components/ui/AdminTable";
 import type { AuditLogEntry } from "@/types";
-import { TableSkeletonRows } from "@/components/ui/Skeleton";
 
+interface AuditResponse {
+  auditLogs: AuditLogEntry[];
+  total: number;
+  actions: string[];
+  entityTypes: string[];
+  chainValid: boolean;
+  chainBrokenAtSequence?: string;
+}
+
+// Server-side mode: the log can be far larger than a browser should load,
+// so search / filters / sort / paging are sent to /api/admin/audit-log and
+// only the current page comes back. Export CSV asks the server for every
+// matching entry.
 export default function AuditLogPage() {
-  const [logs, setLogs] = useState<AuditLogEntry[]>([]);
+  const [data, setData] = useState<AuditResponse | null>(null);
   const [loading, setLoading] = useState(true);
-  const [page, setPage] = useState(1);
-  const [pageInfo, setPageInfo] = useState({ total: 0, pageSize: 50, totalPages: 1 });
-  const [chain, setChain] = useState<{ valid: boolean; brokenAtSequence?: string } | null>(null);
+  const [pagination, setPagination] = useState<MRT_PaginationState>({ pageIndex: 0, pageSize: 50 });
+  const [globalFilter, setGlobalFilter] = useState("");
+  const [columnFilters, setColumnFilters] = useState<MRT_ColumnFiltersState>([]);
+  const [sorting, setSorting] = useState<MRT_SortingState>([{ id: "timestamp", desc: true }]);
+
+  const query = useMemo(() => {
+    const qs = new URLSearchParams();
+    qs.set("page", String(pagination.pageIndex + 1));
+    qs.set("pageSize", String(pagination.pageSize));
+    if (globalFilter) qs.set("q", globalFilter);
+    for (const f of columnFilters) {
+      if (f.id === "action" && f.value) qs.set("action", String(f.value));
+      if (f.id === "entityType" && f.value) qs.set("entityType", String(f.value));
+      if (f.id === "userName" && f.value) qs.set("actor", String(f.value));
+      if (f.id === "timestamp" && Array.isArray(f.value)) {
+        const [from, to] = f.value as [string | undefined, string | undefined];
+        if (from) qs.set("from", String(from));
+        if (to) qs.set("to", String(to));
+      }
+    }
+    qs.set("sort", sorting[0]?.desc === false ? "asc" : "desc");
+    return qs;
+  }, [pagination, globalFilter, columnFilters, sorting]);
 
   useEffect(() => {
+    let cancelled = false;
     setLoading(true);
-    apiGet<{
-      auditLogs: AuditLogEntry[];
-      total: number;
-      pageSize: number;
-      totalPages: number;
-      chainValid: boolean;
-      chainBrokenAtSequence?: string;
-    }>(`/api/admin/audit-log?page=${page}`).then((res) => {
-      setLogs(res.auditLogs);
-      setPageInfo({ total: res.total, pageSize: res.pageSize, totalPages: res.totalPages });
-      setChain({ valid: res.chainValid, brokenAtSequence: res.chainBrokenAtSequence });
-      setLoading(false);
-    });
-  }, [page]);
+    apiGet<AuditResponse>(`/api/admin/audit-log?${query.toString()}`)
+      .then((res) => {
+        if (!cancelled) setData(res);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [query]);
+
+  // Any new search/filter starts again from page 1.
+  useEffect(() => {
+    setPagination((p) => ({ ...p, pageIndex: 0 }));
+  }, [globalFilter, columnFilters]);
+
+  const columns = useMemo<MRT_ColumnDef<AuditLogEntry>[]>(
+    () => [
+      {
+        accessorKey: "timestamp",
+        header: "Time",
+        // From / To as two plain date fields (YYYY-MM-DD), matched by day.
+        filterVariant: "range",
+        muiFilterTextFieldProps: { type: "date", InputLabelProps: { shrink: true } },
+        enableSorting: true,
+        Cell: ({ row }) => <span className="whitespace-nowrap text-xs text-slate-500">{formatDateTime(row.original.timestamp)}</span>,
+      },
+      { accessorKey: "userName", header: "Actor", enableSorting: false },
+      {
+        accessorKey: "action",
+        header: "Action",
+        enableSorting: false,
+        filterVariant: "select",
+        filterSelectOptions: data?.actions ?? [],
+        Cell: ({ row }) => <Badge tone="blue">{row.original.action}</Badge>,
+      },
+      { accessorKey: "entityType", header: "Entity", enableSorting: false, filterVariant: "select", filterSelectOptions: data?.entityTypes ?? [] },
+      { accessorKey: "reason", header: "Reason", enableSorting: false, enableColumnFilter: false, Cell: ({ row }) => <>{row.original.reason ?? "—"}</> },
+    ],
+    [data?.actions, data?.entityTypes]
+  );
+
+  const chain = data ? { valid: data.chainValid, brokenAtSequence: data.chainBrokenAtSequence } : null;
+
+  function exportAll() {
+    const qs = new URLSearchParams(query);
+    qs.delete("page");
+    qs.delete("pageSize");
+    qs.set("format", "csv");
+    // A download link rather than a navigation - the file is served with
+    // Content-Disposition: attachment, so the page stays where it is.
+    const a = document.createElement("a");
+    a.href = `/api/admin/audit-log?${qs.toString()}`;
+    a.download = "";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
 
   return (
     <div>
@@ -39,49 +118,40 @@ export default function AuditLogPage() {
         <h1 className="text-lg font-semibold text-slate-900">Audit Log</h1>
         {chain && (
           <Badge tone={chain.valid ? "green" : "red"}>
-            {chain.valid
-              ? "Chain verified"
-              : `Tampering detected at entry #${chain.brokenAtSequence}`}
+            {chain.valid ? "Chain verified" : `Tampering detected at entry #${chain.brokenAtSequence}`}
           </Badge>
         )}
       </div>
       <p className="mt-1 text-sm text-slate-600">
-        Immutable record of workflow, configuration and authentication events - every entry is
-        cryptographically chained to the one before it, so an edit or deletion made directly in the
-        database (bypassing this app) is detectable, not just assumed impossible.
+        Immutable record of workflow, configuration and authentication events - every entry is cryptographically chained to the one
+        before it, so an edit or deletion made directly in the database (bypassing this app) is detectable, not just assumed impossible.
       </p>
 
       <Card className="mt-5">
-        <CardHeader title="Recent Events" description={`${pageInfo.total} total`} />
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-600">
-              <tr>
-                <th className="px-4 py-2 font-medium">Time</th>
-                <th className="px-4 py-2 font-medium">Actor</th>
-                <th className="px-4 py-2 font-medium">Action</th>
-                <th className="px-4 py-2 font-medium">Entity</th>
-                <th className="px-4 py-2 font-medium">Reason</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {loading && <TableSkeletonRows cols={5} actions={false} rows={10} />}
-              {!loading &&
-                logs.map((l) => (
-                  <tr key={l.id}>
-                    <td className="px-4 py-2 text-xs text-slate-500 whitespace-nowrap">{formatDateTime(l.timestamp)}</td>
-                    <td className="px-4 py-2 text-slate-900">{l.userName}</td>
-                    <td className="px-4 py-2">
-                      <Badge tone="blue">{l.action}</Badge>
-                    </td>
-                    <td className="px-4 py-2 text-slate-600">{l.entityType}</td>
-                    <td className="px-4 py-2 text-slate-500">{l.reason ?? "—"}</td>
-                  </tr>
-                ))}
-            </tbody>
-          </table>
-        </div>
-        <Pagination page={page} totalPages={pageInfo.totalPages} total={pageInfo.total} pageSize={pageInfo.pageSize} onPageChange={setPage} />
+        <CardHeader title="Events" description={`${data?.total ?? 0} matching`} />
+        <AdminTable
+          columns={columns}
+          data={data?.auditLogs ?? []}
+          isLoading={loading && !data}
+          getRowId={(l) => l.id}
+          onExport={exportAll}
+          emptyText="No events match."
+          tableOptions={{
+            manualPagination: true,
+            manualFiltering: true,
+            manualSorting: true,
+            enableFacetedValues: false,
+            enableMultiSort: false,
+            rowCount: data?.total ?? 0,
+            onPaginationChange: setPagination,
+            onGlobalFilterChange: setGlobalFilter,
+            onColumnFiltersChange: setColumnFilters,
+            onSortingChange: setSorting,
+            state: { pagination, globalFilter, columnFilters, sorting, isLoading: loading && !data, showProgressBars: loading && !!data },
+            initialState: { density: "compact", showGlobalFilter: true },
+            muiPaginationProps: { rowsPerPageOptions: [25, 50, 100, 200], showFirstButton: true, showLastButton: true },
+          }}
+        />
       </Card>
     </div>
   );

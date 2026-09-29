@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import type { MRT_ColumnDef } from "material-react-table";
 import { apiGet, apiSend, ApiError } from "@/lib/api-client";
 import { formatDateTime } from "@/lib/format";
 import { Card, CardHeader } from "@/components/ui/Card";
@@ -11,12 +12,10 @@ import { Badge } from "@/components/ui/Badge";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { AddDialog } from "@/components/ui/AddDialog";
 import { RowActions, StatusToggleAction } from "@/components/ui/RowActions";
-import { TableSkeletonRows } from "@/components/ui/Skeleton";
-import { Pagination } from "@/components/ui/Pagination";
-import { useClientPagination } from "@/lib/useClientPagination";
 import { usePermissions } from "@/lib/permissions/PermissionsContext";
 import { hasPermission } from "@/lib/permissions/registry";
 import type { ScoringAdjustment, District, Branch, ReportingPeriod } from "@/types";
+import { AdminTable } from "@/components/ui/AdminTable";
 
 const emptyForm = { targetType: "DISTRICT" as "DISTRICT" | "BRANCH", targetId: "", periodId: "", value: "", reason: "" };
 
@@ -35,7 +34,6 @@ export default function ScoringAdjustmentsPage() {
   const permissions = usePermissions();
   const canCreate = hasPermission(permissions, "scoring-adjustments.create");
   const canToggle = hasPermission(permissions, "scoring-adjustments.toggle-status");
-  const pager = useClientPagination(adjustments);
 
   async function load() {
     setLoading(true);
@@ -115,6 +113,59 @@ export default function ScoringAdjustmentsPage() {
       setRowBusy(null);
     }
   }
+
+  const columns = useMemo<MRT_ColumnDef<ScoringAdjustment>[]>(
+    () => [
+      {
+        id: "target",
+        header: "Target",
+        accessorFn: (a) => targetName(a),
+        Cell: ({ row, cell }) => (
+          <span className="text-slate-900">
+            {cell.getValue<string>()} <span className="text-xs text-slate-500">({row.original.targetType})</span>
+          </span>
+        ),
+      },
+      {
+        accessorKey: "targetType",
+        header: "Level",
+        size: 100,
+        filterVariant: "select",
+        filterSelectOptions: [
+          { value: "BRANCH", label: "Branch" },
+          { value: "DISTRICT", label: "District" },
+        ],
+      },
+      { id: "period", header: "Period", size: 100, accessorFn: (a) => periodCode(a.periodId), filterVariant: "select" },
+      {
+        accessorKey: "value",
+        header: "Value",
+        size: 90,
+        filterVariant: "range",
+        Cell: ({ row }) => <span className="font-medium text-slate-900">{row.original.value}%</span>,
+      },
+      {
+        id: "status",
+        header: "Status",
+        size: 110,
+        accessorFn: (a) => (a.status === "ACTIVE" ? "Active" : "Inactive"),
+        filterVariant: "select",
+        filterSelectOptions: ["Active", "Inactive"],
+        Cell: ({ row }) => (
+          <Badge tone={row.original.status === "ACTIVE" ? "green" : "gray"}>{row.original.status === "ACTIVE" ? "Active" : "Inactive"}</Badge>
+        ),
+      },
+      { accessorKey: "reason", header: "Reason" },
+      {
+        accessorKey: "createdAt",
+        header: "Date",
+        meta: { exportValue: (a: ScoringAdjustment) => formatDateTime(a.createdAt) },
+        Cell: ({ row }) => <span className="text-xs text-slate-500">{formatDateTime(row.original.createdAt)}</span>,
+      },
+    ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [districts, branches, periods]
+  );
 
   return (
     <div>
@@ -198,54 +249,23 @@ export default function ScoringAdjustmentsPage() {
           )}
         />
         {rowError && <p className="px-4 pt-3 text-sm text-red-600">{rowError}</p>}
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-600">
-              <tr>
-                <th className="px-4 py-2 font-medium">Target</th>
-                <th className="px-4 py-2 font-medium">Period</th>
-                <th className="px-4 py-2 font-medium">Value</th>
-                <th className="px-4 py-2 font-medium">Status</th>
-                <th className="px-4 py-2 font-medium">Reason</th>
-                <th className="px-4 py-2 font-medium">Date</th>
-                <th className="px-4 py-2 font-medium">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {loading && <TableSkeletonRows cols={7} />}
-              {!loading && adjustments.length === 0 && (
-                <tr>
-                  <td className="px-4 py-4 text-slate-500" colSpan={7}>
-                    No adjustments recorded.
-                  </td>
-                </tr>
-              )}
-              {!loading &&
-                pager.pageItems.map((a) => (
-                  <tr key={a.id}>
-                    <td className="px-4 py-2 text-slate-900">
-                      {targetName(a)} <span className="text-xs text-slate-500">({a.targetType})</span>
-                    </td>
-                    <td className="px-4 py-2 text-slate-600">{periodCode(a.periodId)}</td>
-                    <td className="px-4 py-2 font-medium text-slate-900">{a.value}%</td>
-                    <td className="px-4 py-2">
-                      <Badge tone={a.status === "ACTIVE" ? "green" : "gray"}>{a.status === "ACTIVE" ? "Active" : "Inactive"}</Badge>
-                    </td>
-                    <td className="px-4 py-2 text-slate-600">{a.reason}</td>
-                    <td className="px-4 py-2 text-xs text-slate-500">{formatDateTime(a.createdAt)}</td>
-                    <td className="px-4 py-2 text-right">
-                      <RowActions>
-                        {canToggle && (
-                          <StatusToggleAction active={a.status === "ACTIVE"} busy={rowBusy === a.id} onClick={() => toggleStatus(a)} />
-                        )}
-                      </RowActions>
-                    </td>
-                  </tr>
-                ))}
-            </tbody>
-          </table>
-        </div>
-        <Pagination page={pager.page} totalPages={pager.totalPages} total={pager.total} pageSize={pager.pageSize} onPageChange={pager.setPage} />
+        <AdminTable
+          columns={columns}
+          data={adjustments}
+          isLoading={loading}
+          getRowId={(a) => a.id}
+          exportFileName="scoring-adjustments"
+          emptyText="No adjustments recorded."
+          renderRowActions={
+            canToggle
+              ? (a) => (
+                  <RowActions>
+                    <StatusToggleAction active={a.status === "ACTIVE"} busy={rowBusy === a.id} onClick={() => toggleStatus(a)} />
+                  </RowActions>
+                )
+              : undefined
+          }
+        />
       </Card>
     </div>
   );

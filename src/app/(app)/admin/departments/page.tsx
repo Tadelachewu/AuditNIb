@@ -1,6 +1,7 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import type { MRT_ColumnDef } from "material-react-table";
 import { apiGet, apiSend, ApiError } from "@/lib/api-client";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -10,12 +11,11 @@ import { Badge } from "@/components/ui/Badge";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { AddDialog, Modal } from "@/components/ui/AddDialog";
 import { RowAction, RowActions, StatusToggleAction } from "@/components/ui/RowActions";
-import { TableSkeletonRows } from "@/components/ui/Skeleton";
-import { Pagination } from "@/components/ui/Pagination";
-import { useClientPagination } from "@/lib/useClientPagination";
 import { usePermissions } from "@/lib/permissions/PermissionsContext";
 import { hasPermission } from "@/lib/permissions/registry";
 import type { Department, District, Branch, OrgScope } from "@/types";
+import { AdminTable } from "@/components/ui/AdminTable";
+import { ImportCsvDialog } from "@/components/ui/ImportCsvDialog";
 
 const emptyForm = { code: "", name: "", orgScope: "BANK" as OrgScope, districtId: "", branchId: "" };
 const emptyEditForm = { name: "", orgScope: "BANK" as OrgScope, districtId: "", branchId: "" };
@@ -38,7 +38,6 @@ export default function DepartmentsPage() {
   const canEdit = hasPermission(permissions, "departments.edit");
   const canToggle = hasPermission(permissions, "departments.toggle-status");
   const canDelete = hasPermission(permissions, "departments.delete");
-  const pager = useClientPagination(departments);
 
   async function load() {
     setLoading(true);
@@ -175,6 +174,50 @@ export default function DepartmentsPage() {
     }
   }
 
+  const editingDept = departments.find((d) => d.id === editingId) ?? null;
+
+  const columns = useMemo<MRT_ColumnDef<Department>[]>(
+    () => [
+      {
+        accessorKey: "code",
+        header: "Code",
+        size: 90,
+        Cell: ({ row }) => <span className="font-mono text-xs text-slate-600">{row.original.code}</span>,
+      },
+      { accessorKey: "name", header: "Name", Cell: ({ row }) => <span className="font-medium text-slate-900">{row.original.name}</span> },
+      {
+        id: "scope",
+        header: "Scope",
+        accessorFn: (d) => (d.orgScope === "BANK" ? "Bank-wide" : `${d.orgScope === "BRANCH" ? "Branch" : "District"}: ${scopeLabel(d)}`),
+        Cell: ({ row, cell }) =>
+          row.original.orgScope === "BANK" ? <Badge tone="blue">Bank-wide</Badge> : <span className="text-slate-600">{cell.getValue<string>()}</span>,
+      },
+      {
+        id: "level",
+        header: "Level",
+        size: 100,
+        accessorFn: (d) => d.orgScope,
+        filterVariant: "select",
+        filterSelectOptions: [
+          { value: "BANK", label: "Bank-wide" },
+          { value: "DISTRICT", label: "District" },
+          { value: "BRANCH", label: "Branch" },
+        ],
+      },
+      {
+        id: "status",
+        header: "Status",
+        size: 110,
+        accessorFn: (d) => (d.active ? "Active" : "Inactive"),
+        filterVariant: "select",
+        filterSelectOptions: ["Active", "Inactive"],
+        Cell: ({ row }) => <Badge tone={row.original.active ? "green" : "gray"}>{row.original.active ? "Active" : "Inactive"}</Badge>,
+      },
+    ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [districts, branches]
+  );
+
   return (
     <div>
       <h1 className="text-lg font-semibold text-slate-900">Departments</h1>
@@ -253,139 +296,139 @@ export default function DepartmentsPage() {
             </AddDialog>
           )}
         />
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-600">
-              <tr>
-                <th className="px-4 py-2 font-medium">Code</th>
-                <th className="px-4 py-2 font-medium">Name</th>
-                <th className="px-4 py-2 font-medium">Scope</th>
-                <th className="px-4 py-2 font-medium">Status</th>
-                <th className="px-4 py-2" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {loading && <TableSkeletonRows cols={5} />}
-              {!loading &&
-                pager.pageItems.map((d) => {
-                  const isEditing = editingId === d.id;
-                  return (
-                    <Fragment key={d.id}>
-                      <tr>
-                        <td className="px-4 py-2 font-mono text-xs text-slate-600">{d.code}</td>
-                        <td className="px-4 py-2 font-medium text-slate-900">{d.name}</td>
-                        <td className="px-4 py-2 text-slate-600">
-                          {d.orgScope === "BANK" ? (
-                            <Badge tone="blue">Bank-wide</Badge>
-                          ) : (
-                            <span>
-                              {d.orgScope === "BRANCH" ? "Branch: " : "District: "}
-                              {scopeLabel(d)}
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-4 py-2">
-                          <Badge tone={d.active ? "green" : "gray"}>{d.active ? "Active" : "Inactive"}</Badge>
-                        </td>
-                        <td className="px-4 py-2 text-right">
-                          <RowActions>
-                            {canEdit && (
-                              <RowAction
-                                kind="edit"
-                                disabled={isEditing}
-                                title={isEditing ? "Already editing - use Save Changes or Cancel below" : "Edit"}
-                                onClick={() => startEdit(d)}
-                              />
-                            )}
-                            {canToggle && (
-                              <StatusToggleAction active={d.active} busy={rowBusy === d.id} onClick={() => toggleActive(d)} />
-                            )}
-                            {canDelete && (
-                              <RowAction kind="delete" busy={rowBusy === d.id} onClick={() => deleteDepartment(d)} />
-                            )}
-                          </RowActions>
-                        </td>
-                      </tr>
-                      {/* Editor in a dialog, like Add (see the Users page's note). */}
-                      {isEditing && (
-                        <Modal title={`Edit ${d.name}`} description={d.code} size="xl" onClose={() => setEditingId(null)}>
-                          <div className="p-4">
-                            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                              <div>
-                                <Label htmlFor="edit-name">Name</Label>
-                                <Input
-                                  id="edit-name"
-                                  value={editForm.name}
-                                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                                />
-                              </div>
-                              <div>
-                                <Label htmlFor="edit-orgScope">Scope</Label>
-                                <Select
-                                  id="edit-orgScope"
-                                  value={editForm.orgScope}
-                                  onChange={(e) =>
-                                    setEditForm({ ...editForm, orgScope: e.target.value as OrgScope, districtId: "", branchId: "" })
-                                  }
-                                >
-                                  <option value="BANK">Bank-wide</option>
-                                  <option value="DISTRICT">District</option>
-                                  <option value="BRANCH">Branch</option>
-                                </Select>
-                              </div>
-                              {(editIsDistrictScoped || editIsBranchScoped) && (
-                                <div>
-                                  <Label htmlFor="edit-districtId">District</Label>
-                                  <Select
-                                    id="edit-districtId"
-                                    value={editForm.districtId}
-                                    onChange={(e) => setEditForm({ ...editForm, districtId: e.target.value, branchId: "" })}
-                                  >
-                                    <option value="">Select district</option>
-                                    {districts.map((dist) => (
-                                      <option key={dist.id} value={dist.id}>
-                                        {dist.name}
-                                      </option>
-                                    ))}
-                                  </Select>
-                                </div>
-                              )}
-                              {editIsBranchScoped && (
-                                <div>
-                                  <Label htmlFor="edit-branchId">Branch</Label>
-                                  <Select
-                                    id="edit-branchId"
-                                    value={editForm.branchId}
-                                    onChange={(e) => setEditForm({ ...editForm, branchId: e.target.value })}
-                                  >
-                                    <option value="">Select branch</option>
-                                    {editBranchOptions.map((b) => (
-                                      <option key={b.id} value={b.id}>
-                                        {b.name}
-                                      </option>
-                                    ))}
-                                  </Select>
-                                </div>
-                              )}
-                            </div>
-                            <StickyActions className="mt-4" error={editError}>
-                              <Button variant="cancel" onClick={() => setEditingId(null)}>
-                                Cancel
-                              </Button>
-                              <Button disabled={rowBusy === d.id} onClick={() => saveEdit(d)}>
-                                {rowBusy === d.id ? "Saving..." : "Save Changes"}
-                              </Button>
-                            </StickyActions>
-                          </div>
-                        </Modal>
-                      )}
-                    </Fragment>
-                  );
-                })}
-            </tbody>
-          </table>
-        </div>
-        <Pagination page={pager.page} totalPages={pager.totalPages} total={pager.total} pageSize={pager.pageSize} onPageChange={pager.setPage} />
+        <AdminTable
+          columns={columns}
+          data={departments}
+          isLoading={loading}
+          getRowId={(d) => d.id}
+          exportFileName="departments"
+          emptyText="No departments yet."
+          toolbarActions={
+            canCreate && (
+              <ImportCsvDialog
+                entityLabel="departments"
+                templateName="departments-import"
+                columns={[
+                  { key: "code", required: true, example: "OPS", help: "Unique department code" },
+                  { key: "name", required: true, example: "Operations", help: "Department name" },
+                  { key: "scope", required: true, example: "BANK", help: "BANK, DISTRICT or BRANCH" },
+                  { key: "district", example: "", help: "For DISTRICT scope: the district's code or name" },
+                  { key: "branch", example: "", help: "For BRANCH scope: the branch's code or name" },
+                ]}
+                toPayload={(row) => {
+                  const label = row.code ? `${row.code} - ${row.name}` : row.name || "(blank)";
+                  if (!row.code || !row.name) return { error: "code and name are required", label };
+                  const scope = (row.scope ?? "").trim().toUpperCase();
+                  if (!["BANK", "DISTRICT", "BRANCH"].includes(scope)) return { error: `scope must be BANK, DISTRICT or BRANCH, not "${row.scope}"`, label };
+                  const find = <T extends { code: string; name: string }>(list: T[], v: string) => {
+                    const k = v.trim().toLowerCase();
+                    return list.find((x) => x.code.toLowerCase() === k || x.name.toLowerCase() === k);
+                  };
+                  if (scope === "DISTRICT") {
+                    const dist = row.district ? find(districts, row.district) : undefined;
+                    if (!dist) return { error: `Unknown or missing district "${row.district ?? ""}"`, label };
+                    return { payload: { code: row.code, name: row.name, orgScope: scope, districtId: dist.id }, label };
+                  }
+                  if (scope === "BRANCH") {
+                    const br = row.branch ? find(branches, row.branch) : undefined;
+                    if (!br) return { error: `Unknown or missing branch "${row.branch ?? ""}"`, label };
+                    return { payload: { code: row.code, name: row.name, orgScope: scope, districtId: br.districtId, branchId: br.id }, label };
+                  }
+                  return { payload: { code: row.code, name: row.name, orgScope: scope }, label };
+                }}
+                submit={(payload) => apiSend("/api/admin/departments", "POST", payload)}
+                onDone={load}
+              />
+            )
+          }
+          renderRowActions={(d) => (
+            <RowActions>
+              {canEdit && (
+                <RowAction
+                  kind="edit"
+                  disabled={editingId === d.id}
+                  title={editingId === d.id ? "Already editing - use Save Changes or Cancel below" : "Edit"}
+                  onClick={() => startEdit(d)}
+                />
+              )}
+              {canToggle && <StatusToggleAction active={d.active} busy={rowBusy === d.id} onClick={() => toggleActive(d)} />}
+              {canDelete && <RowAction kind="delete" busy={rowBusy === d.id} onClick={() => deleteDepartment(d)} />}
+            </RowActions>
+          )}
+        />
+        {/* Editor in a dialog, like Add (see the Users page's note). */}
+        {editingDept && (
+        <Modal title={`Edit ${editingDept.name}`} description={editingDept.code} size="xl" onClose={() => setEditingId(null)}>
+          <div className="p-4">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div>
+                <Label htmlFor="edit-name">Name</Label>
+                <Input
+                  id="edit-name"
+                  value={editForm.name}
+                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-orgScope">Scope</Label>
+                <Select
+                  id="edit-orgScope"
+                  value={editForm.orgScope}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, orgScope: e.target.value as OrgScope, districtId: "", branchId: "" })
+                  }
+                >
+                  <option value="BANK">Bank-wide</option>
+                  <option value="DISTRICT">District</option>
+                  <option value="BRANCH">Branch</option>
+                </Select>
+              </div>
+              {(editIsDistrictScoped || editIsBranchScoped) && (
+                <div>
+                  <Label htmlFor="edit-districtId">District</Label>
+                  <Select
+                    id="edit-districtId"
+                    value={editForm.districtId}
+                    onChange={(e) => setEditForm({ ...editForm, districtId: e.target.value, branchId: "" })}
+                  >
+                    <option value="">Select district</option>
+                    {districts.map((dist) => (
+                      <option key={dist.id} value={dist.id}>
+                        {dist.name}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+              )}
+              {editIsBranchScoped && (
+                <div>
+                  <Label htmlFor="edit-branchId">Branch</Label>
+                  <Select
+                    id="edit-branchId"
+                    value={editForm.branchId}
+                    onChange={(e) => setEditForm({ ...editForm, branchId: e.target.value })}
+                  >
+                    <option value="">Select branch</option>
+                    {editBranchOptions.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+              )}
+            </div>
+            <StickyActions className="mt-4" error={editError}>
+              <Button variant="cancel" onClick={() => setEditingId(null)}>
+                Cancel
+              </Button>
+              <Button disabled={rowBusy === editingDept.id} onClick={() => saveEdit(editingDept)}>
+                {rowBusy === editingDept.id ? "Saving..." : "Save Changes"}
+              </Button>
+            </StickyActions>
+          </div>
+        </Modal>
+        )}
       </Card>
       {dialog}
     </div>

@@ -258,3 +258,11 @@ body {
 .sidebar-scroll::-webkit-scrollbar-thumb:hover {
   background-color: var(--chrome-muted);
 }
+
+/* Anything marked no-print (page actions, table toolbars and page bars)
+   is left out of printouts / Print-to-PDF. */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+}
