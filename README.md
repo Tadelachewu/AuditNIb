@@ -268,3 +268,9 @@ there's no mail server or Graph API credential to send through) — see
 for exactly what's deferred and why. [BRD_COMPLIANCE.md](docs/BRD_COMPLIANCE.md)
 is a full requirement-by-requirement cross-check of the app against every
 document in `AuditDocs/`.
+
+
+
+
+node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+
