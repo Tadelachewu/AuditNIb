@@ -10,12 +10,11 @@ import { ALLOWED_EVIDENCE_TYPES, MAX_EVIDENCE_BYTES, EVIDENCE_UPLOAD_LIMIT, evid
 import { writeStoredFile, deleteStoredFile, newStoredName, FileStorageError } from "@/lib/fileStorage";
 
 // icfms.txt: Branch Controller/Manager "upload optional evidence" for a
-// finding - gated by findings.evidence. A file attached to a *comment*
-// instead (BR-WF-018, master.txt §12: "Users may add attachments to
-// comments where permitted") is gated by findings.comment instead, since
-// that's the actual action being authorized - District Controller/Director
-// can comment (and so attach to their own comment) without holding
-// findings.evidence at all. Uses Next.js's native request.formData()
+// finding - gated by findings.evidence. This is the only way to attach a
+// file: comments are text only, so an upload naming a comment (the old
+// comment-attachment flow) is refused outright. Attachments stored on
+// older comments stay listed/downloadable/removable. Validation rules:
+// EVIDENCE_VALIDATION_RULES.md. Uses Next.js's native request.formData()
 // rather than a new multipart-parsing dependency.
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -24,9 +23,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   // ~10MB before this route ever sees it (verified: a well-formed upload
   // just past 10MB fails here, not at the MAX_EVIDENCE_BYTES check below) -
   // so a parse failure is treated as "too large" rather than the more
-  // literal but misleading "no file provided". Parsed before the
-  // permission check below since which permission applies depends on
-  // whether a commentId field is present.
+  // literal but misleading "no file provided".
   const authBase = await requireUser();
   if (!authBase.ok) return authBase.response;
 
@@ -37,16 +34,20 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "File exceeds the 10 MB limit" }, { status: 400 });
   }
 
+  // Comments are text only - files can't be attached to a comment.
   const commentIdField = formData.get("commentId");
-  const commentId = typeof commentIdField === "string" && commentIdField ? commentIdField : null;
-  const requiredPermission = permissionKey("findings", commentId ? "comment" : "evidence");
-  if (!hasPermission(authBase.session.permissions, requiredPermission)) {
+  if (typeof commentIdField === "string" && commentIdField) {
+    return NextResponse.json(
+      { error: "Comments are text only - attach files in the finding's Evidence section instead." },
+      { status: 400 }
+    );
+  }
+  if (!hasPermission(authBase.session.permissions, permissionKey("findings", "evidence"))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
   const auth = authBase;
 
-  // One account can't fill the disk: a per-user cap on uploads per window
-  // (shared by finding evidence and comment attachments).
+  // One account can't fill the disk: a per-user cap on uploads per window.
   const rateKey = `evidence-upload:${auth.session.userId}`;
   const limited = await isRateLimited(rateKey, EVIDENCE_UPLOAD_LIMIT);
   if (limited.limited) {
@@ -63,9 +64,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const scopeError = assertFindingInScope(auth.session, existing);
   if (scopeError) return NextResponse.json({ error: scopeError }, { status: 403 });
 
-  if (commentId && !db.comments.some((c) => c.id === commentId && c.findingId === id)) {
-    return NextResponse.json({ error: "Comment not found" }, { status: 404 });
-  }
 
   const file = formData.get("file");
   if (!file || !(file instanceof File)) {
@@ -113,7 +111,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       const entry = {
         id: uuid(),
         findingId: f.id,
-        commentId,
+        commentId: null,
         fileName: file.name,
         mimeType: file.type,
         size: file.size,
@@ -129,7 +127,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         action: "EVIDENCE_UPLOAD",
         entityType: "Evidence",
         entityId: entry.id,
-        newValue: { findingId: f.id, reference: f.reference, commentId, fileName: entry.fileName, mimeType: entry.mimeType, size: entry.size },
+        newValue: { findingId: f.id, reference: f.reference, fileName: entry.fileName, mimeType: entry.mimeType, size: entry.size },
       });
       return entry;
     });

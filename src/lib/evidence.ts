@@ -13,7 +13,7 @@ export const ALLOWED_EVIDENCE_TYPES: Record<string, string> = {
   "text/csv": "csv",
 };
 
-// Per-user upload rate limit (evidence + comment attachments together):
+// Per-user evidence upload rate limit:
 // at most this many uploads per window, so one account can't fill the disk.
 export const EVIDENCE_UPLOAD_LIMIT = { max: 30, windowMs: 10 * 60 * 1000 };
 

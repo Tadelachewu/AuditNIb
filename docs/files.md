@@ -9,7 +9,7 @@ This page explains which files users can upload, where and how they're kept, how
 | Where | What | Kept? | Who can upload (default roles) |
 |---|---|---|---|
 | **Finding page → Evidence** | Supporting documents attached to a finding | ✅ encrypted, in `storage/evidence/` | Needs **Findings › Upload Evidence**: Branch Controller, Branch Manager, Branch Sub-Manager, Administrator |
-| **Finding page → Comment attachment** | A file attached to a comment | ✅ encrypted, in `storage/evidence/`, linked to the comment | Needs **Findings › Comment**: all roles except Executive (Read-only) |
+| **Comments** | ❌ **No files, comments are text only.** Attachments stored on comments before this change still show under their comment and can be downloaded or removed. | n/a | n/a |
 | **Import Findings** (`/findings/import`) | The `.xlsx` sheet of findings to bulk-register | ✅ **the original spreadsheet** of every successful import, encrypted, in `storage/imports/` | Needs **Findings › Bulk Import**: HO Controller, Administrator |
 
 **Not files, even though the names suggest it:**
@@ -29,7 +29,7 @@ All uploaded files live in **one dedicated folder**, separate from the app's cod
 
 ```
 storage/                      ← STORAGE_DIR (default: "storage" next to the app)
-  evidence/<random-id>.<ext>  ← evidence + comment attachments
+  evidence/<random-id>.<ext>  ← evidence (and older comment attachments)
   imports/<random-id>.xlsx    ← original import spreadsheets
 ```
 
@@ -55,7 +55,7 @@ If `FILE_ENCRYPTION_KEY` isn't set, uploads are refused with a clear "File stora
 
 | Table | One row per | Key columns |
 |---|---|---|
-| **`evidence`** | Evidence file or comment attachment | `finding_id`, `comment_id` (empty for finding-level evidence), `file_name` (**original** name), `mime_type`, `size`, `storage_path` (the random name in `storage/evidence/`), `uploaded_by`, `created_at` |
+| **`evidence`** | Evidence file (or an older comment attachment) | `finding_id`, `comment_id` (empty for finding-level evidence), `file_name` (**original** name), `mime_type`, `size`, `storage_path` (the random name in `storage/evidence/`), `uploaded_by`, `created_at` |
 | **`import_batches`** | Import run | `file_name` (original name), `stored_file` (the random name in `storage/imports/`; empty for imports made before originals were kept), row counts and outcomes |
 
 The **file** is in the storage folder and its **description** is in the database. A complete backup needs both (§3.4).
@@ -115,18 +115,21 @@ Take 1 and 2 at the same time so the records and the files match. Without 3, the
 
 ## 4. Security measures
 
-### 4.1 Evidence and comment attachments
+### 4.1 Evidence
+
+The full, rule-by-rule list with error messages and code references is in [EVIDENCE_VALIDATION_RULES.md](../EVIDENCE_VALIDATION_RULES.md).
 
 | Protection | What it does |
 |---|---|
 | **Signed-in users only** | Every upload, list, download and delete request needs a valid session. |
-| **Permission check** | **Upload:** Findings › Upload Evidence, or Findings › Comment for a comment attachment. **Download:** Findings › View. **Delete:** see §5. |
+| **Evidence only** | Files can only be attached as evidence. Uploads naming a comment are refused, since comments are text only. |
+| **Permission check** | **Upload:** Findings › Upload Evidence. **Download:** Findings › View. **Delete:** see §5. |
 | **Scope check** | The finding must be inside the user's own branch or district (bank-wide roles: any). A guessed link to another area's finding is refused. |
 | **Link-to-finding check** | A download or delete must name both the finding and the file, and they must belong together. |
 | **Allowed types only** | PDF, PNG, JPG, XLSX, DOCX and CSV. Everything else is refused, including HTML, scripts, executables and SVG. |
 | **Content check (magic bytes)** | The file's real first bytes must match the claimed type. For example, a PDF must start with `%PDF-`, and DOCX/XLSX must be real Office packages. A renamed HTML or executable file is refused. |
 | **Size limit** | 10 MB per file. |
-| **Upload rate limit** | At most **30 uploads per user per 10 minutes** (evidence and attachments together). Beyond that the user is asked to wait. |
+| **Upload rate limit** | At most **30 uploads per user per 10 minutes**. Beyond that the user is asked to wait. |
 | **Random stored names + name check** | Files are stored under server-generated random IDs, and the storage code refuses any other name. No user input can reach a file path. |
 | **Encrypted at rest** | AES-256-GCM with a key that's not in the storage folder (§2.2). |
 | **Tamper detection** | A file altered on disk fails its integrity check and isn't served. |

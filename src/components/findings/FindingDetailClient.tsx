@@ -151,10 +151,8 @@ export function FindingDetailClient({
   const [uploadingEvidence, setUploadingEvidence] = useState(false);
 
   const [commentText, setCommentText] = useState("");
-  const [commentFile, setCommentFile] = useState<File | null>(null);
   const [replyTo, setReplyTo] = useState<string | null>(null);
   const [replyText, setReplyText] = useState("");
-  const [replyFile, setReplyFile] = useState<File | null>(null);
 
   const outstandingCases = finding.caseCount - finding.rectifiedCases;
   const outstandingAmount = finding.amount - finding.rectifiedAmount;
@@ -421,14 +419,12 @@ export function FindingDetailClient({
     }
   }
 
-  // Shared by finding-level evidence uploads and comment attachments
-  // (BR-WF-018) - the only difference is whether commentId is set, which
-  // the API route itself uses to decide findings.evidence vs
-  // findings.comment as the required permission.
-  async function uploadEvidence(file: File, commentId?: string) {
+  // Finding-level evidence upload. (Comments are text only - comment
+  // attachments are no longer accepted; older ones still show under their
+  // comment and can be downloaded/removed.)
+  async function uploadEvidence(file: File) {
     const formData = new FormData();
     formData.append("file", file);
-    if (commentId) formData.append("commentId", commentId);
     const res = await fetch(`/api/findings/${finding.id}/evidence`, { method: "POST", body: formData });
     const body = await res.json().catch(() => ({}));
     if (!res.ok) throw new ApiError(body?.error ?? "Upload failed", res.status);
@@ -492,21 +488,19 @@ export function FindingDetailClient({
     }
   }
 
-  async function postComment(text: string, parentCommentId?: string, file?: File | null) {
+  // Comments are text only - files go in the Evidence section instead.
+  async function postComment(text: string, parentCommentId?: string) {
     if (!text.trim()) return;
     setBusy(true);
     setError(null);
     try {
-      const { comment } = await apiSend<{ comment: Comment }>(`/api/findings/${finding.id}/comments`, "POST", {
+      await apiSend<{ comment: Comment }>(`/api/findings/${finding.id}/comments`, "POST", {
         text,
         parentCommentId,
       });
-      if (file) await uploadEvidence(file, comment.id);
       setCommentText("");
-      setCommentFile(null);
       setReplyTo(null);
       setReplyText("");
-      setReplyFile(null);
       await refresh();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to post comment");
@@ -1059,7 +1053,7 @@ export function FindingDetailClient({
 
       {(permissions.canUploadEvidence || evidence.some((e) => !e.commentId)) && (
         <Card>
-          <CardHeader title="Evidence" description="Optional supporting files (PDF, PNG, JPG, XLSX, DOCX, CSV - up to 10 MB). Comment attachments are shown inline under their comment instead." />
+          <CardHeader title="Evidence" description="Optional supporting files (PDF, PNG, JPG, XLSX, DOCX, CSV - up to 10 MB). This is the one place to attach files - comments are text only." />
           <div className="flex flex-col gap-2 p-4">
             {permissions.canUploadEvidence && (
               <FileInput
@@ -1172,11 +1166,10 @@ export function FindingDetailClient({
                                 onChange={(e) => setReplyText(e.target.value)}
                                 placeholder="Write a reply..."
                               />
-                              <Button onClick={() => postComment(replyText, c.id, replyFile)} disabled={busy}>
+                              <Button onClick={() => postComment(replyText, c.id)} disabled={busy}>
                                 Reply
                               </Button>
                             </div>
-                            <FileInput onChange={(e) => setReplyFile(e.target.files?.[0] ?? null)} />
                           </div>
                         )}
                       </div>
@@ -1192,11 +1185,10 @@ export function FindingDetailClient({
                     onChange={(e) => setCommentText(e.target.value)}
                     placeholder="Add a comment..."
                   />
-                  <Button onClick={() => postComment(commentText, undefined, commentFile)} disabled={busy}>
+                  <Button onClick={() => postComment(commentText)} disabled={busy}>
                     Post
                   </Button>
                 </div>
-                <FileInput onChange={(e) => setCommentFile(e.target.files?.[0] ?? null)} />
               </div>
             )}
           </div>
