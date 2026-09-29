@@ -9,6 +9,7 @@ import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Select, Label } from "@/components/ui/Field";
 import { PrintButton } from "@/components/reports/PrintButton";
+import { AdjustedBadge } from "@/components/ui/AdjustedBadge";
 
 // Filtered to one reporting period at a time (a period picker, same
 // convention as every other template's Period select) rather than
@@ -116,7 +117,7 @@ export default async function MonthlyDistrictHistoryPage({
                     <td className="px-4 py-2 text-slate-700">{formatNumber(r.totalCases)}</td>
                     <td className="px-4 py-2 text-slate-700">{formatNumber(r.outstandingCases)}</td>
                     <td className="px-4 py-2 text-slate-700">{formatNumber(r.rectifiedCases)}</td>
-                    <td className="px-4 py-2 text-slate-700">{r.performance !== null ? `${r.performance.toFixed(1)}%` : "--"}</td>
+                    <td className="px-4 py-2 text-slate-700">{r.performance !== null ? <>{r.performance.toFixed(1)}%<AdjustedBadge adjustment={r.adjustment} /></> : "--"}</td>
                   </tr>
                 ))}
                 {rows.length > 0 && (

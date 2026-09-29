@@ -10,6 +10,7 @@ import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Select, Label } from "@/components/ui/Field";
 import { PrintButton } from "@/components/reports/PrintButton";
+import { AdjustedBadge } from "@/components/ui/AdjustedBadge";
 
 // The same District x Period series as Monthly District History, grouped
 // the other way - one block per district (months as rows) instead of one
@@ -160,7 +161,7 @@ export default async function MonthlyDistrictDetailPage({
                         <td className="px-4 py-2 text-slate-700">{formatNumber(r.totalCases)}</td>
                         <td className="px-4 py-2 text-slate-700">{formatNumber(r.outstandingCases)}</td>
                         <td className="px-4 py-2 text-slate-700">{formatNumber(r.rectifiedCases)}</td>
-                        <td className="px-4 py-2 text-slate-700">{r.performance !== null ? `${r.performance.toFixed(1)}%` : "--"}</td>
+                        <td className="px-4 py-2 text-slate-700">{r.performance !== null ? <>{r.performance.toFixed(1)}%<AdjustedBadge adjustment={r.adjustment} /></> : "--"}</td>
                       </tr>
                     ))}
                     {variousRow && (

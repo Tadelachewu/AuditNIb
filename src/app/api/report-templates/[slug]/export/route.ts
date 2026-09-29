@@ -35,6 +35,13 @@ function pct(v: number | null): string {
   return v === null ? "--" : v.toFixed(1);
 }
 
+// A row's performance %, marked when it's a manual Scoring Adjustment rather
+// than the formula - so an exported sheet shows the same thing the screen
+// does (the "Adjusted" badge), not an unexplained number.
+function pctRow(r: { performance: number | null; adjustment?: { reason: string } | null }): string {
+  return r.adjustment ? `${pct(r.performance)} (adjusted)` : pct(r.performance);
+}
+
 const SLUG_TO_ACTION: Record<string, string> = Object.fromEntries(REPORT_TEMPLATES.map((t) => [t.slug, t.action]));
 
 function buildCsv(slug: string, db: Database, params: URLSearchParams): string | null {
@@ -137,7 +144,7 @@ function buildCsv(slug: string, db: Database, params: URLSearchParams): string |
       if (periodId) rows = rows.filter((r) => r.period.id === periodId);
       return toCsv(
         ["Period", "Total No. of Branches", "District", "Others Cases", "Unrectified", "Rectified", "rectified percetage"],
-        rows.map((r) => [r.period.code, r.totalBranches, r.district.name, r.totalCases, r.outstandingCases, r.rectifiedCases, pct(r.performance)])
+        rows.map((r) => [r.period.code, r.totalBranches, r.district.name, r.totalCases, r.outstandingCases, r.rectifiedCases, pctRow(r)])
       );
     }
     case "monthly-district-detail": {
@@ -163,7 +170,7 @@ function buildCsv(slug: string, db: Database, params: URLSearchParams): string |
       let grandRectified = 0;
       for (const [districtId, periodRows] of byDistrict) {
         periodRows.forEach((r, i) => {
-          dataRows.push([i + 1, i === 0 ? r.district.name : "", r.period.code, "Other Cases", r.totalCases, r.outstandingCases, r.rectifiedCases, pct(r.performance)]);
+          dataRows.push([i + 1, i === 0 ? r.district.name : "", r.period.code, "Other Cases", r.totalCases, r.outstandingCases, r.rectifiedCases, pctRow(r)]);
         });
         const variousRow = variousByDistrict.get(districtId);
         if (variousRow) {
@@ -199,7 +206,7 @@ function buildCsv(slug: string, db: Database, params: URLSearchParams): string |
     case "district-ranking-other-cases": {
       const { rows, totalRow } = getDistrictRankingOtherCases(db, periodIds);
       const header = ["SN", "Total No. of Branches", "District", "Total Others Cases", "Rectified", "Total outstanding unrectified", "Rank"];
-      const dataRows = rows.map((r, i) => [i + 1, r.totalBranches, r.district.name, r.totalCases, r.rectifiedCases, r.outstandingCases, pct(r.performance)]);
+      const dataRows = rows.map((r, i) => [i + 1, r.totalBranches, r.district.name, r.totalCases, r.rectifiedCases, r.outstandingCases, pctRow(r)]);
       if (rows.length > 0) {
         dataRows.push(["", totalRow.totalBranches, "TOTAL", totalRow.totalCases, totalRow.rectifiedCases, totalRow.outstandingCases, pct(totalRow.performance)]);
       }
@@ -258,7 +265,7 @@ function buildCsv(slug: string, db: Database, params: URLSearchParams): string |
     case "district-ranking-all-cases": {
       const { rows, totalRow } = getDistrictRankingAllCases(db, periodIds);
       const header = ["SN", "Total No. of Branches", "District", "Total Cases", "Rectified", "Total outstanding unrectified", "Rank in all cases"];
-      const dataRows = rows.map((r, i) => [i + 1, r.totalBranches, r.district.name, r.totalCases, r.rectifiedCases, r.outstandingCases, pct(r.performance)]);
+      const dataRows = rows.map((r, i) => [i + 1, r.totalBranches, r.district.name, r.totalCases, r.rectifiedCases, r.outstandingCases, pctRow(r)]);
       if (rows.length > 0) {
         dataRows.push(["", totalRow.totalBranches, "TOTAL", totalRow.totalCases, totalRow.rectifiedCases, totalRow.outstandingCases, pct(totalRow.performance)]);
       }
@@ -286,7 +293,7 @@ function buildCsv(slug: string, db: Database, params: URLSearchParams): string |
       const asOfDate = params.get("asOfDate") ?? new Date().toISOString().slice(0, 10);
       const { rows, totalRow } = getDistrictSnapshotAsOf(db, periodId, asOfDate);
       const header = ["SN", "District", "Others Cases", "Unrectified", "Rectified", "rectified percetage"];
-      const dataRows = rows.map((r, i) => [i + 1, r.district.name, r.totalCases, r.outstandingCases, r.rectifiedCases, pct(r.performance)]);
+      const dataRows = rows.map((r, i) => [i + 1, r.district.name, r.totalCases, r.outstandingCases, r.rectifiedCases, pctRow(r)]);
       if (rows.length > 0) {
         dataRows.push(["", "TOTAL", totalRow.totalCases, totalRow.outstandingCases, totalRow.rectifiedCases, pct(totalRow.performance)]);
       }

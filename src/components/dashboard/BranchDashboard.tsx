@@ -30,6 +30,7 @@ import { FindingStatusBadge } from "@/components/findings/FindingStatusBadge";
 import { CaseBasedPerformance } from "@/components/dashboard/CaseBasedPerformance";
 import { FindingsByCategoryChart } from "@/components/dashboard/FindingsByCategoryChart";
 import { SourcePerformanceSummary } from "@/components/dashboard/SourcePerformanceSummary";
+import { AdjustedBadge } from "@/components/ui/AdjustedBadge";
 
 // Per master.txt §10: "Selected month; category totals; total/rectified/
 // outstanding; Other Case summary; performance; monthly trend; risk
@@ -279,6 +280,7 @@ export function BranchDashboard({
       performance: hasPeriodScope
         ? computePerformance(db, { branchId: b.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id })
         : null,
+      adjustment: getActiveScoringAdjustment(db, { branchId: b.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id }),
     }))
     .sort((a, b) => (b.performance ?? -1) - (a.performance ?? -1));
 
@@ -406,7 +408,7 @@ export function BranchDashboard({
                         {row.branch.id === branch.id && <Badge tone="blue">Your Branch</Badge>}
                       </span>
                     </td>
-                    <td className="px-4 py-2 text-slate-700">{row.performance !== null ? `${row.performance.toFixed(1)}%` : "--"}</td>
+                    <td className="px-4 py-2 text-slate-700">{row.performance !== null ? <>{row.performance.toFixed(1)}%<AdjustedBadge adjustment={row.adjustment} /></> : "--"}</td>
                   </tr>
                 ))}
               </tbody>

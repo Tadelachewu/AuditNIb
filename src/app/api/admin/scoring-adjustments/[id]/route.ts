@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { appendAuditLog } from "@/lib/audit";
+import { supersedeOtherActiveAdjustments } from "@/lib/scoringAdjustments";
 
 const patchSchema = z.object({
   status: z.enum(["ACTIVE", "INACTIVE"]),
@@ -48,6 +49,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       newValue: { status: a.status },
       reason,
     });
+    // Re-activating one replaces whichever other adjustment was active for
+    // the same target+period (at most one is ever active at a time).
+    if (a.status === "ACTIVE") {
+      supersedeOtherActiveAdjustments(current, a, { userId: auth.session.userId!, userName: auth.session.name! });
+    }
     return a;
   });
 

@@ -121,8 +121,11 @@ export default function ScoringAdjustmentsPage() {
       {dialog}
       <h1 className="text-lg font-semibold text-slate-900">Scoring Adjustments</h1>
       <p className="mt-1 text-sm text-slate-600">
-        A manual override of a computed score - while ACTIVE, it replaces the dashboard/report figure for that exact target and period
-        outright. Every adjustment (and every activate/deactivate) requires a reason and is written to the audit trail.
+        A manual override of a branch&apos;s or district&apos;s performance % (0-100) for one reporting period. While ACTIVE it replaces
+        the calculated figure on dashboards, rankings, the Reports page and the district report templates, marked
+        &quot;Adjusted&quot; - case counts are never changed, and bank-wide totals always stay calculated. Only one adjustment per
+        target and period is active at a time: adding or re-activating one deactivates the previous one. Every change needs a reason
+        and is written to the audit trail.
       </p>
 
       <Card className="mt-5">
@@ -170,6 +173,8 @@ export default function ScoringAdjustmentsPage() {
                     id="value"
                     type="number"
                     step="0.01"
+                    min="0"
+                    max="100"
                     required
                     value={form.value}
                     onChange={(e) => setForm({ ...form, value: e.target.value })}

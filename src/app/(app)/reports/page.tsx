@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 import { readDb } from "@/lib/db";
 import { findingsInScope } from "@/lib/findings-scope";
-import { computePerformance, findingsResidentInPeriod, type FindingPeriodSlice } from "@/lib/findings";
+import { computePerformance, findingsResidentInPeriod, type FindingPeriodSlice, getActiveScoringAdjustment } from "@/lib/findings";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
 import { paginate, parsePage } from "@/lib/pagination";
 import { formatDateTime, formatNumber, formatCurrency } from "@/lib/format";
@@ -16,6 +16,7 @@ import { TimeRangeFilter } from "@/components/reports/TimeRangeFilter";
 import { PrintButton } from "@/components/reports/PrintButton";
 import { FILTERABLE_FINDING_STATUSES, type Finding } from "@/types";
 import { matchesOperationAndIrregularity } from "@/lib/dashboardFilters";
+import { AdjustedBadge } from "@/components/ui/AdjustedBadge";
 
 // master.txt §18's 14 named reports, covered as a small number of real,
 // data-backed views rather than 14 separate pages (see PHASE7.md): the
@@ -102,12 +103,12 @@ export default async function ReportsPage({
   const inScopeDistricts = user.orgScope === "BANK" ? db.districts : district ? [district] : [];
 
   const branchPerformance = inScopeBranches
-    .map((b) => ({ branch: b, performance: computePerformance(db, { branchId: b.id, periodId: periodId || undefined }) }))
+    .map((b) => ({ branch: b, performance: computePerformance(db, { branchId: b.id, periodId: periodId || undefined }), adjustment: getActiveScoringAdjustment(db, { branchId: b.id, periodId: periodId || undefined }) }))
     .filter((r) => r.performance !== null)
     .sort((a, b) => (b.performance ?? 0) - (a.performance ?? 0));
 
   const districtPerformance = inScopeDistricts
-    .map((d) => ({ district: d, performance: computePerformance(db, { districtId: d.id, periodId: periodId || undefined }) }))
+    .map((d) => ({ district: d, performance: computePerformance(db, { districtId: d.id, periodId: periodId || undefined }), adjustment: getActiveScoringAdjustment(db, { districtId: d.id, periodId: periodId || undefined }) }))
     .filter((r) => r.performance !== null)
     .sort((a, b) => (b.performance ?? 0) - (a.performance ?? 0));
 
@@ -274,7 +275,7 @@ export default async function ReportsPage({
                   <span className="mr-2 text-slate-500">#{i + 1}</span>
                   {row.branch.name}
                 </span>
-                <span className="font-medium text-slate-700">{row.performance!.toFixed(1)}%</span>
+                <span className="font-medium text-slate-700">{row.performance!.toFixed(1)}%<AdjustedBadge adjustment={row.adjustment} /></span>
               </div>
             ))}
           </div>
@@ -290,7 +291,7 @@ export default async function ReportsPage({
                   <span className="mr-2 text-slate-500">#{i + 1}</span>
                   {row.district.name}
                 </span>
-                <span className="font-medium text-slate-700">{row.performance!.toFixed(1)}%</span>
+                <span className="font-medium text-slate-700">{row.performance!.toFixed(1)}%<AdjustedBadge adjustment={row.adjustment} /></span>
               </div>
             ))}
           </div>

@@ -1,6 +1,6 @@
 import { HO_APPROVED_OR_LATER_STATUSES, type Database } from "@/types";
 import type { SessionData } from "@/lib/session";
-import { computePerformance, findingCaseTotals, findingCaseTotalsInPeriod, transferTotals, averageCaseAgeDays, isHoApproved } from "@/lib/findings";
+import { computePerformance, findingCaseTotals, findingCaseTotalsInPeriod, transferTotals, averageCaseAgeDays, isHoApproved, getActiveScoringAdjustment } from "@/lib/findings";
 import { sumAmountByCurrency, sumOutstandingByCurrency, sumAmountByCurrencyInPeriod, sumOutstandingByCurrencyInPeriod } from "@/lib/currency";
 import { inDateRange, type DateRange } from "@/lib/dateRange";
 import { applyDashboardFilters, EMPTY_DASHBOARD_FILTERS, ALL_PERIODS_VALUE, type DashboardFilters } from "@/lib/dashboardFilters";
@@ -16,6 +16,7 @@ import { StackedBarChart } from "@/components/dashboard/charts/StackedBarChart";
 import { SourcePerformanceSummary } from "@/components/dashboard/SourcePerformanceSummary";
 import { CaseBasedPerformance } from "@/components/dashboard/CaseBasedPerformance";
 import { FindingsByCategoryChart } from "@/components/dashboard/FindingsByCategoryChart";
+import { AdjustedBadge } from "@/components/ui/AdjustedBadge";
 
 // master.txt §10: a concise, read-only bank-wide summary for Executive
 // Management - KPIs, top-performer rankings, and an exceptions count
@@ -143,6 +144,7 @@ export function ExecutiveDashboard({
     .map((d) => ({
       district: d,
       performance: hasPeriodScope ? computePerformance(db, { districtId: d.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id }) : null,
+      adjustment: getActiveScoringAdjustment(db, { districtId: d.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id }),
     }))
     .filter((r) => r.performance !== null)
     .sort((a, b) => (b.performance ?? 0) - (a.performance ?? 0));
@@ -153,6 +155,7 @@ export function ExecutiveDashboard({
     .map((b) => ({
       branch: b,
       performance: hasPeriodScope ? computePerformance(db, { branchId: b.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id }) : null,
+      adjustment: getActiveScoringAdjustment(db, { branchId: b.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id }),
     }))
     .filter((r) => r.performance !== null)
     .sort((a, b) => (b.performance ?? 0) - (a.performance ?? 0));
@@ -258,7 +261,7 @@ export function ExecutiveDashboard({
                     <Badge tone={i === 0 ? "green" : "gray"}>#{i + 1}</Badge>
                     {row.district.name}
                   </span>
-                  <span className="font-medium text-slate-700">{row.performance!.toFixed(1)}%</span>
+                  <span className="font-medium text-slate-700">{row.performance!.toFixed(1)}%<AdjustedBadge adjustment={row.adjustment} /></span>
                 </div>
               ))}
             </div>
@@ -274,7 +277,7 @@ export function ExecutiveDashboard({
                     <Badge tone="red">Rank #{districtRanking.findIndex((r) => r.district.id === row.district.id) + 1}</Badge>
                     {row.district.name}
                   </span>
-                  <span className="font-medium text-slate-700">{row.performance!.toFixed(1)}%</span>
+                  <span className="font-medium text-slate-700">{row.performance!.toFixed(1)}%<AdjustedBadge adjustment={row.adjustment} /></span>
                 </div>
               ))}
             </div>
@@ -299,7 +302,7 @@ export function ExecutiveDashboard({
                     <Badge tone={i === 0 ? "green" : "gray"}>#{i + 1}</Badge>
                     {row.branch.name}
                   </span>
-                  <span className="font-medium text-slate-700">{row.performance!.toFixed(1)}%</span>
+                  <span className="font-medium text-slate-700">{row.performance!.toFixed(1)}%<AdjustedBadge adjustment={row.adjustment} /></span>
                 </div>
               ))}
             </div>
@@ -315,7 +318,7 @@ export function ExecutiveDashboard({
                     <Badge tone="red">Rank #{branchRanking.findIndex((r) => r.branch.id === row.branch.id) + 1}</Badge>
                     {row.branch.name}
                   </span>
-                  <span className="font-medium text-slate-700">{row.performance!.toFixed(1)}%</span>
+                  <span className="font-medium text-slate-700">{row.performance!.toFixed(1)}%<AdjustedBadge adjustment={row.adjustment} /></span>
                 </div>
               ))}
             </div>

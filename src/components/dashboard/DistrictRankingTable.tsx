@@ -1,6 +1,7 @@
 import Link from "next/link";
-import type { Database, District } from "@/types";
-import { computePerformance, computeEligibleCaseCounts } from "@/lib/findings";
+import type { Database, District, ScoringAdjustment } from "@/types";
+import { computePerformance, computeEligibleCaseCounts, getActiveScoringAdjustment } from "@/lib/findings";
+import { AdjustedBadge } from "@/components/ui/AdjustedBadge";
 import { Card, CardHeader } from "@/components/ui/Card";
 
 interface DistrictRow {
@@ -10,6 +11,8 @@ interface DistrictRow {
   rectifiedCases: number;
   outstandingCases: number;
   performance: number | null;
+  // Set when `performance` comes from an active Scoring Adjustment.
+  adjustment: ScoringAdjustment | null;
 }
 
 /** Performance %'s own math, revealed on click - same pattern as BranchPerformanceTable's own PerformanceDetail. */
@@ -19,10 +22,21 @@ function PerformanceDetail({ row }: { row: DistrictRow }) {
     <details className="group">
       <summary className="cursor-pointer list-none text-slate-700 marker:content-none hover:underline">
         {row.performance.toFixed(1)}%
+        <AdjustedBadge adjustment={row.adjustment} />
       </summary>
       <div className="mt-1 max-w-[14rem] text-xs leading-relaxed text-slate-500">
-        {row.rectifiedCases} of {row.totalCases} eligible case(s) closed (unless it&apos;s closed, it never counts as rectified):{" "}
-        {row.rectifiedCases} ÷ {row.totalCases} × 100 = {row.performance.toFixed(1)}%.
+        {row.adjustment ? (
+          <>
+            Manually adjusted to {row.performance.toFixed(1)}% (Scoring Adjustments): &quot;{row.adjustment.reason}&quot;. The formula
+            would give {row.rectifiedCases} ÷ {row.totalCases} eligible case(s)
+            {row.totalCases > 0 ? ` = ${((row.rectifiedCases / row.totalCases) * 100).toFixed(1)}%` : ""}.
+          </>
+        ) : (
+          <>
+            {row.rectifiedCases} of {row.totalCases} eligible case(s) closed (unless it&apos;s closed, it never counts as rectified):{" "}
+            {row.rectifiedCases} ÷ {row.totalCases} × 100 = {row.performance.toFixed(1)}%.
+          </>
+        )}
       </div>
     </details>
   );
@@ -66,7 +80,8 @@ export function DistrictRankingTable({
     const performance = hasScope
       ? computePerformance(db, { districtId: d.id, periodId: allPeriods ? undefined : openPeriod!.id })
       : null;
-    return { district: d, branchCount, totalCases, rectifiedCases, outstandingCases: totalCases - rectifiedCases, performance };
+    const adjustment = hasScope ? getActiveScoringAdjustment(db, { districtId: d.id, periodId: allPeriods ? undefined : openPeriod!.id }) : null;
+    return { district: d, branchCount, totalCases, rectifiedCases, outstandingCases: totalCases - rectifiedCases, performance, adjustment };
   });
 
   const ranked = [...rows].sort((a, b) => (b.performance ?? -1) - (a.performance ?? -1));

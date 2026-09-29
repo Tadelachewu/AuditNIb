@@ -4,6 +4,7 @@ import { z } from "zod";
 import { requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { appendAuditLog } from "@/lib/audit";
+import { isValidAdjustmentValue, supersedeOtherActiveAdjustments } from "@/lib/scoringAdjustments";
 
 export async function GET() {
   const auth = await requirePermission("scoring-adjustments.view");
@@ -17,7 +18,9 @@ const createSchema = z.object({
   targetType: z.enum(["DISTRICT", "BRANCH"]),
   targetId: z.string().min(1, "Target is required"),
   periodId: z.string().min(1, "Reporting period is required"),
-  value: z.number(),
+  // An adjusted performance % - 0 to 100, at most two decimals. Previously
+  // any number was accepted, so 150% or -20% could reach every dashboard.
+  value: z.number().refine(isValidAdjustmentValue, "The adjusted score must be between 0 and 100 (at most 2 decimals)"),
   reason: z.string().min(5, "A reason of at least 5 characters is required"),
 });
 
@@ -51,7 +54,7 @@ export async function POST(request: Request) {
     createdAt: new Date().toISOString(),
   };
 
-  await updateDb((current) => {
+  const superseded = await updateDb((current) => {
     current.scoringAdjustments.push(adjustment);
     appendAuditLog(current, {
       userId: auth.session.userId!,
@@ -62,7 +65,10 @@ export async function POST(request: Request) {
       newValue: adjustment,
       reason: input.reason,
     });
+    // One active adjustment per target+period - an older active one for the
+    // same branch/district and period is deactivated (and audit-logged).
+    return supersedeOtherActiveAdjustments(current, adjustment, { userId: auth.session.userId!, userName: auth.session.name! });
   });
 
-  return NextResponse.json({ scoringAdjustment: adjustment }, { status: 201 });
+  return NextResponse.json({ scoringAdjustment: adjustment, supersededCount: superseded }, { status: 201 });
 }

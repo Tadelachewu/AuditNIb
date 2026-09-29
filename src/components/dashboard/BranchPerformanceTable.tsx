@@ -1,6 +1,7 @@
 import Link from "next/link";
-import type { Database, Branch, ReportingPeriod } from "@/types";
-import { computePerformance, computeEligibleCaseCounts, findPreviousPeriod, isHoApproved } from "@/lib/findings";
+import type { Database, Branch, ReportingPeriod, ScoringAdjustment } from "@/types";
+import { computePerformance, computeEligibleCaseCounts, findPreviousPeriod, isHoApproved, getActiveScoringAdjustment } from "@/lib/findings";
+import { AdjustedBadge } from "@/components/ui/AdjustedBadge";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 
@@ -10,6 +11,8 @@ interface Row {
   rectifiedCases: number;
   outstandingCases: number;
   performance: number | null;
+  // Set when `performance` comes from an active Scoring Adjustment.
+  adjustment: ScoringAdjustment | null;
   improvement: number | null;
   highRiskCount: number;
 }
@@ -21,10 +24,21 @@ function PerformanceDetail({ row }: { row: Row }) {
     <details className="group">
       <summary className="cursor-pointer list-none text-slate-700 marker:content-none hover:underline">
         {row.performance.toFixed(1)}%
+        <AdjustedBadge adjustment={row.adjustment} />
       </summary>
       <div className="mt-1 max-w-[14rem] text-xs leading-relaxed text-slate-500">
-        {row.rectifiedCases} of {row.totalCases} eligible case(s) closed (unless it&apos;s closed, it never counts as rectified):{" "}
-        {row.rectifiedCases} ÷ {row.totalCases} × 100 = {row.performance.toFixed(1)}%.
+        {row.adjustment ? (
+          <>
+            Manually adjusted to {row.performance.toFixed(1)}% (Scoring Adjustments): &quot;{row.adjustment.reason}&quot;. The formula
+            would give {row.rectifiedCases} ÷ {row.totalCases} eligible case(s)
+            {row.totalCases > 0 ? ` = ${((row.rectifiedCases / row.totalCases) * 100).toFixed(1)}%` : ""}.
+          </>
+        ) : (
+          <>
+            {row.rectifiedCases} of {row.totalCases} eligible case(s) closed (unless it&apos;s closed, it never counts as rectified):{" "}
+            {row.rectifiedCases} ÷ {row.totalCases} × 100 = {row.performance.toFixed(1)}%.
+          </>
+        )}
       </div>
     </details>
   );
@@ -125,6 +139,7 @@ export function BranchPerformanceTable({
       rectifiedCases,
       outstandingCases: totalCases - rectifiedCases,
       performance,
+      adjustment: hasScope ? getActiveScoringAdjustment(db, { branchId: b.id, periodId: allPeriods ? undefined : openPeriod!.id }) : null,
       improvement: performance !== null && prevPerformance !== null ? performance - prevPerformance : null,
       highRiskCount,
     };
@@ -146,14 +161,14 @@ export function BranchPerformanceTable({
         <Callout
           label="Top Performer"
           branchName={topPerformer?.branch.name ?? null}
-          sub={topPerformer ? `${topPerformer.performance!.toFixed(1)}%` : null}
+          sub={topPerformer ? `${topPerformer.performance!.toFixed(1)}%${topPerformer.adjustment ? " (adjusted)" : ""}` : null}
           href={topPerformer ? `/findings?branchId=${topPerformer.branch.id}` : null}
           tone="green"
         />
         <Callout
           label="Lowest Performer"
           branchName={lowestPerformer?.branch.name ?? null}
-          sub={lowestPerformer ? `${lowestPerformer.performance!.toFixed(1)}%` : null}
+          sub={lowestPerformer ? `${lowestPerformer.performance!.toFixed(1)}%${lowestPerformer.adjustment ? " (adjusted)" : ""}` : null}
           href={lowestPerformer ? `/findings?branchId=${lowestPerformer.branch.id}` : null}
           tone="red"
         />

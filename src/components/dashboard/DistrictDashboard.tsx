@@ -30,6 +30,7 @@ import { DistrictRankingTable } from "@/components/dashboard/DistrictRankingTabl
 import { SourcePerformanceSummary } from "@/components/dashboard/SourcePerformanceSummary";
 import { CaseBasedPerformance } from "@/components/dashboard/CaseBasedPerformance";
 import { FindingsByCategoryChart } from "@/components/dashboard/FindingsByCategoryChart";
+import { AdjustedBadge } from "@/components/ui/AdjustedBadge";
 
 // master.txt §10: district-level aggregate, branch-by-branch ranking,
 // category totals, risk distribution, recent activity, work queue -
@@ -167,6 +168,7 @@ export function DistrictDashboard({
       performance: hasPeriodScope
         ? computePerformance(db, { districtId: d.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id })
         : null,
+      adjustment: getActiveScoringAdjustment(db, { districtId: d.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id }),
     }))
     .sort((a, b) => (b.performance ?? -1) - (a.performance ?? -1));
 
@@ -191,7 +193,7 @@ export function DistrictDashboard({
       // volume count feeding "Findings by Branch" shouldn't grow the moment
       // something's merely registered either.
       const findings = approvedPeriodFindings.filter((f) => f.branchId === b.id);
-      return { branch: b, performance: perf, total: findings.length };
+      return { branch: b, performance: perf, adjustment: getActiveScoringAdjustment(db, { branchId: b.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id }), total: findings.length };
     })
     .sort((a, b) => (b.performance ?? -1) - (a.performance ?? -1));
   const rankedBranches = branchRanking.filter((r) => r.performance !== null);
@@ -349,7 +351,7 @@ export function DistrictDashboard({
                     <Badge tone={i === 0 ? "green" : "gray"}>#{i + 1}</Badge>
                     <span className="text-slate-900">{row.branch.name}</span>
                   </span>
-                  <span className="font-medium text-slate-700">{row.performance!.toFixed(1)}%</span>
+                  <span className="font-medium text-slate-700">{row.performance!.toFixed(1)}%<AdjustedBadge adjustment={row.adjustment} /></span>
                 </Link>
               ))}
             </div>
@@ -369,7 +371,7 @@ export function DistrictDashboard({
                     <Badge tone="red">Rank #{branchRanking.findIndex((r) => r.branch.id === row.branch.id) + 1}</Badge>
                     <span className="text-slate-900">{row.branch.name}</span>
                   </span>
-                  <span className="font-medium text-slate-700">{row.performance!.toFixed(1)}%</span>
+                  <span className="font-medium text-slate-700">{row.performance!.toFixed(1)}%<AdjustedBadge adjustment={row.adjustment} /></span>
                 </Link>
               ))}
             </div>
