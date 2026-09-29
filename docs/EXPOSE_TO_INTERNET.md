@@ -1,6 +1,6 @@
 # Exposing the app to the internet
 
-This app is a local dev server (`npm run dev`, `http://localhost:3000`). To
+This app is a local dev server (`npm run dev`, `http://localhost:9005`). To
 let someone outside this machine reach it — for a demo, a quick review, or
 testing from a phone — you need a tunnel: a service that opens a public
 URL and forwards traffic to your local port. No deployment, no server
@@ -11,6 +11,11 @@ office/corporate LAN, same WiFi), you don't need a tunnel at all — see
 "Same network" below. A tunnel is only needed when the other computer is
 somewhere else entirely (different building, home, mobile data).
 
+> **Port:** everything below assumes the default port **9005**. The app
+> uses `PORT` from `.env` (or the environment), and `npm run tunnel` /
+> `npm run tunnel:cloudflare` follow the same value automatically. If you
+> set a different `PORT`, use it wherever 9005 appears here.
+
 ## Same network — no tunnel needed
 
 1. On this machine: `npm run dev` (leave it running)
@@ -18,8 +23,8 @@ somewhere else entirely (different building, home, mobile data).
    under the adapter that has a `Default Gateway` set (that's the real
    network adapter, not a virtual/host-only one). On this machine that's
    currently `172.23.37.45`.
-3. On the other computer, open a browser to `http://<that IP>:3000` — e.g.
-   `http://172.23.37.45:3000`. Confirmed reachable: `next dev` binds to
+3. On the other computer, open a browser to `http://<that IP>:9005` — e.g.
+   `http://172.23.37.45:9005`. Confirmed reachable: `next dev` binds to
    all network interfaces by default, not just `localhost`.
 
 This only works while both computers are on the same network, and the IP
@@ -37,7 +42,7 @@ already be running in another terminal before either of these):
 npm run tunnel:cloudflare
 ```
 
-Runs `cloudflared tunnel --url http://localhost:3000`. After a few
+Runs `cloudflared tunnel --url http://localhost:9005`. After a few
 seconds it prints a public URL:
 
 ```
@@ -45,7 +50,7 @@ Your quick Tunnel has been created! Visit it at (it may take some time to be rea
 https://random-words-here.trycloudflare.com
 ```
 
-That URL proxies straight to your local `:3000` over HTTPS. No account,
+That URL proxies straight to your local `:9005` over HTTPS. No account,
 no signup, no config file needed. **Verified working from NIB's corporate
 network** (see "Why not localtunnel" below) — confirmed live: the public
 URL served the app's actual login page.
@@ -59,12 +64,12 @@ with the quick-tunnel (account-less) mode used here.
 npm run tunnel
 ```
 
-Runs `lt --port 3000`. Also prints a public `https://<name>.loca.lt` URL.
+Runs `lt --port 9005`. Also prints a public `https://<name>.loca.lt` URL.
 Simpler tool, but **does not work from NIB's corporate network** — see
 below. Worth trying if you're on a different network (home, mobile
 hotspot) where it may work fine and is slightly simpler to reason about.
 
-Optional: `lt --port 3000 --subdomain my-name` requests a stable,
+Optional: `lt --port 9005 --subdomain my-name` requests a stable,
 memorable subdomain instead of a random one (subject to availability,
 not guaranteed).
 
@@ -104,7 +109,7 @@ separate "demo mode." Specifically:
 
 | Scenario | Command | Works on NIB network? |
 |---|---|---|
-| Same network as this machine | `http://172.23.37.45:3000` directly, no command | ✅ Yes — verified |
+| Same network as this machine | `http://172.23.37.45:9005` directly, no command | ✅ Yes — verified |
 | Different network | `npm run tunnel:cloudflare` | ✅ Yes — verified |
 | Different network | `npm run tunnel` (localtunnel) | ❌ No — blocked, hangs with no URL |
 

@@ -65,7 +65,7 @@ const nextConfig: NextConfig = {
   // developer's local dev server. That protection is exactly what breaks
   // the app when accessed through a Cloudflare Quick Tunnel
   // (https://<random>.trycloudflare.com) or from another machine on the
-  // LAN (http://<lan-ip>:3000) - the request arrives from a hostname
+  // LAN (http://<lan-ip>:<PORT>) - the request arrives from a hostname
   // other than localhost, so Next rejects it (visible as "Blocked
   // cross-origin request to Next.js dev resource" in the browser console,
   // and as a malformed/"Unauthorized" response in cloudflared's own log

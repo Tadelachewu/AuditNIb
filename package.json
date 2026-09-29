@@ -4,16 +4,16 @@
   "private": true,
   "scripts": {
     "postinstall": "prisma generate",
-    "dev": "next dev -p 9005",
+    "dev": "node scripts/run.mjs dev",
     "build": "next build --webpack",
-    "start": "next start -p 9005",
+    "start": "node scripts/run.mjs start",
     "lint": "eslint",
     "db:seed": "tsx prisma/seed.ts",
     "storage:migrate": "tsx scripts/storage-migrate.ts",
     "storage:cleanup": "tsx scripts/storage-cleanup.ts",
     "storage:export": "tsx scripts/storage-export.ts",
-    "tunnel": "lt --port 9005",
-    "tunnel:cloudflare": "cloudflared tunnel --url http://localhost:9005"
+    "tunnel": "node scripts/run.mjs tunnel",
+    "tunnel:cloudflare": "node scripts/run.mjs tunnel:cloudflare"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.8.0",

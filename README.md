@@ -96,7 +96,16 @@ npx prisma db seed         # first run only, against an EMPTY database -
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). You'll be redirected to `/login`.
+Open [http://localhost:9005](http://localhost:9005). You'll be redirected to `/login`.
+
+**Port:** the app listens on `PORT` from the environment or `.env` (default **9005**). `npm run dev`, `npm start` and the tunnel scripts all go through `scripts/run.mjs`, which reads it, so change the port in `.env` rather than in `package.json`:
+
+```
+PORT=8080        # listen on http://localhost:8080
+HOST=0.0.0.0     # optional: bind address (0.0.0.0 = reachable from the network)
+```
+
+A `PORT` set in the real environment (e.g. `PORT=8080 npm start`) wins over `.env`.
 Log in with any of the [default users](#default-users--roles) below.
 
 To let someone outside this machine reach the running app (a demo, a
