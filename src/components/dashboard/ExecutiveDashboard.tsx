@@ -109,7 +109,13 @@ export function ExecutiveDashboard({
       ? sumAmountByCurrencyInPeriod(db, openPeriod.id, approvedAllFindingsInRange, "closed")
       : sumAmountByCurrency(approvedPeriodFindings, "closedAmount");
 
-  const outstanding = allFindingsInRange.filter((f) => !["RECTIFIED", "CLOSED", "REJECTED"].includes(f.status));
+  // Outstanding = approved (isHoApproved - sent to the branch or later) and
+  // not yet rectified / closed. A finding still waiting for an approval
+  // (district review, HO review, bank-wide approval) is not outstanding yet -
+  // it's counted under Pending Approval instead; drafts are neither.
+  const outstanding = allFindingsInRange.filter((f) => isHoApproved(f) && !["RECTIFIED", "CLOSED", "REJECTED"].includes(f.status));
+  const pendingApproval = allFindingsInRange.filter((f) => ["SUBMITTED", "DISTRICT_REVIEW", "HO_REVIEW", "PENDING_BANK_APPROVAL"].includes(f.status));
+  const pendingBankApproval = pendingApproval.filter((f) => f.status === "PENDING_BANK_APPROVAL").length;
   const avgOutstandingAgeDays = averageCaseAgeDays(outstanding);
   // Top two tiers of Settings.riskLevels, matched case-insensitively -
   // same convention as HODashboard/BranchDashboard's own High-Risk stat.
@@ -121,7 +127,7 @@ export function ExecutiveDashboard({
   // exception before it does, same rule every other "official" figure on
   // this dashboard already follows.
   const highRiskTiers = new Set(db.settings.riskLevels.slice(-2).map((l) => l.toLowerCase()));
-  const exceptions = outstanding.filter((f) => isHoApproved(f) && highRiskTiers.has(f.riskLevel.toLowerCase()));
+  const exceptions = outstanding.filter((f) => highRiskTiers.has(f.riskLevel.toLowerCase()));
 
   const { topPercent, bottomPercent } = db.settings.performanceThresholds;
 
@@ -223,7 +229,13 @@ export function ExecutiveDashboard({
         />
         <StatCard icon={ICON.totalCases} label="Reported Cases" value={hasPeriodScope ? reportedCases : "--"} hint="Originally registered - not changed by transfers" />
         <StatCard icon={ICON.totalCases} label="Total Cases" value={hasPeriodScope ? totalCases : "--"} hint="In this period, after transfers in / out" />
-        <StatCard icon={ICON.outstanding} label="Outstanding (in scope)" value={outstanding.length} hint="Findings" />
+        <StatCard icon={ICON.outstanding} label="Outstanding (in scope)" value={outstanding.length} hint="Approved findings not yet rectified" />
+        <StatCard
+          icon={ICON.totalFindings}
+          label="Pending Approval"
+          value={pendingApproval.length}
+          hint={pendingBankApproval > 0 ? `Awaiting review / approval - ${pendingBankApproval} bank-wide` : "Awaiting district / HO review or bank-wide approval"}
+        />
         <StatCard icon={ICON.criticalExceptions} label="High/Critical Exceptions" value={exceptions.length} hint="Outstanding, high or critical risk" />
         <StatCard icon={ICON.rectified} label="Rectified Findings" value={hasPeriodScope ? rectifiedFindings : "--"} hint="Formally closed" />
         <StatCard icon={ICON.rectified} label="Rectified Cases" value={hasPeriodScope ? rectifiedCases : "--"} hint="Closed, this period" />
