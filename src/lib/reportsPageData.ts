@@ -173,6 +173,8 @@ export function buildReportsData(db: Database, user: SessionData, get: (key: str
     sourceName: sourceName(f.sourceId),
     currency: f.currency,
     amount: amountOf({ finding: f, slice }),
+    reportedCases: f.caseCount,
+    totalCases: slice ? slice.eligibleCases : f.caseCount,
     outstanding: slice ? slice.eligibleAmount - slice.closedAmount : f.amount - f.rectifiedAmount,
     status: f.status,
     isHistorical: slice ? !slice.isCurrentPeriod : false,

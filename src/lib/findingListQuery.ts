@@ -15,7 +15,7 @@ export interface FindingNames {
   sourceName: (id: string) => string;
 }
 
-export const FINDING_SORT_KEYS = ["reference", "title", "branch", "department", "category", "source", "risk", "amount", "status", "updatedAt"] as const;
+export const FINDING_SORT_KEYS = ["reference", "title", "branch", "department", "category", "source", "risk", "amount", "reportedCases", "cases", "status", "updatedAt"] as const;
 export type FindingSortKey = (typeof FINDING_SORT_KEYS)[number];
 
 export function parseFindingSort(sort: string | null | undefined, dir: string | null | undefined): { key: FindingSortKey; desc: boolean } {
@@ -72,6 +72,12 @@ export function sortFindings<T extends { finding: Finding; amount?: number }>(
         return f.riskLevel;
       case "amount":
         return amountOf(r);
+      // Originally registered - never changed by transfers.
+      case "reportedCases":
+        return f.caseCount;
+      // This period's share after transfers (the whole count with no period filter).
+      case "cases":
+        return (r as { slice?: { eligibleCases: number } | null }).slice?.eligibleCases ?? f.caseCount;
       case "status":
         return f.status;
       case "updatedAt":

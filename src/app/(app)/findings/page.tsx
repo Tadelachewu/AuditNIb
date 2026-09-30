@@ -140,6 +140,8 @@ export default async function FindingsPage({
     riskLevel: f.riskLevel,
     currency: f.currency,
     amount: slice ? slice.eligibleAmount : f.amount,
+    reportedCases: f.caseCount,
+    totalCases: slice ? slice.eligibleCases : f.caseCount,
     status: f.status,
     updatedAt: f.updatedAt,
     rectifiedCases: f.rectifiedCases,

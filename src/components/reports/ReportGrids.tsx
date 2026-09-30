@@ -24,6 +24,10 @@ export interface ReportFindingRow {
   sourceName: string;
   currency: string;
   amount: number;
+  /** Originally registered - never changed by transfers. */
+  reportedCases: number;
+  /** In the filtered period, after transfers. */
+  totalCases: number;
   outstanding: number;
   status: FindingStatus;
   isHistorical: boolean;
@@ -75,6 +79,20 @@ export function ReportFindingsGrid({
             {row.original.currency} {formatCurrency(row.original.amount)}
           </span>
         ),
+      },
+      {
+        id: "reportedCases",
+        accessorKey: "reportedCases",
+        header: "Reported Cases",
+        muiTableHeadCellProps: { title: "Originally registered - not changed by transfers" },
+        Cell: ({ row }) => <span className="tabular-nums">{formatNumber(row.original.reportedCases)}</span>,
+      },
+      {
+        id: "cases",
+        accessorKey: "totalCases",
+        header: "Total Cases",
+        muiTableHeadCellProps: { title: "In this period, after transfers in / out" },
+        Cell: ({ row }) => <span className="tabular-nums">{formatNumber(row.original.totalCases)}</span>,
       },
       {
         id: "outstanding",

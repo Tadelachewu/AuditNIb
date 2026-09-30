@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/Button";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { FindingStatusBadge } from "@/components/findings/FindingStatusBadge";
 import { apiSend, errorMessage } from "@/lib/api-client";
-import { formatDateTime, formatCurrency } from "@/lib/format";
+import { formatDateTime, formatCurrency, formatNumber } from "@/lib/format";
 import type { FindingStatus } from "@/types";
 
 export interface FindingRow {
@@ -24,6 +24,10 @@ export interface FindingRow {
   riskLevel: string;
   currency: string;
   amount: number;
+  /** Originally registered case count - never changed by transfers. */
+  reportedCases: number;
+  /** Cases in the filtered period after transfers in/out (= reported when no period filter). */
+  totalCases: number;
   status: FindingStatus;
   updatedAt: string;
   rectifiedCases: number;
@@ -291,6 +295,22 @@ export function FindingsTable({
             {row.original.currency} {formatCurrency(row.original.amount)}
           </span>
         ),
+      },
+      {
+        id: "reportedCases",
+        accessorKey: "reportedCases",
+        header: "Reported Cases",
+        size: 110,
+        muiTableHeadCellProps: { title: "Originally registered - not changed by transfers" },
+        Cell: ({ row }) => <span className="tabular-nums">{formatNumber(row.original.reportedCases)}</span>,
+      },
+      {
+        id: "cases",
+        accessorKey: "totalCases",
+        header: "Total Cases",
+        size: 100,
+        muiTableHeadCellProps: { title: "In this period, after transfers in / out" },
+        Cell: ({ row }) => <span className="tabular-nums">{formatNumber(row.original.totalCases)}</span>,
       },
       {
         id: "status",
