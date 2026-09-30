@@ -9,6 +9,7 @@ import { AdminTable } from "@/components/ui/AdminTable";
 import { ReasonPicker, resolveReason } from "@/components/reports/ReasonPicker";
 import { UncoveredBranchNoteForm } from "@/components/reports/UncoveredBranchNoteForm";
 import type { UncoveredReason, Branch, District, BranchCoverageNote } from "@/types";
+import { notify, notifications } from "@/lib/notify";
 
 interface Row {
   branch: Branch;
@@ -69,6 +70,7 @@ export function UncoveredBranchesTable({ rows, periodId, reasons }: { rows: Row[
         reason: bulkResolved.reason,
         reasonId: bulkResolved.reasonId,
       });
+      notify.success(notifications.uncoveredNote.bulkSaved);
       setRowSelection({});
       setBulkValue("");
       setBulkCustomText("");

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { currenciesIn } from "@/lib/currency";
 import { ALL_PERIODS_VALUE } from "@/lib/dashboardFilters";
 import { requirePermission } from "@/lib/guard";
 import { readDb } from "@/lib/db";
@@ -68,28 +69,28 @@ function buildCsv(slug: string, db: Database, params: URLSearchParams): string |
         "SN",
         "Total No. of Branches",
         "District",
-        ...categories.flatMap((c) => [`${c.name} Unrectified`, `${c.name} Rectified`]),
-        "Total unrectified",
+        ...categories.flatMap((c) => [`${c.name} Reported Case`, `${c.name} Rectified`]),
+        "Total Reported Case",
         "Rectified",
-        "unrectified Balance",
+        "Outstanding Case",
         "rectified percetage",
       ];
       const dataRows = rows.map((r, i) => [
         i + 1,
         r.totalBranches,
         r.district.name,
-        ...r.perCategory.flatMap((c) => [c.outstanding, c.rectified]),
-        r.totalOutstanding,
+        ...r.perCategory.flatMap((c) => [c.total, c.rectified]),
+        r.totalCases,
         r.totalRectified,
         r.totalOutstanding,
         pct(r.rectifiedPct),
       ]);
       dataRows.push([
         "",
-        "",
+        rows.reduce((s, r) => s + r.totalBranches, 0),
         "TOTAL",
-        ...categories.flatMap(() => ["", ""]),
-        totalRow.totalOutstanding,
+        ...totalRow.perCategory.flatMap((c) => [c.total, c.rectified]),
+        totalRow.totalCases,
         totalRow.totalRectified,
         totalRow.totalOutstanding,
         pct(totalRow.rectifiedPct),
@@ -98,12 +99,15 @@ function buildCsv(slug: string, db: Database, params: URLSearchParams): string |
     }
     case "monthly-summary": {
       const { rows, categories, totalRow } = getMonthlySummaryReport(db, periodOrAll);
+      // One "Amount involved" column per currency (amounts are never added
+      // across currencies), so each stays a plain number Excel can sum.
+      const currencies = currenciesIn([totalRow.totalAmount, ...rows.map((r) => r.amountInvolved)]);
       const header = [
         "SN",
         "Total No. of Branches",
         "District",
         ...categories.map((c) => c.name),
-        "Amount involved in Birr",
+        ...(currencies.length ? currencies : ["ETB"]).map((c) => `Amount involved (${c})`),
         "Unrectified",
         "Rectified",
         "rectified percetage",
@@ -116,7 +120,7 @@ function buildCsv(slug: string, db: Database, params: URLSearchParams): string |
         r.totalBranches,
         r.district.name,
         ...r.perCategory.map((c) => c.total),
-        r.amountInvolved,
+        ...(currencies.length ? currencies : ["ETB"]).map((c) => r.amountInvolved[c] ?? 0),
         r.totalOutstanding,
         r.officialRectified,
         pct(r.officialPerformance),
@@ -129,7 +133,7 @@ function buildCsv(slug: string, db: Database, params: URLSearchParams): string |
         "",
         "TOTAL",
         ...categories.map(() => ""),
-        totalRow.totalAmount,
+        ...(currencies.length ? currencies : ["ETB"]).map((c) => totalRow.totalAmount[c] ?? 0),
         totalRow.totalOutstanding,
         totalRow.officialRectified,
         "",
@@ -146,18 +150,21 @@ function buildCsv(slug: string, db: Database, params: URLSearchParams): string |
       // omitted entirely, this still exports the full history across every
       // period, same as before that page-level filter existed.
       let rows = getMonthlyDistrictSeries(db, "monthly-district-history").otherCases;
+      const header = ["Period", "Total No. of Branches", "District", "Others Cases", "Unrectified", "Rectified", "rectified percetage"];
+      // TOTAL row, same as the page's footer.
+      const withTotal = (data: { totalCases: number; rectifiedCases: number }[], lines: (string | number)[][]) => {
+        const total = data.reduce((s, r) => s + r.totalCases, 0);
+        const rect = data.reduce((s, r) => s + r.rectifiedCases, 0);
+        if (data.length > 0) lines.push(["", "", "TOTAL", total, total - rect, rect, pct(total > 0 ? (rect / total) * 100 : null)]);
+        return lines;
+      };
       // "All periods" on the page: one summed row per district.
       if (periodId === ALL_PERIODS_VALUE) {
-        return toCsv(
-          ["Period", "Total No. of Branches", "District", "Others Cases", "Unrectified", "Rectified", "rectified percetage"],
-          sumDistrictRowsAcrossPeriods(rows).map((r) => ["All periods", r.totalBranches, r.district.name, r.totalCases, r.outstandingCases, r.rectifiedCases, pctRow(r)])
-        );
+        const summed = sumDistrictRowsAcrossPeriods(rows);
+        return toCsv(header, withTotal(summed, summed.map((r) => ["All periods", r.totalBranches, r.district.name, r.totalCases, r.outstandingCases, r.rectifiedCases, pctRow(r)])));
       }
       if (periodId) rows = rows.filter((r) => r.period.id === periodId);
-      return toCsv(
-        ["Period", "Total No. of Branches", "District", "Others Cases", "Unrectified", "Rectified", "rectified percetage"],
-        rows.map((r) => [r.period.code, r.totalBranches, r.district.name, r.totalCases, r.outstandingCases, r.rectifiedCases, pctRow(r)])
-      );
+      return toCsv(header, withTotal(rows, rows.map((r) => [r.period.code, r.totalBranches, r.district.name, r.totalCases, r.outstandingCases, r.rectifiedCases, pctRow(r)])));
     }
     case "monthly-district-detail": {
       // Grouped by district ("Detail monthly summaryBD" - "BD" = "By
@@ -180,7 +187,10 @@ function buildCsv(slug: string, db: Database, params: URLSearchParams): string |
       const dataRows: (string | number)[][] = [];
       let grandTotalCases = 0;
       let grandRectified = 0;
+      // The page's district filter (one district, or all).
+      const onlyDistrict = params.get("districtId") || "";
       for (const [districtId, periodRows] of byDistrict) {
+        if (onlyDistrict && districtId !== onlyDistrict) continue;
         periodRows.forEach((r, i) => {
           dataRows.push([i + 1, i === 0 ? r.district.name : "", r.period.code, "Other Cases", r.totalCases, r.outstandingCases, r.rectifiedCases, pctRow(r)]);
         });
@@ -216,12 +226,15 @@ function buildCsv(slug: string, db: Database, params: URLSearchParams): string |
       return toCsv(["SN", "District", "Month", "Case Type", "Total Cases", "Unrectified", "Rectified", "rectified percetage"], dataRows);
     }
     case "district-ranking-other-cases": {
-      const { rows, totalRow } = getDistrictRankingOtherCases(db, periodIds);
+      const { rows, totalRow, narrative } = getDistrictRankingOtherCases(db, periodIds);
       const header = ["SN", "Total No. of Branches", "District", "Total Others Cases", "Rectified", "Total outstanding unrectified", "Rank"];
-      const dataRows = rows.map((r, i) => [i + 1, r.totalBranches, r.district.name, r.totalCases, r.rectifiedCases, r.outstandingCases, pctRow(r)]);
+      const dataRows: (string | number)[][] = rows.map((r, i) => [i + 1, r.totalBranches, r.district.name, r.totalCases, r.rectifiedCases, r.outstandingCases, pctRow(r)]);
       if (rows.length > 0) {
         dataRows.push(["", totalRow.totalBranches, "TOTAL", totalRow.totalCases, totalRow.rectifiedCases, totalRow.outstandingCases, pct(totalRow.performance)]);
       }
+      // The summary sentence shown under the table on the page.
+      dataRows.push([]);
+      dataRows.push([narrative]);
       return toCsv(header, dataRows);
     }
     case "weekly-executive-summary": {

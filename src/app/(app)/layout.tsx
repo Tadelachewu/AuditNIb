@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { SESSION_ENDED_PATH } from "@/lib/session";
 import { getCurrentUser } from "@/lib/session";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Topbar } from "@/components/layout/Topbar";
@@ -9,7 +10,7 @@ import { MuiProvider } from "@/components/ui/MuiProvider";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await getCurrentUser();
-  if (!user) redirect("/login");
+  if (!user) redirect(SESSION_ENDED_PATH);
 
   // While a password change is pending (src/proxy.ts already redirects
   // every other page to /profile), the sidebar's links would just bounce

@@ -9,8 +9,8 @@ import {
   transferTotals,
   isHoApproved,
 } from "@/lib/findings";
-import { sumAmountByCurrency, sumOutstandingByCurrency, sumAmountByCurrencyInPeriod, sumOutstandingByCurrencyInPeriod } from "@/lib/currency";
-import { formatDateTime, formatCurrency } from "@/lib/format";
+import { sumAmountByCurrency, sumOutstandingByCurrency, sumAmountByCurrencyInPeriod, sumOutstandingByCurrencyInPeriod, addCurrency, mergeCurrencyTotals, formatCurrencyTotals, type CurrencyTotals } from "@/lib/currency";
+import { formatDateTime } from "@/lib/format";
 import { inDateRange, type DateRange } from "@/lib/dateRange";
 import { applyDashboardFilters, EMPTY_DASHBOARD_FILTERS, ALL_PERIODS_VALUE, type DashboardFilters } from "@/lib/dashboardFilters";
 import { Card, CardHeader, StatCard } from "@/components/ui/Card";
@@ -29,6 +29,7 @@ import { DistrictRankingTable } from "@/components/dashboard/DistrictRankingTabl
 import { SourcePerformanceSummary } from "@/components/dashboard/SourcePerformanceSummary";
 import { CaseBasedPerformance } from "@/components/dashboard/CaseBasedPerformance";
 import { FindingsByCategoryChart } from "@/components/dashboard/FindingsByCategoryChart";
+import { DashboardGrid } from "@/components/dashboard/DashboardGrid";
 
 // master.txt §10: district-level aggregate, branch-by-branch ranking,
 // category totals, risk distribution, recent activity, work queue -
@@ -105,7 +106,7 @@ export function DistrictDashboard({
   // in src/lib/findings.ts) - a finding partially rectified here and then
   // transferred still counts its slice toward this period instead of
   // vanishing from it.
-  const { totalFindings, totalCases, rectifiedFindings, rectifiedCases } =
+  const { totalFindings, totalCases, reportedCases, rectifiedFindings, rectifiedCases } =
     !allPeriodsSelected && openPeriod ? findingCaseTotalsInPeriod(db, openPeriod.id, districtFindingsInRange) : findingCaseTotals(periodFindings);
   // Every other "official" figure below (as opposed to
   // FindingStatusDistribution's deliberately broader in-flight-workflow
@@ -217,7 +218,11 @@ export function DistrictDashboard({
     const rectified = findings.reduce((sum, f) => sum + f.closedCases, 0);
     const amount = findings.reduce((sum, f) => sum + f.amount, 0);
     const rectifiedAmount = findings.reduce((sum, f) => sum + f.closedAmount, 0);
-    return { category: c, total, rectified, outstanding: total - rectified, amount, rectifiedAmount, outstandingAmount: amount - rectifiedAmount };
+    // Per currency for display (never added across currencies).
+    const amountCur = findings.reduce((t, f) => addCurrency(t, f.currency, f.amount), {} as CurrencyTotals);
+    const closedCur = findings.reduce((t, f) => addCurrency(t, f.currency, f.closedAmount), {} as CurrencyTotals);
+    const outstandingCur = findings.reduce((t, f) => addCurrency(t, f.currency, f.amount - f.closedAmount), {} as CurrencyTotals);
+    return { category: c, total, rectified, outstanding: total - rectified, amount, rectifiedAmount, outstandingAmount: amount - rectifiedAmount, amountCur, closedCur, outstandingCur };
   });
 
   const isQueued = queueStatusesForSession(user, db);
@@ -280,7 +285,8 @@ export function DistrictDashboard({
           value={hasPeriodScope ? totalFindings : "--"}
           hint={allPeriodsSelected ? "All periods" : openPeriod ? openPeriod.code : "No open period"}
         />
-        <StatCard icon={ICON.totalCases} label="Total Cases" value={hasPeriodScope ? totalCases : "--"} hint={`Across ${totalFindings} finding(s)`} />
+        <StatCard icon={ICON.totalCases} label="Reported Cases" value={hasPeriodScope ? reportedCases : "--"} hint="Originally registered - not changed by transfers" />
+        <StatCard icon={ICON.totalCases} label="Total Cases" value={hasPeriodScope ? totalCases : "--"} hint="In this period, after transfers in / out" />
         <StatCard icon={ICON.requiringReview} label="Requiring Review" value={hasPeriodScope ? requiringReviewFindings : "--"} hint="Awaiting district decision" />
         <StatCard icon={ICON.approved} label="Approved" value={hasPeriodScope ? approvedFindings : "--"} hint="Passed district review" />
         <StatCard icon={ICON.outstanding} label="Outstanding" value={hasPeriodScope ? outstandingFindings : "--"} hint="Findings" />
@@ -437,36 +443,28 @@ export function DistrictDashboard({
 
       <Card>
         <CardHeader title="Category Totals" description="Every active classified case category for this district, current period" />
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-600">
-              <tr>
-                <th className="px-4 py-2 font-medium">Category</th>
-                <th className="px-4 py-2 font-medium">Total Cases</th>
-                <th className="px-4 py-2 font-medium">Rectified Cases</th>
-                <th className="px-4 py-2 font-medium">Outstanding Cases</th>
-                <th className="px-4 py-2 font-medium">Amount</th>
-                <th className="px-4 py-2 font-medium">Rectified Amount</th>
-                <th className="px-4 py-2 font-medium">Outstanding Amount</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {categoryTotals.map(({ category: c, total, rectified, outstanding, amount, rectifiedAmount, outstandingAmount }) => (
-                <tr key={c.id}>
-                  <td className="px-4 py-2 text-slate-900">
-                    {c.name} {c.scored && <Badge tone="blue">Scored</Badge>}
-                  </td>
-                  <td className="px-4 py-2 text-slate-700">{hasPeriodScope ? total : "--"}</td>
-                  <td className="px-4 py-2 text-slate-700">{hasPeriodScope ? rectified : "--"}</td>
-                  <td className="px-4 py-2 text-slate-700">{hasPeriodScope ? outstanding : "--"}</td>
-                  <td className="px-4 py-2 text-slate-700">{hasPeriodScope ? formatCurrency(amount) : "--"}</td>
-                  <td className="px-4 py-2 text-slate-700">{hasPeriodScope ? formatCurrency(rectifiedAmount) : "--"}</td>
-                  <td className="px-4 py-2 text-slate-700">{hasPeriodScope ? formatCurrency(outstandingAmount) : "--"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <DashboardGrid
+          exportFileName="district-category-totals"
+          columns={[
+            { key: "category", header: "Category", badgeWhen: "scored", badgeLabel: "Scored" },
+            { key: "total", header: "Total Cases", type: "number", total: true },
+            { key: "rectified", header: "Rectified Cases", type: "number", total: true },
+            { key: "outstanding", header: "Outstanding Cases", type: "number", total: true },
+            { key: "amount", header: "Amount", footer: hasPeriodScope ? formatCurrencyTotals(mergeCurrencyTotals(categoryTotals.map((x) => x.amountCur))) : "--" },
+            { key: "rectifiedAmount", header: "Rectified Amount", footer: hasPeriodScope ? formatCurrencyTotals(mergeCurrencyTotals(categoryTotals.map((x) => x.closedCur))) : "--" },
+            { key: "outstandingAmount", header: "Outstanding Amount", footer: hasPeriodScope ? formatCurrencyTotals(mergeCurrencyTotals(categoryTotals.map((x) => x.outstandingCur))) : "--" },
+          ]}
+          rows={categoryTotals.map(({ category: c, total, rectified, outstanding, amountCur, closedCur, outstandingCur }) => ({
+            category: c.name,
+            scored: Boolean(c.scored),
+            total: hasPeriodScope ? total : null,
+            rectified: hasPeriodScope ? rectified : null,
+            outstanding: hasPeriodScope ? outstanding : null,
+            amount: hasPeriodScope ? formatCurrencyTotals(amountCur) : null,
+            rectifiedAmount: hasPeriodScope ? formatCurrencyTotals(closedCur) : null,
+            outstandingAmount: hasPeriodScope ? formatCurrencyTotals(outstandingCur) : null,
+          }))}
+        />
       </Card>
 
       <FindingsByCategoryChart findings={approvedPeriodFindings} categories={categoriesInScope} openPeriod={periodDisplayMarker} />

@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/Button";
 import { StickyActions } from "@/components/ui/StickyActions";
 import { Input, Select, Label, Textarea } from "@/components/ui/Field";
 import { FindingStatusBadge } from "@/components/findings/FindingStatusBadge";
+import { notify, notifications } from "@/lib/notify";
 import type {
   Source,
   Department,
@@ -580,10 +581,12 @@ export function NewFindingForm({
       };
       if (finding) {
         await apiSend<{ finding: Finding }>(`/api/findings/${finding.id}`, "PATCH", payload);
+        notify.success(notifications.finding.updated);
         router.refresh();
         onSaved?.();
       } else {
         const res = await apiSend<{ finding: Finding }>("/api/findings", "POST", { ...payload, submit });
+        notify.success(submit ? notifications.finding.submitted : notifications.finding.draftSaved);
         // Either a real Draft save or a Submit just succeeded - the
         // autosave copy's only job was to survive until this point.
         apiSend("/api/findings/draft-autosave", "DELETE").catch(() => {});

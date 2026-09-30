@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { SESSION_ENDED_PATH } from "@/lib/session";
 import { getCurrentUser } from "@/lib/session";
 import { hasPermission } from "@/lib/permissions/registry";
 import { SupportClient } from "@/components/support/SupportClient";
@@ -10,7 +11,7 @@ import { SupportClient } from "@/components/support/SupportClient";
 // same as (app)/dashboard/page.tsx does for its own org-scope branches.
 export default async function SupportPage() {
   const session = await getCurrentUser();
-  if (!session) redirect("/login");
+  if (!session) redirect(SESSION_ENDED_PATH);
   if (!hasPermission(session.permissions, "support.create")) redirect("/dashboard");
 
   return (

@@ -255,13 +255,17 @@ export function isHoApproved(f: Finding): boolean {
 export function findingCaseTotals(findings: Finding[]): {
   totalFindings: number;
   totalCases: number;
+  reportedCases: number;
   rectifiedFindings: number;
   rectifiedCases: number;
 } {
   const approved = findings.filter(isHoApproved);
+  const totalCases = approved.reduce((sum, f) => sum + f.caseCount, 0);
   return {
     totalFindings: approved.length,
-    totalCases: approved.reduce((sum, f) => sum + f.caseCount, 0),
+    totalCases,
+    // Across all periods nothing is moved in or out, so reported = total.
+    reportedCases: totalCases,
     rectifiedFindings: approved.filter((f) => f.status === "CLOSED").length,
     rectifiedCases: approved.reduce((sum, f) => sum + f.closedCases, 0),
   };
@@ -305,15 +309,28 @@ export function findingCaseTotals(findings: Finding[]): {
  * The closed *case* in 10/2026 still counts in that period's rectifiedCases
  * (and Performance %) - that case genuinely was closed there.
  */
+/** The period a finding was originally registered in (before any transfer). */
+export function originPeriodId(db: Database, finding: Finding): string {
+  const first = db.findingTransfers
+    .filter((t) => t.findingId === finding.id)
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt))[0];
+  return first ? first.fromPeriodId : finding.periodId;
+}
+
 export function findingCaseTotalsInPeriod(
   db: Database,
   periodId: string,
   candidates: Finding[]
-): { totalFindings: number; totalCases: number; rectifiedFindings: number; rectifiedCases: number } {
-  const resident = findingsResidentInPeriod(db, periodId, candidates.filter(isHoApproved));
+): { totalFindings: number; totalCases: number; reportedCases: number; rectifiedFindings: number; rectifiedCases: number } {
+  const approved = candidates.filter(isHoApproved);
+  const resident = findingsResidentInPeriod(db, periodId, approved);
   return {
     totalFindings: resident.length,
     totalCases: resident.reduce((sum, r) => sum + r.slice.eligibleCases, 0),
+    // "Reported Cases": the full case count of findings originally
+    // registered in this period - never changed by transfers in or out
+    // (Total Cases is this period's share after transfers).
+    reportedCases: approved.filter((f) => originPeriodId(db, f) === periodId).reduce((sum, f) => sum + f.caseCount, 0),
     rectifiedFindings: resident.filter((r) => r.slice.isCurrentPeriod && r.finding.status === "CLOSED").length,
     rectifiedCases: resident.reduce((sum, r) => sum + r.slice.closedCases, 0),
   };

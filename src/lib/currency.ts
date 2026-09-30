@@ -2,6 +2,31 @@ import { formatCurrency } from "@/lib/format";
 import { findingsResidentInPeriod } from "@/lib/findings";
 import type { Database, Finding } from "@/types";
 
+/** Amounts kept per currency - never added across currencies (there are no exchange rates). */
+export type CurrencyTotals = Record<string, number>;
+
+export function addCurrency(totals: CurrencyTotals, currency: string, value: number): CurrencyTotals {
+  const key = currency || "—";
+  totals[key] = (totals[key] ?? 0) + value;
+  return totals;
+}
+
+export function mergeCurrencyTotals(list: CurrencyTotals[]): CurrencyTotals {
+  const out: CurrencyTotals = {};
+  for (const t of list) for (const [c, v] of Object.entries(t)) addCurrency(out, c, v);
+  return out;
+}
+
+/** "ETB 45,000 · USD 500" ("--" when empty). */
+export function formatCurrencyTotals(totals: CurrencyTotals): string {
+  return formatTotals(new Map(Object.entries(totals)));
+}
+
+/** Currency codes present, sorted - e.g. for one CSV column per currency. */
+export function currenciesIn(list: CurrencyTotals[]): string[] {
+  return [...new Set(list.flatMap((t) => Object.keys(t)))].sort((a, b) => a.localeCompare(b, "en-US"));
+}
+
 function formatTotals(totals: Map<string, number>): string {
   if (totals.size === 0) return "--";
   return [...totals.entries()]

@@ -50,6 +50,7 @@ export function SourcesManager({ initialSources, permissions }: { initialSources
     setSubmitting(true);
     try {
       await apiSend("/api/admin/sources", "POST", form);
+      notify.success(notifications.source.created);
       setForm({ code: "", name: "" });
       close();
       router.refresh();
@@ -71,6 +72,7 @@ export function SourcesManager({ initialSources, permissions }: { initialSources
     setEditError(null);
     try {
       await apiSend(`/api/admin/sources/${s.id}`, "PATCH", { name: editName });
+      notify.success(notifications.source.updated);
       setEditingId(null);
       router.refresh();
     } catch (err) {

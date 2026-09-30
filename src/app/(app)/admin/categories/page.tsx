@@ -52,6 +52,7 @@ export default function CategoriesPage() {
     setSubmitting(true);
     try {
       await apiSend("/api/admin/categories", "POST", form);
+      notify.success(notifications.category.created);
       setForm({ code: "", name: "", scored: false });
       close();
       await load();
@@ -73,6 +74,7 @@ export default function CategoriesPage() {
     setEditError(null);
     try {
       await apiSend(`/api/admin/categories/${c.id}`, "PATCH", { name: editName });
+      notify.success(notifications.category.updated);
       setEditingId(null);
       await load();
     } catch (err) {

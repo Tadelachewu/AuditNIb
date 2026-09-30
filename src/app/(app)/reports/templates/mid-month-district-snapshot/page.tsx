@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SESSION_ENDED_PATH } from "@/lib/session";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 import { readDb } from "@/lib/db";
@@ -16,7 +17,7 @@ export default async function MidMonthDistrictSnapshotPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const user = await getCurrentUser();
-  if (!user) redirect("/login");
+  if (!user) redirect(SESSION_ENDED_PATH);
   if (!hasPermission(user.permissions, permissionKey("report-templates", "mid-month-district-snapshot"))) redirect("/reports/templates");
 
   const db = await readDb();
@@ -37,7 +38,7 @@ export default async function MidMonthDistrictSnapshotPage({
     <div className="flex flex-col gap-5">
       <style>{`@media print { nav, header, .no-print { display: none !important; } main { padding: 0 !important; } }`}</style>
 
-      <div className="no-print flex flex-wrap items-center justify-between gap-2">
+      <div className="no-print flex flex-wrap items-start justify-between gap-2">
         <div>
           <Link
             href="/reports/templates"
@@ -49,7 +50,7 @@ export default async function MidMonthDistrictSnapshotPage({
           <p className="mt-1 text-sm text-slate-600">District performance as of any chosen cutoff date within a period.</p>
           {sourceNote && <p className="mt-1 text-xs font-medium text-amber-800">{sourceNote}</p>}
         </div>
-        <div className="flex gap-2">
+        <div className="flex shrink-0 gap-2">
           <a href={`/api/report-templates/mid-month-district-snapshot/export?periodId=${periodId}&asOfDate=${asOfDate}`}>
             <span className="inline-flex items-center rounded-md border border-brand-gold-dark bg-brand-gold px-3 py-1.5 text-sm font-medium text-on-gold transition-colors hover:bg-brand-gold-dark">
               Download CSV

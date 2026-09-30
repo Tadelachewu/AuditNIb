@@ -20,7 +20,8 @@ const DEMO_USERS: DemoUser[] = [
 // server's .env - the same switch as the /dev-reset tool.
 export const dynamic = "force-dynamic";
 
-export default function LoginPage() {
+export default async function LoginPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const isDevelopment = (process.env.APP_ENV ?? "").trim().toLowerCase() === "development";
-  return <LoginClient demoUsers={isDevelopment ? DEMO_USERS : null} />;
+  const sessionEnded = (await searchParams).reason === "session-ended";
+  return <LoginClient demoUsers={isDevelopment ? DEMO_USERS : null} sessionEnded={sessionEnded} />;
 }

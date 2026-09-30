@@ -72,6 +72,7 @@ export default function RolesPage() {
     setSubmitting(true);
     try {
       await apiSend("/api/admin/roles", "POST", { ...form, permissions: newPermissions });
+      notify.success(notifications.role.created);
       setForm(emptyForm);
       close();
       setNewPermissions([]);
@@ -100,6 +101,7 @@ export default function RolesPage() {
         description: draftDescription,
         permissions: draftPermissions,
       });
+      notify.success(notifications.role.updated);
       setExpandedRoleId(null);
       await load();
     } catch (err) {

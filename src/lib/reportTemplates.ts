@@ -1,5 +1,6 @@
 import { computeEligibleCaseCounts, caseAgeDays, findingsResidentInPeriod, isHoApproved } from "@/lib/findings";
 import { formatNumber } from "@/lib/format";
+import { addCurrency, mergeCurrencyTotals, type CurrencyTotals } from "@/lib/currency";
 import type { Database, Branch, District, ReportingPeriod, ClassifiedCategory, BranchCoverageNote, Finding, Source } from "@/types";
 
 // The 10 named Internal Control Division report templates (see report/*.xlsx,
@@ -49,19 +50,20 @@ function closedAsOf(db: Database, findingId: string, asOfDate: string, periodId?
  * sum of every period's share. "Closed" is formal closure, the one
  * "rectified" basis every official figure uses.
  */
-function scopedTotals(db: Database, periodId: string | undefined, findings: Finding[]): { cases: number; closed: number; amount: number } {
+function scopedTotals(db: Database, periodId: string | undefined, findings: Finding[]): { cases: number; closed: number; amount: CurrencyTotals } {
+  // Amounts per currency - never summed across currencies.
   if (!periodId) {
     return {
       cases: findings.reduce((s, f) => s + f.caseCount, 0),
       closed: findings.reduce((s, f) => s + f.closedCases, 0),
-      amount: findings.reduce((s, f) => s + f.amount, 0),
+      amount: findings.reduce((t, f) => addCurrency(t, f.currency, f.amount), {} as CurrencyTotals),
     };
   }
   const resident = findingsResidentInPeriod(db, periodId, findings);
   return {
     cases: resident.reduce((s, r) => s + r.slice.eligibleCases, 0),
     closed: resident.reduce((s, r) => s + r.slice.closedCases, 0),
-    amount: resident.reduce((s, r) => s + r.slice.eligibleAmount, 0),
+    amount: resident.reduce((t, r) => addCurrency(t, r.finding.currency, r.slice.eligibleAmount), {} as CurrencyTotals),
   };
 }
 
@@ -196,7 +198,7 @@ export function getCategoryDetailByDistrict(
 ): {
   rows: CategoryDetailRow[];
   categories: ClassifiedCategory[];
-  totalRow: { totalCases: number; totalRectified: number; totalOutstanding: number; rectifiedPct: number | null };
+  totalRow: { totalCases: number; totalRectified: number; totalOutstanding: number; rectifiedPct: number | null; perCategory: { total: number; rectified: number }[] };
 } {
   const categories = activeCategories(db);
   const sourceFilteredFindings = applySourceFilter(db, "category-detail-by-district", db.findings);
@@ -231,7 +233,17 @@ export function getCategoryDetailByDistrict(
   return {
     rows,
     categories,
-    totalRow: { totalCases, totalRectified, totalOutstanding: totalCases - totalRectified, rectifiedPct: totalCases > 0 ? (totalRectified / totalCases) * 100 : null },
+    totalRow: {
+      totalCases,
+      totalRectified,
+      totalOutstanding: totalCases - totalRectified,
+      rectifiedPct: totalCases > 0 ? (totalRectified / totalCases) * 100 : null,
+      // Each category's bank total, for the TOTAL row (as in the bank's "Case Summarised" sheet).
+      perCategory: categories.map((_, i) => ({
+        total: rows.reduce((sum, row) => sum + row.perCategory[i].total, 0),
+        rectified: rows.reduce((sum, row) => sum + row.perCategory[i].rectified, 0),
+      })),
+    },
   };
 }
 
@@ -266,7 +278,8 @@ export interface MonthlySummaryRow {
   district: District;
   totalBranches: number;
   perCategory: MonthlySummaryCell[];
-  amountInvolved: number;
+  /** Amount involved, per currency. */
+  amountInvolved: CurrencyTotals;
   totalOutstanding: number;
   officialRectified: number;
   officialPerformance: number | null;
@@ -281,7 +294,7 @@ export function getMonthlySummaryReport(
 ): {
   rows: MonthlySummaryRow[];
   categories: ClassifiedCategory[];
-  totalRow: { totalOutstanding: number; officialRectified: number; totalAmount: number; totalCases: number };
+  totalRow: { totalOutstanding: number; officialRectified: number; totalAmount: CurrencyTotals; totalCases: number };
 } {
   const categories = activeCategories(db);
   const uncovered = getUncoveredBranches(db, periodId);
@@ -322,7 +335,7 @@ export function getMonthlySummaryReport(
   });
   const totalOutstanding = rows.reduce((sum, r) => sum + r.totalOutstanding, 0);
   const officialRectified = rows.reduce((sum, r) => sum + r.officialRectified, 0);
-  const totalAmount = rows.reduce((sum, r) => sum + r.amountInvolved, 0);
+  const totalAmount = mergeCurrencyTotals(rows.map((r) => r.amountInvolved));
   const totalCases = rows.reduce((sum, r) => sum + r.totalCases, 0);
   return { rows, categories, totalRow: { totalOutstanding, officialRectified, totalAmount, totalCases } };
 }
@@ -404,7 +417,6 @@ export function getMonthlyDistrictSeries(
   const periods = [...db.reportingPeriods].sort((a, b) => a.year - b.year || a.month - b.month);
   const districts = reportDistricts(db);
   const templateSourceIds = getTemplateSourceIds(db, templateSlug);
-  const sourceFilteredFindings = applySourceFilter(db, templateSlug, db.findings);
 
   const otherCases: DistrictPeriodRow[] = [];
   for (const period of periods) {
@@ -435,16 +447,16 @@ export function getMonthlyDistrictSeries(
   // population to report, so every district shows zero rather than
   // falling back to some broader, less precise population.
   //
-  // The template's configured source filter also applies here: if the
-  // admin excluded the IA source from this template's scope, the various
-  // row naturally stays all-zero rather than sneaking in a source the
-  // template was meant to omit entirely.
   const iaSource = db.sources.find((s) => s.code.toUpperCase() === "IA");
   const various: DistrictVariousRow[] = districts.map((district) => {
     let variousTotal = 0;
     let variousRectified = 0;
-    if (rule && iaSource && (!templateSourceIds || templateSourceIds.includes(iaSource.id))) {
-      const findings = sourceFilteredFindings.filter(
+    // Never narrowed by the template's source setting (Settings → Report
+    // Template Sources): that setting applies only to the monthly Other
+    // Cases rows. This row is always every Internal-Audit Other Case, all
+    // periods combined, whichever sources are selected.
+    if (rule && iaSource) {
+      const findings = db.findings.filter(
         (f) => f.districtId === district.id && isHoApproved(f) && rule.categories.includes(f.categoryId) && f.sourceId === iaSource.id
       );
       variousTotal = findings.reduce((s, f) => s + f.caseCount, 0);

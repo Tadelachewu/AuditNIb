@@ -6,6 +6,7 @@ import { apiGet, apiSend, errorMessage } from "@/lib/api-client";
 import { formatDateTime } from "@/lib/format";
 import { FIELD_FOCUS } from "@/components/ui/Field";
 import type { Notification } from "@/types";
+import { notify, notifications as notices } from "@/lib/notify";
 
 // master.txt §12's in-app notification center: bell + unread badge, polled
 // rather than pushed (no websocket infrastructure exists elsewhere in the
@@ -95,6 +96,7 @@ export function NotificationBell() {
     setCommentError(null);
     try {
       await apiSend(`/api/findings/${n.entityId}/comments`, "POST", { text });
+      notify.success(notices.finding.commentPosted);
       goToFinding(n);
     } catch (err) {
       setCommentError(errorMessage(err, "Failed to post comment"));

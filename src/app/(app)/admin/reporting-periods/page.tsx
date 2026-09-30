@@ -121,6 +121,7 @@ export default function ReportingPeriodsPage() {
         submissionEndsAt: windowForm.submissionEndsAt,
         reason: windowReason,
       });
+      notify.success(notifications.reportingPeriod.windowUpdated);
       setWindowTarget(null);
       await load();
     } catch (err) {
@@ -164,6 +165,7 @@ export default function ReportingPeriodsPage() {
     setRenameError(null);
     try {
       await apiSend(`/api/admin/reporting-periods/${p.id}`, "PATCH", { name: renameValue, reason: renameReason });
+      notify.success(notifications.reportingPeriod.updated);
       setRenamingId(null);
       await load();
     } catch (err) {
@@ -212,6 +214,7 @@ export default function ReportingPeriodsPage() {
         submissionEndsAt: periodEditForm.submissionEndsAt,
         reason: periodEditReason,
       });
+      notify.success(notifications.reportingPeriod.updated);
       setPeriodEditTarget(null);
       await load();
     } catch (err) {
@@ -252,6 +255,7 @@ export default function ReportingPeriodsPage() {
     setSubmitting(true);
     try {
       await apiSend("/api/admin/reporting-periods", "POST", form);
+      notify.success(notifications.reportingPeriod.created);
       setForm((f) => ({ ...f, name: "" }));
       close();
       await load();

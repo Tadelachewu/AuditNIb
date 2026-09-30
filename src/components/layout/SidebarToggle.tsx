@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 
 /**
- * Shows / hides the whole sidebar. The state lives on <html data-sidebar>
+ * Collapses the sidebar to an icon rail / expands it. The state lives on <html data-sidebar>
  * (restored before first paint by the init script in app/layout.tsx, so the
  * sidebar never flashes) and in localStorage ("sidebar"); the sidebar reacts
  * through the `sidebar-collapsed:` CSS variant in globals.css.
@@ -54,7 +54,7 @@ export function SidebarToggle() {
     setHiddenState(next);
   }
 
-  const label = hidden ? "Show sidebar" : "Hide sidebar";
+  const label = hidden ? "Expand sidebar" : "Collapse sidebar";
   return (
     <button
       type="button"

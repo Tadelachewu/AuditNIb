@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { addCurrency, formatCurrencyTotals, type CurrencyTotals } from "@/lib/currency";
+import { SESSION_ENDED_PATH } from "@/lib/session";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 import { readDb } from "@/lib/db";
@@ -24,7 +26,7 @@ export default async function TransferredFindingsPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const user = await getCurrentUser();
-  if (!user) redirect("/login");
+  if (!user) redirect(SESSION_ENDED_PATH);
   if (!hasPermission(user.permissions, permissionKey("report-templates", "transferred-findings"))) redirect("/reports/templates");
 
   const db = await readDb();
@@ -41,7 +43,8 @@ export default async function TransferredFindingsPage({
   });
 
   const totalCasesTransferred = rows.reduce((sum, r) => sum + r.transfer.casesTransferred, 0);
-  const totalAmountTransferred = rows.reduce((sum, r) => sum + r.transfer.amountTransferred, 0);
+  // Per currency - never added across currencies.
+  const totalAmountTransferred = rows.reduce((t, r) => addCurrency(t, r.finding.currency, r.transfer.amountTransferred), {} as CurrencyTotals);
   const stillOutstandingCount = rows.filter((r) => r.isLatestHop && r.currentOutstandingCases > 0 && r.currentStatus !== "CLOSED").length;
   const periodsSorted = [...db.reportingPeriods].sort((a, b) => b.code.localeCompare(a.code));
 
@@ -49,7 +52,7 @@ export default async function TransferredFindingsPage({
     <div className="flex flex-col gap-5">
       <style>{`@media print { nav, header, .no-print { display: none !important; } main { padding: 0 !important; } }`}</style>
 
-      <div className="no-print flex flex-wrap items-center justify-between gap-2">
+      <div className="no-print flex flex-wrap items-start justify-between gap-2">
         <div>
           <Link
             href="/reports/templates"
@@ -63,7 +66,7 @@ export default async function TransferredFindingsPage({
           </p>
           {sourceNote && <p className="mt-1 text-xs font-medium text-amber-800">{sourceNote}</p>}
         </div>
-        <div className="flex gap-2">
+        <div className="flex shrink-0 gap-2">
           <a href={`/api/report-templates/transferred-findings/export?fromPeriodId=${fromPeriodId}&toPeriodId=${toPeriodId}`}>
             <span className="inline-flex items-center rounded-md border border-brand-gold-dark bg-brand-gold px-3 py-1.5 text-sm font-medium text-on-gold transition-colors hover:bg-brand-gold-dark">
               Download CSV
@@ -102,7 +105,7 @@ export default async function TransferredFindingsPage({
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatCard label="Transfer Hops" value={rows.length} hint="Matching current filter" />
         <StatCard label="Cases Transferred" value={formatNumber(totalCasesTransferred)} hint="Sum of outstanding cases moved" />
-        <StatCard label="Amount Transferred" value={formatCurrency(totalAmountTransferred)} hint="Sum of outstanding amount moved" />
+        <StatCard label="Amount Transferred" value={formatCurrencyTotals(totalAmountTransferred)} hint="Sum of outstanding amount moved" />
         <StatCard label="Still Outstanding" value={stillOutstandingCount} hint="Latest hop, not yet closed" />
       </div>
 

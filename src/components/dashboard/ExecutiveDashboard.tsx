@@ -16,6 +16,7 @@ import { StackedBarChart } from "@/components/dashboard/charts/StackedBarChart";
 import { SourcePerformanceSummary } from "@/components/dashboard/SourcePerformanceSummary";
 import { CaseBasedPerformance } from "@/components/dashboard/CaseBasedPerformance";
 import { FindingsByCategoryChart } from "@/components/dashboard/FindingsByCategoryChart";
+import { DashboardGrid } from "@/components/dashboard/DashboardGrid";
 
 // master.txt §10: a concise, read-only bank-wide summary for Executive
 // Management - KPIs, top-performer rankings, and an exceptions count
@@ -71,7 +72,7 @@ export function ExecutiveDashboard({
   // in src/lib/findings.ts) - a finding partially rectified here and then
   // transferred still counts its slice toward this period instead of
   // vanishing from it.
-  const { totalFindings, totalCases, rectifiedFindings, rectifiedCases } =
+  const { totalFindings, totalCases, reportedCases, rectifiedFindings, rectifiedCases } =
     !allPeriodsSelected && openPeriod ? findingCaseTotalsInPeriod(db, openPeriod.id, allFindingsInRange) : findingCaseTotals(periodFindings);
   // Same isHoApproved() gate as every other dashboard - Total Amount,
   // Outstanding Amount, Source Comparison, etc. shouldn't move before a
@@ -220,7 +221,8 @@ export function ExecutiveDashboard({
           value={hasPeriodScope ? totalFindings : "--"}
           hint={allPeriodsSelected ? "All periods" : (openPeriod?.code ?? "No open period")}
         />
-        <StatCard icon={ICON.totalCases} label="Total Cases" value={hasPeriodScope ? totalCases : "--"} hint="Sum of case counts, bank-wide" />
+        <StatCard icon={ICON.totalCases} label="Reported Cases" value={hasPeriodScope ? reportedCases : "--"} hint="Originally registered - not changed by transfers" />
+        <StatCard icon={ICON.totalCases} label="Total Cases" value={hasPeriodScope ? totalCases : "--"} hint="In this period, after transfers in / out" />
         <StatCard icon={ICON.outstanding} label="Outstanding (in scope)" value={outstanding.length} hint="Findings" />
         <StatCard icon={ICON.criticalExceptions} label="High/Critical Exceptions" value={exceptions.length} hint="Outstanding, high or critical risk" />
         <StatCard icon={ICON.rectified} label="Rectified Findings" value={hasPeriodScope ? rectifiedFindings : "--"} hint="Formally closed" />
@@ -356,30 +358,23 @@ export function ExecutiveDashboard({
             }))}
           />
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-600">
-              <tr>
-                <th className="px-4 py-2 font-medium">Source</th>
-                <th className="px-4 py-2 font-medium">Total Cases</th>
-                <th className="px-4 py-2 font-medium">Eligible Cases</th>
-                <th className="px-4 py-2 font-medium">Rectified Cases</th>
-                <th className="px-4 py-2 font-medium">Outstanding Cases</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {sourceComparison.map(({ source: s, total, eligibleCases, rectified, outstanding: outstandingCount }) => (
-                <tr key={s.id}>
-                  <td className="px-4 py-2 text-slate-900">{s.name}</td>
-                  <td className="px-4 py-2 text-slate-700">{openPeriod ? total : "--"}</td>
-                  <td className="px-4 py-2 text-slate-700">{openPeriod ? eligibleCases : "--"}</td>
-                  <td className="px-4 py-2 text-slate-700">{openPeriod ? rectified : "--"}</td>
-                  <td className="px-4 py-2 text-slate-700">{openPeriod ? outstandingCount : "--"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <DashboardGrid
+          exportFileName="source-comparison"
+          columns={[
+            { key: "source", header: "Source" },
+            { key: "total", header: "Total Cases", type: "number", total: true },
+            { key: "eligibleCases", header: "Eligible Cases", type: "number", total: true },
+            { key: "rectified", header: "Rectified Cases", type: "number", total: true },
+            { key: "outstanding", header: "Outstanding Cases", type: "number", total: true },
+          ]}
+          rows={sourceComparison.map(({ source: s, total, eligibleCases, rectified, outstanding: outstandingCount }) => ({
+            source: s.name,
+            total: openPeriod ? total : null,
+            eligibleCases: openPeriod ? eligibleCases : null,
+            rectified: openPeriod ? rectified : null,
+            outstanding: openPeriod ? outstandingCount : null,
+          }))}
+        />
       </Card>
 
       <FindingsByCategoryChart

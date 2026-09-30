@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { SESSION_ENDED_PATH } from "@/lib/session";
 import { getCurrentUser } from "@/lib/session";
 import { readDb } from "@/lib/db";
 import { formatDateTime } from "@/lib/format";
@@ -12,11 +13,11 @@ import { ProfileClient } from "@/components/profile/ProfileClient";
 // src/proxy.ts's redirect here.
 export default async function ProfilePage() {
   const session = await getCurrentUser();
-  if (!session) redirect("/login");
+  if (!session) redirect(SESSION_ENDED_PATH);
 
   const db = await readDb();
   const user = db.users.find((u) => u.id === session.userId);
-  if (!user) redirect("/login");
+  if (!user) redirect(SESSION_ENDED_PATH);
 
   const role = db.roles.find((r) => r.code === user.role);
   const district = db.districts.find((d) => d.id === user.districtId);

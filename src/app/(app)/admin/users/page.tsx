@@ -151,6 +151,7 @@ export default function UsersPage() {
         branchId: form.branchId || null,
         departmentId: form.departmentId || null,
       });
+      notify.success(notifications.user.created);
       setForm({ ...emptyForm, role: form.role });
       close();
       await loadAll();
@@ -196,6 +197,7 @@ export default function UsersPage() {
       };
       if (editForm.password) payload.password = editForm.password;
       await apiSend(`/api/admin/users/${user.id}`, "PATCH", payload);
+      notify.success(notifications.user.updated);
       setEditingId(null);
       await loadAll();
     } catch (err) {

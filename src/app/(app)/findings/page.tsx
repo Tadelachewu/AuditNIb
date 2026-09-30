@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SESSION_ENDED_PATH } from "@/lib/session";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 import { readDb } from "@/lib/db";
@@ -22,7 +23,7 @@ export default async function FindingsPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const user = await getCurrentUser();
-  if (!user) redirect("/login");
+  if (!user) redirect(SESSION_ENDED_PATH);
   if (!hasPermission(user.permissions, permissionKey("findings", "view"))) redirect("/dashboard");
 
   const params = await searchParams;

@@ -59,6 +59,7 @@ export default function DistrictsPage() {
     setSubmitting(true);
     try {
       await apiSend("/api/admin/districts", "POST", form);
+      notify.success(notifications.district.created);
       setForm({ code: "", name: "" });
       close();
       await load();
@@ -80,6 +81,7 @@ export default function DistrictsPage() {
     setEditError(null);
     try {
       await apiSend(`/api/admin/districts/${d.id}`, "PATCH", { name: editName });
+      notify.success(notifications.district.updated);
       setEditingId(null);
       await load();
     } catch (err) {

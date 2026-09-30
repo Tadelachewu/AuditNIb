@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { apiSend, errorMessage } from "@/lib/api-client";
 import { Button } from "@/components/ui/Button";
 import { Input, Label } from "@/components/ui/Field";
@@ -11,7 +10,6 @@ import { validatePasswordStrength } from "@/lib/passwordValidation";
 import { AuthBackdrop, AUTH_PANEL_CLASS } from "@/components/auth/AuthBackdrop";
 
 export function ResetPasswordClient({ token: token }: { token: string | null }) {
-  const router = useRouter();
 
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");

@@ -12,6 +12,7 @@ import type { SupportThread, SupportMessage } from "@/types";
 import { ListSkeleton } from "@/components/ui/Skeleton";
 import { Pagination } from "@/components/ui/Pagination";
 import { useClientPagination } from "@/lib/useClientPagination";
+import { notify, notifications } from "@/lib/notify";
 
 function StatusBadge({ thread }: { thread: SupportThread }) {
   if (thread.status === "RESOLVED") return <Badge tone="green">Resolved{thread.rating ? ` - ${thread.rating}★` : ""}</Badge>;
@@ -108,6 +109,7 @@ export function SupportClient() {
     setSendingReply(true);
     try {
       await apiSend(`/api/support/${selectedId}/messages`, "POST", { body: replyBody });
+      notify.success(notifications.support.replySent);
       setReplyBody("");
       await Promise.all([loadThread(selectedId), loadThreads()]);
     } catch (err) {
@@ -123,6 +125,7 @@ export function SupportClient() {
     setRatingSaving(true);
     try {
       await apiSend(`/api/support/${selectedId}/rate`, "POST", { rating: stars });
+      notify.success(notifications.support.rated);
       setRating(stars);
       await Promise.all([loadThread(selectedId), loadThreads()]);
     } catch (err) {

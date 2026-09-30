@@ -1,4 +1,5 @@
 import { Fragment } from "react";
+import { SESSION_ENDED_PATH } from "@/lib/session";
 import { ALL_PERIODS_VALUE } from "@/lib/dashboardFilters";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -18,7 +19,7 @@ export default async function CategoryDetailByDistrictPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const user = await getCurrentUser();
-  if (!user) redirect("/login");
+  if (!user) redirect(SESSION_ENDED_PATH);
   if (!hasPermission(user.permissions, permissionKey("report-templates", "category-detail-by-district"))) redirect("/reports/templates");
 
   const db = await readDb();
@@ -33,13 +34,13 @@ export default async function CategoryDetailByDistrictPage({
   const period = db.reportingPeriods.find((p) => p.id === periodId);
   const { rows, categories, totalRow } = periodId
     ? getCategoryDetailByDistrict(db, allPeriods ? undefined : periodId)
-    : { rows: [], categories: [], totalRow: { totalCases: 0, totalRectified: 0, totalOutstanding: 0, rectifiedPct: null } };
+    : { rows: [], categories: [], totalRow: { totalCases: 0, totalRectified: 0, totalOutstanding: 0, rectifiedPct: null, perCategory: [] } };
 
   return (
     <div className="flex flex-col gap-5">
       <style>{`@media print { nav, header, .no-print { display: none !important; } main { padding: 0 !important; } }`}</style>
 
-      <div className="no-print flex flex-wrap items-center justify-between gap-2">
+      <div className="no-print flex flex-wrap items-start justify-between gap-2">
         <div>
           <Link
             href="/reports/templates"
@@ -51,7 +52,7 @@ export default async function CategoryDetailByDistrictPage({
           <p className="mt-1 text-sm text-slate-600">Every district x classified-case category, Unrectified/Rectified.</p>
           {sourceNote && <p className="mt-1 text-xs font-medium text-amber-800">{sourceNote}</p>}
         </div>
-        <div className="flex gap-2">
+        <div className="flex shrink-0 gap-2">
           <a href={`/api/report-templates/category-detail-by-district/export?periodId=${periodId}`}>
             <span className="inline-flex items-center rounded-md border border-brand-gold-dark bg-brand-gold px-3 py-1.5 text-sm font-medium text-on-gold transition-colors hover:bg-brand-gold-dark">
               Download CSV
@@ -96,26 +97,27 @@ export default async function CategoryDetailByDistrictPage({
                     {c.name}
                   </th>
                 ))}
-                <th className="px-4 py-2 text-center font-medium" colSpan={3}>
+                <th className="px-4 py-2 text-center font-medium" colSpan={4}>
                   Status of the irregularities
                 </th>
               </tr>
               <tr>
                 {categories.map((c) => (
                   <Fragment key={c.id}>
-                    <th className="px-2 py-1 font-normal">Unrect.</th>
-                    <th className="px-2 py-1 font-normal">Rect.</th>
+                    <th className="px-2 py-1 font-normal">Reported Case</th>
+                    <th className="px-2 py-1 font-normal">Rectified</th>
                   </Fragment>
                 ))}
-                <th className="px-2 py-1 font-normal">Unrect.</th>
-                <th className="px-2 py-1 font-normal">Rect.</th>
-                <th className="px-2 py-1 font-normal">Rect. %</th>
+                <th className="px-2 py-1 font-normal">Total Reported Case</th>
+                <th className="px-2 py-1 font-normal">Rectified</th>
+                <th className="px-2 py-1 font-normal">Outstanding Case</th>
+                <th className="px-2 py-1 font-normal">Rectified %</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {rows.length === 0 && (
                 <tr>
-                  <td className="px-4 py-6 text-center text-slate-500" colSpan={5 + categories.length * 2}>
+                  <td className="px-4 py-6 text-center text-slate-500" colSpan={7 + categories.length * 2}>
                     No districts configured yet.
                   </td>
                 </tr>
@@ -127,12 +129,13 @@ export default async function CategoryDetailByDistrictPage({
                   <td className="px-4 py-2 text-slate-900">{r.district.name}</td>
                   {r.perCategory.map((c) => (
                     <Fragment key={c.category.id}>
-                      <td className="px-2 py-2 text-center text-slate-700">{formatNumber(c.outstanding)}</td>
+                      <td className="px-2 py-2 text-center text-slate-700">{formatNumber(c.total)}</td>
                       <td className="px-2 py-2 text-center text-slate-700">{formatNumber(c.rectified)}</td>
                     </Fragment>
                   ))}
-                  <td className="px-2 py-2 text-center font-medium text-slate-900">{formatNumber(r.totalOutstanding)}</td>
+                  <td className="px-2 py-2 text-center font-medium text-slate-900">{formatNumber(r.totalCases)}</td>
                   <td className="px-2 py-2 text-center font-medium text-slate-900">{formatNumber(r.totalRectified)}</td>
+                  <td className="px-2 py-2 text-center font-medium text-slate-900">{formatNumber(r.totalOutstanding)}</td>
                   <td className="px-2 py-2 text-center font-medium text-slate-900">{r.rectifiedPct !== null ? `${r.rectifiedPct.toFixed(1)}%` : "--"}</td>
                 </tr>
               ))}
@@ -141,11 +144,15 @@ export default async function CategoryDetailByDistrictPage({
                   <td className="px-4 py-2 text-slate-900" colSpan={3}>
                     TOTAL
                   </td>
-                  {categories.map((c) => (
-                    <td key={c.id} className="px-2 py-2" colSpan={2} />
+                  {categories.map((c, i) => (
+                    <Fragment key={c.id}>
+                      <td className="px-2 py-2 text-center text-slate-900">{formatNumber(totalRow.perCategory[i]?.total ?? 0)}</td>
+                      <td className="px-2 py-2 text-center text-slate-900">{formatNumber(totalRow.perCategory[i]?.rectified ?? 0)}</td>
+                    </Fragment>
                   ))}
-                  <td className="px-2 py-2 text-center text-slate-900">{formatNumber(totalRow.totalOutstanding)}</td>
+                  <td className="px-2 py-2 text-center text-slate-900">{formatNumber(totalRow.totalCases)}</td>
                   <td className="px-2 py-2 text-center text-slate-900">{formatNumber(totalRow.totalRectified)}</td>
+                  <td className="px-2 py-2 text-center text-slate-900">{formatNumber(totalRow.totalOutstanding)}</td>
                   <td className="px-2 py-2 text-center text-slate-900">{totalRow.rectifiedPct !== null ? `${totalRow.rectifiedPct.toFixed(1)}%` : "--"}</td>
                 </tr>
               )}

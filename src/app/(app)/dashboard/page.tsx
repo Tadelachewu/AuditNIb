@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { SESSION_ENDED_PATH } from "@/lib/session";
 import { getCurrentUser } from "@/lib/session";
 import { readDb } from "@/lib/db";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
@@ -33,7 +34,7 @@ export default async function DashboardPage({
   // already taken effect by the time it runs (a stale/invalidated session
   // - see User.sessionVersion's own doc comment - reaches this null case
   // for real now, not just hypothetically).
-  if (!user) redirect("/login");
+  if (!user) redirect(SESSION_ENDED_PATH);
   const db = await readDb();
   const params = await searchParams;
   const dateRange = parseDateRange(params);

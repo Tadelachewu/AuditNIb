@@ -207,3 +207,9 @@ export async function getCurrentUser(): Promise<SessionData | null> {
 
   return session;
 }
+
+/**
+ * Send a user with an invalid session here (not straight to /login): it
+ * clears the stale cookie first - see src/app/api/auth/session-ended/route.ts.
+ */
+export const SESSION_ENDED_PATH = "/api/auth/session-ended";

@@ -6,6 +6,10 @@
 @custom-variant sidebar-collapsed (&:where([data-sidebar="collapsed"], [data-sidebar="collapsed"] *));
 
 :root {
+  /* Tells the browser which palette native controls (dropdown lists,
+     date pickers, checkboxes, scrollbars) should use. Switched to dark
+     in the dark blocks below. */
+  color-scheme: light;
   --background: #ffffff;
   --foreground: #171717;
   /* Sampled from public/Nib_International_Bank.png - the gold of the
@@ -136,6 +140,7 @@
    --------------------------------------------------------------------- */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
+    color-scheme: dark;
     --background: #0b1220;
     --foreground: #e7e9ee;
 
@@ -183,10 +188,21 @@
     --color-red-600: #fca5a5;
     --color-red-700: #fecaca;
     --color-red-800: #fee2e2;
+    /* Green, and the few red/amber shades not covered above - same
+       "backgrounds deepen, text lightens" pattern as emerald/red/amber. */
+    --color-green-50: #14532d;
+    --color-green-100: #166534;
+    --color-green-200: #15803d;
+    --color-green-700: #86efac;
+    --color-green-800: #bbf7d0;
+    --color-green-900: #dcfce7;
+    --color-red-400: #f87171;
+    --color-amber-400: #fbbf24;
   }
 }
 
 :root[data-theme="dark"] {
+  color-scheme: dark;
   --background: #0b1220;
   --foreground: #e7e9ee;
 
@@ -232,6 +248,16 @@
   --color-red-600: #fca5a5;
   --color-red-700: #fecaca;
   --color-red-800: #fee2e2;
+  /* Green, and the few red/amber shades not covered above - same
+     "backgrounds deepen, text lightens" pattern as emerald/red/amber. */
+  --color-green-50: #14532d;
+  --color-green-100: #166534;
+  --color-green-200: #15803d;
+  --color-green-700: #86efac;
+  --color-green-800: #bbf7d0;
+  --color-green-900: #dcfce7;
+  --color-red-400: #f87171;
+  --color-amber-400: #fbbf24;
 }
 
 /* Every native checkbox/radio fills with the brand color when checked
@@ -283,4 +309,13 @@ body {
   .no-print {
     display: none !important;
   }
+}
+
+/* Dropdown lists: some browsers draw <option>s with their own light
+   background regardless of the page - pin them to the app's surface and
+   text colours so they're readable in both themes. */
+select option,
+select optgroup {
+  background-color: var(--color-white);
+  color: var(--color-slate-900);
 }

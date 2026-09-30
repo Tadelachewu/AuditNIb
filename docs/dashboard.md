@@ -1,5 +1,10 @@
 # Dashboards — Reference Documentation
 
+> **Reported Cases vs Total Cases (2026-09-30).** Every dashboard shows both:
+> - **Reported Cases** - the full case count of findings originally registered in the period. Never changed by transfers.
+> - **Total Cases** - the cases the period holds after transfers in and out (what performance is measured on).
+> Across *All periods* the two are equal. Example: 2026-09 reported 38 cases; after transfers it holds 29.
+
 NIB Control360 (ICFMS) renders a different dashboard per role/org-scope combination, all reached through the single route `/dashboard`. This document is a code-grounded reference to every stat card, chart, table, filter, and permission gate involved. Every non-trivial claim below cites `file:line` in this repository.
 
 ---

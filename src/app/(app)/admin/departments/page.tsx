@@ -95,6 +95,7 @@ export default function DepartmentsPage() {
         districtId: form.districtId || undefined,
         branchId: form.branchId || undefined,
       });
+      notify.success(notifications.department.created);
       setForm(emptyForm);
       close();
       await load();
@@ -126,6 +127,7 @@ export default function DepartmentsPage() {
         districtId: editForm.districtId || undefined,
         branchId: editForm.branchId || undefined,
       });
+      notify.success(notifications.department.updated);
       setEditingId(null);
       await load();
     } catch (err) {

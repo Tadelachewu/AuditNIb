@@ -52,7 +52,9 @@ import * as T from "@/lib/reportTemplates";
   check("ALL Category Detail = sum of periods", T.getCategoryDetailByDistrict(db, undefined).totalRow.totalCases, sumPeriods((pid) => T.getCategoryDetailByDistrict(db, pid).totalRow.totalCases));
   check("ALL Category Detail rectified = sum of periods", T.getCategoryDetailByDistrict(db, undefined).totalRow.totalRectified, sumPeriods((pid) => T.getCategoryDetailByDistrict(db, pid).totalRow.totalRectified));
   check("ALL Monthly Summary = sum of periods", T.getMonthlySummaryReport(db, undefined).totalRow.totalCases, sumPeriods((pid) => T.getMonthlySummaryReport(db, pid).totalRow.totalCases));
-  check("ALL Monthly Summary amount = sum of periods", Math.round(T.getMonthlySummaryReport(db, undefined).totalRow.totalAmount), Math.round(sumPeriods((pid) => T.getMonthlySummaryReport(db, pid).totalRow.totalAmount)));
+  for (const cur of Object.keys(T.getMonthlySummaryReport(db, undefined).totalRow.totalAmount)) {
+    check(`ALL Monthly Summary amount (${cur}) = sum of periods`, Math.round(T.getMonthlySummaryReport(db, undefined).totalRow.totalAmount[cur] ?? 0), Math.round(sumPeriods((pid) => T.getMonthlySummaryReport(db, pid).totalRow.totalAmount[cur] ?? 0)));
+  }
   check("ALL Ranking Other Cases = sum of periods", roAll.totalCases, sumPeriods((pid) => T.getDistrictRankingOtherCases(db, [pid]).totalRow.totalCases));
   const hist = T.sumDistrictRowsAcrossPeriods(T.getMonthlyDistrictSeries(db, "monthly-district-history").otherCases).reduce((s, r) => s + r.totalCases, 0);
   check("ALL Monthly District History = Ranking Other Cases (all)", hist, roAll.totalCases);

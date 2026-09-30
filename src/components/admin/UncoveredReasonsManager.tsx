@@ -39,6 +39,7 @@ export function UncoveredReasonsManager({ initialReasons }: { initialReasons: Un
     setSubmitting(true);
     try {
       await apiSend("/api/admin/uncovered-reasons", "POST", form);
+      notify.success(notifications.uncoveredReason.created);
       setForm({ code: "", name: "" });
       close();
       router.refresh();
@@ -60,6 +61,7 @@ export function UncoveredReasonsManager({ initialReasons }: { initialReasons: Un
     setEditError(null);
     try {
       await apiSend(`/api/admin/uncovered-reasons/${r.id}`, "PATCH", { name: editName });
+      notify.success(notifications.uncoveredReason.updated);
       setEditingId(null);
       router.refresh();
     } catch (err) {

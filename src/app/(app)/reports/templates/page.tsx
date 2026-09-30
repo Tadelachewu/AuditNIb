@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SESSION_ENDED_PATH } from "@/lib/session";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
@@ -11,7 +12,7 @@ import { Card, CardHeader } from "@/components/ui/Card";
 // subset via /admin/roles rather than an all-or-nothing toggle.
 export default async function ReportTemplatesPage() {
   const user = await getCurrentUser();
-  if (!user) redirect("/login");
+  if (!user) redirect(SESSION_ENDED_PATH);
   if (!hasPermission(user.permissions, permissionKey("report-templates", "view"))) redirect("/dashboard");
 
   const visible = REPORT_TEMPLATES.filter((t) => hasPermission(user.permissions, permissionKey("report-templates", t.action)));

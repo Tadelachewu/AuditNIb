@@ -118,6 +118,7 @@ export default function ScoringRulesPage() {
     setSubmitting(true);
     try {
       await apiSend("/api/admin/scoring-rules", "POST", form);
+      notify.success(notifications.scoringRule.created);
       setForm(emptyForm);
       close();
       setBasisEditedManually(false);
@@ -151,6 +152,7 @@ export default function ScoringRulesPage() {
     setEditError(null);
     try {
       await apiSend(`/api/admin/scoring-rules/${rule.id}`, "PATCH", editDraft);
+      notify.success(notifications.scoringRule.updated);
       setEditingRuleId(null);
       await load();
     } catch (err) {

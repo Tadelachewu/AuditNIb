@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SESSION_ENDED_PATH } from "@/lib/session";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 import { readDb } from "@/lib/db";
@@ -19,7 +20,7 @@ export default async function UncoveredBranchesPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const user = await getCurrentUser();
-  if (!user) redirect("/login");
+  if (!user) redirect(SESSION_ENDED_PATH);
   if (!hasPermission(user.permissions, permissionKey("report-templates", "uncovered-branches"))) redirect("/reports/templates");
 
   const db = await readDb();
@@ -36,7 +37,7 @@ export default async function UncoveredBranchesPage({
     <div className="flex flex-col gap-5">
       <style>{`@media print { nav, header, .no-print { display: none !important; } main { padding: 0 !important; } }`}</style>
 
-      <div className="no-print flex flex-wrap items-center justify-between gap-2">
+      <div className="no-print flex flex-wrap items-start justify-between gap-2">
         <div>
           <Link
             href="/reports/templates"
@@ -48,7 +49,7 @@ export default async function UncoveredBranchesPage({
           <p className="mt-1 text-sm text-slate-600">Branches with no findings submitted this period, and why.</p>
           {sourceNote && <p className="mt-1 text-xs font-medium text-amber-800">{sourceNote}</p>}
         </div>
-        <div className="flex gap-2">
+        <div className="flex shrink-0 gap-2">
           <a href={`/api/report-templates/uncovered-branches/export?periodId=${periodId}`}>
             <span className="inline-flex items-center rounded-md border border-brand-gold-dark bg-brand-gold px-3 py-1.5 text-sm font-medium text-on-gold transition-colors hover:bg-brand-gold-dark">
               Download CSV

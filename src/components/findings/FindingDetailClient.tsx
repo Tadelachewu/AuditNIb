@@ -198,6 +198,7 @@ export function FindingDetailClient({
     setError(null);
     try {
       await apiSend(`/api/findings/${finding.id}`, "DELETE");
+      notify.success(notifications.finding.deleted);
       router.push("/findings");
     } catch (err) {
       setError(errorMessage(err, "Failed to delete finding"));
@@ -232,6 +233,7 @@ export function FindingDetailClient({
     setError(null);
     try {
       await apiSend(`/api/findings/${finding.id}/submit`, "POST");
+      notify.success(notifications.finding.submitted);
       await refresh();
     } catch (err) {
       setError(errorMessage(err, "Failed to submit finding"));
@@ -274,6 +276,7 @@ export function FindingDetailClient({
     setError(null);
     try {
       await apiSend(`/api/findings/${finding.id}/${stage}`, "POST", { decision, reason });
+      notify.success(decision === "APPROVE" ? notifications.finding.approved : decision === "REJECT" ? notifications.finding.rejected : notifications.finding.returned);
       await refresh();
     } catch (err) {
       setError(errorMessage(err, "Failed to record decision"));
@@ -293,6 +296,7 @@ export function FindingDetailClient({
     setError(null);
     try {
       await apiSend(`/api/findings/${finding.id}/verify-rectification`, "POST");
+      notify.success(notifications.finding.verified);
       await refresh();
     } catch (err) {
       setError(errorMessage(err, "Failed to verify rectification"));
@@ -351,6 +355,7 @@ export function FindingDetailClient({
             note: rectifyForm.note || undefined,
           }
       );
+      notify.success(notifications.finding.rectified);
       setRectifying(false);
       setRectifyForm({ rectifiedCases: "", rectifiedAmount: "", note: "" });
       setSelectedCaseIds([]);
@@ -378,6 +383,7 @@ export function FindingDetailClient({
     setError(null);
     try {
       await apiSend(`/api/findings/${finding.id}/close`, "POST");
+      notify.success(willFullyClose ? notifications.finding.closed : notifications.finding.partiallyClosed);
       await refresh();
     } catch (err) {
       setError(errorMessage(err, "Failed to close finding"));
@@ -399,6 +405,7 @@ export function FindingDetailClient({
     setError(null);
     try {
       await apiSend(`/api/findings/${finding.id}/return-rectification`, "POST", { reason: result });
+      notify.success(notifications.finding.rectificationReturned);
       await refresh();
     } catch (err) {
       setError(errorMessage(err, "Failed to return finding for correction"));
@@ -412,6 +419,7 @@ export function FindingDetailClient({
     setError(null);
     try {
       await apiSend(`/api/findings/${finding.id}/resubmit-rectification`, "POST");
+      notify.success(notifications.finding.rectificationResubmitted);
       await refresh();
     } catch (err) {
       setError(errorMessage(err, "Failed to resubmit finding"));
@@ -434,6 +442,7 @@ export function FindingDetailClient({
     setError(null);
     try {
       await apiSend(`/api/findings/${finding.id}/transfer`, "POST", { toPeriodId: transferPeriodId, reason: result });
+      notify.success(notifications.finding.transferred);
       setTransferring(false);
       await refresh();
     } catch (err) {
@@ -450,6 +459,7 @@ export function FindingDetailClient({
     const formData = new FormData();
     formData.append("file", file);
     await apiUpload(`/api/findings/${finding.id}/evidence`, formData);
+    notify.success(notifications.finding.evidenceUploaded);
   }
 
   // Mirrors the DELETE route's rule (the real check is server-side):
@@ -473,6 +483,7 @@ export function FindingDetailClient({
     setError(null);
     try {
       await apiSend(`/api/findings/${finding.id}/evidence/${e.id}`, "DELETE");
+      notify.success(notifications.finding.evidenceRemoved);
       await refresh();
     } catch (err) {
       setError(errorMessage(err, "Failed to remove the file"));
@@ -523,6 +534,7 @@ export function FindingDetailClient({
       setCommentText("");
       setReplyTo(null);
       setReplyText("");
+      notify.success(notifications.finding.commentPosted);
       await refresh();
     } catch (err) {
       setError(errorMessage(err, "Failed to post comment"));
@@ -989,7 +1001,7 @@ export function FindingDetailClient({
                   <Label htmlFor="t-period">Destination period</Label>
                   <select
                     id="t-period"
-                    className={`w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm ${FIELD_FOCUS}`}
+                    className={`w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 ${FIELD_FOCUS}`}
                     value={transferPeriodId}
                     onChange={(e) => setTransferPeriodId(e.target.value)}
                   >

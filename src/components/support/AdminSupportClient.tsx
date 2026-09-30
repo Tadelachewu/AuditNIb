@@ -11,6 +11,7 @@ import type { SupportThread, SupportMessage } from "@/types";
 import { ListSkeleton } from "@/components/ui/Skeleton";
 import { Pagination } from "@/components/ui/Pagination";
 import { useClientPagination } from "@/lib/useClientPagination";
+import { notify, notifications } from "@/lib/notify";
 
 type AdminThread = SupportThread & { userName: string; userRole: string | null };
 
@@ -81,6 +82,7 @@ export function AdminSupportClient({ canRespond }: { canRespond: boolean }) {
     setSendingReply(true);
     try {
       await apiSend(`/api/support/${selectedId}/messages`, "POST", { body: replyBody });
+      notify.success(notifications.support.replySent);
       setReplyBody("");
       await Promise.all([loadThread(selectedId), loadThreads()]);
     } catch (err) {

@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { SESSION_ENDED_PATH } from "@/lib/session";
 import { getCurrentUser } from "@/lib/session";
 import { hasPermission, hasAnyPermission } from "@/lib/permissions/registry";
 import { AdminSupportClient } from "@/components/support/AdminSupportClient";
@@ -10,7 +11,7 @@ import { AdminSupportClient } from "@/components/support/AdminSupportClient";
 // alone still works too, for a read-only "see what's been asked" role.
 export default async function AdminSupportPage() {
   const session = await getCurrentUser();
-  if (!session) redirect("/login");
+  if (!session) redirect(SESSION_ENDED_PATH);
   if (!hasAnyPermission(session.permissions, ["support.view", "support.respond"])) redirect("/admin");
 
   const canRespond = hasPermission(session.permissions, "support.respond");

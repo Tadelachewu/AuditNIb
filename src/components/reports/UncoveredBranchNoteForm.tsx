@@ -6,6 +6,7 @@ import { apiSend, errorMessage } from "@/lib/api-client";
 import { Button } from "@/components/ui/Button";
 import { ReasonPicker, reasonToPickerValue, resolveReason } from "@/components/reports/ReasonPicker";
 import type { UncoveredReason } from "@/types";
+import { notify, notifications } from "@/lib/notify";
 
 // The Uncovered Branches report's one writable field - why a branch has no
 // findings this period, picked from the admin-configured list (see
@@ -63,6 +64,7 @@ export function UncoveredBranchNoteForm({
         reason: resolved.reason,
         reasonId: resolved.reasonId,
       });
+      notify.success(notifications.uncoveredNote.saved);
       setEditing(false);
       router.refresh();
     } catch (err) {

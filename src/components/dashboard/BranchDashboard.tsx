@@ -12,13 +12,12 @@ import {
   isHoApproved,
 } from "@/lib/findings";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
-import { sumAmountByCurrency, sumOutstandingByCurrency, sumAmountByCurrencyInPeriod, sumOutstandingByCurrencyInPeriod } from "@/lib/currency";
-import { formatDateTime, formatCurrency } from "@/lib/format";
+import { sumAmountByCurrency, sumOutstandingByCurrency, sumAmountByCurrencyInPeriod, sumOutstandingByCurrencyInPeriod, addCurrency, mergeCurrencyTotals, formatCurrencyTotals, type CurrencyTotals } from "@/lib/currency";
+import { formatDateTime } from "@/lib/format";
 import { inDateRange, type DateRange } from "@/lib/dateRange";
 import { applyDashboardFilters, EMPTY_DASHBOARD_FILTERS, ALL_PERIODS_VALUE, type DashboardFilters } from "@/lib/dashboardFilters";
 import { Card, CardHeader, StatCard } from "@/components/ui/Card";
 import { DASHBOARD_ICONS as ICON } from "@/lib/dashboardIcons";
-import { Badge } from "@/components/ui/Badge";
 import { FilterBar } from "@/components/dashboard/FilterBar";
 import { TimeRangeFilter } from "@/components/reports/TimeRangeFilter";
 import { RiskDistribution } from "@/components/dashboard/RiskDistribution";
@@ -29,6 +28,7 @@ import { FindingStatusBadge } from "@/components/findings/FindingStatusBadge";
 import { CaseBasedPerformance } from "@/components/dashboard/CaseBasedPerformance";
 import { FindingsByCategoryChart } from "@/components/dashboard/FindingsByCategoryChart";
 import { SourcePerformanceSummary } from "@/components/dashboard/SourcePerformanceSummary";
+import { DashboardGrid } from "@/components/dashboard/DashboardGrid";
 
 // Per master.txt §10: "Selected month; category totals; total/rectified/
 // outstanding; Other Case summary; performance; monthly trend; risk
@@ -107,7 +107,7 @@ export function BranchDashboard({
   // "All periods"/no-scope modes have no single period to walk a transfer
   // chain against, so they keep the plain findingCaseTotals() over
   // periodFindings, unchanged from before this existed.
-  const { totalFindings, totalCases, rectifiedFindings, rectifiedCases } =
+  const { totalFindings, totalCases, reportedCases, rectifiedFindings, rectifiedCases } =
     !allPeriodsSelected && openPeriod ? findingCaseTotalsInPeriod(db, openPeriod.id, branchAllFindings) : findingCaseTotals(periodFindings);
   // Every StatCard/table below that reports an "official" figure (as
   // opposed to FindingStatusDistribution's deliberately broader
@@ -190,7 +190,11 @@ export function BranchDashboard({
     const rectified = findings.reduce((sum, f) => sum + f.closedCases, 0);
     const amount = findings.reduce((sum, f) => sum + f.amount, 0);
     const rectifiedAmount = findings.reduce((sum, f) => sum + f.closedAmount, 0);
-    return { category: c, total, rectified, outstanding: total - rectified, amount, rectifiedAmount, outstandingAmount: amount - rectifiedAmount };
+    // Per currency for display (never added across currencies).
+    const amountCur = findings.reduce((t, f) => addCurrency(t, f.currency, f.amount), {} as CurrencyTotals);
+    const closedCur = findings.reduce((t, f) => addCurrency(t, f.currency, f.closedAmount), {} as CurrencyTotals);
+    const outstandingCur = findings.reduce((t, f) => addCurrency(t, f.currency, f.amount - f.closedAmount), {} as CurrencyTotals);
+    return { category: c, total, rectified, outstanding: total - rectified, amount, rectifiedAmount, outstandingAmount: amount - rectifiedAmount, amountCur, closedCur, outstandingCur };
   });
 
   // High-risk = the top two tiers of Settings.riskLevels, matched
@@ -314,7 +318,8 @@ export function BranchDashboard({
           value={hasPeriodScope ? totalFindings : "--"}
           hint={allPeriodsSelected ? "All periods" : openPeriod ? openPeriod.code : "No open period"}
         />
-        <StatCard icon={ICON.totalCases} label="Total Cases" value={hasPeriodScope ? totalCases : "--"} hint="Sum of case counts" />
+        <StatCard icon={ICON.totalCases} label="Reported Cases" value={hasPeriodScope ? reportedCases : "--"} hint="Originally registered - not changed by transfers" />
+        <StatCard icon={ICON.totalCases} label="Total Cases" value={hasPeriodScope ? totalCases : "--"} hint="In this period, after transfers in / out" />
         <StatCard icon={ICON.rectified} label="Rectified Findings" value={hasPeriodScope ? rectifiedFindings : "--"} hint="Formally closed" />
         <StatCard icon={ICON.rectified} label="Rectified Cases" value={hasPeriodScope ? rectifiedCases : "--"} hint="Closed, this period" />
         <StatCard icon={ICON.outstandingCases} label="Outstanding Cases" value={hasPeriodScope ? totalCases - rectifiedCases : "--"} hint="Total minus rectified" />
@@ -367,38 +372,21 @@ export function BranchDashboard({
             title="Branch Ranking"
             description={district ? `Every branch in ${district.name}, performance this period` : "Peer branches, performance this period"}
           />
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-600">
-                <tr>
-                  <th className="px-4 py-2 font-medium">Rank</th>
-                  <th className="px-4 py-2 font-medium">Branch</th>
-                  <th className="px-4 py-2 font-medium">Performance</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {branchRanking.length === 0 && (
-                  <tr>
-                    <td colSpan={3} className="px-4 py-6 text-center text-slate-500">
-                      No peer branches in this district yet.
-                    </td>
-                  </tr>
-                )}
-                {branchRanking.map((row, i) => (
-                  <tr key={row.branch.id} className={row.branch.id === branch.id ? "bg-blue-50" : undefined}>
-                    <td className="px-4 py-2 text-slate-500">{i + 1}</td>
-                    <td className="px-4 py-2 text-slate-900">
-                      <span className="flex items-center gap-2">
-                        {row.branch.name}
-                        {row.branch.id === branch.id && <Badge tone="blue">Your Branch</Badge>}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2 text-slate-700">{row.performance !== null ? <>{row.performance.toFixed(1)}%</> : "--"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DashboardGrid
+            exportFileName="branch-ranking"
+            emptyText="No peer branches in this district yet."
+            columns={[
+              { key: "rank", header: "Rank", type: "number" },
+              { key: "branch", header: "Branch", badgeWhen: "mine", badgeLabel: "Your Branch" },
+              { key: "performance", header: "Performance %", type: "number" },
+            ]}
+            rows={branchRanking.map((row, i) => ({
+              rank: i + 1,
+              branch: row.branch.name,
+              mine: row.branch.id === branch.id,
+              performance: row.performance !== null ? Math.round(row.performance * 10) / 10 : null,
+            }))}
+          />
         </Card>
       ) : (
         <Card>
@@ -431,36 +419,28 @@ export function BranchDashboard({
 
       <Card>
         <CardHeader title="Category Totals" description="Every active classified case category for this branch, current period" />
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-600">
-              <tr>
-                <th className="px-4 py-2 font-medium">Category</th>
-                <th className="px-4 py-2 font-medium">Total Cases</th>
-                <th className="px-4 py-2 font-medium">Rectified Cases</th>
-                <th className="px-4 py-2 font-medium">Outstanding Cases</th>
-                <th className="px-4 py-2 font-medium">Amount</th>
-                <th className="px-4 py-2 font-medium">Rectified Amount</th>
-                <th className="px-4 py-2 font-medium">Outstanding Amount</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {categoryTotals.map(({ category: c, total, rectified, outstanding, amount, rectifiedAmount, outstandingAmount: catOutstandingAmount }) => (
-                <tr key={c.id}>
-                  <td className="px-4 py-2 text-slate-900">
-                    {c.name} {c.scored && <Badge tone="blue">Scored</Badge>}
-                  </td>
-                  <td className="px-4 py-2 text-slate-700">{hasPeriodScope ? total : "--"}</td>
-                  <td className="px-4 py-2 text-slate-700">{hasPeriodScope ? rectified : "--"}</td>
-                  <td className="px-4 py-2 text-slate-700">{hasPeriodScope ? outstanding : "--"}</td>
-                  <td className="px-4 py-2 text-slate-700">{hasPeriodScope ? formatCurrency(amount) : "--"}</td>
-                  <td className="px-4 py-2 text-slate-700">{hasPeriodScope ? formatCurrency(rectifiedAmount) : "--"}</td>
-                  <td className="px-4 py-2 text-slate-700">{hasPeriodScope ? formatCurrency(catOutstandingAmount) : "--"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <DashboardGrid
+          exportFileName="branch-category-totals"
+          columns={[
+            { key: "category", header: "Category", badgeWhen: "scored", badgeLabel: "Scored" },
+            { key: "total", header: "Total Cases", type: "number", total: true },
+            { key: "rectified", header: "Rectified Cases", type: "number", total: true },
+            { key: "outstanding", header: "Outstanding Cases", type: "number", total: true },
+            { key: "amount", header: "Amount", footer: hasPeriodScope ? formatCurrencyTotals(mergeCurrencyTotals(categoryTotals.map((x) => x.amountCur))) : "--" },
+            { key: "rectifiedAmount", header: "Rectified Amount", footer: hasPeriodScope ? formatCurrencyTotals(mergeCurrencyTotals(categoryTotals.map((x) => x.closedCur))) : "--" },
+            { key: "outstandingAmount", header: "Outstanding Amount", footer: hasPeriodScope ? formatCurrencyTotals(mergeCurrencyTotals(categoryTotals.map((x) => x.outstandingCur))) : "--" },
+          ]}
+          rows={categoryTotals.map(({ category: c, total, rectified, outstanding, amountCur, closedCur, outstandingCur }) => ({
+            category: c.name,
+            scored: Boolean(c.scored),
+            total: hasPeriodScope ? total : null,
+            rectified: hasPeriodScope ? rectified : null,
+            outstanding: hasPeriodScope ? outstanding : null,
+            amount: hasPeriodScope ? formatCurrencyTotals(amountCur) : null,
+            rectifiedAmount: hasPeriodScope ? formatCurrencyTotals(closedCur) : null,
+            outstandingAmount: hasPeriodScope ? formatCurrencyTotals(outstandingCur) : null,
+          }))}
+        />
       </Card>
 
       <FindingsByCategoryChart findings={approvedPeriodFindings} categories={categoriesInScope} openPeriod={periodDisplayMarker} />

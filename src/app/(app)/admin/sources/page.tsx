@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { SESSION_ENDED_PATH } from "@/lib/session";
 import { getCurrentUser } from "@/lib/session";
 import { readDb } from "@/lib/db";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
@@ -12,7 +13,7 @@ import { SourcesManager } from "@/components/admin/SourcesManager";
 // router.refresh() after a mutation rather than a duplicated client copy.
 export default async function SourcesPage() {
   const user = await getCurrentUser();
-  if (!user) redirect("/login");
+  if (!user) redirect(SESSION_ENDED_PATH);
   // Redundant with src/proxy.ts's own "sources.view" gate on this route -
   // same defense-in-depth convention src/app/(app)/findings/page.tsx uses.
   if (!hasPermission(user.permissions, permissionKey("sources", "view"))) redirect("/dashboard");

@@ -21,7 +21,7 @@ export interface DemoUser {
 // production the list is null and the demo credentials are never sent to
 // the browser at all (not just hidden). See docs/PRODUCTION.md.
 
-export function LoginClient({ demoUsers }: { demoUsers: DemoUser[] | null }) {
+export function LoginClient({ demoUsers, sessionEnded = false }: { demoUsers: DemoUser[] | null; sessionEnded?: boolean }) {
   const router = useRouter();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -57,6 +57,11 @@ export function LoginClient({ demoUsers }: { demoUsers: DemoUser[] | null }) {
           <p className="text-sm font-medium text-brand-ink">Internal Control Findings Management System</p>
         </div>
 
+        {sessionEnded && (
+          <p role="status" className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            Your session ended (signed in elsewhere, timed out, or your account changed). Please sign in again.
+          </p>
+        )}
         <form onSubmit={handleSubmit}>
           <div className="mb-4">
             <Label htmlFor="username" brand>Username</Label>

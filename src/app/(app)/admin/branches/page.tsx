@@ -65,6 +65,7 @@ export default function BranchesPage() {
     setSubmitting(true);
     try {
       await apiSend("/api/admin/branches", "POST", form);
+      notify.success(notifications.branch.created);
       setForm({ code: "", name: "", districtId: "" });
       close();
       await load();
@@ -86,6 +87,7 @@ export default function BranchesPage() {
     setEditError(null);
     try {
       await apiSend(`/api/admin/branches/${b.id}`, "PATCH", editForm);
+      notify.success(notifications.branch.updated);
       setEditingId(null);
       await load();
     } catch (err) {

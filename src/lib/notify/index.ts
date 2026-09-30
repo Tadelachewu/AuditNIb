@@ -114,11 +114,11 @@ export const notify = {
       case "auth":
         show("info", notifications.auth.sessionExpired, { id: opts.id });
         if (typeof window !== "undefined") {
-          const from = window.location.pathname + window.location.search;
-          // A full page load on purpose: after the session ends, no in-memory
-          // client state from the old session should survive.
+          // Through /api/auth/session-ended, which clears the stale cookie
+          // first (going straight to /login could loop - see that route). A
+          // full page load on purpose: no client state of the old session survives.
           // eslint-disable-next-line @next/next/no-location-assign-relative-destination
-          window.setTimeout(() => window.location.assign(`/login?from=${encodeURIComponent(from)}`), 1200);
+          window.setTimeout(() => window.location.assign("/api/auth/session-ended"), 1200);
         }
         break;
       case "permission":

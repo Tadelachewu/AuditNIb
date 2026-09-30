@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { SESSION_ENDED_PATH } from "@/lib/session";
 import { canReopen } from "@/lib/findingReopen";
 import { getCurrentUser } from "@/lib/session";
 import { readDb } from "@/lib/db";
@@ -10,7 +11,7 @@ import { FindingDetailClient } from "@/components/findings/FindingDetailClient";
 
 export default async function FindingDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
-  if (!user) redirect("/login");
+  if (!user) redirect(SESSION_ENDED_PATH);
   if (!hasPermission(user.permissions, permissionKey("findings", "view"))) redirect("/dashboard");
 
   const { id } = await params;
