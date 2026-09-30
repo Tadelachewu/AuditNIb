@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 import { readDb } from "@/lib/db";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
-import { getUncoveredBranches } from "@/lib/reportTemplates";
+import { getUncoveredBranches, templateSourceNote } from "@/lib/reportTemplates";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Select, Label } from "@/components/ui/Field";
@@ -23,6 +23,9 @@ export default async function UncoveredBranchesPage({
   if (!hasPermission(user.permissions, permissionKey("report-templates", "uncovered-branches"))) redirect("/reports/templates");
 
   const db = await readDb();
+  // Shown when Settings limits this template to certain sources, so its
+  // counts are never mistaken for the bank-wide totals.
+  const sourceNote = templateSourceNote(db, "uncovered-branches");
   const params = await searchParams;
   const openPeriod = db.reportingPeriods.find((p) => p.status === "OPEN");
   const periodId = (typeof params.periodId === "string" && params.periodId) || openPeriod?.id || db.reportingPeriods[0]?.id || "";
@@ -43,6 +46,7 @@ export default async function UncoveredBranchesPage({
           </Link>
           <h1 className="mt-1 text-lg font-semibold text-slate-900">Uncovered Branches</h1>
           <p className="mt-1 text-sm text-slate-600">Branches with no findings submitted this period, and why.</p>
+          {sourceNote && <p className="mt-1 text-xs font-medium text-amber-800">{sourceNote}</p>}
         </div>
         <div className="flex gap-2">
           <a href={`/api/report-templates/uncovered-branches/export?periodId=${periodId}`}>

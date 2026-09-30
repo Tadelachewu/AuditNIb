@@ -9,25 +9,25 @@ import type { DuplicateEvidence } from "@/lib/importRun";
 export interface DuplicatesFound {
   message: string;
   totalRows: number;
-  importableRows: number;
   matchFields: string[];
   duplicates: DuplicateEvidence[];
 }
 
 /**
- * The import's FINAL check: rows that duplicate existing findings (or each
- * other). Nothing has been imported yet. Shows the evidence for each match
- * and lets the importer import the rest without the duplicates, or cancel.
+ * The import's FINAL check: rows that match existing findings (or each
+ * other) under the admin-configured rule (Settings → Similar Findings).
+ * Nothing has been imported yet. Shows the evidence for each match and
+ * lets the importer import everything anyway, or cancel.
  */
 export function ImportDuplicatesReview({
   data,
   busy,
-  onImportRest,
+  onImportAnyway,
   onCancel,
 }: {
   data: DuplicatesFound;
   busy: boolean;
-  onImportRest: () => void;
+  onImportAnyway: () => void;
   onCancel: () => void;
 }) {
   return (
@@ -35,8 +35,11 @@ export function ImportDuplicatesReview({
       <CardHeader title={`Possible duplicates: ${data.duplicates.length} of ${data.totalRows} row(s)`} description={data.message} />
       <div className="flex flex-col gap-3 p-4">
         <p className="text-sm text-slate-600">
-          Every other check passed. A row counts as a duplicate when all of these match an existing finding (or an earlier row in this file):{" "}
-          <span className="font-medium text-slate-800">{data.matchFields.join(", ")}</span>. Title and description may differ.
+          Every other check passed. A row counts as a possible duplicate when all of these match an existing finding (or an earlier row in
+          this file):{" "}
+          <span className="font-medium text-slate-800">{data.matchFields.join(", ")}</span> - the fields chosen in Settings → Similar Findings.
+          Review the evidence, then import everything anyway (duplicates are imported as new findings, each linked in the import history to
+          the finding it matched) or cancel and fix the file.
         </p>
         <div className="max-h-96 overflow-auto rounded-md border border-slate-200">
           <table className="w-full text-left text-xs">
@@ -90,8 +93,8 @@ export function ImportDuplicatesReview({
           <Button variant="cancel" onClick={onCancel} disabled={busy}>
             Cancel import
           </Button>
-          <Button onClick={onImportRest} disabled={busy || data.importableRows === 0}>
-            {busy ? "Importing..." : `Import without duplicates (${data.importableRows} row${data.importableRows === 1 ? "" : "s"})`}
+          <Button variant="warning" onClick={onImportAnyway} disabled={busy}>
+            {busy ? "Importing..." : `Import anyway - all ${data.totalRows} row${data.totalRows === 1 ? "" : "s"}, duplicates included`}
           </Button>
         </div>
       </div>

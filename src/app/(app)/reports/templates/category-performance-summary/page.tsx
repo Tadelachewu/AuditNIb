@@ -4,7 +4,7 @@ import { getCurrentUser } from "@/lib/session";
 import { readDb } from "@/lib/db";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
 import { formatNumber } from "@/lib/format";
-import { getCategoryPerformanceSummary, formatPercentageRange } from "@/lib/reportTemplates";
+import { getCategoryPerformanceSummary, formatPercentageRange, templateSourceNote } from "@/lib/reportTemplates";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Select, Label } from "@/components/ui/Field";
@@ -20,6 +20,9 @@ export default async function CategoryPerformanceSummaryPage({
   if (!hasPermission(user.permissions, permissionKey("report-templates", "category-performance-summary"))) redirect("/reports/templates");
 
   const db = await readDb();
+  // Shown when Settings limits this template to certain sources, so its
+  // counts are never mistaken for the bank-wide totals.
+  const sourceNote = templateSourceNote(db, "category-performance-summary");
   const params = await searchParams;
   const periodId = typeof params.periodId === "string" ? params.periodId : "";
   const { rows, totalRow, grossPercentage } = getCategoryPerformanceSummary(db, periodId || undefined);
@@ -38,6 +41,7 @@ export default async function CategoryPerformanceSummaryPage({
           </Link>
           <h1 className="mt-1 text-lg font-semibold text-slate-900">Category Performance Summary</h1>
           <p className="mt-1 text-sm text-slate-600">Bank-wide rectification rate per category, with the district range.</p>
+          {sourceNote && <p className="mt-1 text-xs font-medium text-amber-800">{sourceNote}</p>}
         </div>
         <div className="flex gap-2">
           <a href={`/api/report-templates/category-performance-summary/export?periodId=${periodId}`}>

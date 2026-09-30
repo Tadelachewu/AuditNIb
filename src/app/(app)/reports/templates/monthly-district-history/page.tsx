@@ -4,7 +4,7 @@ import { getCurrentUser } from "@/lib/session";
 import { readDb } from "@/lib/db";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
 import { formatNumber } from "@/lib/format";
-import { getMonthlyDistrictSeries, sumDistrictRowsAcrossPeriods } from "@/lib/reportTemplates";
+import { getMonthlyDistrictSeries, sumDistrictRowsAcrossPeriods, templateSourceNote } from "@/lib/reportTemplates";
 import { ALL_PERIODS_VALUE } from "@/lib/dashboardFilters";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -26,6 +26,9 @@ export default async function MonthlyDistrictHistoryPage({
   if (!hasPermission(user.permissions, permissionKey("report-templates", "monthly-district-history"))) redirect("/reports/templates");
 
   const db = await readDb();
+  // Shown when Settings limits this template to certain sources, so its
+  // counts are never mistaken for the bank-wide totals.
+  const sourceNote = templateSourceNote(db, "monthly-district-history");
   const params = await searchParams;
   const openPeriod = db.reportingPeriods.find((p) => p.status === "OPEN");
   const periodId = (typeof params.periodId === "string" && params.periodId) || openPeriod?.id || db.reportingPeriods[0]?.id || "";
@@ -52,6 +55,7 @@ export default async function MonthlyDistrictHistoryPage({
           </Link>
           <h1 className="mt-1 text-lg font-semibold text-slate-900">Monthly District History</h1>
           <p className="mt-1 text-sm text-slate-600">Other-Case performance by district, for one reporting period or all periods combined.</p>
+          {sourceNote && <p className="mt-1 text-xs font-medium text-amber-800">{sourceNote}</p>}
         </div>
         <div className="flex gap-2">
           <a href={`/api/report-templates/monthly-district-history/export?periodId=${periodId}`}>

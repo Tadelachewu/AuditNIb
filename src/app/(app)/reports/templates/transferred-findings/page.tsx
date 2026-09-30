@@ -4,7 +4,7 @@ import { getCurrentUser } from "@/lib/session";
 import { readDb } from "@/lib/db";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
 import { formatNumber, formatDateTime, formatCurrency } from "@/lib/format";
-import { getTransferredFindings } from "@/lib/reportTemplates";
+import { getTransferredFindings, templateSourceNote } from "@/lib/reportTemplates";
 import { Card, CardHeader, StatCard } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -28,6 +28,9 @@ export default async function TransferredFindingsPage({
   if (!hasPermission(user.permissions, permissionKey("report-templates", "transferred-findings"))) redirect("/reports/templates");
 
   const db = await readDb();
+  // Shown when Settings limits this template to certain sources, so its
+  // counts are never mistaken for the bank-wide totals.
+  const sourceNote = templateSourceNote(db, "transferred-findings");
   const params = await searchParams;
   const fromPeriodId = typeof params.fromPeriodId === "string" ? params.fromPeriodId : "";
   const toPeriodId = typeof params.toPeriodId === "string" ? params.toPeriodId : "";
@@ -58,6 +61,7 @@ export default async function TransferredFindingsPage({
           <p className="mt-1 text-sm text-slate-600">
             Every transfer hop, bank-wide: original-period detail, what happened before it left, where it went, and its status today.
           </p>
+          {sourceNote && <p className="mt-1 text-xs font-medium text-amber-800">{sourceNote}</p>}
         </div>
         <div className="flex gap-2">
           <a href={`/api/report-templates/transferred-findings/export?fromPeriodId=${fromPeriodId}&toPeriodId=${toPeriodId}`}>

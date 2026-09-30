@@ -41,6 +41,8 @@ function fixture(): Database {
       operationAreas: ["Teller Counter"],
       irregularityTypes: ["Cash Shortage"],
       requiredFindingFields: {},
+      // The admin's duplicate rule (Settings → Similar Findings).
+      similarFindingFields: ["branchId", "periodId", "categoryId", "findingDate", "amount", "caseCount"],
     },
     findings: [],
     findingTransitions: [],
@@ -96,33 +98,48 @@ beforeEach(() => {
 describe("import: duplicates are the final decision", () => {
   it("errors come first - a file with errors never reaches the duplicate check", async () => {
     const file = await workbook([row(), row({ "Branch Code": "NOPE" })]);
-    await expect(runImport(file, "f.xlsx", actor, { skipDuplicates: false })).rejects.toMatchObject({ code: "IMPORT_FILE_INVALID" });
+    await expect(runImport(file, "f.xlsx", actor, { importDuplicates: false })).rejects.toMatchObject({ code: "IMPORT_FILE_INVALID" });
     expect(db.findings).toHaveLength(0);
   });
 
   it("reports duplicates with evidence and imports nothing until the importer decides", async () => {
-    const first = await runImport(await workbook([row()]), "first.xlsx", actor, { skipDuplicates: false });
+    const first = await runImport(await workbook([row()]), "first.xlsx", actor, { importDuplicates: false });
     expect(first.importedCount).toBe(1);
     const existingRef = db.findings[0].reference;
 
     const file = await workbook([row({ Title: "Different wording, same facts" }), row({ Amount: 9999, Title: "New one" })]);
-    const err = (await runImport(file, "second.xlsx", actor, { skipDuplicates: false }).catch((e) => e)) as ApplicationError;
+    const err = (await runImport(file, "second.xlsx", actor, { importDuplicates: false }).catch((e) => e)) as ApplicationError;
     expect(err).toBeInstanceOf(ApplicationError);
     expect(err.code).toBe("IMPORT_DUPLICATES_FOUND");
-    const details = err.details as { importableRows: number; duplicates: { rowNumber: number; matchesReference: string; withinFile: boolean; rowTitle: string; existing: { title: string; amount: number } }[] };
-    expect(details.importableRows).toBe(1);
+    const details = err.details as { matchFields: string[]; duplicates: { rowNumber: number; matchesReference: string; withinFile: boolean; rowTitle: string; existing: { title: string; amount: number } }[] };
+    expect(details.matchFields).toEqual(["Branch", "Reporting period", "Classified case", "Finding date", "Amount", "Number of cases"]);
     expect(details.duplicates).toEqual([
       expect.objectContaining({ rowNumber: 2, matchesReference: existingRef, withinFile: false, rowTitle: "Different wording, same facts", existing: expect.objectContaining({ title: "Cash shortage at teller", amount: 5000 }) }),
     ]);
     expect(db.findings).toHaveLength(1); // nothing imported yet
 
-    const batch = await runImport(file, "second.xlsx", actor, { skipDuplicates: true });
-    expect(batch).toMatchObject({ importedCount: 1, duplicateCount: 1 });
-    expect(db.findings).toHaveLength(2);
+    // "Import anyway": every row imported, the duplicate keeps a pointer to what it matched.
+    const batch = await runImport(file, "second.xlsx", actor, { importDuplicates: true });
+    expect(batch).toMatchObject({ importedCount: 2, duplicateCount: 0 });
+    expect(batch.rows.find((r) => r.rowNumber === 2)).toMatchObject({ outcome: "imported", duplicateOfReference: existingRef });
+    expect(db.findings).toHaveLength(3);
+  });
+
+  it("uses only the admin-configured fields: a different title still matches, a different amount doesn't", async () => {
+    await runImport(await workbook([row()]), "a.xlsx", actor, { importDuplicates: false });
+    await expect(runImport(await workbook([row({ Title: "Other words" })]), "b.xlsx", actor, { importDuplicates: false })).rejects.toMatchObject({ code: "IMPORT_DUPLICATES_FOUND" });
+    const ok = await runImport(await workbook([row({ Amount: 1234 })]), "c.xlsx", actor, { importDuplicates: false });
+    expect(ok.importedCount).toBe(1);
+  });
+
+  it("no fields configured = duplicate check off", async () => {
+    (db.settings as { similarFindingFields: string[] }).similarFindingFields = [];
+    const batch = await runImport(await workbook([row(), row()]), "f.xlsx", actor, { importDuplicates: false });
+    expect(batch.importedCount).toBe(2);
   });
 
   it("flags duplicates within the same file", async () => {
-    const err = (await runImport(await workbook([row(), row()]), "f.xlsx", actor, { skipDuplicates: false }).catch((e) => e)) as ApplicationError;
+    const err = (await runImport(await workbook([row(), row()]), "f.xlsx", actor, { importDuplicates: false }).catch((e) => e)) as ApplicationError;
     expect(err.code).toBe("IMPORT_DUPLICATES_FOUND");
     expect((err.details as { duplicates: { withinFile: boolean; matchesRowNumber: number }[] }).duplicates[0]).toMatchObject({ withinFile: true, matchesRowNumber: 2 });
   });
@@ -130,7 +147,7 @@ describe("import: duplicates are the final decision", () => {
 
 describe("import: reverse regardless of later work, then re-import or delete", () => {
   it("reverses even after comments / evidence / workflow, removing everything attached", async () => {
-    const batch = await runImport(await workbook([row(), row({ Amount: 7000 })]), "f.xlsx", actor, { skipDuplicates: false });
+    const batch = await runImport(await workbook([row(), row({ Amount: 7000 })]), "f.xlsx", actor, { importDuplicates: false });
     const f = db.findings[0];
     db.comments.push({ id: "cm1", findingId: f.id } as never);
     db.evidence.push({ id: "ev1", findingId: f.id, storagePath: "evidence-file.enc" } as never);
@@ -154,7 +171,7 @@ describe("import: reverse regardless of later work, then re-import or delete", (
   });
 
   it("reverse-and-delete removes the record but keeps its reference numbers reserved", async () => {
-    await runImport(await workbook([row()]), "f.xlsx", actor, { skipDuplicates: false });
+    await runImport(await workbook([row()]), "f.xlsx", actor, { importDuplicates: false });
     const ref = db.findings[0].reference;
     const result = reverseImportBatch(db, db.importBatches[0], { userId: "u1", userName: "HO" }, "remove entirely", { deleteRecord: true });
     expect(db.importBatches).toHaveLength(0);
@@ -166,9 +183,9 @@ describe("import: reverse regardless of later work, then re-import or delete", (
 
   it("the same file can be imported again after reversal (no false duplicates)", async () => {
     const file = await workbook([row()]);
-    await runImport(file, "f.xlsx", actor, { skipDuplicates: false });
+    await runImport(file, "f.xlsx", actor, { importDuplicates: false });
     reverseImportBatch(db, db.importBatches[0], { userId: "u1", userName: "HO" }, "fix and redo");
-    const again = await runImport(file, "f.xlsx", actor, { skipDuplicates: false });
+    const again = await runImport(file, "f.xlsx", actor, { importDuplicates: false });
     expect(again.importedCount).toBe(1);
   });
 });
@@ -176,7 +193,7 @@ describe("import: reverse regardless of later work, then re-import or delete", (
 describe("reopen a closed finding", () => {
   it("resets to a fresh Sent to Branch Manager, removes closure/rectification credit, keeps history", async () => {
     const { reopenFinding, canReopen } = await import("@/lib/findingReopen");
-    await runImport(await workbook([row({ "Status (SENT_TO_BRANCH_MANAGER / TRANSFERRED / CLOSED)": "CLOSED" })]), "f.xlsx", actor, { skipDuplicates: false });
+    await runImport(await workbook([row({ "Status (SENT_TO_BRANCH_MANAGER / TRANSFERRED / CLOSED)": "CLOSED" })]), "f.xlsx", actor, { importDuplicates: false });
     const f = db.findings[0];
     expect(f.status).toBe("CLOSED");
     expect(f.closedCases).toBe(2);

@@ -4,7 +4,7 @@ import { getCurrentUser } from "@/lib/session";
 import { readDb } from "@/lib/db";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
 import { formatNumber } from "@/lib/format";
-import { getDistrictSnapshotAsOf } from "@/lib/reportTemplates";
+import { getDistrictSnapshotAsOf, templateSourceNote } from "@/lib/reportTemplates";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Select, Input, Label } from "@/components/ui/Field";
@@ -20,6 +20,9 @@ export default async function MidMonthDistrictSnapshotPage({
   if (!hasPermission(user.permissions, permissionKey("report-templates", "mid-month-district-snapshot"))) redirect("/reports/templates");
 
   const db = await readDb();
+  // Shown when Settings limits this template to certain sources, so its
+  // counts are never mistaken for the bank-wide totals.
+  const sourceNote = templateSourceNote(db, "mid-month-district-snapshot");
   const params = await searchParams;
   const openPeriod = db.reportingPeriods.find((p) => p.status === "OPEN");
   const periodId = (typeof params.periodId === "string" && params.periodId) || openPeriod?.id || db.reportingPeriods[0]?.id || "";
@@ -44,6 +47,7 @@ export default async function MidMonthDistrictSnapshotPage({
           </Link>
           <h1 className="mt-1 text-lg font-semibold text-slate-900">Mid-Month District Snapshot</h1>
           <p className="mt-1 text-sm text-slate-600">District performance as of any chosen cutoff date within a period.</p>
+          {sourceNote && <p className="mt-1 text-xs font-medium text-amber-800">{sourceNote}</p>}
         </div>
         <div className="flex gap-2">
           <a href={`/api/report-templates/mid-month-district-snapshot/export?periodId=${periodId}&asOfDate=${asOfDate}`}>

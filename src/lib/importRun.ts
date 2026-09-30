@@ -1,9 +1,10 @@
 import { v4 as uuid } from "uuid";
 import { readDb, updateDb } from "@/lib/db";
 import { appendAuditLog } from "@/lib/audit";
-import { MAX_IMPORT_ROWS, parseImportWorkbook, validateImportRow, existingDedupeKeys } from "@/lib/import";
+import { MAX_IMPORT_ROWS, parseImportWorkbook, validateImportRow, existingSimilarityKeys } from "@/lib/import";
 import { writeStoredFile, deleteStoredFile, newStoredName } from "@/lib/fileStorage";
-import { ApplicationError, BusinessRuleError, ValidationError } from "@/lib/errors";
+import { ApplicationError, ValidationError } from "@/lib/errors";
+import { SIMILAR_FINDING_FIELDS } from "@/types";
 import type { Database, ImportBatch, ImportBatchRow } from "@/types";
 
 /**
@@ -14,11 +15,12 @@ import type { Database, ImportBatch, ImportBatchRow } from "@/types";
  *   2. Every row validated against a scratch copy of the data; if ANY row
  *      has an error -> IMPORT_FILE_INVALID, nothing imported, all problems
  *      listed.
- *   3. FINAL check - duplicates. If rows duplicate existing findings (or
- *      each other) and the importer hasn't decided yet ->
- *      IMPORT_DUPLICATES_FOUND with evidence for each, nothing imported.
- *      The importer then either imports without the duplicates
- *      (skipDuplicates) or cancels.
+ *   3. FINAL check - duplicates, by the admin-configured rule (Settings →
+ *      Similar Findings, the same rule the Register Finding form uses). If
+ *      rows duplicate existing findings (or each other) and the importer
+ *      hasn't decided yet -> IMPORT_DUPLICATES_FOUND with evidence for
+ *      each, nothing imported. The importer then either imports everything
+ *      anyway, duplicates included (importDuplicates), or cancels.
  *   4. Commit: original file stored (encrypted), findings created, batch +
  *      audit entry written, all in one transaction.
  */
@@ -56,26 +58,16 @@ export interface DuplicateEvidence {
   } | null;
 }
 
-/** The fields that make two findings duplicates (see dedupeKey() in src/lib/import.ts). */
-export const DUPLICATE_MATCH_FIELDS = [
-  "Branch",
-  "Reporting period",
-  "Source",
-  "Department",
-  "Category",
-  "Finding date",
-  "Operation area",
-  "Type of irregularity",
-  "Currency",
-  "Amount",
-  "Number of cases",
-];
+/** Labels of the admin-configured duplicate fields (Settings → Similar Findings). */
+export function duplicateMatchFields(db: Database): string[] {
+  return (db.settings.similarFindingFields ?? []).map((k) => SIMILAR_FINDING_FIELDS.find((f) => f.key === k)?.label ?? k);
+}
 
 export async function runImport(
   buffer: Buffer,
   fileName: string,
   actor: ImportActor,
-  opts: { skipDuplicates: boolean; auditAction?: string; reimportOf?: string }
+  opts: { importDuplicates: boolean; auditAction?: string; reimportOf?: string }
 ): Promise<ImportBatch> {
   const parsed = await parseImportWorkbook(buffer);
   if (parsed.error) throw new ValidationError(parsed.error);
@@ -84,17 +76,18 @@ export async function runImport(
     throw new ValidationError(`This file has ${parsed.rows.length} rows - split it into batches of ${MAX_IMPORT_ROWS} or fewer`);
   }
 
-  const rowOpts = (importBatchId: string) => ({
+  const rowOpts = (importBatchId: string, allowDuplicates = false) => ({
     userId: actor.userId,
     userName: actor.userName,
     importBatchId,
+    allowDuplicates,
     importerScope: { orgScope: actor.orgScope, districtId: actor.districtId, branchId: actor.branchId },
   });
 
   // Dry run on a scratch copy - never persisted.
   const live = await readDb();
   const dryDb = structuredClone(live);
-  const drySeen = existingDedupeKeys(dryDb);
+  const drySeen = existingSimilarityKeys(dryDb);
   const dryRows: ImportBatchRow[] = parsed.rows.map((row, i) => stripFinding(validateImportRow(dryDb, row, i + 2, drySeen, rowOpts("dry-run"))));
 
   const errorCount = dryRows.filter((r) => r.outcome === "error").length;
@@ -106,20 +99,15 @@ export async function runImport(
   }
 
   const duplicates = dryRows.filter((r) => r.outcome === "duplicate");
-  if (duplicates.length > 0 && !opts.skipDuplicates) {
-    const importable = dryRows.length - duplicates.length;
+  if (duplicates.length > 0 && !opts.importDuplicates) {
     throw new ApplicationError("IMPORT_DUPLICATES_FOUND", {
-      message: `${duplicates.length} of ${dryRows.length} row(s) already exist. Nothing was imported yet - import the other ${importable} row(s) without the duplicates, or cancel.`,
+      message: `${duplicates.length} of ${dryRows.length} row(s) look like findings that already exist. Nothing was imported yet - import all ${dryRows.length} row(s) anyway, or cancel.`,
       details: {
         totalRows: dryRows.length,
-        importableRows: importable,
-        matchFields: DUPLICATE_MATCH_FIELDS,
+        matchFields: duplicateMatchFields(live),
         duplicates: duplicates.map((d) => duplicateEvidence(d, parsed.rows[d.rowNumber - 2]?.title ?? "", live, dryDb, dryRows)),
       },
     });
-  }
-  if (dryRows.length - duplicates.length === 0) {
-    throw new BusinessRuleError("IMPORT_NOTHING_TO_IMPORT", "Every row in this file already exists - there is nothing new to import.");
   }
 
   const importBatchId = uuid();
@@ -127,8 +115,8 @@ export async function runImport(
   writeStoredFile("imports", storedFile, buffer);
   try {
     return await updateDb((current) => {
-      const seenKeys = existingDedupeKeys(current);
-      const rows = parsed.rows.map((row, i) => stripFinding(validateImportRow(current, row, i + 2, seenKeys, rowOpts(importBatchId))));
+      const seenKeys = existingSimilarityKeys(current);
+      const rows = parsed.rows.map((row, i) => stripFinding(validateImportRow(current, row, i + 2, seenKeys, rowOpts(importBatchId, opts.importDuplicates))));
       const importedCount = rows.filter((r) => r.outcome === "imported").length;
       const duplicateCount = rows.filter((r) => r.outcome === "duplicate").length;
       const record: ImportBatch = {
@@ -151,7 +139,13 @@ export async function runImport(
         action: opts.auditAction ?? "IMPORT",
         entityType: "ImportBatch",
         entityId: record.id,
-        newValue: { fileName, importedCount, duplicateCount, skippedDuplicates: opts.skipDuplicates && duplicateCount > 0, totalRows: rows.length, reimportOf: opts.reimportOf },
+        newValue: {
+          fileName,
+          importedCount,
+          duplicatesImportedAnyway: rows.filter((r) => r.outcome === "imported" && r.duplicateOfReference).length,
+          totalRows: rows.length,
+          reimportOf: opts.reimportOf,
+        },
       });
       return record;
     });

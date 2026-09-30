@@ -1,6 +1,7 @@
 import ExcelJS from "exceljs";
 import { v4 as uuid } from "uuid";
 import { appendAuditLog } from "@/lib/audit";
+import { similarityKey } from "@/lib/similarFindings";
 import { nextFindingReference, transitionFinding, transferFinding } from "@/lib/findings";
 import { isDepartmentInScope } from "@/lib/org";
 import type { Database, Finding, ImportBatchRow, ReportingPeriod, RequirableFindingField } from "@/types";
@@ -301,63 +302,9 @@ function localDate(iso: string): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-/**
- * The dedupe key: every field an import row and a manually-registered
- * finding both have, excluding free text (description/recommendation/
- * evidenceNote/title - too easy to differ by whitespace/wording for an
- * exact-match key to be meaningful) and excluding reference (always
- * system-generated, never comparable across a re-import).
- */
-function dedupeKey(f: {
-  branchId: string;
-  periodId: string;
-  sourceId: string;
-  departmentId: string;
-  categoryId: string;
-  findingDate: string;
-  operationArea: string;
-  irregularityType: string;
-  currency: string;
-  amount: number;
-  caseCount: number;
-}): string {
-  return [
-    f.branchId,
-    f.periodId,
-    f.sourceId,
-    f.departmentId,
-    f.categoryId,
-    f.findingDate,
-    f.operationArea,
-    f.irregularityType,
-    f.currency,
-    f.amount,
-    f.caseCount,
-  ].join("|");
-}
-
-export function existingDedupeKeys(db: Database): Map<string, string> {
-  const map = new Map<string, string>();
-  for (const f of db.findings) {
-    map.set(
-      dedupeKey({
-        branchId: f.branchId,
-        periodId: f.periodId,
-        sourceId: f.sourceId,
-        departmentId: f.departmentId,
-        categoryId: f.categoryId,
-        findingDate: f.findingDate,
-        operationArea: f.operationArea,
-        irregularityType: f.irregularityType,
-        currency: f.currency,
-        amount: f.amount,
-        caseCount: f.caseCount,
-      }),
-      f.reference
-    );
-  }
-  return map;
-}
+// Duplicates use the admin-configured rule (Settings → Similar Findings),
+// the same one the Register Finding form uses - see src/lib/similarFindings.ts.
+export { existingSimilarityKeys } from "@/lib/similarFindings";
 
 /**
  * Validates one raw row against current reference data and, if valid and
@@ -385,6 +332,8 @@ export function validateImportRow(
     userId: string;
     userName: string;
     importBatchId: string;
+    /** Import a row even when it matches an existing finding (the importer chose "Import anyway"). */
+    allowDuplicates?: boolean;
     // The importer's own org scope - mirrors POST /api/findings' identical
     // "BRANCH/DISTRICT roles are forced to their own org unit, BANK isn't"
     // check. findings.import is seeded onto the HO Controller role only
@@ -560,28 +509,6 @@ export function validateImportRow(
     return { rowNumber, outcome: "error", error: errors.join(" · "), errors };
   }
 
-  // Duplicate check - the import's own exact-match key (see dedupeKey()),
-  // not the Register Finding form's admin-configured similar-finding hint.
-  // TRANSFERRED dedupes by its *current* period (the destination), which is
-  // what an already-imported TRANSFERRED finding's own periodId now is.
-  const key = dedupeKey({
-    branchId: branch.id,
-    periodId: status === "TRANSFERRED" ? destinationPeriod!.id : period.id,
-    sourceId: source?.id ?? "",
-    departmentId: department?.id ?? "",
-    categoryId: category?.id ?? "",
-    findingDate,
-    operationArea,
-    irregularityType,
-    currency,
-    amount,
-    caseCount,
-  });
-  const existingReference = seenKeys.get(key);
-  if (existingReference) {
-    return { rowNumber, outcome: "duplicate", duplicateOfReference: existingReference };
-  }
-
   const now = new Date().toISOString();
   // caseAgeDays() (src/lib/findings.ts) measures age from createdAt, per
   // master.txt §8's "track case age from original finding date" - for a
@@ -641,7 +568,21 @@ export function validateImportRow(
     updatedAt: now,
   };
 
-  seenKeys.set(key, finding.reference);
+  // Duplicate check - the admin-configured rule (Settings → Similar
+  // Findings): every configured field present and equal. Compared on the
+  // finding's CURRENT period (for TRANSFERRED, the destination), which is
+  // what an already-imported TRANSFERRED finding's own periodId now is.
+  // Rule off (no fields configured) or a configured field blank -> no match.
+  const key = similarityKey(db.settings.similarFindingFields ?? [], {
+    ...finding,
+    periodId: status === "TRANSFERRED" ? destinationPeriod!.id : period.id,
+  });
+  const duplicateOfReference = key ? seenKeys.get(key) : undefined;
+  if (duplicateOfReference && !opts.allowDuplicates) {
+    return { rowNumber, outcome: "duplicate", duplicateOfReference };
+  }
+
+  if (key && !seenKeys.has(key)) seenKeys.set(key, finding.reference);
   db.findings.push(finding);
 
   fastForwardHistoricalImport(
@@ -664,7 +605,8 @@ export function validateImportRow(
     { userId: opts.userId, userName: opts.userName }
   );
 
-  return { rowNumber, outcome: "imported", findingId: finding.id, reference: finding.reference, finding };
+  // An imported duplicate keeps a pointer to what it duplicates, for the record.
+  return { rowNumber, outcome: "imported", findingId: finding.id, reference: finding.reference, duplicateOfReference, finding };
 }
 
 /**

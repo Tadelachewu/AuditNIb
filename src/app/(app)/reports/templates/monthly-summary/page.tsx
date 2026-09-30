@@ -1,10 +1,11 @@
 import Link from "next/link";
+import { ALL_PERIODS_VALUE } from "@/lib/dashboardFilters";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 import { readDb } from "@/lib/db";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
 import { formatNumber, formatCurrency } from "@/lib/format";
-import { getMonthlySummaryReport } from "@/lib/reportTemplates";
+import { getMonthlySummaryReport, templateSourceNote } from "@/lib/reportTemplates";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Select, Label } from "@/components/ui/Field";
@@ -20,12 +21,17 @@ export default async function MonthlySummaryReportPage({
   if (!hasPermission(user.permissions, permissionKey("report-templates", "monthly-summary"))) redirect("/reports/templates");
 
   const db = await readDb();
+  // Shown when Settings limits this template to certain sources, so its
+  // counts are never mistaken for the bank-wide totals.
+  const sourceNote = templateSourceNote(db, "monthly-summary");
   const params = await searchParams;
   const openPeriod = db.reportingPeriods.find((p) => p.status === "OPEN");
   const periodId = (typeof params.periodId === "string" && params.periodId) || openPeriod?.id || db.reportingPeriods[0]?.id || "";
+  // "All periods" = every period combined (each case counted once).
+  const allPeriods = periodId === ALL_PERIODS_VALUE;
   const period = db.reportingPeriods.find((p) => p.id === periodId);
   const { rows, categories, totalRow } = periodId
-    ? getMonthlySummaryReport(db, periodId)
+    ? getMonthlySummaryReport(db, allPeriods ? undefined : periodId)
     : { rows: [], categories: [], totalRow: { totalOutstanding: 0, officialRectified: 0, totalAmount: 0, totalCases: 0 } };
 
   return (
@@ -45,6 +51,7 @@ export default async function MonthlySummaryReportPage({
             Total cases per category, amount involved, branch dispatch coverage, and the district&apos;s official score.
             Unrect./Rect./Rect. % reflect only the scored performance category (Other Case).
           </p>
+          {sourceNote && <p className="mt-1 text-xs font-medium text-amber-800">{sourceNote}</p>}
         </div>
         <div className="flex gap-2">
           <a href={`/api/report-templates/monthly-summary/export?periodId=${periodId}`}>
@@ -60,6 +67,7 @@ export default async function MonthlySummaryReportPage({
         <div>
           <Label htmlFor="periodId">Period</Label>
           <Select id="periodId" name="periodId" defaultValue={periodId}>
+            <option value={ALL_PERIODS_VALUE}>All periods</option>
             {db.reportingPeriods.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.code} {p.status === "LOCKED" ? "(locked)" : ""}
@@ -73,7 +81,7 @@ export default async function MonthlySummaryReportPage({
       <Card>
         <CardHeader
           title="Monthly Summary Report"
-          description={period ? `${period.code} - Total amount involved: ETB ${formatCurrency(totalRow.totalAmount)}` : "No reporting period"}
+          description={allPeriods || period ? `${allPeriods ? "All periods" : period!.code} - Total amount involved: ETB ${formatCurrency(totalRow.totalAmount)}` : "No reporting period"}
         />
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">

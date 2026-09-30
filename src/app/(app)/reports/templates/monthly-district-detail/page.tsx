@@ -5,7 +5,7 @@ import { getCurrentUser } from "@/lib/session";
 import { readDb } from "@/lib/db";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
 import { formatNumber } from "@/lib/format";
-import { getMonthlyDistrictSeries, type DistrictPeriodRow, type DistrictVariousRow } from "@/lib/reportTemplates";
+import { getMonthlyDistrictSeries, type DistrictPeriodRow, type DistrictVariousRow, templateSourceNote } from "@/lib/reportTemplates";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Select, Label } from "@/components/ui/Field";
@@ -32,6 +32,9 @@ export default async function MonthlyDistrictDetailPage({
   if (!hasPermission(user.permissions, permissionKey("report-templates", "monthly-district-detail"))) redirect("/reports/templates");
 
   const db = await readDb();
+  // Shown when Settings limits this template to certain sources, so its
+  // counts are never mistaken for the bank-wide totals.
+  const sourceNote = templateSourceNote(db, "monthly-district-detail");
   const params = await searchParams;
   const districtId = typeof params.districtId === "string" ? params.districtId : "";
   const activeDistricts = db.districts.filter((d) => d.status === "ACTIVE").sort((a, b) => a.name.localeCompare(b.name, "en-US"));
@@ -91,6 +94,7 @@ export default async function MonthlyDistrictDetailPage({
           <p className="mt-1 text-sm text-slate-600">
             District-by-district history: Other Cases per period, then one closing &quot;Various internal Audit report&quot; row per district, subtotal, and grand total.
           </p>
+          {sourceNote && <p className="mt-1 text-xs font-medium text-amber-800">{sourceNote}</p>}
         </div>
         <div className="flex gap-2">
           <a href={`/api/report-templates/monthly-district-detail/export?districtId=${districtId}`}>

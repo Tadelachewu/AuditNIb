@@ -49,6 +49,8 @@ const SLUG_TO_ACTION: Record<string, string> = Object.fromEntries(REPORT_TEMPLAT
 
 function buildCsv(slug: string, db: Database, params: URLSearchParams): string | null {
   const periodId = params.get("periodId") ?? "";
+  // "All periods" on a single-period template = no period narrowing.
+  const periodOrAll = periodId === ALL_PERIODS_VALUE ? undefined : periodId;
   const periodIdsList = params.getAll("periodIds");
   const periodIds = periodIdsList.length > 0 ? periodIdsList : undefined;
 
@@ -61,7 +63,7 @@ function buildCsv(slug: string, db: Database, params: URLSearchParams): string |
       );
     }
     case "category-detail-by-district": {
-      const { rows, categories, totalRow } = getCategoryDetailByDistrict(db, periodId);
+      const { rows, categories, totalRow } = getCategoryDetailByDistrict(db, periodOrAll);
       const header = [
         "SN",
         "Total No. of Branches",
@@ -95,7 +97,7 @@ function buildCsv(slug: string, db: Database, params: URLSearchParams): string |
       return toCsv(header, dataRows);
     }
     case "monthly-summary": {
-      const { rows, categories, totalRow } = getMonthlySummaryReport(db, periodId);
+      const { rows, categories, totalRow } = getMonthlySummaryReport(db, periodOrAll);
       const header = [
         "SN",
         "Total No. of Branches",

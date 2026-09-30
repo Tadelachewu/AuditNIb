@@ -4,7 +4,7 @@ import { getCurrentUser } from "@/lib/session";
 import { readDb } from "@/lib/db";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
 import { formatNumber } from "@/lib/format";
-import { getWeeklyExecutiveSummary, weekEndDate } from "@/lib/reportTemplates";
+import { getWeeklyExecutiveSummary, weekEndDate, templateSourceNote } from "@/lib/reportTemplates";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -39,6 +39,9 @@ export default async function WeeklyExecutiveSummaryPage({
   if (!hasPermission(user.permissions, permissionKey("report-templates", "weekly-executive-summary"))) redirect("/reports/templates");
 
   const db = await readDb();
+  // Shown when Settings limits this template to certain sources, so its
+  // counts are never mistaken for the bank-wide totals.
+  const sourceNote = templateSourceNote(db, "weekly-executive-summary");
   const params = await searchParams;
   const thisWeekDate = (typeof params.thisWeekDate === "string" && params.thisWeekDate) || weekEndDate(0);
   const lastWeekDate = (typeof params.lastWeekDate === "string" && params.lastWeekDate) || weekEndDate(1);
@@ -58,6 +61,7 @@ export default async function WeeklyExecutiveSummaryPage({
           </Link>
           <h1 className="mt-1 text-lg font-semibold text-slate-900">Weekly Executive Summary</h1>
           <p className="mt-1 text-sm text-slate-600">Every classified category x district, balance carried forward this week vs. last week.</p>
+          {sourceNote && <p className="mt-1 text-xs font-medium text-amber-800">{sourceNote}</p>}
         </div>
         <div className="flex gap-2">
           <a href={`/api/report-templates/weekly-executive-summary/export?thisWeekDate=${thisWeekDate}&lastWeekDate=${lastWeekDate}`}>

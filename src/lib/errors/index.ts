@@ -41,7 +41,6 @@ export const ERROR_CODES = {
   LOCKOUT_PREVENTED: { status: 409, message: "This change would leave nobody able to undo it." },
   IMPORT_FILE_INVALID: { status: 422, message: "The import file has problems. Nothing was imported." },
   IMPORT_DUPLICATES_FOUND: { status: 409, message: "Some rows already exist. Choose whether to import the rest or cancel." },
-  IMPORT_NOTHING_TO_IMPORT: { status: 409, message: "Every row in this file already exists - there is nothing new to import." },
   IMPORT_NOT_REVERSIBLE: { status: 409, message: "This import can't be changed in its current state." },
   FILE_STORAGE_UNAVAILABLE: { status: 503, message: "File storage is temporarily unavailable. Please try again later or contact support." },
   FILE_INTEGRITY_FAILED: { status: 500, message: "The stored file could not be verified. Please contact support." },

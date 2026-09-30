@@ -1,11 +1,12 @@
 import { Fragment } from "react";
+import { ALL_PERIODS_VALUE } from "@/lib/dashboardFilters";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 import { readDb } from "@/lib/db";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
 import { formatNumber } from "@/lib/format";
-import { getCategoryDetailByDistrict } from "@/lib/reportTemplates";
+import { getCategoryDetailByDistrict, templateSourceNote } from "@/lib/reportTemplates";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Select, Label } from "@/components/ui/Field";
@@ -21,12 +22,17 @@ export default async function CategoryDetailByDistrictPage({
   if (!hasPermission(user.permissions, permissionKey("report-templates", "category-detail-by-district"))) redirect("/reports/templates");
 
   const db = await readDb();
+  // Shown when Settings limits this template to certain sources, so its
+  // counts are never mistaken for the bank-wide totals.
+  const sourceNote = templateSourceNote(db, "category-detail-by-district");
   const params = await searchParams;
   const openPeriod = db.reportingPeriods.find((p) => p.status === "OPEN");
   const periodId = (typeof params.periodId === "string" && params.periodId) || openPeriod?.id || db.reportingPeriods[0]?.id || "";
+  // "All periods" = every period combined (each case counted once).
+  const allPeriods = periodId === ALL_PERIODS_VALUE;
   const period = db.reportingPeriods.find((p) => p.id === periodId);
   const { rows, categories, totalRow } = periodId
-    ? getCategoryDetailByDistrict(db, periodId)
+    ? getCategoryDetailByDistrict(db, allPeriods ? undefined : periodId)
     : { rows: [], categories: [], totalRow: { totalCases: 0, totalRectified: 0, totalOutstanding: 0, rectifiedPct: null } };
 
   return (
@@ -43,6 +49,7 @@ export default async function CategoryDetailByDistrictPage({
           </Link>
           <h1 className="mt-1 text-lg font-semibold text-slate-900">Category Detail by District</h1>
           <p className="mt-1 text-sm text-slate-600">Every district x classified-case category, Unrectified/Rectified.</p>
+          {sourceNote && <p className="mt-1 text-xs font-medium text-amber-800">{sourceNote}</p>}
         </div>
         <div className="flex gap-2">
           <a href={`/api/report-templates/category-detail-by-district/export?periodId=${periodId}`}>
@@ -58,6 +65,7 @@ export default async function CategoryDetailByDistrictPage({
         <div>
           <Label htmlFor="periodId">Period</Label>
           <Select id="periodId" name="periodId" defaultValue={periodId}>
+            <option value={ALL_PERIODS_VALUE}>All periods</option>
             {db.reportingPeriods.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.code} {p.status === "LOCKED" ? "(locked)" : ""}
@@ -69,7 +77,7 @@ export default async function CategoryDetailByDistrictPage({
       </form>
 
       <Card>
-        <CardHeader title="Category Detail by District" description={period ? period.code : "No reporting period"} />
+        <CardHeader title="Category Detail by District" description={allPeriods ? "All periods" : period ? period.code : "No reporting period"} />
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-600">

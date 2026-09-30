@@ -15,7 +15,8 @@
     "tunnel": "node scripts/run.mjs tunnel",
     "tunnel:cloudflare": "node scripts/run.mjs tunnel:cloudflare",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "reports:verify": "tsx --env-file=.env --env-file-if-exists=.env.local scripts/verify-report-templates.ts"
   },
   "dependencies": {
     "@emotion/cache": "^11.14.0",

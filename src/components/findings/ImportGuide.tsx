@@ -91,11 +91,11 @@ const TEST_CASES: { n: number; scenario: string; status: string; key: string; ou
   { n: 5, scenario: "Fully resolved, single case", status: "CLOSED", key: "—", outcome: "imported", detail: "" },
   {
     n: 6,
-    scenario: "Same branch/period/source/dept/category/date/area/type/currency/amount/cases as an earlier row",
+    scenario: "Every Settings → Similar Findings field equals an existing finding",
     status: "any",
-    key: "Only Title differs",
+    key: "e.g. only Title differs (if Title isn't one of the chosen fields)",
     outcome: "duplicate",
-    detail: "",
+    detail: "Shown for review - Import anyway or Cancel",
   },
   { n: 7, scenario: "Branch code doesn't exist", status: "any", key: "B999", outcome: "error", detail: 'Unknown branch code "B999"' },
   { n: 8, scenario: "Branch belongs to a different district than stated", status: "any", key: "D02 + B001 (B001 is under D01)", outcome: "error", detail: "Branch does not belong to district" },
@@ -369,26 +369,25 @@ export function ImportGuide() {
         <div className="flex flex-col gap-2">
           <h3 className="text-sm font-semibold text-slate-900">How duplicates are detected</h3>
           <p className="text-sm text-slate-600">
-            The importer uses <strong>its own fixed, exact-match rule</strong>, not the admin&apos;s &quot;similar findings&quot;
-            setting. A row is a duplicate when all of these are identical to an existing finding (or to an earlier row in the same
-            file): <strong>branch, reporting period, source, department, category, finding date, operation area, type of
-            irregularity, currency, amount and number of cases</strong>. Title, description and other text can differ freely.
+            The import uses the <strong>same rule as the Register Finding form</strong>, set by the administrator in{" "}
+            <strong>Settings → Similar Findings</strong>. A row is a possible duplicate when <strong>every</strong> field chosen there has a
+            value and is exactly equal to an existing finding (or an earlier row in the same file). Codes and list values are compared
+            after their letter case is normalised.
           </p>
           <ul className="list-disc space-y-1 pl-5 text-sm text-slate-600">
             <li>
               Duplicates are the <strong>final check</strong>: they&apos;re only looked for once every row has passed every other rule.
             </li>
             <li>
-              If any are found, <strong>nothing is imported yet</strong>. You see each duplicate with its evidence: the row, its title,
-              the existing finding it matches (with a link, or &quot;row N of this file&quot;) and the matching values. Then choose{" "}
-              <strong>Import without duplicates</strong> (the rest are imported, duplicates skipped and recorded) or{" "}
-              <strong>Cancel import</strong>.
+              If any are found, <strong>nothing is imported yet</strong>. You see each one with its evidence: the row, its title, the
+              existing finding it matches (with a link, or &quot;row N of this file&quot;) and the matching values. Then choose{" "}
+              <strong>Import anyway</strong> (every row is imported, duplicates included, each linked in the import history to the finding
+              it matched) or <strong>Cancel import</strong>.
             </li>
-            <li>For a Transferred row, the period compared is the one it moved <em>into</em>, so re-uploading the same file is safe.</li>
+            <li>For a Transferred row, the period compared is the one it moved <em>into</em>.</li>
             <li>
-              Why not the admin setting? Settings → Similar Findings only drives a &quot;possible duplicate&quot; hint on the
-              Register Finding form, which a person reviews. An import has no one reviewing each row, so it needs a strict rule
-              that can&apos;t skip a real, different finding by accident.
+              If no fields are chosen in Settings → Similar Findings, duplicates are <strong>not checked</strong>. A row with a blank value
+              in one of the chosen fields is never treated as a duplicate.
             </li>
           </ul>
         </div>

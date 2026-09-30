@@ -4,7 +4,7 @@ import { getCurrentUser } from "@/lib/session";
 import { readDb } from "@/lib/db";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
 import { formatNumber } from "@/lib/format";
-import { getDistrictRankingOtherCases } from "@/lib/reportTemplates";
+import { getDistrictRankingOtherCases, templateSourceNote } from "@/lib/reportTemplates";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { PrintButton } from "@/components/reports/PrintButton";
@@ -20,6 +20,9 @@ export default async function DistrictRankingOtherCasesPage({
   if (!hasPermission(user.permissions, permissionKey("report-templates", "district-ranking-other-cases"))) redirect("/reports/templates");
 
   const db = await readDb();
+  // Shown when Settings limits this template to certain sources, so its
+  // counts are never mistaken for the bank-wide totals.
+  const sourceNote = templateSourceNote(db, "district-ranking-other-cases");
   const params = await searchParams;
   const raw = params.periodIds;
   const selectedPeriodIds = raw === undefined ? [] : Array.isArray(raw) ? raw : [raw];
@@ -43,6 +46,7 @@ export default async function DistrictRankingOtherCasesPage({
           </Link>
           <h1 className="mt-1 text-lg font-semibold text-slate-900">District Ranking - Other Cases</h1>
           <p className="mt-1 text-sm text-slate-600">Cumulative district ranking on the official scored category.</p>
+          {sourceNote && <p className="mt-1 text-xs font-medium text-amber-800">{sourceNote}</p>}
         </div>
         <div className="flex gap-2">
           <a href={`/api/report-templates/district-ranking-other-cases/export?${exportQuery.toString()}`}>

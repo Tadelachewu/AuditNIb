@@ -51,7 +51,7 @@ function BatchRowsTable({ rows }: { rows: DisplayRow[] }) {
                 <Badge tone={OUTCOME_TONE[r.outcome]}>{r.outcome}</Badge>
               </td>
               <td className="px-3 py-1.5 text-slate-700">
-                {r.outcome === "imported" && r.reference}
+                {r.outcome === "imported" && (r.duplicateOfReference ? `${r.reference} (imported although it matches ${r.duplicateOfReference})` : r.reference)}
                 {r.outcome === "duplicate" && `Already exists as ${r.duplicateOfReference}`}
                 {r.outcome === "error" &&
                   (r.errors && r.errors.length > 1 ? (
@@ -115,16 +115,20 @@ export default function ImportFindingsPage() {
     setResult(batch);
     setDuplicates(null);
     notify.success(notice, {
-      description: `${batch.importedCount} finding(s) imported${batch.duplicateCount ? `, ${batch.duplicateCount} duplicate(s) skipped` : ""}.`,
+      description: `${batch.importedCount} finding(s) imported${
+        batch.rows.some((r) => r.outcome === "imported" && r.duplicateOfReference)
+          ? `, including ${batch.rows.filter((r) => r.outcome === "imported" && r.duplicateOfReference).length} possible duplicate(s)`
+          : ""
+      }.`,
     });
   }
 
-  async function reimport(batch: ImportBatch, skipDuplicates = false) {
+  async function reimport(batch: ImportBatch, importDuplicates = false) {
     setRowBusy(batch.id);
     setResult(null);
     setRejected(null);
     try {
-      const res = await apiSend<{ importBatch: ImportBatch }>(`/api/findings/import/${batch.id}/reimport`, "POST", { skipDuplicates });
+      const res = await apiSend<{ importBatch: ImportBatch }>(`/api/findings/import/${batch.id}/reimport`, "POST", { importDuplicates });
       importSucceeded(res.importBatch, notifications.import.reimported);
       await load();
     } catch (err) {
@@ -181,7 +185,7 @@ export default function ImportFindingsPage() {
     setFile(picked);
   }
 
-  async function handleImport(skipDuplicates = false) {
+  async function handleImport(importDuplicates = false) {
     if (!file) return;
     setUploading(true);
     setError(null);
@@ -190,7 +194,7 @@ export default function ImportFindingsPage() {
     try {
       const formData = new FormData();
       formData.append("file", file);
-      if (skipDuplicates) formData.append("duplicates", "skip");
+      if (importDuplicates) formData.append("duplicates", "import");
       const body = await apiUpload<{ importBatch: ImportBatch }>("/api/findings/import", formData);
       importSucceeded(body.importBatch);
       setFile(null);
@@ -238,7 +242,7 @@ export default function ImportFindingsPage() {
       <Card>
         <CardHeader
           title="2. Upload the completed file"
-          description="All-or-nothing: every row is checked first and every problem in every row is listed at once. If any row has an error, nothing is imported — fix them all and re-upload the whole file. Duplicates are the final check: you'll see the evidence and choose to import the rest or cancel."
+          description="All-or-nothing: every row is checked first and every problem in every row is listed at once. If any row has an error, nothing is imported — fix them all and re-upload the whole file. Duplicates (by the Settings → Similar Findings rule) are the final check: you'll see the evidence and choose to import anyway or cancel."
         />
         <div className="flex flex-col gap-3 p-4">
           <FileInput accept=".xlsx" onChange={(e) => handleFileChange(e.target.files?.[0] ?? null)} />
@@ -270,7 +274,7 @@ export default function ImportFindingsPage() {
             setDuplicates(null);
             notify.info(notifications.import.cancelled);
           }}
-          onImportRest={() => {
+          onImportAnyway={() => {
             const src = duplicates.source;
             if (src.kind === "upload") handleImport(true);
             else {

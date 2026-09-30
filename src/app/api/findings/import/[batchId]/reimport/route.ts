@@ -8,7 +8,7 @@ import { hasPermission } from "@/lib/permissions/registry";
 import { AuthorizationError, BusinessRuleError, NotFoundError } from "@/lib/errors";
 import { withApiHandler } from "@/lib/api/handler";
 
-const bodySchema = z.object({ skipDuplicates: z.boolean().optional() }).default({});
+const bodySchema = z.object({ importDuplicates: z.boolean().optional() }).default({});
 
 // Re-import a REVERSED batch from its stored original file (Import History →
 // Re-import). Same pipeline and checks as a fresh upload (runImport):
@@ -39,7 +39,7 @@ async function handlePOST(request: Request, { params }: { params: Promise<{ batc
       districtId: auth.session.districtId ?? null,
       branchId: auth.session.branchId ?? null,
     },
-    { skipDuplicates: Boolean(body.skipDuplicates), auditAction: "IMPORT_REIMPORT", reimportOf: batch.id }
+    { importDuplicates: Boolean(body.importDuplicates), auditAction: "IMPORT_REIMPORT", reimportOf: batch.id }
   );
   return NextResponse.json({ importBatch: newBatch }, { status: 201 });
 }

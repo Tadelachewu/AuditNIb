@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { requirePermission } from "@/lib/guard";
 import { readDb } from "@/lib/db";
 import { findingsInScope } from "@/lib/findings-scope";
-import { SIMILAR_FINDING_FIELDS, type Finding, type SimilarFindingField } from "@/types";
+import { SIMILAR_FINDING_FIELDS, type SimilarFindingField } from "@/types";
+import { SIMILAR_FIELD_ACCESSORS } from "@/lib/similarFindings";
 import { withApiHandler } from "@/lib/api/handler";
 
 // Every accessor returns a plain string so comparison against a URL query
@@ -11,35 +12,12 @@ import { withApiHandler } from "@/lib/api/handler";
 // `?? ""` (never actually compared as "" against "" in practice: the
 // caller-side "every configured field must have a value" check below
 // already rules out an empty in-progress value before any comparison runs).
-const FIELD_ACCESSORS: Record<SimilarFindingField, (f: Finding) => string> = {
-  districtId: (f) => f.districtId,
-  branchId: (f) => f.branchId,
-  sourceId: (f) => f.sourceId,
-  departmentId: (f) => f.departmentId,
-  categoryId: (f) => f.categoryId,
-  periodId: (f) => f.periodId,
-  findingDate: (f) => f.findingDate,
-  operationArea: (f) => f.operationArea,
-  irregularityType: (f) => f.irregularityType,
-  amount: (f) => String(f.amount),
-  currency: (f) => f.currency,
-  caseCount: (f) => String(f.caseCount),
-  riskLevel: (f) => f.riskLevel,
-  priority: (f) => f.priority,
-  title: (f) => f.title,
-  description: (f) => f.description,
-  recommendation: (f) => f.recommendation ?? "",
-  rootCause: (f) => f.rootCause ?? "",
-  evidenceNote: (f) => f.evidenceNote ?? "",
-};
 
 /**
  * Non-blocking duplicate-suggestion lookup for the Register Finding form -
  * "suggest the most likely existing registered finding... let the
- * registrar check" (as opposed to bulk import's dedupeKey() in
- * src/lib/import.ts, which hard-rejects an exact-match row; this is
- * deliberately a looser, softer match since it's a human prompt, not a
- * validation gate). Which fields count toward "similar" is entirely admin
+ * registrar check". The Excel import uses the same configured rule
+ * (src/lib/similarFindings.ts) for its duplicate check. Which fields count toward "similar" is entirely admin
  * config (Settings.similarFindingFields, edited at /admin/settings, see
  * SIMILAR_FINDING_FIELDS' own doc comment for the full candidate menu) -
  * every configured field must match exactly (AND, not OR), and every one
@@ -71,7 +49,7 @@ async function handleGET(request: Request) {
   }
 
   const matches = findingsInScope(db, auth.session)
-    .filter((f) => f.id !== excludeId && fields.every((field) => FIELD_ACCESSORS[field](f) === candidateValues[field]))
+    .filter((f) => f.id !== excludeId && fields.every((field) => SIMILAR_FIELD_ACCESSORS[field](f) === candidateValues[field]))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
     .slice(0, 5)
     .map((f) => ({ id: f.id, reference: f.reference, title: f.title, status: f.status, createdAt: f.createdAt }));

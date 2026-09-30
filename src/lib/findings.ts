@@ -742,35 +742,33 @@ function findingResidencyInPeriod(
   if (transfers.length === 0) {
     return finding.periodId === periodId ? { eligibleCases: finding.caseCount, eligibleAmount: finding.amount, exitTransfer: null } : null;
   }
-  if (transfers[0].fromPeriodId === periodId) {
-    // Only the portion that never transferred out belongs to the origin
-    // period - casesTransferred/amountTransferred (see transferFinding())
-    // is exactly what was still outstanding, and therefore carried
-    // forward, at that moment. Crediting the origin period the *full*
-    // caseCount/amount here (the previous behavior) would count a
-    // transferred case as "eligible but never rectified" against the
-    // period it left - i.e. a case transfer would drag down that period's
-    // performance for something that isn't a rectification failure there.
-    // Performance must never be moved by a transferred case, in either
-    // direction, in the period it left.
-    return {
-      eligibleCases: finding.caseCount - transfers[0].casesTransferred,
-      eligibleAmount: finding.amount - transfers[0].amountTransferred,
-      exitTransfer: transfers[0],
-    };
-  }
-  const hopIndex = transfers.findIndex((t) => t.toPeriodId === periodId);
-  if (hopIndex === -1) return null;
-  // Same reasoning for an intermediate hop (a finding transferred more than
-  // once): this period is only credited what arrived minus whatever moved
-  // on again via the *next* transfer, never the finding's full caseCount/amount.
-  const arrivedHop = transfers[hopIndex];
-  const nextTransfer = transfers[hopIndex + 1];
-  return {
-    eligibleCases: arrivedHop.casesTransferred - (nextTransfer?.casesTransferred ?? 0),
-    eligibleAmount: arrivedHop.amountTransferred - (nextTransfer?.amountTransferred ?? 0),
-    exitTransfer: nextTransfer ?? null,
-  };
+  // The finding's stays, in order: the origin (arrived with the full
+  // caseCount/amount), then one per transfer (arrived with what that hop
+  // carried). Each stay is credited what arrived minus what the NEXT
+  // transfer carried onward - only the portion that never moved on belongs
+  // there (a transferred case must never count as "eligible but never
+  // rectified" in the period it left, in either direction). A period can
+  // hold several stays when a finding comes back to a period it left
+  // (e.g. 2026-09 -> 2026-10 -> 2026-09); they are summed, so every case
+  // is counted in exactly one period and period totals add up to the
+  // finding's caseCount. exitTransfer is the transfer that ended this
+  // period's LAST stay (null = the finding is still here).
+  const stays = [
+    { periodId: transfers[0].fromPeriodId, cases: finding.caseCount, amount: finding.amount },
+    ...transfers.map((t) => ({ periodId: t.toPeriodId, cases: t.casesTransferred, amount: t.amountTransferred })),
+  ];
+  let eligibleCases = 0;
+  let eligibleAmount = 0;
+  let lastStay = -1;
+  stays.forEach((stay, i) => {
+    if (stay.periodId !== periodId) return;
+    const leaving = transfers[i];
+    eligibleCases += stay.cases - (leaving?.casesTransferred ?? 0);
+    eligibleAmount += stay.amount - (leaving?.amountTransferred ?? 0);
+    lastStay = i;
+  });
+  if (lastStay === -1) return null;
+  return { eligibleCases, eligibleAmount, exitTransfer: transfers[lastStay] ?? null };
 }
 
 /** Thin wrapper over findingResidencyInPeriod() for the one existing caller (computeEligibleCaseCounts) that only ever needed the case count. */

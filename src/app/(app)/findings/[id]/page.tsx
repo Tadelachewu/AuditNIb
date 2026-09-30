@@ -62,7 +62,8 @@ export default async function FindingDetailPage({ params }: { params: Promise<{ 
   const period = db.reportingPeriods.find((p) => p.id === finding.periodId);
 
   const otherOpenPeriods = db.reportingPeriods
-    .filter((p) => p.status === "OPEN" && p.id !== finding.periodId)
+    // Forward only (same rule as the transfer API).
+    .filter((p) => p.status === "OPEN" && p.id !== finding.periodId && (!period || p.startsAt > period.startsAt))
     .map((p) => ({ id: p.id, code: p.code }));
 
   const has = (action: string) => hasPermission(user.permissions, permissionKey("findings", action));

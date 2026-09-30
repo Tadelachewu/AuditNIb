@@ -65,8 +65,7 @@ Codes are stable: never rename one, because clients depend on them.
 | `PERIOD_LOCKED` | 409 | Reporting period locked |
 | `LOCKOUT_PREVENTED` | 409 | Change would leave nobody able to undo it |
 | `IMPORT_FILE_INVALID` | 422 | Import file has errors (`details.rows`) |
-| `IMPORT_DUPLICATES_FOUND` | 409 | Final import check: duplicates need a decision (`details.duplicates`) |
-| `IMPORT_NOTHING_TO_IMPORT` | 409 | Every row already exists |
+| `IMPORT_DUPLICATES_FOUND` | 409 | Final import check: possible duplicates (Settings → Similar Findings rule) need a decision: import anyway or cancel (`details.duplicates`) |
 | `IMPORT_NOT_REVERSIBLE` | 409 | Import in the wrong state for that action |
 | `EMAIL_DELIVERY_FAILED` | 502 | SMTP send failed |
 | `BAD_GATEWAY` | 502 | Upstream returned something invalid |

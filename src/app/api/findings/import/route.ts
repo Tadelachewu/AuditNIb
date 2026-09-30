@@ -29,8 +29,8 @@ async function handleGET() {
 // nothing validation, duplicates as the final decision, commit) lives in
 // runImport() (src/lib/importRun.ts), shared with Re-import.
 //
-// Form fields: file (.xlsx); duplicates=skip once the importer has seen
-// the IMPORT_DUPLICATES_FOUND evidence and chose to import the rest.
+// Form fields: file (.xlsx); duplicates=import once the importer has seen
+// the IMPORT_DUPLICATES_FOUND evidence and chose "Import anyway".
 async function handlePOST(request: Request) {
   const auth = await requirePermission("findings.import");
   if (!auth.ok) return auth.response;
@@ -60,7 +60,7 @@ async function handlePOST(request: Request) {
       districtId: auth.session.districtId ?? null,
       branchId: auth.session.branchId ?? null,
     },
-    { skipDuplicates: formData.get("duplicates") === "skip" }
+    { importDuplicates: formData.get("duplicates") === "import" }
   );
   return NextResponse.json({ importBatch: batch }, { status: 201 });
 }
