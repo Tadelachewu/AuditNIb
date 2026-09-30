@@ -38,8 +38,8 @@ export default async function MidMonthDistrictSnapshotPage({
     <div className="flex flex-col gap-5">
       <style>{`@media print { nav, header, .no-print { display: none !important; } main { padding: 0 !important; } }`}</style>
 
-      <div className="no-print flex flex-wrap items-start justify-between gap-2">
-        <div>
+      <div className="no-print flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 flex-1">
           <Link
             href="/reports/templates"
             className="inline-flex items-center rounded-md bg-brand-gold px-3 py-1.5 text-sm font-bold text-on-gold transition-colors hover:bg-brand-gold-dark"

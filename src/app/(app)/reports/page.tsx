@@ -56,8 +56,8 @@ export default async function ReportsPage({
     <div className="flex flex-col gap-5">
       <style>{`@media print { nav, header, .no-print { display: none !important; } main { padding: 0 !important; } }`}</style>
 
-      <div className="no-print flex flex-wrap items-start justify-between gap-2">
-        <div>
+      <div className="no-print flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 flex-1">
           <h1 className="text-lg font-semibold text-slate-900">Reports</h1>
           <p className="mt-1 text-sm text-slate-600">
             Findings, performance, category/risk breakdowns, and transfers - export as CSV or print to PDF.
