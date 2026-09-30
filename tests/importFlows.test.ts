@@ -33,6 +33,7 @@ function fixture(): Database {
     categories: [{ id: "c1", code: "CASH", name: "Cash", active: true }],
     reportingPeriods: [
       { id: "p9", code: "2026-09", year: 2026, month: 9, status: "OPEN", startsAt: "2026-08-31T21:00:00.000Z", endsAt: "2026-09-30T20:59:00.000Z" },
+      { id: "p10", code: "2026-10", year: 2026, month: 10, status: "OPEN", startsAt: "2026-09-30T21:00:00.000Z", endsAt: "2026-10-31T20:59:00.000Z" },
     ],
     settings: {
       currencies: ["ETB"],
@@ -190,28 +191,55 @@ describe("import: reverse regardless of later work, then re-import or delete", (
   });
 });
 
-describe("reopen a closed finding", () => {
-  it("resets to a fresh Sent to Branch Manager, removes closure/rectification credit, keeps history", async () => {
+describe("reopen = reverse the closure", () => {
+  it("a closed finding returns to its pre-closure status; rectification kept, closure removed, history kept", async () => {
     const { reopenFinding, canReopen } = await import("@/lib/findingReopen");
     await runImport(await workbook([row({ "Status (SENT_TO_BRANCH_MANAGER / TRANSFERRED / CLOSED)": "CLOSED" })]), "f.xlsx", actor, { importDuplicates: false });
     const f = db.findings[0];
-    expect(f.status).toBe("CLOSED");
-    expect(f.closedCases).toBe(2);
-    expect(db.findingClosures.filter((c) => c.findingId === f.id)).toHaveLength(1);
-    const transitionsBefore = db.findingTransitions.filter((t) => t.findingId === f.id).length;
+    expect(f).toMatchObject({ status: "CLOSED", closedCases: 2, rectifiedCases: 2 });
     expect(canReopen(f)).toBe(true);
+    const transitionsBefore = db.findingTransitions.filter((t) => t.findingId === f.id).length;
 
-    reopenFinding(db, f, { userId: "u1", userName: "HO" }, "closed by mistake");
+    const r = reopenFinding(db, f, { userId: "u1", userName: "HO" }, "closed by mistake");
 
-    expect(f).toMatchObject({ status: "SENT_TO_BRANCH_MANAGER", rectifiedCases: 0, rectifiedAmount: 0, districtVerifiedCases: 0, closedCases: 0, closedAmount: 0 });
+    expect(r).toEqual({ fromStatus: "CLOSED", toStatus: "RECTIFIED" });
+    expect(f).toMatchObject({ status: "RECTIFIED", closedCases: 0, closedAmount: 0, rectifiedCases: 2, districtVerifiedCases: 2 });
     expect(db.findingClosures.filter((c) => c.findingId === f.id)).toHaveLength(0);
-    expect(db.rectifications.filter((r) => r.findingId === f.id)).toHaveLength(0);
+    expect(db.rectifications.filter((x) => x.findingId === f.id).length).toBeGreaterThan(0);
     const transitions = db.findingTransitions.filter((t) => t.findingId === f.id);
-    expect(transitions.length).toBe(transitionsBefore + 1); // history kept, one REOPEN added
-    expect(transitions.some((t) => t.action === "REOPEN" && t.fromStatus === "CLOSED" && t.reason === "closed by mistake")).toBe(true);
-    const audit = db.auditLogs.find((l) => l.action === "REOPEN_RESET");
+    expect(transitions.length).toBe(transitionsBefore + 1);
+    expect(transitions.some((t) => t.action === "REOPEN" && t.fromStatus === "CLOSED" && t.toStatus === "RECTIFIED" && t.reason === "closed by mistake")).toBe(true);
+    const audit = db.auditLogs.find((l) => l.action === "REOPEN_CLOSURE_REVERSED");
     expect((audit?.oldValue as { closedCases: number; closures: unknown[] }).closedCases).toBe(2);
-    expect((audit?.oldValue as { closures: unknown[] }).closures).toHaveLength(1);
     expect(canReopen(f)).toBe(false);
+  });
+
+  it("a transferred finding with part closed can be reopened and stays Transferred", async () => {
+    const { reopenFinding, canReopen, periodsAffectedByReopen } = await import("@/lib/findingReopen");
+    await runImport(
+      await workbook([
+        row({
+          "Status (SENT_TO_BRANCH_MANAGER / TRANSFERRED / CLOSED)": "TRANSFERRED",
+          "Transferred To Period Code (required only if Status is TRANSFERRED)": "2026-10",
+          "Rectified Cases (optional - only for a TRANSFERRED row with some progress already made)": 1,
+          "Rectified Amount (optional - only for a TRANSFERRED row with some progress already made)": 2000,
+        }),
+      ]),
+      "t.xlsx",
+      actor,
+      { importDuplicates: false }
+    );
+    const f = db.findings[0];
+    expect(f).toMatchObject({ status: "TRANSFERRED", closedCases: 1, periodId: "p10" });
+    expect(canReopen(f)).toBe(true);
+    // The closure was credited to the origin period - it must be writable too.
+    expect(periodsAffectedByReopen(db, f).sort()).toEqual(["p10", "p9"]);
+
+    const r = reopenFinding(db, f, { userId: "u1", userName: "HO" }, "closure was wrong");
+
+    expect(r).toEqual({ fromStatus: "TRANSFERRED", toStatus: "TRANSFERRED" });
+    expect(f).toMatchObject({ status: "TRANSFERRED", closedCases: 0, closedAmount: 0, rectifiedCases: 1 });
+    expect(db.findingTransfers.filter((t) => t.findingId === f.id)).toHaveLength(1);
+    expect(db.auditLogs.some((l) => l.action === "REOPEN_CLOSURE_REVERSED" && l.reason === "closure was wrong")).toBe(true);
   });
 });

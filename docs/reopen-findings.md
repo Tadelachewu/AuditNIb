@@ -1,26 +1,27 @@
 # Reopening Closed Findings
 
-A **closed** or **partially closed** finding can be reset to a fresh **Sent to Branch Manager**, as if nothing had been rectified yet.
+**Reopen reverses a closure.** It works on a **closed** finding and on a **partially closed** one, including a **transferred** finding part of which was closed before it moved on.
 
-- **Where:** the finding's page → **Reopen** (next to Edit/Submit/Delete).
-- **Who:** roles with **Findings › Reopen Closed / Partially Closed Findings** (`findings.reopen`). The Administrator has it; grant it to other roles in Roles & Permissions. The finding must be in your organisational scope and its reporting period must not be locked.
+- **Where:** the finding's page → **Reopen**.
+- **Who:** roles with **Findings › Reopen Closed / Partially Closed Findings** (`findings.reopen`). The Administrator has it and can grant it to other roles.
+- **Conditions:** the finding is in your organisational scope, and **no period the closure was credited to is locked**. That means its current period, and for a transferred finding also the period it was closed in.
 - **Reason:** required (at least 5 characters), in a confirmation dialog **before** anything changes.
 
 ## What changes
 
 | | After reopening |
 |---|---|
-| Status | `SENT_TO_BRANCH_MANAGER` (recorded as a `REOPEN` step) |
-| Rectified / district-verified / closed cases and amounts | 0 |
-| Rectification and closure records | removed, so they no longer count in performance %, dashboards or reports |
-| Itemized cases | back to *Outstanding* |
-| Transfers | kept (movement history) |
+| Closure records | removed, so they **no longer count** in performance %, dashboards or reports, in whichever period they were credited |
+| Closed cases / amount | 0 |
+| Status | **reversed**. A **closed** finding returns to the status it had **just before it was closed**, taken from its own history (usually *Rectified* or *Partially Rectified*). A **partially closed** finding keeps its current status (e.g. *Transferred*) |
+| Rectifications and district verifications | **kept**. Only the closure is undone, so the closer can review it and close it again |
+| Transfers, itemized cases, comments, evidence | unchanged |
 
 ## What is kept
 
-- The **full workflow history** on the finding (every earlier step plus the new `REOPEN` step with its reason).
-- The **audit log** entry `REOPEN_RESET`, with the reason and a snapshot of the previous figures and every removed rectification / closure record.
+- The **full workflow history**, plus a *Reopen* step (closed → previous status) with the reason when the status changes.
+- The **audit log** entry `REOPEN_CLOSURE_REVERSED`, with the reason and a snapshot of every removed closure and the previous figures.
 
-The branch's rectifiers and the registrant get a **Reopened** notification (it can be switched on/off for email in Settings → Email Events).
+**Who is told:** the district's closers (they can close it again), the branch's rectifiers and the registrant get a **Reopened** notification. Its email can be switched on or off in Settings → Email Events.
 
-Code: `src/lib/findingReopen.ts`, `src/app/api/findings/[id]/reopen/route.ts`. Error code when not applicable: `FINDING_NOT_REOPENABLE`.
+Code: `src/lib/findingReopen.ts`, `src/app/api/findings/[id]/reopen/route.ts`. Error codes: `FINDING_NOT_REOPENABLE` (nothing closed), `PERIOD_LOCKED`.

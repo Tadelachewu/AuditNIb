@@ -209,7 +209,7 @@ export function FindingDetailClient({
   async function handleReopen() {
     const reason = await confirm({
       title: "Reopen this finding?",
-      message: `"${finding.reference}" goes back to Sent to Branch Manager as if nothing had been rectified: its rectified, verified and closed cases and amounts are reset to zero and the branch must rectify it again. The full history and audit trail are kept.`,
+      message: `The closure of "${finding.reference}" is reversed: its closed cases and amount go back to zero and ${finding.status === "CLOSED" ? "its status returns to what it was before it was closed" : "its current status stays"}. Rectifications and verifications are kept, so it can be reviewed and closed again. The full history and audit trail are kept.`,
       confirmLabel: "Reopen Finding",
       tone: "danger",
       needsReason: true,

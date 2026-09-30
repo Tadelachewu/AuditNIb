@@ -29,7 +29,7 @@ export const NOTIFICATION_EVENT_GROUPS = [
       { type: "RECTIFICATION_VERIFIED", label: "Rectification verified", hint: "The district verified a rectification; it is ready to close" },
       { type: "RECTIFICATION_REMINDER", label: "Rectification reminder", hint: "No rectification progress for the configured number of days" },
       { type: "CLOSED", label: "Closed", hint: "A finding was closed" },
-      { type: "REOPENED", label: "Reopened", hint: "A closed / partially closed finding was reset to Sent to Branch Manager" },
+      { type: "REOPENED", label: "Reopened", hint: "The closure of a closed / partially closed finding was reversed" },
     ],
   },
   {
