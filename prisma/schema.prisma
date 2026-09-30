@@ -85,11 +85,6 @@ enum TransferMethod {
   AUTOMATIC
 }
 
-enum ScoringAdjustmentTargetType {
-  DISTRICT
-  BRANCH
-}
-
 enum ImportOutcome {
   imported
   duplicate
@@ -219,7 +214,6 @@ model District {
   branches           Branch[]
   users              User[]
   findings           Finding[]
-  scoringAdjustments ScoringAdjustment[]
 
   @@map("districts")
 }
@@ -236,7 +230,6 @@ model Branch {
 
   users               User[]
   findings            Finding[]
-  scoringAdjustments  ScoringAdjustment[]
   branchCoverageNotes BranchCoverageNote[]
 
   @@map("branches")
@@ -334,32 +327,6 @@ model ScoringRule {
   @@map("scoring_rules")
 }
 
-model ScoringAdjustment {
-  id         String                       @id
-  targetType ScoringAdjustmentTargetType  @map("target_type")
-  targetId   String                       @map("target_id")
-  periodId   String                       @map("period_id")
-  period     ReportingPeriod              @relation(fields: [periodId], references: [id], onDelete: Restrict)
-  // targetId points at either a District or a Branch depending on
-  // targetType - a polymorphic reference (see PHASE1.md §"Polymorphic
-  // references"), so it's deliberately not a single FK to one table.
-  // districtId/branchId below are optional shadow FKs used only when
-  // targetType matches, purely so Postgres can still enforce referential
-  // integrity on whichever one actually applies - application code
-  // continues to read/write targetId exactly as before.
-  districtId String?   @map("district_id")
-  district   District? @relation(fields: [districtId], references: [id], onDelete: Restrict)
-  branchId   String?   @map("branch_id")
-  branch     Branch?   @relation(fields: [branchId], references: [id], onDelete: Restrict)
-  value      Float
-  reason     String
-  status     Status   @default(ACTIVE)
-  adjustedBy String   @map("adjusted_by")
-  createdAt  DateTime @map("created_at")
-
-  @@map("scoring_adjustments")
-}
-
 model ReportingPeriod {
   id                     String       @id
   year                   Int
@@ -384,7 +351,6 @@ model ReportingPeriod {
   updatedAt              DateTime     @map("updated_at")
 
   findings            Finding[]
-  scoringAdjustments  ScoringAdjustment[]
   branchCoverageNotes BranchCoverageNote[]
 
   @@map("reporting_periods")
@@ -592,6 +558,11 @@ model ImportBatch {
   // batches imported before originals were kept.
   storedFile       String?  @map("stored_file")
   createdAt        DateTime @map("created_at")
+  // Set when the batch was reversed (its findings removed; this row kept).
+  reversedAt       DateTime? @map("reversed_at")
+  reversedBy       String?   @map("reversed_by")
+  reversedByName   String?   @map("reversed_by_name")
+  reverseReason    String?   @map("reverse_reason")
 
   findings Finding[]
 

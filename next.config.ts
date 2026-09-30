@@ -11,6 +11,15 @@ import type { NextConfig } from "next";
 // follow-up work, not done here to avoid shipping a CSP that silently
 // breaks dark-mode-on-first-paint or React hydration.
 const isProd = process.env.NODE_ENV === "production";
+// Browser error reports go to the Sentry host only when a DSN is configured
+// (see docs/error-handling.md); otherwise connect-src stays 'self'.
+const sentryOrigin = (() => {
+  try {
+    return process.env.NEXT_PUBLIC_SENTRY_DSN ? new URL(process.env.NEXT_PUBLIC_SENTRY_DSN).origin : "";
+  } catch {
+    return "";
+  }
+})();
 const csp = [
   "default-src 'self'",
   // 'unsafe-eval' is Fast Refresh/HMR's requirement in `next dev` only -
@@ -24,7 +33,7 @@ const csp = [
   // data: for small embedded/generated images (e.g. exported report
   // assets); this app doesn't otherwise load images from third-party hosts.
   "img-src 'self' data:",
-  "connect-src 'self'",
+  `connect-src 'self'${sentryOrigin ? ` ${sentryOrigin}` : ""}`,
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",

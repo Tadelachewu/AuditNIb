@@ -9,7 +9,6 @@ import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { PrintButton } from "@/components/reports/PrintButton";
 import { PeriodCheckboxAccordion } from "@/components/reports/PeriodCheckboxAccordion";
-import { AdjustedBadge } from "@/components/ui/AdjustedBadge";
 
 export default async function DistrictRankingOtherCasesPage({
   searchParams,
@@ -99,7 +98,7 @@ export default async function DistrictRankingOtherCasesPage({
                   <td className="px-4 py-2 text-slate-700">{formatNumber(r.totalCases)}</td>
                   <td className="px-4 py-2 text-slate-700">{formatNumber(r.outstandingCases)}</td>
                   <td className="px-4 py-2 text-slate-700">{formatNumber(r.rectifiedCases)}</td>
-                  <td className="px-4 py-2 text-slate-700">{r.performance !== null ? <>{r.performance.toFixed(1)}%<AdjustedBadge adjustment={r.adjustment} /></> : "--"}</td>
+                  <td className="px-4 py-2 text-slate-700">{r.performance !== null ? <>{r.performance.toFixed(1)}%</> : "--"}</td>
                 </tr>
               ))}
               {rows.length > 0 && (

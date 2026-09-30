@@ -7,7 +7,8 @@ import { hasPermission, permissionKey } from "@/lib/permissions/registry";
 import { appendAuditLog } from "@/lib/audit";
 import { isRateLimited, recordAttempt } from "@/lib/rateLimit";
 import { ALLOWED_EVIDENCE_TYPES, MAX_EVIDENCE_BYTES, EVIDENCE_UPLOAD_LIMIT, evidenceContentMatchesType } from "@/lib/evidence";
-import { writeStoredFile, deleteStoredFile, newStoredName, FileStorageError } from "@/lib/fileStorage";
+import { writeStoredFile, deleteStoredFile, newStoredName } from "@/lib/fileStorage";
+import { withApiHandler } from "@/lib/api/handler";
 
 // icfms.txt: Branch Controller/Manager "upload optional evidence" for a
 // finding - gated by findings.evidence. This is the only way to attach a
@@ -16,7 +17,7 @@ import { writeStoredFile, deleteStoredFile, newStoredName, FileStorageError } fr
 // older comments stay listed/downloadable/removable. Validation rules:
 // EVIDENCE_VALIDATION_RULES.md. Uses Next.js's native request.formData()
 // rather than a new multipart-parsing dependency.
-export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+async function handlePOST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
   // The runtime's own request body parser rejects a formData() body over
@@ -95,13 +96,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   // Encrypted at rest in the dedicated storage folder (src/lib/fileStorage.ts).
   const storedFileName = newStoredName(extension);
-  try {
-    writeStoredFile("evidence", storedFileName, buffer);
-  } catch (err) {
-    console.error("[evidence] storing upload failed", err);
-    const message = err instanceof FileStorageError ? err.message : "Could not store the file - please try again.";
-    return NextResponse.json({ error: message }, { status: 500 });
-  }
+  // A storage failure is mapped centrally (src/lib/errors/normalize.ts): logged in
+  // full, the client only gets FILE_STORAGE_UNAVAILABLE / FILE_INTEGRITY_FAILED.
+  writeStoredFile("evidence", storedFileName, buffer);
   await recordAttempt(rateKey, EVIDENCE_UPLOAD_LIMIT);
 
   let updated;
@@ -143,7 +140,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 // Listing (unlike uploading) is available to anyone who can view the
 // finding at all - a reviewer needs to see evidence without necessarily
 // holding upload rights.
-export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+async function handleGET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requirePermission("findings.view");
   if (!auth.ok) return auth.response;
   const { id } = await params;
@@ -157,3 +154,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
   return NextResponse.json({ evidence: db.evidence.filter((e) => e.findingId === id) });
 }
+
+// Central error handling, request ID and access logging: src/lib/api/handler.ts
+export const POST = withApiHandler(handlePOST);
+export const GET = withApiHandler(handleGET);

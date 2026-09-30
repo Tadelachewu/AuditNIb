@@ -4,6 +4,7 @@ import { readDb, updateDb } from "@/lib/db";
 import { assertFindingInScope } from "@/lib/findings-scope";
 import { appendAuditLog } from "@/lib/audit";
 import { notifyFindingsPermissionHolders } from "@/lib/notifications";
+import { withApiHandler } from "@/lib/api/handler";
 
 // The District Controller's gate on a Branch Manager's recorded
 // rectification, before any of it is closable by anyone (including HO) -
@@ -16,7 +17,7 @@ import { notifyFindingsPermissionHolders } from "@/lib/notifications";
 // moment. The alternative to verifying is returning it for correction
 // instead - see return-rectification/route.ts, now gated by this same
 // findings.verify-rectification permission rather than findings.close.
-export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+async function handlePOST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requirePermission("findings.verify-rectification");
   if (!auth.ok) return auth.response;
   const { id } = await params;
@@ -66,3 +67,6 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
 
   return NextResponse.json({ finding: updated });
 }
+
+// Central error handling, request ID and access logging: src/lib/api/handler.ts
+export const POST = withApiHandler(handlePOST);

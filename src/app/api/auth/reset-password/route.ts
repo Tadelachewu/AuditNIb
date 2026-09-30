@@ -6,6 +6,8 @@ import { appendAuditLog } from "@/lib/audit";
 import { validatePasswordFull } from "@/lib/passwordValidation";
 import { prisma } from "@/lib/prismaClient";
 import { isRateLimited, recordAttempt } from "@/lib/rateLimit";
+import { withApiHandler } from "@/lib/api/handler";
+import { logger } from "@/lib/logger";
 
 const schema = z.object({
   token: z.string().min(1, "Reset token is required"),
@@ -14,7 +16,7 @@ const schema = z.object({
 
 const PER_TOKEN_RATE_LIMIT = { max: 10, windowMs: 15 * 60 * 1000 };
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
     return NextResponse.json(
@@ -74,7 +76,7 @@ export async function POST(request: Request) {
       }),
     ]);
   } catch (err) {
-    console.error("[reset-password] Failed to consume reset token:", err);
+    logger.error({ err, event: "password_reset.consume_failed" }, "Failed to consume reset token");
     return NextResponse.json({ error: "Failed to process request" }, { status: 500 });
   }
 
@@ -96,3 +98,6 @@ export async function POST(request: Request) {
 
   return NextResponse.json({ ok: true });
 }
+
+// Central error handling, request ID and access logging: src/lib/api/handler.ts
+export const POST = withApiHandler(handlePOST);

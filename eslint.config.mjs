@@ -13,6 +13,20 @@ const eslintConfig = defineConfig([
       "react-hooks/set-state-in-effect": "off",
     },
   },
+  {
+    // Notifications go through src/lib/notify only (catalog wording,
+    // central durations/position, de-duplication), so the toast library
+    // can be replaced in one place. See docs/notifications-ui.md.
+    ignores: ["src/lib/notify/**", "src/components/ui/AppToaster.tsx", "tests/**"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        { paths: [{ name: "sonner", message: "Use notify from \"@/lib/notify\" instead of importing sonner directly." }] },
+      ],
+    },
+  },
+  // Generated Prisma client and build output aren't hand-written code.
+  globalIgnores(["src/generated/**", ".next-verify/**", "coverage/**"]),
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:

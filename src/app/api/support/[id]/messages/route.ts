@@ -5,12 +5,13 @@ import { requireUser } from "@/lib/guard";
 import { hasPermission } from "@/lib/permissions/registry";
 import { readDb, updateDb } from "@/lib/db";
 import { notifyUsers, usersWithSupportRespondPermission } from "@/lib/notifications";
+import { withApiHandler } from "@/lib/api/handler";
 
 const messageSchema = z.object({
   body: z.string().trim().min(1, "Message cannot be empty"),
 });
 
-export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+async function handlePOST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireUser();
   if (!auth.ok) return auth.response;
   const { id } = await params;
@@ -81,3 +82,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   return NextResponse.json({ message: created }, { status: 201 });
 }
+
+// Central error handling, request ID and access logging: src/lib/api/handler.ts
+export const POST = withApiHandler(handlePOST);

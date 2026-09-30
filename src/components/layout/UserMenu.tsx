@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { ChevronDown, KeyRound, LogOut, UserCircle } from "lucide-react";
 import { apiSend } from "@/lib/api-client";
+import { notify, notifications } from "@/lib/notify";
 
 /** Fired instead of navigating when "Change Password" is picked while already on /profile. */
 export const OPEN_CHANGE_PASSWORD_EVENT = "open-change-password";
@@ -53,8 +54,11 @@ export function UserMenu({ name, roleName }: { name: string; roleName?: string }
     setSigningOut(true);
     try {
       await apiSend("/api/auth/logout", "POST");
+      notify.success(notifications.auth.logoutSuccess);
       router.push("/login");
       router.refresh();
+    } catch (err) {
+      notify.fromError(err, notifications.auth.logoutFailed);
     } finally {
       setSigningOut(false);
     }

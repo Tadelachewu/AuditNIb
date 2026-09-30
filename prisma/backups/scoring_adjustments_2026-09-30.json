@@ -1,0 +1,28 @@
+[
+  {
+    "id": "262a879f-8625-4f20-aaa5-fdffb6a13a25",
+    "target_type": "BRANCH",
+    "target_id": "dd0881e0-d2e3-4cea-9e35-a0de0918bb6d",
+    "period_id": "period-1",
+    "district_id": null,
+    "branch_id": "dd0881e0-d2e3-4cea-9e35-a0de0918bb6d",
+    "value": 80,
+    "reason": "adjusted",
+    "adjusted_by": "user-admin",
+    "created_at": "2026-09-25T22:00:17.517Z",
+    "status": "ACTIVE"
+  },
+  {
+    "id": "95b5f070-b69f-4da5-ab4b-859325d4ba81",
+    "target_type": "BRANCH",
+    "target_id": "branch-1",
+    "period_id": "period-1",
+    "district_id": null,
+    "branch_id": "branch-1",
+    "value": 85,
+    "reason": "chenge bole %",
+    "adjusted_by": "user-admin",
+    "created_at": "2026-09-29T07:39:54.533Z",
+    "status": "ACTIVE"
+  }
+]

@@ -163,3 +163,16 @@ export function isDepartmentExactScopeForUser(
   if (userOrgScope === "DISTRICT") return department.orgScope === "DISTRICT" && department.districtId === target.districtId;
   return department.orgScope === "BANK";
 }
+
+/**
+ * A deactivated district/branch can't receive anything new - no new user
+ * assignment, no new finding. Records already there stay as they are.
+ * Returns an error message, or null when both are active (or unset).
+ */
+export function inactiveOrgUnitError(db: Database, districtId: string | null | undefined, branchId: string | null | undefined): string | null {
+  const district = districtId ? db.districts.find((d) => d.id === districtId) : undefined;
+  if (district && district.status !== "ACTIVE") return `District "${district.name}" is deactivated.`;
+  const branch = branchId ? db.branches.find((b) => b.id === branchId) : undefined;
+  if (branch && branch.status !== "ACTIVE") return `Branch "${branch.name}" is deactivated.`;
+  return null;
+}

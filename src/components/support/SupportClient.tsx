@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Star } from "lucide-react";
-import { apiGet, apiSend, ApiError } from "@/lib/api-client";
+import { apiGet, apiSend, errorMessage } from "@/lib/api-client";
 import { formatDateTime } from "@/lib/format";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -50,7 +50,7 @@ export function SupportClient() {
       const data = await apiGet<{ threads: SupportThread[] }>("/api/support");
       setThreads(data.threads);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to load threads");
+      setError(errorMessage(err, "Failed to load threads"));
     }
   }, []);
 
@@ -61,7 +61,7 @@ export function SupportClient() {
       setMessages(data.messages);
       setThreads((prev) => (prev ? prev.map((t) => (t.id === id ? data.thread : t)) : prev));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to load conversation");
+      setError(errorMessage(err, "Failed to load conversation"));
     }
   }, []);
 
@@ -95,7 +95,7 @@ export function SupportClient() {
       await loadThreads();
       setSelectedId(data.thread.id);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to send message");
+      setError(errorMessage(err, "Failed to send message"));
     } finally {
       setSendingNew(false);
     }
@@ -111,7 +111,7 @@ export function SupportClient() {
       setReplyBody("");
       await Promise.all([loadThread(selectedId), loadThreads()]);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to send message");
+      setError(errorMessage(err, "Failed to send message"));
     } finally {
       setSendingReply(false);
     }
@@ -126,7 +126,7 @@ export function SupportClient() {
       setRating(stars);
       await Promise.all([loadThread(selectedId), loadThreads()]);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to save rating");
+      setError(errorMessage(err, "Failed to save rating"));
     } finally {
       setRatingSaving(false);
     }

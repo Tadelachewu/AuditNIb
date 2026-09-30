@@ -4,10 +4,11 @@ import { z } from "zod";
 import { requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { notifyUsers, usersWithSupportRespondPermission } from "@/lib/notifications";
+import { withApiHandler } from "@/lib/api/handler";
 
 // support.create is the requester side of Support - see registry.ts's own
 // doc comment on the "support" page for the full three-action split.
-export async function GET() {
+async function handleGET() {
   const auth = await requirePermission("support.create");
   if (!auth.ok) return auth.response;
 
@@ -23,7 +24,7 @@ const createSchema = z.object({
   body: z.string().trim().min(1, "Message cannot be empty"),
 });
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   const auth = await requirePermission("support.create");
   if (!auth.ok) return auth.response;
 
@@ -74,3 +75,7 @@ export async function POST(request: Request) {
 
   return NextResponse.json(created, { status: 201 });
 }
+
+// Central error handling, request ID and access logging: src/lib/api/handler.ts
+export const GET = withApiHandler(handleGET);
+export const POST = withApiHandler(handlePOST);

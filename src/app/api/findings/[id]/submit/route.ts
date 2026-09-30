@@ -4,10 +4,11 @@ import { readDb, updateDb } from "@/lib/db";
 import { assertFindingInScope } from "@/lib/findings-scope";
 import { submitFinding, assertPeriodWritable, assertPeriodOpenForSubmission } from "@/lib/findings";
 import { notifyFindingsPermissionHolders, notifyUsers } from "@/lib/notifications";
+import { withApiHandler } from "@/lib/api/handler";
 
 const SUBMITTABLE_STATUSES = ["DRAFT", "RETURNED"];
 
-export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+async function handlePOST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requirePermission("findings.submit");
   if (!auth.ok) return auth.response;
   const { id } = await params;
@@ -30,7 +31,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
   }
 
   const periodError = assertPeriodWritable(db, existing.periodId);
-  if (periodError) return NextResponse.json({ error: periodError }, { status: 409 });
+  if (periodError) return NextResponse.json({ error: periodError, code: "PERIOD_LOCKED" }, { status: 409 });
 
   const windowError = assertPeriodOpenForSubmission(db, existing.periodId);
   if (windowError) return NextResponse.json({ error: windowError }, { status: 409 });
@@ -72,3 +73,6 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
 
   return NextResponse.json({ finding: updated });
 }
+
+// Central error handling, request ID and access logging: src/lib/api/handler.ts
+export const POST = withApiHandler(handlePOST);

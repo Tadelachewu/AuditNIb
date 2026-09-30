@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { MRT_ColumnDef } from "material-react-table";
-import { apiGet, apiSend, ApiError } from "@/lib/api-client";
+import { apiGet, apiSend, errorMessage } from "@/lib/api-client";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { StickyActions } from "@/components/ui/StickyActions";
@@ -16,6 +16,7 @@ import { ImportCsvDialog } from "@/components/ui/ImportCsvDialog";
 import { usePermissions } from "@/lib/permissions/PermissionsContext";
 import { hasPermission } from "@/lib/permissions/registry";
 import type { District } from "@/types";
+import { notify, notifications } from "@/lib/notify";
 
 type DistrictRow = District & { controllerNames: string[]; directorNames: string[] };
 
@@ -62,7 +63,7 @@ export default function DistrictsPage() {
       close();
       await load();
     } catch (err) {
-      setFormError(err instanceof ApiError ? err.message : "Failed to create district");
+      setFormError(errorMessage(err, "Failed to create district"));
     } finally {
       setSubmitting(false);
     }
@@ -82,7 +83,7 @@ export default function DistrictsPage() {
       setEditingId(null);
       await load();
     } catch (err) {
-      setEditError(err instanceof ApiError ? err.message : "Failed to save changes");
+      setEditError(errorMessage(err, "Failed to save changes"));
     } finally {
       setRowBusy(null);
     }
@@ -99,9 +100,10 @@ export default function DistrictsPage() {
     setRowBusy(d.id);
     try {
       await apiSend(`/api/admin/districts/${d.id}`, "DELETE");
+      notify.success(notifications.district.deleted);
       await load();
     } catch (err) {
-      alert(err instanceof ApiError ? err.message : "Failed to delete district");
+      notify.fromError(err, notifications.district.deleteFailed);
     } finally {
       setRowBusy(null);
     }
@@ -120,9 +122,10 @@ export default function DistrictsPage() {
     setRowBusy(d.id);
     try {
       await apiSend(`/api/admin/districts/${d.id}`, "PATCH", { status: d.status === "ACTIVE" ? "INACTIVE" : "ACTIVE" });
+      notify.success(d.status === "ACTIVE" ? notifications.district.deactivated : notifications.district.activated);
       await load();
     } catch (err) {
-      alert(err instanceof ApiError ? err.message : "Failed to update district");
+      notify.fromError(err, notifications.district.statusFailed);
     } finally {
       setRowBusy(null);
     }

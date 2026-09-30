@@ -41,8 +41,13 @@ export function notifyUsers(db: Database, recipientUserIds: string[], opts: Noti
   const adminIds = adminOnlyGetsSupport
     ? new Set(db.users.filter((u) => u.role === ADMIN_ROLE_CODE).map((u) => u.id))
     : new Set<string>();
+  // Deactivated users get nothing - no bell entry, no email. The
+  // permission-based lookups below already skip them; this also covers
+  // recipients named directly (registrant, comment author, support thread
+  // owner, picked Bank-Wide approvers).
+  const activeIds = new Set(db.users.filter((u) => u.status === "ACTIVE").map((u) => u.id));
   for (const recipientUserId of new Set(recipientUserIds)) {
-    if (adminIds.has(recipientUserId)) continue;
+    if (adminIds.has(recipientUserId) || !activeIds.has(recipientUserId)) continue;
     const notification = {
       id: uuid(),
       recipientUserId,

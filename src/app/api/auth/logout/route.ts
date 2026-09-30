@@ -2,8 +2,9 @@ import { NextResponse } from "next/server";
 import { readDb, updateDb } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { appendAuditLog } from "@/lib/audit";
+import { withApiHandler } from "@/lib/api/handler";
 
-export async function POST() {
+async function handlePOST() {
   const session = await getSession();
 
   if (session.isLoggedIn && session.userId) {
@@ -25,3 +26,6 @@ export async function POST() {
   session.destroy();
   return NextResponse.json({ ok: true });
 }
+
+// Central error handling, request ID and access logging: src/lib/api/handler.ts
+export const POST = withApiHandler(handlePOST);

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { apiSend, ApiError } from "@/lib/api-client";
+import { apiSend, errorMessage } from "@/lib/api-client";
 import { Button } from "@/components/ui/Button";
 import { Input, Label } from "@/components/ui/Field";
 import { validatePasswordStrength } from "@/lib/passwordValidation";
@@ -46,7 +46,7 @@ export function ResetPasswordClient({ token: token }: { token: string | null }) 
       await apiSend("/api/auth/reset-password", "POST", { token, newPassword });
       setDone(true);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Something went wrong. Please try again.");
+      setError(errorMessage(err, "Something went wrong. Please try again."));
     } finally {
       setLoading(false);
     }

@@ -7,6 +7,7 @@ import { hashPassword, verifyPassword } from "@/lib/auth";
 import { appendAuditLog } from "@/lib/audit";
 import { validatePasswordFull } from "@/lib/passwordValidation";
 import { checkLockout, recordFailureForLockout, clearLockout, isRateLimited, recordAttempt, clearRateLimit } from "@/lib/rateLimit";
+import { withApiHandler } from "@/lib/api/handler";
 
 const schema = z.object({
   currentPassword: z.string().min(1, "Current password is required"),
@@ -26,7 +27,7 @@ const RATE_LIMIT = { max: 5, windowMs: 15 * 60 * 1000 };
 // just proof you know the current one. This is what clears
 // mustChangePassword (see User.mustChangePassword's doc comment), whether
 // that flag came from initial account creation or an admin's reset.
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   const auth = await requireUser();
   if (!auth.ok) return auth.response;
 
@@ -130,3 +131,6 @@ export async function POST(request: Request) {
 
   return NextResponse.json({ ok: true });
 }
+
+// Central error handling, request ID and access logging: src/lib/api/handler.ts
+export const POST = withApiHandler(handlePOST);

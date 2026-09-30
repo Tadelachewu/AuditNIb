@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { canReopen } from "@/lib/findingReopen";
 import { getCurrentUser } from "@/lib/session";
 import { readDb } from "@/lib/db";
 import { assertFindingInScope } from "@/lib/findings-scope";
@@ -142,9 +143,9 @@ export default async function FindingDetailPage({ params }: { params: Promise<{ 
       irregularityTypes={db.settings.irregularityTypes}
       requiredFields={db.settings.requiredFindingFields}
       allowOther={db.settings.allowOtherValueFields}
-      editSources={db.sources.filter((s) => s.active)}
-      editDepartments={db.departments.filter((d) => d.active)}
-      editCategories={db.categories.filter((c) => c.active)}
+      editSources={db.sources.filter((s) => s.active || s.id === finding.sourceId)}
+      editDepartments={db.departments.filter((d) => d.active || d.id === finding.departmentId)}
+      editCategories={db.categories.filter((c) => c.active || c.id === finding.categoryId)}
       // Same OPEN-or-drafts-allowed-while-locked set as the Register
       // Finding form (see findings/new/page.tsx) - otherwise a DRAFT
       // finding already sitting in a locked-but-draftable period wouldn't
@@ -190,6 +191,9 @@ export default async function FindingDetailPage({ params }: { params: Promise<{ 
         // reviewer housekeeping action on a terminal outcome, not the
         // registrant cleaning up their own work.
         canDeleteRejected: has("delete-rejected") && finding.status === "REJECTED",
+        // Closed / partially closed -> back to a fresh Sent to Branch Manager
+        // (history kept) - src/lib/findingReopen.ts.
+        canReopen: has("reopen") && canReopen(finding),
         canSubmit: has("submit") && finding.createdBy === user.userId && ["DRAFT", "RETURNED"].includes(finding.status),
         canDistrictReview: has("district-review") && finding.status === "DISTRICT_REVIEW",
         // At each review stage (District/HO/Bank), the "Return" option is

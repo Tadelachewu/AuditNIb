@@ -23,7 +23,7 @@
 // =============================================================================
 
 import { useEffect, useState } from "react";
-import { apiGet, apiSend, ApiError } from "@/lib/api-client";
+import { apiGet, apiSend, ApiError, errorMessage } from "@/lib/api-client";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input, Label } from "@/components/ui/Field";
@@ -49,7 +49,6 @@ const COLLECTION_LABELS: Record<string, string> = {
   findingClosures: "Closure records",
   findingCases: "Itemized cases",
   importBatches: "Import batches",
-  scoringAdjustments: "Scoring adjustments",
   branchCoverageNotes: "Uncovered-branch notes",
   evidence: "Evidence files",
   comments: "Comments",
@@ -98,7 +97,7 @@ export default function DevResetPage() {
       setConfirmText("");
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Reset failed");
+      setError(errorMessage(err, "Reset failed"));
     } finally {
       setResetting(false);
     }

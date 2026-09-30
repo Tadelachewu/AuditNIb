@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
+import { lockoutError } from "@/lib/permissions/lockout";
 import { z } from "zod";
 import { requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { appendAuditLog } from "@/lib/audit";
 import { isValidPermissionKey, permissionKey } from "@/lib/permissions/registry";
+import { withApiHandler } from "@/lib/api/handler";
 
 const ROLES_MANAGE_KEY = permissionKey("roles", "manage");
 
@@ -21,7 +23,7 @@ const updateSchema = z.object({
 // against it. Changing what a role *means* structurally is a delete-and-
 // recreate, not an edit; only its name/description/permissions/status can
 // change in place.
-export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
+async function handlePATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requirePermission("roles.manage");
   if (!auth.ok) return auth.response;
   const { id } = await params;
@@ -63,6 +65,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
   }
 
+  // Any role (not just Administrator): refuse a deactivation or permission
+  // removal that leaves nobody active able to undo it.
+  if (input.status !== undefined || input.permissions !== undefined) {
+    const lockout = lockoutError(db, {
+      roles: db.roles.map((r) => (r.id === existing.id ? { ...r, status: input.status ?? r.status, permissions: input.permissions ?? r.permissions } : r)),
+    });
+    if (lockout) return NextResponse.json({ error: lockout, code: "LOCKOUT_PREVENTED" }, { status: 409 });
+  }
+
   if (existing.orgScope !== "BRANCH" && input.branchSingleton) {
     return NextResponse.json({ error: "branchSingleton only applies to branch-scoped roles" }, { status: 400 });
   }
@@ -83,6 +94,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (input.branchSingleton !== undefined) r.branchSingleton = input.branchSingleton;
     if (input.status !== undefined) r.status = input.status;
     r.updatedAt = new Date().toISOString();
+    // Deactivating a role signs out everyone holding it right away (their
+    // session cookie still carries the role's permissions until then);
+    // login already refuses a deactivated role.
+    if (input.status === "INACTIVE" && existing.status === "ACTIVE") {
+      for (const u of current.users) if (u.role === r.code) u.sessionVersion = (u.sessionVersion ?? 1) + 1;
+    }
 
     appendAuditLog(current, {
       userId: auth.session.userId!,
@@ -111,7 +128,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 // ADMIN lockout guard above all assume they exist) and can never be
 // deleted, only deactivated. Also blocked with 409 if any user - active or
 // not - still references this role's code, so User.role can never dangle.
-export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+async function handleDELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requirePermission("roles.manage");
   if (!auth.ok) return auth.response;
   const { id } = await params;
@@ -146,3 +163,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
 
   return NextResponse.json({ ok: true });
 }
+
+// Central error handling, request ID and access logging: src/lib/api/handler.ts
+export const PATCH = withApiHandler(handlePATCH);
+export const DELETE = withApiHandler(handleDELETE);

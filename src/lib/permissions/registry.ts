@@ -38,6 +38,8 @@ export type PermissionAction =
   | "delete-evidence"
   | "comment"
   | "import"
+  | "reverse-import"
+  | "reopen"
   | "uncovered-branches"
   | "category-detail-by-district"
   | "monthly-summary"
@@ -129,6 +131,9 @@ export const PAGE_REGISTRY: PageDefinition[] = [
       { action: "district-return-rectification", label: "District: Return Rectification for Correction" },
       { action: "ho-return-rectification", label: "HO: Return Rectification for Correction (after District verification)" },
       { action: "close", label: "Close (Verify)" },
+      // Undo a closure: a closed / partially closed finding goes back to a
+      // fresh Sent to Branch Manager (history kept). See src/lib/findingReopen.ts.
+      { action: "reopen", label: "Reopen Closed / Partially Closed Findings" },
       { action: "transfer", label: "Transfer to Next Period" },
       { action: "evidence", label: "Upload Evidence" },
       // Removing *anyone's* evidence/attachment (housekeeping - a wrong or
@@ -138,6 +143,9 @@ export const PAGE_REGISTRY: PageDefinition[] = [
       { action: "delete-evidence", label: "Delete Any Evidence" },
       { action: "comment", label: "Comment" },
       { action: "import", label: "Bulk Import (Excel)" },
+      // Undo a whole import batch (removes the findings it created), only
+      // while none of them has been worked on since. See src/lib/importReverse.ts.
+      { action: "reverse-import", label: "Reverse an Import" },
     ],
   },
   // Its own dedicated "view" label rather than the shared V constant - once
@@ -194,12 +202,6 @@ export const PAGE_REGISTRY: PageDefinition[] = [
     // src/app/api/admin/scoring-rules/[id]/route.ts, not just here.
     actions: [V, C, E, D, { action: "activate", label: "Activate / Deactivate" }],
   },
-  // Activate/deactivate, never delete or edit - lets an adjustment stop
-  // overriding computePerformance() (src/lib/findings.ts) without erasing
-  // the permanent record itself (adjustments can never be deleted - see
-  // PHASE3.md). See ScoringAdjustment.status's own doc comment in
-  // src/types/index.ts.
-  { code: "scoring-adjustments", label: "Scoring Adjustments", actions: [V, C, T] },
   // Delete only ever applies to a period nothing references yet (no
   // findings, scoring adjustments, rectifications, closures, or transfers
   // in or out of it - enforced in

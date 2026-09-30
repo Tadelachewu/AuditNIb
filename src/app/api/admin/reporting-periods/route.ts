@@ -5,8 +5,9 @@ import { requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { appendAuditLog } from "@/lib/audit";
 import { outstandingTransferPreview } from "@/lib/findings";
+import { withApiHandler } from "@/lib/api/handler";
 
-export async function GET() {
+async function handleGET() {
   const auth = await requirePermission("reporting-periods.view");
   if (!auth.ok) return auth.response;
   const db = await readDb();
@@ -56,7 +57,7 @@ const createSchema = z
     path: ["submissionEndsAt"],
   });
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   const auth = await requirePermission("reporting-periods.create");
   if (!auth.ok) return auth.response;
 
@@ -117,3 +118,7 @@ export async function POST(request: Request) {
 
   return NextResponse.json({ reportingPeriod: period }, { status: 201 });
 }
+
+// Central error handling, request ID and access logging: src/lib/api/handler.ts
+export const GET = withApiHandler(handleGET);
+export const POST = withApiHandler(handlePOST);

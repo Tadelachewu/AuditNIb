@@ -11,6 +11,7 @@ import {
 } from "@/lib/findings";
 import { usersWithFindingsPermission, notifyUsers } from "@/lib/notifications";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
+import { withApiHandler } from "@/lib/api/handler";
 
 // Deliberately excludes SENT_TO_BRANCH_MANAGER - "return for correction"
 // only ever makes sense once the Branch Manager has actually recorded
@@ -52,7 +53,7 @@ const returnSchema = z.object({
 // oversight job regardless of how the original finding was approved, and
 // (per RETURNABLE_STATUSES above) there's no earlier "nothing rectified
 // yet" stage left for a bank-scope distinction to matter at.
-export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+async function handlePOST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requirePermission(
     permissionKey("findings", "return-rectification"),
     permissionKey("findings", "district-return-rectification"),
@@ -137,7 +138,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   const periodError = assertPeriodWritable(db, existing.periodId);
-  if (periodError) return NextResponse.json({ error: periodError }, { status: 409 });
+  if (periodError) return NextResponse.json({ error: periodError, code: "PERIOD_LOCKED" }, { status: 409 });
 
   const updated = await updateDb((current) => {
     const f = current.findings.find((x) => x.id === id)!;
@@ -187,3 +188,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   return NextResponse.json({ finding: updated });
 }
+
+// Central error handling, request ID and access logging: src/lib/api/handler.ts
+export const POST = withApiHandler(handlePOST);

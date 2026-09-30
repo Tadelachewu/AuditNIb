@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/guard";
 import { updateDb } from "@/lib/db";
+import { withApiHandler } from "@/lib/api/handler";
 
-export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+async function handlePOST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireUser();
   if (!auth.ok) return auth.response;
   const { id } = await params;
@@ -16,3 +17,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!updated) return NextResponse.json({ error: "Notification not found" }, { status: 404 });
   return NextResponse.json({ notification: updated });
 }
+
+// Central error handling, request ID and access logging: src/lib/api/handler.ts
+export const POST = withApiHandler(handlePOST);

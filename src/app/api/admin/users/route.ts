@@ -5,10 +5,11 @@ import { requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { hashPassword } from "@/lib/auth";
 import { validatePasswordFull } from "@/lib/passwordValidation";
-import { resolveOrgAssignment, isDepartmentExactScopeForUser } from "@/lib/org";
+import { resolveOrgAssignment, isDepartmentExactScopeForUser, inactiveOrgUnitError } from "@/lib/org";
 import { appendAuditLog } from "@/lib/audit";
 import { toSafeUser } from "@/lib/sanitize";
 import { paginate, parsePage } from "@/lib/pagination";
+import { withApiHandler } from "@/lib/api/handler";
 
 // A real bank deployment can have hundreds of users (several per branch,
 // across every branch bank-wide) - paginated the same way Branches/Audit
@@ -19,7 +20,7 @@ import { paginate, parsePage } from "@/lib/pagination";
 // assignment, where "every active bank-wide user" is a genuinely small,
 // bounded set (ADMIN/HO Controller/Executive holders) that needs to be
 // fully visible to choose from, not paged.
-export async function GET(request: Request) {
+async function handleGET(request: Request) {
   const auth = await requirePermission("users.view");
   if (!auth.ok) return auth.response;
 
@@ -70,7 +71,7 @@ const createUserSchema = z.object({
   departmentId: z.string().nullable().optional(),
 });
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   const auth = await requirePermission("users.create");
   if (!auth.ok) return auth.response;
 
@@ -102,6 +103,8 @@ export async function POST(request: Request) {
   if (assignment.error) {
     return NextResponse.json({ error: assignment.error }, { status: 409 });
   }
+  const inactiveUnit = inactiveOrgUnitError(db, assignment.districtId, assignment.branchId);
+  if (inactiveUnit) return NextResponse.json({ error: `${inactiveUnit} New users can't be assigned to it.` }, { status: 409 });
 
   // Defense in depth, not a live restriction today - see the identical
   // check (and its own doc comment) in PATCH .../users/[id]/route.ts.
@@ -173,3 +176,7 @@ export async function POST(request: Request) {
 
   return NextResponse.json({ user: toSafeUser(user) }, { status: 201 });
 }
+
+// Central error handling, request ID and access logging: src/lib/api/handler.ts
+export const GET = withApiHandler(handleGET);
+export const POST = withApiHandler(handlePOST);

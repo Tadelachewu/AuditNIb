@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 import { requirePermission } from "@/lib/guard";
 import { readDb } from "@/lib/db";
+import { withApiHandler } from "@/lib/api/handler";
 
 // The admin inbox - every user's threads, not just the caller's own (see
 // GET /api/support for that). Gated by support.view OR support.respond -
 // a respond-only role must still be able to list threads to find one to
 // act on; posting a reply (see [id]/messages/route.ts) stays respond-only.
-export async function GET() {
+async function handleGET() {
   const auth = await requirePermission("support.view", "support.respond");
   if (!auth.ok) return auth.response;
 
@@ -27,3 +28,6 @@ export async function GET() {
 
   return NextResponse.json({ threads: enriched });
 }
+
+// Central error handling, request ID and access logging: src/lib/api/handler.ts
+export const GET = withApiHandler(handleGET);

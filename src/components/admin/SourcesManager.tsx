@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import type { MRT_ColumnDef } from "material-react-table";
 import { useRouter } from "next/navigation";
-import { apiSend, ApiError } from "@/lib/api-client";
+import { apiSend, errorMessage } from "@/lib/api-client";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { StickyActions } from "@/components/ui/StickyActions";
@@ -15,6 +15,7 @@ import { RowAction, RowActions, StatusToggleAction } from "@/components/ui/RowAc
 import type { Source } from "@/types";
 import { AdminTable } from "@/components/ui/AdminTable";
 import { ImportCsvDialog } from "@/components/ui/ImportCsvDialog";
+import { notify, notifications } from "@/lib/notify";
 
 // The list itself is never copied into local state - `sources` is read
 // straight from the prop the Server Component parent passes in, so a
@@ -53,7 +54,7 @@ export function SourcesManager({ initialSources, permissions }: { initialSources
       close();
       router.refresh();
     } catch (err) {
-      setFormError(err instanceof ApiError ? err.message : "Failed to create source");
+      setFormError(errorMessage(err, "Failed to create source"));
     } finally {
       setSubmitting(false);
     }
@@ -73,7 +74,7 @@ export function SourcesManager({ initialSources, permissions }: { initialSources
       setEditingId(null);
       router.refresh();
     } catch (err) {
-      setEditError(err instanceof ApiError ? err.message : "Failed to save changes");
+      setEditError(errorMessage(err, "Failed to save changes"));
     } finally {
       setRowBusy(null);
     }
@@ -90,9 +91,10 @@ export function SourcesManager({ initialSources, permissions }: { initialSources
     setRowBusy(s.id);
     try {
       await apiSend(`/api/admin/sources/${s.id}`, "DELETE");
+      notify.success(notifications.source.deleted);
       router.refresh();
     } catch (err) {
-      alert(err instanceof ApiError ? err.message : "Failed to delete source");
+      notify.fromError(err, notifications.source.deleteFailed);
     } finally {
       setRowBusy(null);
     }
@@ -111,9 +113,10 @@ export function SourcesManager({ initialSources, permissions }: { initialSources
     setRowBusy(s.id);
     try {
       await apiSend(`/api/admin/sources/${s.id}`, "PATCH", { active: !s.active });
+      notify.success(s.active ? notifications.source.deactivated : notifications.source.activated);
       router.refresh();
     } catch (err) {
-      alert(err instanceof ApiError ? err.message : "Failed to update source");
+      notify.fromError(err, notifications.source.statusFailed);
     } finally {
       setRowBusy(null);
     }
@@ -126,9 +129,10 @@ export function SourcesManager({ initialSources, permissions }: { initialSources
     setRowBusy(s.id);
     try {
       await apiSend(`/api/admin/sources/${s.id}`, "PATCH", { isDefault: !s.isDefault });
+      notify.success(s.isDefault ? notifications.source.defaultCleared : notifications.source.defaultSet);
       router.refresh();
     } catch (err) {
-      alert(err instanceof ApiError ? err.message : "Failed to update default source");
+      notify.fromError(err, notifications.source.defaultFailed);
     } finally {
       setRowBusy(null);
     }

@@ -5,8 +5,9 @@ import { requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { appendAuditLog } from "@/lib/audit";
 import { resolveOrgScope } from "@/lib/org";
+import { withApiHandler } from "@/lib/api/handler";
 
-export async function GET() {
+async function handleGET() {
   const auth = await requirePermission("departments.view");
   if (!auth.ok) return auth.response;
   const db = await readDb();
@@ -24,7 +25,7 @@ const createSchema = z.object({
   branchId: z.string().optional(),
 });
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   const auth = await requirePermission("departments.create");
   if (!auth.ok) return auth.response;
 
@@ -67,3 +68,7 @@ export async function POST(request: Request) {
 
   return NextResponse.json({ department }, { status: 201 });
 }
+
+// Central error handling, request ID and access logging: src/lib/api/handler.ts
+export const GET = withApiHandler(handleGET);
+export const POST = withApiHandler(handlePOST);

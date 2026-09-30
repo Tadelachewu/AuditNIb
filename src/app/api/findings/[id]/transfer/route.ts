@@ -5,6 +5,7 @@ import { readDb, updateDb } from "@/lib/db";
 import { assertFindingInScope } from "@/lib/findings-scope";
 import { transferFinding } from "@/lib/findings";
 import { notifyUsers, usersWithFindingsPermission } from "@/lib/notifications";
+import { withApiHandler } from "@/lib/api/handler";
 
 // Every non-terminal status is transferable - only CLOSED is excluded.
 // See findings.ts's AUTO_TRANSFERABLE_STATUSES for the full reasoning
@@ -23,7 +24,7 @@ const transferSchema = z.object({
 // districtControllerPermissions). Deliberately skips assertPeriodWritable()
 // on the *source* period: transfer is the intended path once a period
 // locks with the finding still outstanding.
-export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+async function handlePOST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requirePermission("findings.transfer");
   if (!auth.ok) return auth.response;
   const { id } = await params;
@@ -81,3 +82,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   return NextResponse.json({ finding: updated });
 }
+
+// Central error handling, request ID and access logging: src/lib/api/handler.ts
+export const POST = withApiHandler(handlePOST);

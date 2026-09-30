@@ -2,6 +2,15 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getIronSession } from "iron-session";
 import { sessionOptions, type SessionData } from "@/lib/session";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
+import { REQUEST_ID_HEADER, resolveRequestId } from "@/lib/requestId";
+
+// Error bodies written here use the same contract as every API route
+// (src/lib/errors/index.ts): { success: false, error: { code, message, details }, requestId }.
+function proxyError(status: number, code: string, message: string, requestId: string): NextResponse {
+  const res = NextResponse.json({ success: false, error: { code, message, details: null }, requestId }, { status });
+  res.headers.set(REQUEST_ID_HEADER, requestId);
+  return res;
+}
 
 const PUBLIC_PATHS = ["/login", "/forgot-password", "/reset-password"];
 
@@ -123,17 +132,27 @@ function isCrossOriginApiRequest(request: NextRequest): boolean {
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  // Correlation ID: assigned here, forwarded to the route/page as a request
+  // header (read by src/lib/api/handler.ts) and echoed in the response.
+  const requestId = resolveRequestId(request.headers.get(REQUEST_ID_HEADER));
+  const forwardedHeaders = new Headers(request.headers);
+  forwardedHeaders.set(REQUEST_ID_HEADER, requestId);
+  const withId = (res: NextResponse) => {
+    res.headers.set(REQUEST_ID_HEADER, requestId);
+    return res;
+  };
+
   if (pathname.startsWith("/api")) {
     if (STATE_CHANGING_METHODS.has(request.method)) {
       const contentLength = Number(request.headers.get("content-length") ?? "0");
       if (contentLength > MAX_API_BODY_BYTES) {
-        return NextResponse.json({ error: "Request body too large" }, { status: 413 });
+        return proxyError(413, "PAYLOAD_TOO_LARGE", "The request is too large.", requestId);
       }
       if (isCrossOriginApiRequest(request)) {
-        return NextResponse.json({ error: "Cross-origin request rejected" }, { status: 403 });
+        return proxyError(403, "CROSS_ORIGIN_REJECTED", "Cross-origin request rejected.", requestId);
       }
     }
-    return NextResponse.next();
+    return withId(NextResponse.next({ request: { headers: forwardedHeaders } }));
   }
 
   if (
@@ -149,7 +168,7 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const response = NextResponse.next();
+  const response = withId(NextResponse.next({ request: { headers: forwardedHeaders } }));
   const session = await getIronSession<SessionData>(request, response, sessionOptions);
   const isLoggedIn = Boolean(session.isLoggedIn && session.userId);
   const isPublicPath = PUBLIC_PATHS.includes(pathname);
@@ -157,11 +176,11 @@ export async function proxy(request: NextRequest) {
   if (!isLoggedIn && !isPublicPath) {
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("from", pathname);
-    return forwardSessionCookies(response, NextResponse.redirect(loginUrl));
+    return forwardSessionCookies(response, withId(NextResponse.redirect(loginUrl)));
   }
 
   if (isLoggedIn && isPublicPath) {
-    return forwardSessionCookies(response, NextResponse.redirect(new URL("/dashboard", request.url)));
+    return forwardSessionCookies(response, withId(NextResponse.redirect(new URL("/dashboard", request.url))));
   }
 
   // An admin-set password (initial creation or a reset) forces every page
@@ -169,12 +188,12 @@ export async function proxy(request: NextRequest) {
   // User.mustChangePassword's doc comment. Never gates /api routes (they
   // already bail out above); this only blocks navigating the UI.
   if (isLoggedIn && session.mustChangePassword && pathname !== "/profile") {
-    return forwardSessionCookies(response, NextResponse.redirect(new URL("/profile", request.url)));
+    return forwardSessionCookies(response, withId(NextResponse.redirect(new URL("/profile", request.url))));
   }
 
   const pageCode = pageCodeFor(pathname);
   if (isLoggedIn && pageCode && !hasPermission(session.permissions, permissionKey(pageCode, "view"))) {
-    return forwardSessionCookies(response, NextResponse.redirect(new URL("/dashboard", request.url)));
+    return forwardSessionCookies(response, withId(NextResponse.redirect(new URL("/dashboard", request.url))));
   }
 
   return response;

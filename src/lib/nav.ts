@@ -15,7 +15,6 @@ import {
   AlertTriangle,
   Tags,
   Calculator,
-  SlidersHorizontal,
   CalendarClock,
   KeyRound,
   Settings,
@@ -88,12 +87,6 @@ export const NAV_SECTIONS: NavSection[] = [
       },
       { label: "Classified Categories", href: "/admin/categories", icon: Tags, permission: permissionKey("categories", "view") },
       { label: "Scoring Rules", href: "/admin/scoring-rules", icon: Calculator, permission: permissionKey("scoring-rules", "view") },
-      {
-        label: "Scoring Adjustments",
-        href: "/admin/scoring-adjustments",
-        icon: SlidersHorizontal,
-        permission: permissionKey("scoring-adjustments", "view"),
-      },
       {
         label: "Reporting Periods",
         href: "/admin/reporting-periods",

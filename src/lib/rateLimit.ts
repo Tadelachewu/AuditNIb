@@ -1,4 +1,5 @@
 import { redis } from "@/lib/redisClient";
+import { logger } from "@/lib/logger";
 
 // Redis-backed login/password-change abuse protection - replaces an
 // earlier in-memory (per-process Map) version, which reset on every
@@ -26,7 +27,7 @@ import { redis } from "@/lib/redisClient";
 //     without spending any of their rate-limit budget re-triggering it.
 
 function logRedisFailure(op: string, err: unknown): void {
-  console.error(`[rateLimit] Redis ${op} failed - failing open`, err);
+  logger.error({ err, event: "redis.failed", op }, "Rate limit Redis operation failed - failing open");
 }
 
 export interface RateLimitOptions {

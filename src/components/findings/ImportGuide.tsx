@@ -14,39 +14,39 @@ const COLUMNS: {
   format: string;
   note?: string;
 }[] = [
-  { n: 1, name: "District Code", req: "always", format: "D01", note: "Must be an active district." },
-  { n: 2, name: "Branch Code", req: "always", format: "B001", note: "Must belong to the District Code on the same row." },
+  { n: 1, name: "District Code", req: "always", format: "D01", note: "Must exist and be active. Any letter case." },
+  { n: 2, name: "Branch Code", req: "always", format: "B001", note: "Must exist, be active, and belong to the District Code on the same row." },
   {
     n: 3,
     name: "Reporting Period Code",
     req: "always",
     format: "2026-09",
-    note: "The finding's own original period - for a Transferred row, this is where it started, not where it ended up.",
+    note: "The finding's own original period - for a Transferred row, this is where it started, not where it ended up. Any existing period, open or locked.",
   },
-  { n: 4, name: "Source Code", req: "config", format: "IC / IA" },
+  { n: 4, name: "Source Code", req: "config", format: "IC / IA", note: "Must exist and be active." },
   {
     n: 5,
     name: "Department Code",
     req: "config",
     format: "OPS",
-    note: "Must be available to the row's district/branch (bank-wide departments always qualify).",
+    note: "Must be active and available to the row's district/branch (bank-wide departments always qualify).",
   },
-  { n: 6, name: "Classified Category Code", req: "config", format: "ATM_MISMATCH", note: "From the Reference Data sheet's category list." },
+  { n: 6, name: "Classified Category Code", req: "config", format: "ATM_MISMATCH", note: "Must exist and be active - see the Reference Data sheet." },
   { n: 7, name: "Title", req: "config", format: "Short, specific", note: "Not part of duplicate matching - wording can vary freely." },
   {
     n: 8,
     name: "Finding Date",
     req: "config",
     format: "YYYY-MM-DD",
-    note: "The real, original date - used to backdate the record's case age (see §How Validation Works).",
+    note: "A real date in YYYY-MM-DD form (or an Excel date cell). Within the Reporting Period or earlier - never after the period ends, never in the future. Sets the finding's case age.",
   },
-  { n: 9, name: "Operation Area", req: "config", format: "Teller Counter, Vault, …", note: "Must match the configured list exactly." },
-  { n: 10, name: "Type of Irregularity", req: "config", format: "Cash Shortage, Fraud, …", note: "Must match the configured list exactly." },
-  { n: 11, name: "Amount", req: "always", format: "61000", note: "The finding's full amount, not any outstanding remainder." },
-  { n: 12, name: "Currency", req: "config", format: "ETB", note: "Must be one of the bank's configured currencies." },
+  { n: 9, name: "Operation Area", req: "config", format: "Teller Counter, Vault, …", note: "One of the configured values; letter case doesn't matter." },
+  { n: 10, name: "Type of Irregularity", req: "config", format: "Cash Shortage, Fraud, …", note: "One of the configured values; letter case doesn't matter." },
+  { n: 11, name: "Amount", req: "always", format: "61000", note: "A number, 0 or more (thousands commas allowed). The finding's full amount, not any outstanding remainder." },
+  { n: 12, name: "Currency", req: "config", format: "ETB", note: "One of the bank's configured currencies; letter case doesn't matter." },
   { n: 13, name: "Number of Cases", req: "always", format: "3", note: "Whole number, at least 1. The finding's full case count." },
-  { n: 14, name: "Risk Level", req: "config", format: "Low / Medium / High / Critical" },
-  { n: 15, name: "Priority", req: "config", format: "Low / Medium / High / Urgent" },
+  { n: 14, name: "Risk Level", req: "config", format: "Low / Medium / High / Critical", note: "Configured value; letter case doesn't matter." },
+  { n: 15, name: "Priority", req: "config", format: "Low / Medium / High / Urgent", note: "Configured value; letter case doesn't matter." },
   { n: 16, name: "Description", req: "config", format: "Free text" },
   { n: 17, name: "Recommendation", req: "config", format: "Free text" },
   { n: 18, name: "Evidence Note", req: "config", format: "Free text", note: "A note only - no file attachment via import." },
@@ -97,10 +97,10 @@ const TEST_CASES: { n: number; scenario: string; status: string; key: string; ou
     outcome: "duplicate",
     detail: "",
   },
-  { n: 7, scenario: "Branch code doesn't exist", status: "any", key: "B999", outcome: "error", detail: 'Unknown or inactive branch code "B999"' },
+  { n: 7, scenario: "Branch code doesn't exist", status: "any", key: "B999", outcome: "error", detail: 'Unknown branch code "B999"' },
   { n: 8, scenario: "Branch belongs to a different district than stated", status: "any", key: "D02 + B001 (B001 is under D01)", outcome: "error", detail: "Branch does not belong to district" },
   { n: 9, scenario: "Negative amount", status: "any", key: "-500", outcome: "error", detail: "Invalid amount" },
-  { n: 10, scenario: "Category code doesn't exist", status: "any", key: "BADCODE", outcome: "error", detail: "Unknown or inactive classified category code" },
+  { n: 10, scenario: "Category code doesn't exist", status: "any", key: "BADCODE", outcome: "error", detail: "Unknown classified category code" },
   { n: 11, scenario: "Required Title left blank", status: "any", key: "Title admin-required, blank", outcome: "error", detail: "Missing required value(s): Title" },
   { n: 12, scenario: "Transferred with no destination given", status: "TRANSFERRED", key: "Transferred To Period Code blank", outcome: "error", detail: "requires Transferred To Period Code" },
   { n: 13, scenario: "Transferred to its own origin period", status: "TRANSFERRED", key: "Reporting Period = Transferred To", outcome: "error", detail: "must differ from Reporting Period Code" },
@@ -121,6 +121,12 @@ const TEST_CASES: { n: number; scenario: string; status: string; key: string; ou
     detail: "the two must reach full together",
   },
   { n: 16, scenario: "Unrecognized status spelling", status: "SENT-TO-BRANCH", key: "Typo / wrong value", outcome: "error", detail: "must be one of the three listed statuses" },
+  { n: 17, scenario: "Values in a different letter case", status: "closed", key: "teller counter, etb, low, b001", outcome: "imported", detail: "Saved as Teller Counter, ETB, Low, B001" },
+  { n: 18, scenario: "Finding date after its reporting period", status: "any", key: "Period 2026-09, date 2026-10-05", outcome: "error", detail: "after reporting period 2026-09 (ends 2026-09-30)" },
+  { n: 19, scenario: "Finding date before its reporting period", status: "any", key: "Period 2026-09, date 2026-06-12", outcome: "imported", detail: "Earlier dates are allowed" },
+  { n: 20, scenario: "Date in another format", status: "any", key: "15/09/2026", outcome: "error", detail: "use YYYY-MM-DD" },
+  { n: 21, scenario: "Several problems in one row", status: "any", key: "Bad branch + bad currency + bad amount", outcome: "error", detail: "All three are listed together" },
+  { n: 22, scenario: "A branch or category that has been deactivated", status: "any", key: "Deactivated code", outcome: "error", detail: "is deactivated" },
 ];
 
 const OUTCOME_TONE: Record<string, "green" | "amber" | "red"> = { imported: "green", duplicate: "amber", error: "red" };
@@ -137,7 +143,7 @@ export function ImportGuide() {
   return (
     <CollapsibleCard
       title="Import Guide"
-      description="Column-by-column and status-by-status reference, plus test cases - read this before filling in the template."
+      description="File rules, every validation rule, duplicates, reversing an import, and test cases - read this before filling in the template."
     >
       <div className="flex flex-col gap-8 p-4">
         {/* ---- Purpose ---- */}
@@ -202,8 +208,8 @@ export function ImportGuide() {
                 </tr>
                 <tr>
                   <td className="px-3 py-1.5">Root Cause field</td>
-                  <td className="px-3 py-1.5 text-slate-500">not available</td>
-                  <td className="px-3 py-1.5 text-slate-500">Leave blank; add it later from the finding&apos;s own page if needed.</td>
+                  <td className="px-3 py-1.5 font-mono">Root Cause (last column)</td>
+                  <td className="px-3 py-1.5 text-slate-500">Older templates without it still import, unless Root cause is required.</td>
                 </tr>
                 <tr>
                   <td className="px-3 py-1.5 italic text-slate-500">(system-generated on save)</td>
@@ -294,26 +300,124 @@ export function ImportGuide() {
           </div>
         </div>
 
+        {/* ---- File rules ---- */}
+        <div className="flex flex-col gap-2">
+          <h3 className="text-sm font-semibold text-slate-900">File rules</h3>
+          <ul className="list-disc space-y-1 pl-5 text-sm text-slate-600">
+            <li>
+              An Excel <strong>.xlsx</strong> file, up to <strong>10 MB</strong> and <strong>2,000 data rows</strong>. Split bigger
+              files into several imports.
+            </li>
+            <li>
+              The rows are read from the sheet named <span className="font-mono">Findings</span> (or the first sheet). Row 1 is the
+              header; data starts on row 2. Completely empty rows are skipped.
+            </li>
+            <li>
+              Columns are matched by their <strong>header text</strong>, not position. Keep the template&apos;s headers; column order
+              and extra columns don&apos;t matter. A trailing &quot;(optional)&quot; in a header is ignored.
+            </li>
+            <li>Error messages give the Excel row number, so row 2 is the first data row.</li>
+            <li>Up to 10 import attempts per user every 10 minutes.</li>
+          </ul>
+        </div>
+
         {/* ---- How validation works ---- */}
         <div className="flex flex-col gap-2">
           <h3 className="text-sm font-semibold text-slate-900">How validation works</h3>
           <ul className="flex flex-col gap-2 text-sm text-slate-600">
             <li>
-              <strong className="text-slate-800">The whole file succeeds or none of it does.</strong> Every row is checked
-              first; one real error rejects the entire file - a duplicate alone doesn&apos;t.
+              <strong className="text-slate-800">Every problem is reported at once.</strong> The whole file is checked before
+              anything is saved, and each row lists <em>all</em> of its problems together, not just the first. Fix everything in
+              one pass and upload the whole file again.
             </li>
             <li>
-              <strong className="text-slate-800">Duplicates are judged on data, not wording.</strong> Branch, period, source,
-              department, category, finding date, operation area, irregularity type, currency, amount, and case count decide
-              a match - Title and Description can differ freely.
+              <strong className="text-slate-800">The whole file succeeds or none of it does.</strong> One real error rejects the
+              entire file. A duplicate alone doesn&apos;t: it is skipped and the rest imports.
+            </li>
+            <li>
+              <strong className="text-slate-800">Letter case doesn&apos;t matter.</strong> Codes (district, branch, period, source,
+              department, category), Status, and list values (operation area, type of irregularity, currency, risk level,
+              priority) match regardless of case, and are saved in the spelling configured in the system. Spelling and spaces
+              inside the value must still match.
+            </li>
+            <li>
+              <strong className="text-slate-800">Finding date must fit the period.</strong> It must be on or before the last day
+              of the row&apos;s Reporting Period (earlier months are fine; later never), and not in the future. For a Transferred
+              row this is the <em>original</em> period.
+            </li>
+            <li>
+              <strong className="text-slate-800">Everything referenced must be active.</strong> Deactivated districts, branches,
+              sources, departments and categories are rejected. The department must also be available to the row&apos;s
+              district/branch.
+            </li>
+            <li>
+              <strong className="text-slate-800">Your own scope applies.</strong> A district- or branch-level importer can only
+              import rows for their own district or branch.
             </li>
             <li>
               <strong className="text-slate-800">Reference numbers are never yours to set.</strong> Always generated from the
               branch and the finding&apos;s <em>original</em> Reporting Period Code, even for a Transferred row.
             </li>
             <li>
-              <strong className="text-slate-800">Finding Date drives the finding&apos;s recorded age.</strong> Case-age
-              figures on every dashboard measure from it, not from today&apos;s import date.
+              <strong className="text-slate-800">Finding Date drives the finding&apos;s recorded age.</strong> Case-age figures on
+              every dashboard measure from it, not from today&apos;s import date.
+            </li>
+          </ul>
+        </div>
+
+        {/* ---- Duplicates ---- */}
+        <div className="flex flex-col gap-2">
+          <h3 className="text-sm font-semibold text-slate-900">How duplicates are detected</h3>
+          <p className="text-sm text-slate-600">
+            The importer uses <strong>its own fixed, exact-match rule</strong>, not the admin&apos;s &quot;similar findings&quot;
+            setting. A row is a duplicate when all of these are identical to an existing finding (or to an earlier row in the same
+            file): <strong>branch, reporting period, source, department, category, finding date, operation area, type of
+            irregularity, currency, amount and number of cases</strong>. Title, description and other text can differ freely.
+          </p>
+          <ul className="list-disc space-y-1 pl-5 text-sm text-slate-600">
+            <li>
+              Duplicates are the <strong>final check</strong>: they&apos;re only looked for once every row has passed every other rule.
+            </li>
+            <li>
+              If any are found, <strong>nothing is imported yet</strong>. You see each duplicate with its evidence: the row, its title,
+              the existing finding it matches (with a link, or &quot;row N of this file&quot;) and the matching values. Then choose{" "}
+              <strong>Import without duplicates</strong> (the rest are imported, duplicates skipped and recorded) or{" "}
+              <strong>Cancel import</strong>.
+            </li>
+            <li>For a Transferred row, the period compared is the one it moved <em>into</em>, so re-uploading the same file is safe.</li>
+            <li>
+              Why not the admin setting? Settings → Similar Findings only drives a &quot;possible duplicate&quot; hint on the
+              Register Finding form, which a person reviews. An import has no one reviewing each row, so it needs a strict rule
+              that can&apos;t skip a real, different finding by accident.
+            </li>
+          </ul>
+        </div>
+
+        {/* ---- Reversing ---- */}
+        <div className="flex flex-col gap-2">
+          <h3 className="text-sm font-semibold text-slate-900">Reversing, re-importing and deleting an import</h3>
+          <ul className="list-disc space-y-1 pl-5 text-sm text-slate-600">
+            <li>
+              In <strong>Import History</strong>, <strong>Reverse</strong> removes every finding that import created, together with
+              everything recorded against them (workflow history, rectifications, closures, transfers, comments, evidence files). It
+              works <strong>whatever has happened to them since</strong>.
+            </li>
+            <li>
+              Before confirming you see exactly what will be removed, including which findings have been worked on since the import.
+              That work is deleted too, so you must tick to confirm it and give a reason.
+            </li>
+            <li>
+              Choose <strong>Reverse import</strong> (the record stays, marked <em>Reversed</em>) or{" "}
+              <strong>Reverse and delete record</strong> (it is removed from the history as well).
+            </li>
+            <li>
+              A reversed import offers <strong>Re-import</strong>, which runs the stored original file through all the checks again
+              (including the duplicate decision), and <strong>Delete record</strong>.
+            </li>
+            <li>
+              Needs the <strong>Findings › Reverse an Import</strong> permission (Re-import also needs Bulk Import). The Administrator
+              has it and can grant it to other roles. The audit log keeps every step, and removed reference numbers are never given
+              to another finding.
             </li>
           </ul>
         </div>
@@ -324,13 +428,13 @@ export function ImportGuide() {
           <ul className="grid grid-cols-1 gap-2 text-sm text-slate-600 sm:grid-cols-2">
             {[
               "Download a fresh template each session - required columns and valid codes can change.",
-              "Codes are exact, not close - must match the Reference Data sheet's spelling exactly.",
+              "Copy codes and list values from the Reference Data sheet - case doesn't matter, spelling does.",
+              "Finding dates in YYYY-MM-DD, within their Reporting Period or earlier, never later.",
               "Amount and Number of Cases are the finding's whole totals, not whatever's still outstanding.",
               "Transferred needs two different, real periods - its own origin, and a later open destination.",
               "No itemized case amounts - only the combined total survives import.",
-              "No Root Cause column - add it afterward from the finding's own detail page if needed.",
               "This is not a live-review shortcut - a genuinely new finding belongs on Register Finding.",
-              "Read every row of the result, not just the totals - a rejected file tells you exactly what to fix.",
+              "Read every row of the result - a rejected file lists every problem to fix.",
             ].map((text) => (
               <li key={text} className="flex gap-2">
                 <span className="text-emerald-600">✓</span>

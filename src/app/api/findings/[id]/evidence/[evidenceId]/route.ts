@@ -4,14 +4,15 @@ import { readDb, updateDb } from "@/lib/db";
 import { assertFindingInScope } from "@/lib/findings-scope";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
 import { appendAuditLog } from "@/lib/audit";
-import { readStoredFile, deleteStoredFile, attachmentDisposition, FileStorageError } from "@/lib/fileStorage";
+import { readStoredFile, deleteStoredFile, attachmentDisposition } from "@/lib/fileStorage";
+import { withApiHandler } from "@/lib/api/handler";
 
 type Params = { params: Promise<{ id: string; evidenceId: string }> };
 
 // Download - anyone who can view the finding (in scope). Decrypted on the
 // fly from the storage folder, always served as an attachment (never
 // rendered inline), and recorded in the audit log.
-export async function GET(_request: Request, { params }: Params) {
+async function handleGET(_request: Request, { params }: Params) {
   const auth = await requirePermission("findings.view");
   if (!auth.ok) return auth.response;
   const { id, evidenceId } = await params;
@@ -26,14 +27,9 @@ export async function GET(_request: Request, { params }: Params) {
   const record = db.evidence.find((e) => e.id === evidenceId && e.findingId === id);
   if (!record) return NextResponse.json({ error: "Evidence not found" }, { status: 404 });
 
-  let buffer: Buffer | null;
-  try {
-    buffer = readStoredFile("evidence", record.storagePath);
-  } catch (err) {
-    console.error("[evidence] reading stored file failed", err);
-    const message = err instanceof FileStorageError ? err.message : "Could not read the stored file";
-    return NextResponse.json({ error: message }, { status: 500 });
-  }
+  // A storage failure is mapped centrally (src/lib/errors/normalize.ts): logged in
+  // full, the client only gets FILE_STORAGE_UNAVAILABLE / FILE_INTEGRITY_FAILED.
+  const buffer = readStoredFile("evidence", record.storagePath);
   if (!buffer) return NextResponse.json({ error: "File is missing from storage" }, { status: 404 });
 
   await updateDb((current) => {
@@ -63,7 +59,7 @@ export async function GET(_request: Request, { params }: Params) {
 // (housekeeping - e.g. a sensitive file that shouldn't be there). Both
 // still need the finding in their org scope. Removes the record and the
 // stored file, and is recorded in the audit log.
-export async function DELETE(_request: Request, { params }: Params) {
+async function handleDELETE(_request: Request, { params }: Params) {
   const auth = await requireUser();
   if (!auth.ok) return auth.response;
   const { id, evidenceId } = await params;
@@ -110,3 +106,7 @@ export async function DELETE(_request: Request, { params }: Params) {
 
   return NextResponse.json({ ok: true });
 }
+
+// Central error handling, request ID and access logging: src/lib/api/handler.ts
+export const GET = withApiHandler(handleGET);
+export const DELETE = withApiHandler(handleDELETE);

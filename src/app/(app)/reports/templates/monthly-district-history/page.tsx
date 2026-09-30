@@ -4,18 +4,18 @@ import { getCurrentUser } from "@/lib/session";
 import { readDb } from "@/lib/db";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
 import { formatNumber } from "@/lib/format";
-import { getMonthlyDistrictSeries } from "@/lib/reportTemplates";
+import { getMonthlyDistrictSeries, sumDistrictRowsAcrossPeriods } from "@/lib/reportTemplates";
+import { ALL_PERIODS_VALUE } from "@/lib/dashboardFilters";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Select, Label } from "@/components/ui/Field";
 import { PrintButton } from "@/components/reports/PrintButton";
-import { AdjustedBadge } from "@/components/ui/AdjustedBadge";
 
-// Filtered to one reporting period at a time (a period picker, same
-// convention as every other template's Period select) rather than
-// stacking every period's block vertically on one page - the same series
-// as Monthly District Detail (long format) still covers the full history
-// when that's what's actually wanted.
+// One reporting period at a time (a period picker, same convention as every
+// other template's Period select), or "All periods": each district summed
+// across every period (sumDistrictRowsAcrossPeriods - no double counting,
+// % recomputed from the summed counts). Monthly District Detail still
+// shows the month-by-month breakdown.
 export default async function MonthlyDistrictHistoryPage({
   searchParams,
 }: {
@@ -29,11 +29,12 @@ export default async function MonthlyDistrictHistoryPage({
   const params = await searchParams;
   const openPeriod = db.reportingPeriods.find((p) => p.status === "OPEN");
   const periodId = (typeof params.periodId === "string" && params.periodId) || openPeriod?.id || db.reportingPeriods[0]?.id || "";
+  const allPeriods = periodId === ALL_PERIODS_VALUE;
   const period = db.reportingPeriods.find((p) => p.id === periodId);
   const periodsSorted = [...db.reportingPeriods].sort((a, b) => b.code.localeCompare(a.code));
 
   const { otherCases } = getMonthlyDistrictSeries(db, "monthly-district-history");
-  const rows = period ? otherCases.filter((r) => r.period.id === period.id) : [];
+  const rows = allPeriods ? sumDistrictRowsAcrossPeriods(otherCases) : period ? otherCases.filter((r) => r.period.id === period.id) : [];
   const totalCases = rows.reduce((sum, r) => sum + r.totalCases, 0);
   const rectifiedCases = rows.reduce((sum, r) => sum + r.rectifiedCases, 0);
 
@@ -50,7 +51,7 @@ export default async function MonthlyDistrictHistoryPage({
             ← Back
           </Link>
           <h1 className="mt-1 text-lg font-semibold text-slate-900">Monthly District History</h1>
-          <p className="mt-1 text-sm text-slate-600">Other-Case performance by district, for a selected reporting period.</p>
+          <p className="mt-1 text-sm text-slate-600">Other-Case performance by district, for one reporting period or all periods combined.</p>
         </div>
         <div className="flex gap-2">
           <a href={`/api/report-templates/monthly-district-history/export?periodId=${periodId}`}>
@@ -66,6 +67,7 @@ export default async function MonthlyDistrictHistoryPage({
         <div>
           <Label htmlFor="periodId">Period</Label>
           <Select id="periodId" name="periodId" defaultValue={periodId}>
+            <option value={ALL_PERIODS_VALUE}>All periods</option>
             {periodsSorted.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.code} {p.status === "LOCKED" ? "(locked)" : ""}
@@ -76,17 +78,17 @@ export default async function MonthlyDistrictHistoryPage({
         <Button type="submit">View</Button>
       </form>
 
-      {!period && (
+      {!period && !allPeriods && (
         <Card className="p-4">
           <p className="text-sm text-slate-500">No reporting periods configured yet.</p>
         </Card>
       )}
 
-      {period && (
+      {(period || allPeriods) && (
         <Card>
           <CardHeader
-            title={period.code}
-            description={`${period.status === "OPEN" ? "Open" : "Locked"} - ${formatNumber(rectifiedCases)} of ${formatNumber(totalCases)} eligible cases rectified`}
+            title={allPeriods ? "All periods" : period!.code}
+            description={`${allPeriods ? `${db.reportingPeriods.length} period(s) combined` : period!.status === "OPEN" ? "Open" : "Locked"} - ${formatNumber(rectifiedCases)} of ${formatNumber(totalCases)} eligible cases rectified`}
           />
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
@@ -117,7 +119,7 @@ export default async function MonthlyDistrictHistoryPage({
                     <td className="px-4 py-2 text-slate-700">{formatNumber(r.totalCases)}</td>
                     <td className="px-4 py-2 text-slate-700">{formatNumber(r.outstandingCases)}</td>
                     <td className="px-4 py-2 text-slate-700">{formatNumber(r.rectifiedCases)}</td>
-                    <td className="px-4 py-2 text-slate-700">{r.performance !== null ? <>{r.performance.toFixed(1)}%<AdjustedBadge adjustment={r.adjustment} /></> : "--"}</td>
+                    <td className="px-4 py-2 text-slate-700">{r.performance !== null ? <>{r.performance.toFixed(1)}%</> : "--"}</td>
                   </tr>
                 ))}
                 {rows.length > 0 && (

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { apiGet, apiSend, ApiError } from "@/lib/api-client";
+import { apiGet, apiSend, errorMessage } from "@/lib/api-client";
 import { formatDateTime } from "@/lib/format";
 import { FIELD_FOCUS } from "@/components/ui/Field";
 import type { Notification } from "@/types";
@@ -97,7 +97,7 @@ export function NotificationBell() {
       await apiSend(`/api/findings/${n.entityId}/comments`, "POST", { text });
       goToFinding(n);
     } catch (err) {
-      setCommentError(err instanceof ApiError ? err.message : "Failed to post comment");
+      setCommentError(errorMessage(err, "Failed to post comment"));
     } finally {
       setPostingComment(false);
     }

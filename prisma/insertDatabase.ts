@@ -178,22 +178,6 @@ export async function insertDatabaseIntoPostgres(prisma: PrismaClient, db: Datab
   });
   console.log(`  reportingPeriods: ${db.reportingPeriods.length}`);
 
-  await prisma.scoringAdjustment.createMany({
-    data: db.scoringAdjustments.map((a) => ({
-      id: a.id,
-      targetType: a.targetType,
-      targetId: a.targetId,
-      periodId: a.periodId,
-      districtId: a.targetType === "DISTRICT" ? a.targetId : null,
-      branchId: a.targetType === "BRANCH" ? a.targetId : null,
-      value: a.value,
-      reason: a.reason,
-      adjustedBy: a.adjustedBy,
-      createdAt: toDate(a.createdAt),
-    })),
-  });
-  console.log(`  scoringAdjustments: ${db.scoringAdjustments.length}`);
-
   // Import batches before findings (a finding may reference one).
   await prisma.importBatch.createMany({
     data: db.importBatches.map((b) => ({

@@ -5,6 +5,7 @@ import { readDb, updateDb } from "@/lib/db";
 import { assertFindingInScope } from "@/lib/findings-scope";
 import { transitionFinding, districtApproveFinding, assertPeriodWritable } from "@/lib/findings";
 import { notifyFindingsPermissionHolders, notifyUsers } from "@/lib/notifications";
+import { withApiHandler } from "@/lib/api/handler";
 
 const reviewSchema = z
   .object({
@@ -21,7 +22,7 @@ const reviewSchema = z
 // DISTRICT_REVIEW; the org-scope check (via requirePermission's session +
 // assertFindingInScope) is what actually stops a controller from acting on
 // another district's finding, not this route's own logic.
-export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+async function handlePOST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requirePermission("findings.district-review");
   if (!auth.ok) return auth.response;
   const { id } = await params;
@@ -58,7 +59,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   const periodError = assertPeriodWritable(db, existing.periodId);
-  if (periodError) return NextResponse.json({ error: periodError }, { status: 409 });
+  if (periodError) return NextResponse.json({ error: periodError, code: "PERIOD_LOCKED" }, { status: 409 });
 
   const updated = await updateDb((current) => {
     const f = current.findings.find((x) => x.id === id)!;
@@ -92,3 +93,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   return NextResponse.json({ finding: updated });
 }
+
+// Central error handling, request ID and access logging: src/lib/api/handler.ts
+export const POST = withApiHandler(handlePOST);

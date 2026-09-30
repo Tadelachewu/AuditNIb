@@ -2,12 +2,13 @@ import { NextResponse } from "next/server";
 import { requirePermission } from "@/lib/guard";
 import { readDb } from "@/lib/db";
 import { buildImportTemplate } from "@/lib/import";
+import { withApiHandler } from "@/lib/api/handler";
 
 // master.txt §22: "Create standardized import template aligned to Finding
 // model" - regenerated from current reference data on every download (not
 // a static file) so the "Reference Data" sheet's codes/names never go
 // stale relative to what the import route will actually accept.
-export async function GET() {
+async function handleGET() {
   const auth = await requirePermission("findings.import");
   if (!auth.ok) return auth.response;
 
@@ -22,3 +23,6 @@ export async function GET() {
     },
   });
 }
+
+// Central error handling, request ID and access logging: src/lib/api/handler.ts
+export const GET = withApiHandler(handleGET);

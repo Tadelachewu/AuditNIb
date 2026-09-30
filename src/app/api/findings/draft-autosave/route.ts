@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { requirePermission } from "@/lib/guard";
 import { redis } from "@/lib/redisClient";
+import { withApiHandler } from "@/lib/api/handler";
+import { logger } from "@/lib/logger";
 
 // One in-progress, not-yet-saved NEW finding registration per user - a
 // power failure, an accidental tab close, or a refresh mid-form shouldn't
@@ -18,13 +20,13 @@ function draftKey(userId: string): string {
 const TTL_SECONDS = 24 * 60 * 60;
 
 function logRedisFailure(op: string, err: unknown): void {
-  console.error(`[draft-autosave] Redis ${op} failed`, err);
+  logger.error({ err, event: "redis.failed", op }, "Draft autosave Redis operation failed");
 }
 
 // Fails open/silent in every direction - this is a convenience feature,
 // never allowed to block or error out the actual registration flow if
 // Redis is down (same "fails open" convention as src/lib/rateLimit.ts).
-export async function GET() {
+async function handleGET() {
   const auth = await requirePermission("findings.create");
   if (!auth.ok) return auth.response;
 
@@ -37,7 +39,7 @@ export async function GET() {
   }
 }
 
-export async function PATCH(request: Request) {
+async function handlePATCH(request: Request) {
   const auth = await requirePermission("findings.create");
   if (!auth.ok) return auth.response;
 
@@ -67,7 +69,7 @@ export async function PATCH(request: Request) {
 // NewFindingForm.tsx) - the autosave copy's only job was to survive until
 // that point, so it's cleared immediately rather than left to expire on
 // its own 24h later.
-export async function DELETE() {
+async function handleDELETE() {
   const auth = await requirePermission("findings.create");
   if (!auth.ok) return auth.response;
 
@@ -78,3 +80,8 @@ export async function DELETE() {
   }
   return NextResponse.json({ ok: true });
 }
+
+// Central error handling, request ID and access logging: src/lib/api/handler.ts
+export const GET = withApiHandler(handleGET);
+export const PATCH = withApiHandler(handlePATCH);
+export const DELETE = withApiHandler(handleDELETE);

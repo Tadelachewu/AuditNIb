@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
+import { lockoutError } from "@/lib/permissions/lockout";
 import { z } from "zod";
 import { requireToggleOrEditPermission, requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { hashPassword } from "@/lib/auth";
 import { validatePasswordFull } from "@/lib/passwordValidation";
-import { resolveOrgAssignment, isDepartmentExactScopeForUser } from "@/lib/org";
+import { resolveOrgAssignment, isDepartmentExactScopeForUser, inactiveOrgUnitError } from "@/lib/org";
 import { appendAuditLog } from "@/lib/audit";
 import { toSafeUser } from "@/lib/sanitize";
+import { withApiHandler } from "@/lib/api/handler";
 
 const updateUserSchema = z.object({
   name: z.string().min(1).optional(),
@@ -16,10 +18,10 @@ const updateUserSchema = z.object({
   // undefined (not sent, don't change it) but NOT null (explicitly clear) -
   // email must never be nullable, per the DB constraint and the forgot-
   // password/notification flows that depend on it always existing.
-  email: z.union([
-    z.string().min(1, "Email address is required").email("Enter a valid email address"),
-    z.undefined(),
-  ]),
+  // .optional(): a status-only PATCH (Activate/Deactivate) sends no email.
+  // Zod 4 treats a union with z.undefined() as a *required* key unless
+  // marked optional - that broke every user status toggle.
+  email: z.string().min(1, "Email address is required").email("Enter a valid email address").optional(),
   // Optional and nullable (unlike email) - not every account has one, and
   // an admin can clear it back out. Loosely validated, same reasoning as
   // POST /api/admin/users' own phone field.
@@ -34,7 +36,7 @@ const updateUserSchema = z.object({
   password: z.string().min(8).optional(),
 });
 
-export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
+async function handlePATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
   const body = await request.json().catch(() => null);
@@ -54,6 +56,21 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const db = await readDb();
   const existing = db.users.find((u) => u.id === id);
   if (!existing) return NextResponse.json({ error: "User not found" }, { status: 404 });
+
+  // Deactivating signs the user out on their next request and blocks
+  // login (src/lib/session.ts, the login route). Never allowed on your own
+  // account; and never (deactivation or a role change) when it would leave
+  // nobody active holding the permissions needed to undo it - permission-
+  // based, whatever the role is called (src/lib/permissions/lockout.ts).
+  if (input.status === "INACTIVE" && existing.status === "ACTIVE" && existing.id === auth.session.userId) {
+    return NextResponse.json({ error: "You can't deactivate your own account." }, { status: 409 });
+  }
+  if ((input.status !== undefined && input.status !== existing.status) || (input.role !== undefined && input.role !== existing.role)) {
+    const lockout = lockoutError(db, {
+      users: db.users.map((u) => (u.id === existing.id ? { ...u, status: input.status ?? u.status, role: input.role ?? u.role } : u)),
+    });
+    if (lockout) return NextResponse.json({ error: lockout, code: "LOCKOUT_PREVENTED" }, { status: 409 });
+  }
 
   // Defense in depth, not a live restriction today: users.edit/toggle-status
   // are seeded onto ADMIN only (BANK-scoped, so none of this fires for the
@@ -108,6 +125,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       existing.id
     );
     if (assignment.error) return NextResponse.json({ error: assignment.error }, { status: 409 });
+    // Only a *move* into a deactivated district/branch is refused; a user
+    // already there can still be edited (e.g. to move them out).
+    if (assignment.districtId !== existing.districtId || assignment.branchId !== existing.branchId) {
+      const inactiveUnit = inactiveOrgUnitError(db, assignment.districtId, assignment.branchId);
+      if (inactiveUnit) return NextResponse.json({ error: `${inactiveUnit} Users can't be moved into it.` }, { status: 409 });
+    }
     districtId = assignment.districtId;
     branchId = assignment.branchId;
 
@@ -219,7 +242,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 // (userName), so a dangling reference there doesn't break anything shown
 // to anyone, and blocking on "this user was once notified about something"
 // or "logged in once" would make almost no account ever deletable.
-export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+async function handleDELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requirePermission("users.delete");
   if (!auth.ok) return auth.response;
   const { id } = await params;
@@ -227,6 +250,12 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   const db = await readDb();
   const existing = db.users.find((u) => u.id === id);
   if (!existing) return NextResponse.json({ error: "User not found" }, { status: 404 });
+  // Same lock-out protection as deactivation (see PATCH above).
+  if (existing.id === auth.session.userId) {
+    return NextResponse.json({ error: "You can't delete your own account." }, { status: 409 });
+  }
+  const lockout = lockoutError(db, { users: db.users.filter((u) => u.id !== existing.id) });
+  if (lockout) return NextResponse.json({ error: lockout, code: "LOCKOUT_PREVENTED" }, { status: 409 });
 
   const references: Array<{ label: string; count: number }> = [
     { label: "finding(s) registered", count: db.findings.filter((f) => f.createdBy === id).length },
@@ -240,7 +269,6 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
     { label: "comment(s) authored", count: db.comments.filter((c) => c.authorId === id).length },
     { label: "branch coverage note(s) recorded", count: db.branchCoverageNotes.filter((n) => n.recordedBy === id).length },
     { label: "scoring rule(s) created", count: db.scoringRules.filter((r) => r.createdBy === id).length },
-    { label: "scoring adjustment(s) made", count: db.scoringAdjustments.filter((a) => a.adjustedBy === id).length },
   ];
   const blocking = references.find((r) => r.count > 0);
   if (blocking) {
@@ -267,3 +295,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
 
   return NextResponse.json({ ok: true });
 }
+
+// Central error handling, request ID and access logging: src/lib/api/handler.ts
+export const PATCH = withApiHandler(handlePATCH);
+export const DELETE = withApiHandler(handleDELETE);

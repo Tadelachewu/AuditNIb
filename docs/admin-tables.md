@@ -30,7 +30,7 @@ Every list in the Administration area, plus the Findings list, the dashboards' r
 
 | List | Search / filter / sort | Export | Import | Notes |
 |---|---|---|---|---|
-| Users | ✅ (filters: role, org unit, department, status) | ✅ | ❌ | Accounts need passwords and role checks, so no bulk import. Export never includes passwords. |
+| Users | ✅ (filters: role, org unit, department, status) | ✅ | ✅ | Import: `username`*, `name`*, `email`*, `phone`, `role`* (code), `district`, `branch`, `department` (code or name), `temporary_password`*. Each row goes through the normal create-user checks; the user must change the temporary password at first sign-in (it expires in 24 h). The password column is **never** written to the results file; delete the CSV after importing. Export never includes passwords. |
 | Districts | ✅ (status) | ✅ | ✅ | |
 | Branches | ✅ (district, status) | ✅ | ✅ | Now loads every branch, so search covers the whole list. |
 | Departments | ✅ (level, status) | ✅ | ✅ | |
@@ -38,7 +38,6 @@ Every list in the Administration area, plus the Findings list, the dashboards' r
 | Sources | ✅ (default, status) | ✅ | ✅ | The default source's row keeps its gold highlight. |
 | Uncovered Branch Reasons | ✅ (status) | ✅ | ✅ | |
 | Reporting Periods | ✅ (status) | ✅ | ❌ | Periods have lock rules and date windows; create them one at a time. |
-| Scoring Adjustments | ✅ (level, period, value range, status) | ✅ | ❌ | Each adjustment needs a deliberate reason. |
 | Audit Log | ✅ (actor, action, entity, **date range**), sort by time | ✅ **all matching entries** | ❌ | Runs on the **server**: the log can be very large, so search, filters, sort and paging are applied by the server. Export returns every matching entry, not just one page. |
 | Roles, Scoring Rules | — | — | — | Expandable card lists with in-place editors, not tables; unchanged. |
 

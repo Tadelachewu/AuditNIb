@@ -5,6 +5,7 @@ import { assertFindingInScope } from "@/lib/findings-scope";
 import { transitionFinding, assertPeriodWritable } from "@/lib/findings";
 import { notifyFindingsPermissionHolders } from "@/lib/notifications";
 import type { FindingStatus } from "@/types";
+import { withApiHandler } from "@/lib/api/handler";
 
 // The explicit "I've addressed it" step out of RECTIFICATION_RETURNED,
 // for when the correction didn't involve recording more
@@ -21,7 +22,7 @@ import type { FindingStatus } from "@/types";
 // nothing on record - but landing here with zero would be a lie
 // (PARTIALLY_RECTIFIED implies something was rectified) if that ever
 // changes, so this stays a safe default rather than assuming it can't.
-export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+async function handlePOST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requirePermission("findings.rectify");
   if (!auth.ok) return auth.response;
   const { id } = await params;
@@ -38,7 +39,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
   }
 
   const periodError = assertPeriodWritable(db, existing.periodId);
-  if (periodError) return NextResponse.json({ error: periodError }, { status: 409 });
+  if (periodError) return NextResponse.json({ error: periodError, code: "PERIOD_LOCKED" }, { status: 409 });
 
   const updated = await updateDb((current) => {
     const f = current.findings.find((x) => x.id === id)!;
@@ -70,3 +71,6 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
 
   return NextResponse.json({ finding: updated });
 }
+
+// Central error handling, request ID and access logging: src/lib/api/handler.ts
+export const POST = withApiHandler(handlePOST);

@@ -1,6 +1,9 @@
-import { NextResponse } from "next/server";
+import type { NextResponse } from "next/server";
 import { getCurrentUser, type SessionData } from "@/lib/session";
 import { hasAnyPermission } from "@/lib/permissions/registry";
+import { AuthenticationError, AuthorizationError } from "@/lib/errors";
+import { errorResponse } from "@/lib/api/handler";
+import { setRequestUser } from "@/lib/requestContext";
 
 type Ok = { ok: true; session: SessionData };
 type Err = { ok: false; response: NextResponse };
@@ -9,7 +12,7 @@ type Err = { ok: false; response: NextResponse };
 // reusing one instance across multiple requests/responses is unsafe (the
 // stream can only be consumed once).
 function notAuthenticated(): Err {
-  return { ok: false, response: NextResponse.json({ error: "Not authenticated" }, { status: 401 }) };
+  return { ok: false, response: errorResponse(new AuthenticationError()) };
 }
 
 /**
@@ -30,6 +33,7 @@ export async function requireUser(): Promise<Ok | Err> {
   if (!session) {
     return notAuthenticated();
   }
+  setRequestUser(session.userId);
   return { ok: true, session };
 }
 
@@ -43,7 +47,7 @@ export async function requirePermission(...keys: string[]): Promise<Ok | Err> {
   const result = await requireUser();
   if (!result.ok) return result;
   if (!hasAnyPermission(result.session.permissions, keys)) {
-    return { ok: false, response: NextResponse.json({ error: "Forbidden" }, { status: 403 }) };
+    return { ok: false, response: errorResponse(new AuthorizationError()) };
   }
   return result;
 }

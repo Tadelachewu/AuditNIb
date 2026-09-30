@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/guard";
 import { updateDb } from "@/lib/db";
+import { withApiHandler } from "@/lib/api/handler";
 
-export async function POST() {
+async function handlePOST() {
   const auth = await requireUser();
   if (!auth.ok) return auth.response;
 
@@ -16,3 +17,6 @@ export async function POST() {
 
   return NextResponse.json({ ok: true });
 }
+
+// Central error handling, request ID and access logging: src/lib/api/handler.ts
+export const POST = withApiHandler(handlePOST);

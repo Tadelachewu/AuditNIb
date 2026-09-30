@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { inactiveOrgUnitError } from "@/lib/org";
 import { z } from "zod";
 import { requirePermission } from "@/lib/guard";
 import { hasPermission } from "@/lib/permissions/registry";
@@ -8,10 +9,11 @@ import { assertPeriodWritable, nextFindingReference, assertRequiredFindingFields
 import { isDepartmentInScope } from "@/lib/org";
 import { appendAuditLog } from "@/lib/audit";
 import { deleteStoredFile } from "@/lib/fileStorage";
+import { withApiHandler } from "@/lib/api/handler";
 
 const EDITABLE_STATUSES = ["DRAFT", "RETURNED"];
 
-export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+async function handleGET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requirePermission("findings.view");
   if (!auth.ok) return auth.response;
   const { id } = await params;
@@ -73,7 +75,7 @@ const updateSchema = z.object({
 // Only DRAFT/RETURNED are editable (plan doc §3.3). Editing a RETURNED
 // finding does not by itself resubmit it - that's the separate
 // POST .../submit action, same as an initial DRAFT.
-export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
+async function handlePATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requirePermission("findings.edit");
   if (!auth.ok) return auth.response;
   const { session } = auth;
@@ -109,7 +111,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
 
   const periodError = assertPeriodWritable(db, existing.periodId, existing.status);
-  if (periodError) return NextResponse.json({ error: periodError }, { status: 409 });
+  if (periodError) return NextResponse.json({ error: periodError, code: "PERIOD_LOCKED" }, { status: 409 });
 
   // Same org-scope rule POST /api/findings enforces at creation: a
   // branch-scoped session can never move its own finding to a different
@@ -129,6 +131,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (branch.districtId !== districtId) {
     return NextResponse.json({ error: "Selected branch does not belong to the selected district" }, { status: 400 });
   }
+  // Moving a finding into a deactivated district/branch is refused; a
+  // finding already there can still be edited.
+  if (districtId !== existing.districtId || branchId !== existing.branchId) {
+    const inactiveUnit = inactiveOrgUnitError(db, districtId, branchId);
+    if (inactiveUnit) return NextResponse.json({ error: `${inactiveUnit} Findings can't be moved to it.` }, { status: 400 });
+  }
 
   const periodId = input.periodId ?? existing.periodId;
   const period = db.reportingPeriods.find((p) => p.id === periodId);
@@ -147,13 +155,16 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   // cleared it (allowed once Settings.requiredFindingFields opts it out)
   // or it was already blank on `existing` and nothing here is touching
   // it, and neither case has anything to look up or scope-check.
+  // "Must be active" applies only to a *newly picked* source / department /
+  // category: a finding whose value was deactivated later can still be
+  // edited without being forced to change it (docs/deactivation.md).
   const sourceId = input.sourceId ?? existing.sourceId;
-  if (sourceId && !db.sources.some((s) => s.id === sourceId && s.active)) {
+  if (sourceId && sourceId !== existing.sourceId && !db.sources.some((s) => s.id === sourceId && s.active)) {
     return NextResponse.json({ error: "Selected source is not active" }, { status: 400 });
   }
   const departmentId = input.departmentId ?? existing.departmentId;
   if (departmentId) {
-    const department = db.departments.find((d) => d.id === departmentId && d.active);
+    const department = db.departments.find((d) => d.id === departmentId && (d.active || departmentId === existing.departmentId));
     if (!department) {
       return NextResponse.json({ error: "Selected department is not active" }, { status: 400 });
     }
@@ -167,7 +178,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   // value (Settings.allowOtherValueFields.categoryId), stored as plain
   // text with no backing record by design, not an invalid reference.
   const matchedCategory = categoryId ? db.categories.find((c) => c.id === categoryId) : undefined;
-  if (matchedCategory && !matchedCategory.active) {
+  if (matchedCategory && !matchedCategory.active && categoryId !== existing.categoryId) {
     return NextResponse.json({ error: "Selected classified case is not active" }, { status: 400 });
   }
 
@@ -239,7 +250,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   return NextResponse.json({ finding: updated });
 }
 
-export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+async function handleDELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   // Two independent permissions can reach this route, each only valid for
   // a different status - see the registry's own doc comment on
   // "delete-rejected" for why deleting a DRAFT (the registrant cleaning up
@@ -280,7 +291,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   }
 
   const periodError = assertPeriodWritable(db, existing.periodId, existing.status);
-  if (periodError) return NextResponse.json({ error: periodError }, { status: 409 });
+  if (periodError) return NextResponse.json({ error: periodError, code: "PERIOD_LOCKED" }, { status: 409 });
 
   // Its evidence/attachment records go with it (DB cascade); the stored
   // files are removed below, once the delete has actually committed - so a
@@ -305,3 +316,8 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
 
   return NextResponse.json({ ok: true });
 }
+
+// Central error handling, request ID and access logging: src/lib/api/handler.ts
+export const GET = withApiHandler(handleGET);
+export const PATCH = withApiHandler(handlePATCH);
+export const DELETE = withApiHandler(handleDELETE);

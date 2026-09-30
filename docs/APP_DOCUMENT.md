@@ -1,3 +1,5 @@
+> **Note (2026-09-30):** Scoring Adjustments were removed from the application. Performance is always the Scoring Rule's formula. The old rows were exported to `prisma/backups/scoring_adjustments_2026-09-30.json`. References below are historical.
+
 # NIB Control360 — App Walkthrough & Business Rationale
 
 This document walks through every functionality currently in the app, in

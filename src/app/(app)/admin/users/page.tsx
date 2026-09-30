@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { MRT_ColumnDef } from "material-react-table";
-import { apiGet, apiSend, ApiError } from "@/lib/api-client";
+import { apiGet, apiSend, ApiError, errorMessage } from "@/lib/api-client";
 import { formatDateTime } from "@/lib/format";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -16,6 +16,8 @@ import { usePermissions } from "@/lib/permissions/PermissionsContext";
 import { hasPermission } from "@/lib/permissions/registry";
 import type { SafeUser, District, Branch, Department, RoleDefinition } from "@/types";
 import { AdminTable } from "@/components/ui/AdminTable";
+import { ImportCsvDialog } from "@/components/ui/ImportCsvDialog";
+import { notify, notifications } from "@/lib/notify";
 
 const emptyForm = { name: "", username: "", email: "", phone: "", password: "", role: "", districtId: "", branchId: "", departmentId: "" };
 const emptyEditForm = { name: "", email: "", phone: "", role: "", districtId: "", branchId: "", departmentId: "", password: "" };
@@ -153,7 +155,7 @@ export default function UsersPage() {
       close();
       await loadAll();
     } catch (err) {
-      setFormError(err instanceof ApiError ? err.message : "Failed to create user");
+      setFormError(errorMessage(err, "Failed to create user"));
     } finally {
       setSubmitting(false);
     }
@@ -197,7 +199,7 @@ export default function UsersPage() {
       setEditingId(null);
       await loadAll();
     } catch (err) {
-      setEditError(err instanceof ApiError ? err.message : "Failed to save changes");
+      setEditError(errorMessage(err, "Failed to save changes"));
     } finally {
       setRowBusy(null);
     }
@@ -218,9 +220,10 @@ export default function UsersPage() {
       await apiSend(`/api/admin/users/${user.id}`, "PATCH", {
         status: user.status === "ACTIVE" ? "INACTIVE" : "ACTIVE",
       });
+      notify.success(user.status === "ACTIVE" ? notifications.user.deactivated : notifications.user.activated);
       await loadAll();
     } catch (err) {
-      alert(err instanceof ApiError ? err.message : "Failed to update user");
+      notify.fromError(err, notifications.user.statusFailed);
     } finally {
       setRowBusy(null);
     }
@@ -237,9 +240,10 @@ export default function UsersPage() {
     setRowBusy(user.id);
     try {
       await apiSend(`/api/admin/users/${user.id}`, "DELETE");
+      notify.success(notifications.user.deleted);
       await loadAll();
     } catch (err) {
-      alert(err instanceof ApiError ? err.message : "Failed to delete user");
+      notify.fromError(err, notifications.user.deleteFailed);
     } finally {
       setRowBusy(null);
     }
@@ -445,6 +449,63 @@ export default function UsersPage() {
           getRowId={(u) => u.id}
           exportFileName="users"
           emptyText="No users yet."
+          toolbarActions={
+            canCreate && roles.length > 0 && (
+              <ImportCsvDialog
+                entityLabel="users"
+                templateName="users-import"
+                columns={[
+                  { key: "username", required: true, example: "abebe.k", help: "Letters, numbers, dots, dashes, underscores; at least 3 characters" },
+                  { key: "name", required: true, example: "Abebe Kebede", help: "Full name" },
+                  { key: "email", required: true, example: "abebe.k@nibbank.com.et", help: "Work email (used for password reset)" },
+                  { key: "phone", example: "+251911000000", help: "Optional" },
+                  { key: "role", required: true, example: "BRANCH_MANAGER", help: "Role code (see Roles & Permissions)" },
+                  { key: "district", example: "AA", help: "District code or exact name - for district-level roles" },
+                  { key: "branch", example: "BOLE", help: "Branch code or exact name - for branch-level roles (district is taken from it)" },
+                  { key: "department", example: "OPS", help: "Optional department code or exact name" },
+                  {
+                    key: "temporary_password",
+                    required: true,
+                    example: "Temp#2026-Abebe",
+                    help: "Must meet the password policy. The user must change it at first sign-in and it expires in 24 hours. Never written to the results file - delete the CSV after importing.",
+                    sensitive: true,
+                  },
+                ]}
+                toPayload={(row) => {
+                  const label = row.username || row.name || "(blank)";
+                  if (!row.username || !row.name || !row.email || !row.role || !row.temporary_password) {
+                    return { error: "username, name, email, role and temporary_password are required", label };
+                  }
+                  const match = <T extends { id: string; code?: string; name: string }>(list: T[], v: string) =>
+                    list.find((x) => x.code?.toLowerCase() === v.toLowerCase() || x.name.toLowerCase() === v.toLowerCase());
+                  const role = roles.find((r) => r.code.toLowerCase() === row.role.toLowerCase());
+                  if (!role) return { error: `Unknown role "${row.role}"`, label };
+                  const branch = row.branch ? match(branches, row.branch) : undefined;
+                  if (row.branch && !branch) return { error: `Unknown branch "${row.branch}"`, label };
+                  const district = row.district ? match(districts, row.district) : undefined;
+                  if (row.district && !district) return { error: `Unknown district "${row.district}"`, label };
+                  const department = row.department ? match(departments, row.department) : undefined;
+                  if (row.department && !department) return { error: `Unknown or inactive department "${row.department}"`, label };
+                  return {
+                    label,
+                    payload: {
+                      username: row.username,
+                      name: row.name,
+                      email: row.email,
+                      phone: row.phone || undefined,
+                      role: role.code,
+                      password: row.temporary_password,
+                      branchId: branch?.id ?? null,
+                      districtId: branch?.districtId ?? district?.id ?? null,
+                      departmentId: department?.id ?? null,
+                    },
+                  };
+                }}
+                submit={(payload) => apiSend("/api/admin/users", "POST", payload)}
+                onDone={loadAll}
+              />
+            )
+          }
           renderRowActions={(u) => (
             <RowActions>
               {canEdit && (

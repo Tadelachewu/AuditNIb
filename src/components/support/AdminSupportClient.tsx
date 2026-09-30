@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { apiGet, apiSend, ApiError } from "@/lib/api-client";
+import { apiGet, apiSend, errorMessage } from "@/lib/api-client";
 import { formatDateTime } from "@/lib/format";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -45,7 +45,7 @@ export function AdminSupportClient({ canRespond }: { canRespond: boolean }) {
       const data = await apiGet<{ threads: AdminThread[] }>("/api/admin/support");
       setThreads(data.threads);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to load threads");
+      setError(errorMessage(err, "Failed to load threads"));
     }
   }, []);
 
@@ -55,7 +55,7 @@ export function AdminSupportClient({ canRespond }: { canRespond: boolean }) {
       if (selectedIdRef.current !== id) return;
       setMessages(data.messages);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to load conversation");
+      setError(errorMessage(err, "Failed to load conversation"));
     }
   }, []);
 
@@ -84,7 +84,7 @@ export function AdminSupportClient({ canRespond }: { canRespond: boolean }) {
       setReplyBody("");
       await Promise.all([loadThread(selectedId), loadThreads()]);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to send message");
+      setError(errorMessage(err, "Failed to send message"));
     } finally {
       setSendingReply(false);
     }

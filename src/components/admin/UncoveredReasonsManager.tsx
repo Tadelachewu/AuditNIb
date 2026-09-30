@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import type { MRT_ColumnDef } from "material-react-table";
 import { useRouter } from "next/navigation";
-import { apiSend, ApiError } from "@/lib/api-client";
+import { apiSend, errorMessage } from "@/lib/api-client";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { StickyActions } from "@/components/ui/StickyActions";
@@ -15,6 +15,7 @@ import { RowAction, RowActions, StatusToggleAction } from "@/components/ui/RowAc
 import type { UncoveredReason } from "@/types";
 import { AdminTable } from "@/components/ui/AdminTable";
 import { ImportCsvDialog } from "@/components/ui/ImportCsvDialog";
+import { notify, notifications } from "@/lib/notify";
 
 // Same convention as SourcesManager: the list is a prop refreshed via
 // router.refresh() after every mutation, not a duplicated client copy -
@@ -42,7 +43,7 @@ export function UncoveredReasonsManager({ initialReasons }: { initialReasons: Un
       close();
       router.refresh();
     } catch (err) {
-      setFormError(err instanceof ApiError ? err.message : "Failed to create reason");
+      setFormError(errorMessage(err, "Failed to create reason"));
     } finally {
       setSubmitting(false);
     }
@@ -62,7 +63,7 @@ export function UncoveredReasonsManager({ initialReasons }: { initialReasons: Un
       setEditingId(null);
       router.refresh();
     } catch (err) {
-      setEditError(err instanceof ApiError ? err.message : "Failed to save changes");
+      setEditError(errorMessage(err, "Failed to save changes"));
     } finally {
       setRowBusy(null);
     }
@@ -79,9 +80,10 @@ export function UncoveredReasonsManager({ initialReasons }: { initialReasons: Un
     setRowBusy(r.id);
     try {
       await apiSend(`/api/admin/uncovered-reasons/${r.id}`, "DELETE");
+      notify.success(notifications.uncoveredReason.deleted);
       router.refresh();
     } catch (err) {
-      alert(err instanceof ApiError ? err.message : "Failed to delete reason");
+      notify.fromError(err, notifications.uncoveredReason.deleteFailed);
     } finally {
       setRowBusy(null);
     }
@@ -100,9 +102,10 @@ export function UncoveredReasonsManager({ initialReasons }: { initialReasons: Un
     setRowBusy(r.id);
     try {
       await apiSend(`/api/admin/uncovered-reasons/${r.id}`, "PATCH", { active: !r.active });
+      notify.success(r.active ? notifications.uncoveredReason.deactivated : notifications.uncoveredReason.activated);
       router.refresh();
     } catch (err) {
-      alert(err instanceof ApiError ? err.message : "Failed to update reason");
+      notify.fromError(err, notifications.uncoveredReason.statusFailed);
     } finally {
       setRowBusy(null);
     }

@@ -4,7 +4,6 @@ import { useMemo } from "react";
 import Link from "next/link";
 import type { MRT_ColumnDef } from "material-react-table";
 import { AdminTable } from "@/components/ui/AdminTable";
-import { AdjustedBadge } from "@/components/ui/AdjustedBadge";
 
 /** One row of a performance ranking, computed server-side (plain, serializable). */
 export interface RankingRow {
@@ -19,8 +18,6 @@ export interface RankingRow {
   rectifiedCases: number;
   outstandingCases: number;
   performance: number | null;
-  /** Set when `performance` is a manual Scoring Adjustment. */
-  adjustmentReason: string | null;
 }
 
 /**
@@ -67,30 +64,19 @@ export function RankingGrid({
         sortUndefined: "last",
         meta: {
           exportValue: (r: RankingRow) =>
-            r.performance === null ? "" : `${r.performance.toFixed(1)}${r.adjustmentReason ? " (adjusted)" : ""}`,
+            r.performance === null ? "" : r.performance.toFixed(1),
         },
         Cell: ({ row }) => {
           const r = row.original;
           if (r.performance === null) return <>--</>;
-          const formula = r.totalCases > 0 ? (r.rectifiedCases / r.totalCases) * 100 : null;
           return (
             <details className="group">
               <summary className="cursor-pointer list-none text-slate-700 marker:content-none hover:underline">
                 {r.performance.toFixed(1)}%
-                <AdjustedBadge adjustment={r.adjustmentReason ? { reason: r.adjustmentReason } : null} />
               </summary>
               <div className="mt-1 max-w-[14rem] text-xs leading-relaxed text-slate-500">
-                {r.adjustmentReason ? (
-                  <>
-                    Manually adjusted to {r.performance.toFixed(1)}% (Scoring Adjustments): &quot;{r.adjustmentReason}&quot;. The formula would
-                    give {r.rectifiedCases} ÷ {r.totalCases} eligible case(s){formula !== null ? ` = ${formula.toFixed(1)}%` : ""}.
-                  </>
-                ) : (
-                  <>
                     {r.rectifiedCases} of {r.totalCases} eligible case(s) closed (unless it&apos;s closed, it never counts as rectified):{" "}
                     {r.rectifiedCases} ÷ {r.totalCases} × 100 = {r.performance.toFixed(1)}%.
-                  </>
-                )}
               </div>
             </details>
           );

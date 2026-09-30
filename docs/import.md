@@ -1,5 +1,16 @@
 # Bulk Import & Export — NIB Control360 (ICFMS)
 
+> **Current rules (updated 2026-09-30). Where anything below disagrees, this box wins.**
+> - **Every problem is reported at once:** each rejected row lists *all* its problems (`errors[]`, also joined in `error`), not just the first; the whole file is still checked before anything is saved (all-or-nothing).
+> - **Case-insensitive:** district / branch / period / source / department / category codes, Status, and the list values (operation area, type of irregularity, currency, risk level, priority) match regardless of letter case and are stored in the configured spelling.
+> - **Finding date:** strict `YYYY-MM-DD` real calendar date (or an Excel date cell); **not after the last day of the row's Reporting Period** (earlier is fine), and not in the future. For TRANSFERRED this is the original period.
+> - **Inactive references** are reported as *"… is deactivated"*, separately from unknown codes. A Transferred To period must also be later than the Reporting Period.
+> - **Duplicates** use the importer's own fixed exact-match key (branch, period, source, department, category, finding date, operation area, irregularity type, currency, amount, cases), **not** the admin's Similar Findings setting.
+> - **Duplicates are the final check:** only after every row passes; nothing is imported until the importer reviews the evidence and chooses *Import without duplicates* or *Cancel* (`IMPORT_DUPLICATES_FOUND`, `src/lib/importRun.ts`).
+> - **Reverse an import:** Import History → Reverse (permission *Findings › Reverse an Import*) removes the batch's findings and everything recorded against them, **whatever has happened since** (impact shown first, reason required). Then *Re-import* (stored file, all checks again) or *Delete record*. References stay reserved. Code: `src/lib/importReverse.ts`.
+> - **Root Cause** is an import column (the last one).
+
+
 This document describes the Findings **bulk import** feature end-to-end (template, parsing, validation, commit, permissions, edge cases) and, for contrast, the **CSV export** feature it's paired with in the UI/permission model. All citations are `file:line` relative to the repo root (`C:\Users\HP\Desktop\AdonayAudit\auditapp`).
 
 Core files:
@@ -97,7 +108,7 @@ Malformed-file behavior summary: wrong extension → blocked client-side; corrup
 
 ## 4. Row-level validation rules (exhaustive)
 
-All of the following live in `validateImportRow()` (`src/lib/import.ts:353-666`), evaluated **in this order** — the first failing rule short-circuits with `outcome: "error"` and that error message; a row that passes every rule is either `outcome: "duplicate"` or `outcome: "imported"`.
+All of the following live in `validateImportRow()` (`src/lib/import.ts:353-666`), evaluated **all together** — every failing rule is collected and the row gets `outcome: "error"` with all the messages (`errors[]`); a row that passes every rule is either `outcome: "duplicate"` or `outcome: "imported"`.
 
 1. **Required-field presence** (`import.ts:378-381`): every column whose `columnRequired(db, col)` is true must have a non-blank (after `.trim()`) value. Error: `Missing required value(s): <comma-joined column headers>`.
 2. **Status value** (`import.ts:383-391`): uppercased, must be one of `SENT_TO_BRANCH_MANAGER`, `TRANSFERRED`, `CLOSED`. Error: `Invalid status "<raw>" - must be one of SENT_TO_BRANCH_MANAGER, TRANSFERRED, CLOSED`.
@@ -113,7 +124,7 @@ All of the following live in `validateImportRow()` (`src/lib/import.ts:353-666`)
 8. **Source Code** (`import.ts:447-449`): only looked up if non-blank (config-optional); if given, must match an **active** source. Error: `Unknown or inactive source code "<code>"`.
 9. **Department Code** (`import.ts:451-456`): only looked up if non-blank; must match an **active** department (`Unknown or inactive department code "<code>"`), and must be in org-scope for the row's district/branch via `isDepartmentInScope()` (`src/lib/org.ts:141-145` — BANK-scoped departments always qualify, DISTRICT-scoped must match the row's district, BRANCH-scoped must match the row's branch). Error: `Department "<code>" is not available for branch "<code>"`.
 10. **Classified Category Code** (`import.ts:458-460`): only looked up if non-blank; must match an **active** category. Error: `Unknown or inactive classified category code "<code>"`.
-11. **Currency** (`import.ts:465-467`): only checked if non-blank; must be an exact, case-sensitive member of `Settings.currencies`. Error: `Unknown currency "<value>"`.
+11. **Currency** (`import.ts:465-467`): only checked if non-blank; must be a member of `Settings.currencies`, case-insensitive. Error: `Unknown currency "<value>"`.
 12. **Risk Level** (`import.ts:468-470`): must be an exact member of `Settings.riskLevels`. Error: `Unknown risk level "<value>"`.
 13. **Priority** (`import.ts:471-473`): must be an exact member of `Settings.priorityLevels`. Error: `Unknown priority "<value>"`.
 14. **Operation Area** (`import.ts:474-476`): must be an exact member of `Settings.operationAreas`. Error: `Unknown operation area "<value>"`.

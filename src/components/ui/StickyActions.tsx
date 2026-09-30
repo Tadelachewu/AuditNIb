@@ -52,12 +52,15 @@ export function StickyActions({
     <div
       className={`sticky bottom-0 z-20 col-span-full mt-2 flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 bg-white/95 py-3 backdrop-blur-sm ${VARIANTS[variant]} ${className}`}
     >
+      {/* The message takes the free space and wraps its own text; the buttons
+          stay together as one group, so a long message never splits them
+          (on a narrow screen the whole group moves below the message). */}
       {(error || hint) && (
-        <div className="mr-auto min-w-0 text-sm">
+        <div className="min-w-0 flex-1 basis-60 text-sm" role={error ? "alert" : undefined}>
           {error ? <p className="text-red-600">{error}</p> : <p className="text-xs text-slate-500">{hint}</p>}
         </div>
       )}
-      {children}
+      <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2">{children}</div>
     </div>
   );
 }

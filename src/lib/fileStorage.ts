@@ -1,6 +1,7 @@
 import path from "path";
 import fs from "fs";
 import crypto from "crypto";
+import { logger } from "@/lib/logger";
 
 /**
  * The one place the app reads, writes and deletes stored files - evidence
@@ -38,7 +39,11 @@ const MAGIC = Buffer.from("NIBENC1\0", "latin1");
 const IV_BYTES = 12;
 const TAG_BYTES = 16;
 
-export class FileStorageError extends Error {}
+export class FileStorageError extends Error {
+  // Named so the central error mapping (src/lib/errors/normalize.ts) can
+  // recognise it and answer FILE_STORAGE_UNAVAILABLE instead of a raw 500.
+  override name = "FileStorageError";
+}
 
 export function areaDir(area: StorageArea): string {
   return path.join(STORAGE_ROOT, area);
@@ -121,7 +126,7 @@ export function deleteStoredFile(area: StorageArea, name: string): boolean {
       fs.unlinkSync(p);
       deleted = true;
     } catch (err) {
-      if ((err as NodeJS.ErrnoException).code !== "ENOENT") console.error(`[fileStorage] could not delete ${p}`, err);
+      if ((err as NodeJS.ErrnoException).code !== "ENOENT") logger.error({ err, event: "storage.delete_failed" }, "Could not delete a stored file");
     }
   }
   return deleted;

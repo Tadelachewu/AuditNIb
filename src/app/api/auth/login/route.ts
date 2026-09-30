@@ -16,6 +16,7 @@ import {
   sleep,
   clientIp,
 } from "@/lib/rateLimit";
+import { withApiHandler } from "@/lib/api/handler";
 
 const loginSchema = z.object({
   username: z.string().min(1),
@@ -45,7 +46,7 @@ const PER_ACCOUNT_RATE_LIMIT = { max: 5, windowMs: 15 * 60 * 1000 };
 const ACCOUNT_LOCKOUT = { maxFailures: 5, windowMs: 15 * 60 * 1000, lockoutMs: 15 * 60 * 1000 };
 const IP_LOCKOUT = { maxFailures: 10, windowMs: 30 * 60 * 1000, lockoutMs: 30 * 60 * 1000 };
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   const body = await request.json().catch(() => null);
   const parsed = loginSchema.safeParse(body);
   if (!parsed.success) {
@@ -179,3 +180,6 @@ export async function POST(request: Request) {
 
   return NextResponse.json({ user: toSafeUser({ ...user, lastLoginAt: loginTime }) });
 }
+
+// Central error handling, request ID and access logging: src/lib/api/handler.ts
+export const POST = withApiHandler(handlePOST);

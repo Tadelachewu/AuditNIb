@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { apiGet, apiSend, ApiError } from "@/lib/api-client";
+import { apiGet, apiSend, errorMessage } from "@/lib/api-client";
 import { CollapsibleCard } from "@/components/ui/CollapsibleCard";
 import { Button } from "@/components/ui/Button";
 import { StickyActions } from "@/components/ui/StickyActions";
@@ -92,7 +92,7 @@ export default function SettingsPage() {
       // whole app immediately, not just after the next navigation.
       router.refresh();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to save settings");
+      setError(errorMessage(err, "Failed to save settings"));
     } finally {
       setSaving(false);
     }
@@ -105,7 +105,7 @@ export default function SettingsPage() {
       const res = await apiSend<{ ok: boolean; sentTo: string }>("/api/admin/settings/test-email", "POST", {});
       setTestEmailResult({ ok: true, message: `Sent to ${res.sentTo}.` });
     } catch (err) {
-      setTestEmailResult({ ok: false, message: err instanceof ApiError ? err.message : "Failed to send test email" });
+      setTestEmailResult({ ok: false, message: errorMessage(err, "Failed to send test email") });
     } finally {
       setTestEmailSending(false);
     }

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
+import { withApiHandler } from "@/lib/api/handler";
 
 const rateSchema = z.object({
   rating: z.number().int().min(1).max(5),
@@ -11,7 +12,7 @@ const rateSchema = z.object({
 // side), never support.view/support.respond alone - a 5-star rating closes
 // the thread; anything below leaves it OPEN so the owner's next message
 // (see [id]/messages/route.ts) reopens the notify/respond cycle.
-export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+async function handlePOST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requirePermission("support.create");
   if (!auth.ok) return auth.response;
   const { id } = await params;
@@ -39,3 +40,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   return NextResponse.json({ thread: updated });
 }
+
+// Central error handling, request ID and access logging: src/lib/api/handler.ts
+export const POST = withApiHandler(handlePOST);

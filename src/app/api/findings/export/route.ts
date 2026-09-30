@@ -6,6 +6,7 @@ import { findingsResidentInPeriod, queueStatusesForSession, type FindingPeriodSl
 import type { Finding } from "@/types";
 import { filterFindingsByText, sortFindings, parseFindingSort } from "@/lib/findingListQuery";
 import { matchesOperationAndIrregularity } from "@/lib/dashboardFilters";
+import { withApiHandler } from "@/lib/api/handler";
 
 // master.txt §18's report set, as a real text/csv export - same
 // org-scope + filter logic as GET /api/findings (src/app/api/findings/route.ts),
@@ -19,7 +20,7 @@ function csvCell(value: string | number): string {
   return /[",\r\n]/.test(s) ? `"${s.replaceAll('"', '""')}"` : s;
 }
 
-export async function GET(request: Request) {
+async function handleGET(request: Request) {
   // Used by both the Reports page and the Findings list's Export CSV - either
   // permission is enough (the data is still limited to the caller's scope).
   const auth = await requirePermission("reports.view", "findings.view");
@@ -156,3 +157,6 @@ export async function GET(request: Request) {
     },
   });
 }
+
+// Central error handling, request ID and access logging: src/lib/api/handler.ts
+export const GET = withApiHandler(handleGET);

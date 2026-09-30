@@ -1,6 +1,6 @@
-import { computeEligibleCaseCounts, caseAgeDays, findingsResidentInPeriod, isHoApproved, getActiveScoringAdjustment } from "@/lib/findings";
+import { computeEligibleCaseCounts, caseAgeDays, findingsResidentInPeriod, isHoApproved } from "@/lib/findings";
 import { formatNumber } from "@/lib/format";
-import type { Database, Branch, District, ReportingPeriod, ClassifiedCategory, BranchCoverageNote, Finding, Source, ScoringAdjustment } from "@/types";
+import type { Database, Branch, District, ReportingPeriod, ClassifiedCategory, BranchCoverageNote, Finding, Source } from "@/types";
 
 // The 10 named Internal Control Division report templates (see report/*.xlsx,
 // already relabeled with these exact names), plus #11 Transferred Findings
@@ -302,24 +302,6 @@ export function getMonthlySummaryReport(
 //       District History (#4) has never shown it at all (Other-Case only).
 // ---------------------------------------------------------------------------
 
-/**
- * A district's official single-period performance, with an active Scoring
- * Adjustment applied the same way computePerformance() applies it on the
- * dashboards (getActiveScoringAdjustment() - which also declines when the
- * figure is narrowed to specific sources). Returns the figure to show and
- * the adjustment behind it (null when it's the formula's own result).
- */
-function withDistrictAdjustment(
-  db: Database,
-  districtId: string,
-  periodId: string,
-  sourceIds: string[] | undefined,
-  formula: number | null
-): { performance: number | null; adjustment: ScoringAdjustment | null } {
-  const adjustment = getActiveScoringAdjustment(db, { districtId, periodId, sourceIds });
-  return adjustment ? { performance: adjustment.value, adjustment } : { performance: formula, adjustment: null };
-}
-
 export interface DistrictPeriodRow {
   period: ReportingPeriod;
   district: District;
@@ -328,10 +310,27 @@ export interface DistrictPeriodRow {
   rectifiedCases: number;
   outstandingCases: number;
   performance: number | null;
-  // An active Scoring Adjustment for this district + period, when it
-  // replaced `performance` (single-period official figures only - see
-  // docs/scoring-adjustments.md). Counts beside it are never adjusted.
-  adjustment?: ScoringAdjustment | null;
+}
+
+/**
+ * "All periods" view of Monthly District History: each district's rows
+ * summed across every period. Each case is counted in exactly one period
+ * (a transferred case moves to its destination period), so the sum never
+ * double-counts; performance is recomputed from the summed counts, not
+ * averaged from the monthly percentages.
+ */
+export type DistrictTotalRow = Omit<DistrictPeriodRow, "period">;
+
+export function sumDistrictRowsAcrossPeriods(rows: DistrictPeriodRow[]): DistrictTotalRow[] {
+  const byDistrict = new Map<string, DistrictTotalRow>();
+  for (const r of rows) {
+    const t = byDistrict.get(r.district.id) ?? { district: r.district, totalBranches: r.totalBranches, totalCases: 0, rectifiedCases: 0, outstandingCases: 0, performance: null };
+    t.totalCases += r.totalCases;
+    t.rectifiedCases += r.rectifiedCases;
+    t.outstandingCases += r.outstandingCases;
+    byDistrict.set(r.district.id, t);
+  }
+  return [...byDistrict.values()].map((t) => ({ ...t, performance: t.totalCases > 0 ? (t.rectifiedCases / t.totalCases) * 100 : null }));
 }
 
 export interface DistrictVariousRow {
@@ -368,17 +367,7 @@ export function getMonthlyDistrictSeries(
         totalCases: otherTotal,
         rectifiedCases: otherRectified,
         outstandingCases: otherTotal - otherRectified,
-        // A manual Scoring Adjustment for this district+period replaces the
-        // official figure, exactly as on the dashboards - unless this
-        // template is narrowed to specific sources (an adjustment is one
-        // whole-district figure, see getActiveScoringAdjustment()).
-        ...withDistrictAdjustment(
-          db,
-          district.id,
-          period.id,
-          templateSourceIds,
-          eligible && eligible.totalCases > 0 ? (eligible.rectifiedCases / eligible.totalCases) * 100 : null
-        ),
+        performance: eligible && eligible.totalCases > 0 ? (eligible.rectifiedCases / eligible.totalCases) * 100 : null,
       });
     }
   }
@@ -433,10 +422,6 @@ export interface DistrictRankingRow {
   rectifiedCases: number;
   outstandingCases: number;
   performance: number | null;
-  // An active Scoring Adjustment for this district + period, when it
-  // replaced `performance` (single-period official figures only - see
-  // docs/scoring-adjustments.md). Counts beside it are never adjusted.
-  adjustment?: ScoringAdjustment | null;
 }
 
 /** Bank-wide TOTAL row for any per-district ranking table - present at the bottom of every such sheet in the source workbook. */
@@ -488,12 +473,7 @@ export function getDistrictRankingOtherCases(
         totalCases,
         rectifiedCases,
         outstandingCases: totalCases - rectifiedCases,
-        // An adjustment is one figure for one period - it can only replace a
-        // single-period ranking, never a sum across several periods (or the
-        // no-period lifetime view).
-        ...(periodIds && periodIds.length === 1
-          ? withDistrictAdjustment(db, district.id, periodIds[0], templateSourceIds, formula)
-          : { performance: formula, adjustment: null }),
+        performance: formula,
       };
     })
     .sort((a, b) => (b.performance ?? -1) - (a.performance ?? -1));

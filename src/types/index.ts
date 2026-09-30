@@ -180,22 +180,6 @@ export interface ScoringRule {
   createdAt: string;
 }
 
-export interface ScoringAdjustment {
-  id: string;
-  targetType: "DISTRICT" | "BRANCH";
-  targetId: string;
-  periodId: string;
-  value: number;
-  reason: string;
-  // Only an ACTIVE adjustment overrides computePerformance() (see
-  // src/lib/findings.ts's own doc comment) - deactivating one reverts that
-  // target+period back to the mechanical formula without deleting the
-  // record (scoring adjustments can never be deleted - see PHASE3.md).
-  status: "ACTIVE" | "INACTIVE";
-  adjustedBy: string;
-  createdAt: string;
-}
-
 export type PeriodStatus = "OPEN" | "LOCKED";
 
 export interface ReportingPeriod {
@@ -765,7 +749,9 @@ export interface ImportBatchRow {
   findingId?: string;
   reference?: string;
   duplicateOfReference?: string;
+  // Every problem found in the row, joined with " · " (errors below lists them one by one).
   error?: string;
+  errors?: string[];
 }
 
 export interface ImportBatch {
@@ -783,6 +769,13 @@ export interface ImportBatch {
   // imported before originals were kept.
   storedFile: string | null;
   createdAt: string;
+  // Set when the batch was reversed (Import History → Reverse): every
+  // finding it created was removed. The batch record itself is kept, and
+  // its references stay reserved (never reissued).
+  reversedAt?: string | null;
+  reversedBy?: string | null;
+  reversedByName?: string | null;
+  reverseReason?: string | null;
 }
 
 // Real uploaded files (see src/lib/evidence.ts) - stored on local disk
@@ -863,7 +856,6 @@ export interface Database {
   departments: Department[];
   categories: ClassifiedCategory[];
   scoringRules: ScoringRule[];
-  scoringAdjustments: ScoringAdjustment[];
   reportingPeriods: ReportingPeriod[];
   findings: Finding[];
   findingTransitions: FindingTransition[];

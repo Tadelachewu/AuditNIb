@@ -7,6 +7,7 @@ import { transitionFinding } from "@/lib/findings";
 import { appendAuditLog } from "@/lib/audit";
 import { notifyUsers } from "@/lib/notifications";
 import type { FindingClosure } from "@/types";
+import { withApiHandler } from "@/lib/api/handler";
 
 // District/HO Controller's verification duty (plan doc §3.6; master.txt's
 // Close row: "Case closes only when eligible remaining cases/amount are
@@ -27,7 +28,7 @@ import type { FindingClosure } from "@/types";
 // caseCount/amount - short of that, status keeps tracking rectify/transfer
 // progress untouched, since a partial close doesn't change what's still
 // owed.
-export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+async function handlePOST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requirePermission("findings.close");
   if (!auth.ok) return auth.response;
   const { id } = await params;
@@ -44,7 +45,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
   }
   if (existing.status === "RECTIFICATION_RETURNED") {
     return NextResponse.json(
-      { error: "This finding was sent back for correction and can't be closed until it's resubmitted" },
+      { error: "This finding was sent back for correction and can't be closed until it's resubmitted", code: "FINDING_NOT_READY_FOR_CLOSURE" },
       { status: 409 }
     );
   }
@@ -56,7 +57,10 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     const awaitingVerification =
       existing.rectifiedCases > existing.districtVerifiedCases || existing.rectifiedAmount > existing.districtVerifiedAmount;
     return NextResponse.json(
-      { error: awaitingVerification ? "Awaiting district verification before this can be closed" : "Nothing rectified is awaiting closure yet" },
+      {
+        error: awaitingVerification ? "Awaiting district verification before this can be closed" : "Nothing rectified is awaiting closure yet",
+        code: "FINDING_NOT_READY_FOR_CLOSURE",
+      },
       { status: 409 }
     );
   }
@@ -116,3 +120,6 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
 
   return NextResponse.json({ finding: updated });
 }
+
+// Central error handling, request ID and access logging: src/lib/api/handler.ts
+export const POST = withApiHandler(handlePOST);

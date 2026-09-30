@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { inactiveOrgUnitError } from "@/lib/org";
 import { v4 as uuid } from "uuid";
 import { z } from "zod";
 import { requirePermission } from "@/lib/guard";
@@ -8,8 +9,9 @@ import { nextFindingReference, submitFinding, assertPeriodOpenForSubmission, ass
 import { isDepartmentInScope } from "@/lib/org";
 import type { Finding, FindingCase } from "@/types";
 import { matchesOperationAndIrregularity } from "@/lib/dashboardFilters";
+import { withApiHandler } from "@/lib/api/handler";
 
-export async function GET(request: Request) {
+async function handleGET(request: Request) {
   const auth = await requirePermission("findings.view");
   if (!auth.ok) return auth.response;
 
@@ -86,7 +88,7 @@ const createSchema = z.object({
 // Controller registering Internal Audit findings - icfms.txt: "Register
 // Internal Audit findings received from the Internal Audit Department")
 // must supply which district/branch the finding concerns.
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   const auth = await requirePermission("findings.create");
   if (!auth.ok) return auth.response;
   const { session } = auth;
@@ -141,6 +143,9 @@ export async function POST(request: Request) {
     branchId = input.branchId;
   }
 
+  const inactiveUnit = inactiveOrgUnitError(db, districtId, branchId);
+  if (inactiveUnit) return NextResponse.json({ error: `${inactiveUnit} New findings can't be registered for it.` }, { status: 400 });
+
   const branch = db.branches.find((b) => b.id === branchId)!;
   const period = db.reportingPeriods.find((p) => p.id === input.periodId);
   if (!period) return NextResponse.json({ error: "Selected reporting period does not exist" }, { status: 400 });
@@ -154,11 +159,11 @@ export async function POST(request: Request) {
   // period - drafts-allowed or not - is rejected the same way, instead of
   // silently creating-then-submitting and skipping the lock entirely.
   if (period.status === "LOCKED" && !period.draftsAllowedWhileLocked) {
-    return NextResponse.json({ error: `${period.code} is locked and cannot accept new findings` }, { status: 409 });
+    return NextResponse.json({ error: `${period.code} is locked and cannot accept new findings`, code: "PERIOD_LOCKED" }, { status: 409 });
   }
   if (input.submit && period.status === "LOCKED") {
     return NextResponse.json(
-      { error: `${period.code} is locked - save as a draft instead, then submit once the period is open` },
+      { error: `${period.code} is locked - save as a draft instead, then submit once the period is open`, code: "PERIOD_LOCKED" },
       { status: 409 }
     );
   }
@@ -278,3 +283,7 @@ export async function POST(request: Request) {
   const created = createdDb.findings.find((f) => f.id === finding.id)!;
   return NextResponse.json({ finding: created }, { status: 201 });
 }
+
+// Central error handling, request ID and access logging: src/lib/api/handler.ts
+export const GET = withApiHandler(handleGET);
+export const POST = withApiHandler(handlePOST);

@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { appendAuditLog } from "@/lib/audit";
 import { isDevResetEnabled, resetRegisteredData } from "@/lib/devResetRegisteredData";
+import { withApiHandler } from "@/lib/api/handler";
 
 // DEV-ONLY - see devResetRegisteredData.ts's own doc comment for the full
 // picture (scope, isolation, how to remove this feature entirely). 404s
@@ -27,7 +28,7 @@ async function requireDevAdmin() {
 
 // Lets the confirmation page show real counts ("this will delete 42
 // findings...") before the admin commits to typing the confirmation phrase.
-export async function GET() {
+async function handleGET() {
   const auth = await requireDevAdmin();
   if (!auth.ok) return auth.response;
 
@@ -41,7 +42,6 @@ export async function GET() {
       findingClosures: db.findingClosures.length,
       findingCases: db.findingCases.length,
       importBatches: db.importBatches.length,
-      scoringAdjustments: db.scoringAdjustments.length,
       branchCoverageNotes: db.branchCoverageNotes.length,
       evidence: db.evidence.length,
       comments: db.comments.length,
@@ -51,7 +51,7 @@ export async function GET() {
 
 const CONFIRM_PHRASE = "DELETE ALL FINDINGS";
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   const auth = await requireDevAdmin();
   if (!auth.ok) return auth.response;
 
@@ -78,3 +78,7 @@ export async function POST(request: Request) {
 
   return NextResponse.json({ summary });
 }
+
+// Central error handling, request ID and access logging: src/lib/api/handler.ts
+export const GET = withApiHandler(handleGET);
+export const POST = withApiHandler(handlePOST);

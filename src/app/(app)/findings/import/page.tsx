@@ -3,12 +3,18 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Download } from "lucide-react";
-import { apiGet, ApiError } from "@/lib/api-client";
+import { apiGet, ApiError, errorMessage, apiUpload, apiSend } from "@/lib/api-client";
+import { notify, notifications } from "@/lib/notify";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { ImportDuplicatesReview, type DuplicatesFound } from "@/components/findings/ImportDuplicatesReview";
+import { ImportReversePanel } from "@/components/findings/ImportReversePanel";
 import { formatDateTime } from "@/lib/format";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { FileInput } from "@/components/ui/Field";
+import { usePermissions } from "@/lib/permissions/PermissionsContext";
+import { hasPermission } from "@/lib/permissions/registry";
 import { ImportGuide } from "@/components/findings/ImportGuide";
 import type { ImportBatch, ImportBatchRow } from "@/types";
 import { ListSkeleton } from "@/components/ui/Skeleton";
@@ -24,7 +30,7 @@ const OUTCOME_TONE: Record<string, "green" | "amber" | "red"> = {
 // Shared by a real (already-committed) ImportBatch and by a rejected dry
 // run's row list (RejectedImportRow[]) - same shape apart from a rejected
 // row never having a findingId, which this table never displays anyway.
-type DisplayRow = Pick<ImportBatchRow, "rowNumber" | "outcome" | "reference" | "duplicateOfReference" | "error">;
+type DisplayRow = Pick<ImportBatchRow, "rowNumber" | "outcome" | "reference" | "duplicateOfReference" | "error" | "errors">;
 
 function BatchRowsTable({ rows }: { rows: DisplayRow[] }) {
   return (
@@ -47,7 +53,16 @@ function BatchRowsTable({ rows }: { rows: DisplayRow[] }) {
               <td className="px-3 py-1.5 text-slate-700">
                 {r.outcome === "imported" && r.reference}
                 {r.outcome === "duplicate" && `Already exists as ${r.duplicateOfReference}`}
-                {r.outcome === "error" && r.error}
+                {r.outcome === "error" &&
+                  (r.errors && r.errors.length > 1 ? (
+                    <ul className="list-disc space-y-0.5 pl-4">
+                      {r.errors.map((e) => (
+                        <li key={e}>{e}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    r.error
+                  ))}
               </td>
             </tr>
           ))}
@@ -70,6 +85,74 @@ export default function ImportFindingsPage() {
   // id/history entry behind it, just the row-by-row breakdown to fix from.
   const [rejected, setRejected] = useState<{ error: string; rows: ImportBatchRow[] } | null>(null);
   const [expandedBatchId, setExpandedBatchId] = useState<string | null>(null);
+  const permissions = usePermissions();
+  const canImport = hasPermission(permissions, "findings.import");
+  const canReverse = hasPermission(permissions, "findings.reverse-import");
+  const { confirm, dialog } = useConfirm();
+  // Duplicates are the import's final check: nothing is imported until the
+  // importer decides (import the rest / cancel). `source` says what to
+  // resubmit - the selected file, or a reversed batch being re-imported.
+  const [duplicates, setDuplicates] = useState<{ data: DuplicatesFound; source: { kind: "upload" } | { kind: "reimport"; batchId: string } } | null>(null);
+  const [reversingId, setReversingId] = useState<string | null>(null);
+  const [rowBusy, setRowBusy] = useState<string | null>(null);
+
+  /** Shared outcome handling for an upload or a re-import attempt. */
+  function handleImportFailure(err: unknown, source: { kind: "upload" } | { kind: "reimport"; batchId: string }) {
+    if (err instanceof ApiError && err.code === "IMPORT_DUPLICATES_FOUND") {
+      setDuplicates({ data: { ...(err.details as Omit<DuplicatesFound, "message">), message: err.message }, source });
+      return;
+    }
+    const rows = err instanceof ApiError ? (err.details as { rows?: ImportBatchRow[] } | null)?.rows : undefined;
+    if (err instanceof ApiError && err.code === "IMPORT_FILE_INVALID" && Array.isArray(rows)) {
+      setRejected({ error: err.message, rows });
+      return;
+    }
+    if (source.kind === "upload") setError(errorMessage(err, notifications.import.failed.message));
+    else notify.fromError(err, notifications.import.reimportFailed);
+  }
+
+  function importSucceeded(batch: ImportBatch, notice = notifications.import.completed) {
+    setResult(batch);
+    setDuplicates(null);
+    notify.success(notice, {
+      description: `${batch.importedCount} finding(s) imported${batch.duplicateCount ? `, ${batch.duplicateCount} duplicate(s) skipped` : ""}.`,
+    });
+  }
+
+  async function reimport(batch: ImportBatch, skipDuplicates = false) {
+    setRowBusy(batch.id);
+    setResult(null);
+    setRejected(null);
+    try {
+      const res = await apiSend<{ importBatch: ImportBatch }>(`/api/findings/import/${batch.id}/reimport`, "POST", { skipDuplicates });
+      importSucceeded(res.importBatch, notifications.import.reimported);
+      await load();
+    } catch (err) {
+      handleImportFailure(err, { kind: "reimport", batchId: batch.id });
+    } finally {
+      setRowBusy(null);
+    }
+  }
+
+  async function deleteRecord(batch: ImportBatch) {
+    const ok = await confirm({
+      title: "Delete this import record?",
+      message: `"${batch.fileName}" and its stored original file will be removed from Import History. Its findings were already reversed. The audit log keeps a record. This can't be undone.`,
+      confirmLabel: "Delete Record",
+      tone: "danger",
+    });
+    if (ok === false) return;
+    setRowBusy(batch.id);
+    try {
+      await apiSend(`/api/findings/import/${batch.id}`, "DELETE");
+      notify.success(notifications.import.deleted);
+      await load();
+    } catch (err) {
+      notify.fromError(err, notifications.import.deleteFailed);
+    } finally {
+      setRowBusy(null);
+    }
+  }
 
   async function load() {
     setLoading(true);
@@ -98,7 +181,7 @@ export default function ImportFindingsPage() {
     setFile(picked);
   }
 
-  async function handleImport() {
+  async function handleImport(skipDuplicates = false) {
     if (!file) return;
     setUploading(true);
     setError(null);
@@ -107,23 +190,13 @@ export default function ImportFindingsPage() {
     try {
       const formData = new FormData();
       formData.append("file", file);
-      const res = await fetch("/api/findings/import", { method: "POST", body: formData });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        // A rejected all-or-nothing dry run carries the full row breakdown
-        // alongside the error message - a plain permission/file-shape
-        // error (wrong extension, too many rows, ...) doesn't.
-        if (Array.isArray(body?.rows)) {
-          setRejected({ error: body.error ?? "Import failed", rows: body.rows as ImportBatchRow[] });
-          return;
-        }
-        throw new ApiError(body?.error ?? "Import failed", res.status);
-      }
-      setResult(body.importBatch as ImportBatch);
+      if (skipDuplicates) formData.append("duplicates", "skip");
+      const body = await apiUpload<{ importBatch: ImportBatch }>("/api/findings/import", formData);
+      importSucceeded(body.importBatch);
       setFile(null);
       await load();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to import file");
+      handleImportFailure(err, { kind: "upload" });
     } finally {
       setUploading(false);
     }
@@ -148,6 +221,8 @@ export default function ImportFindingsPage() {
 
       <ImportGuide />
 
+      {canImport && (
+      <>
       <Card>
         <CardHeader
           title="1. Download the template"
@@ -163,7 +238,7 @@ export default function ImportFindingsPage() {
       <Card>
         <CardHeader
           title="2. Upload the completed file"
-          description="All-or-nothing: every row is checked first, and if even one has a real error, nothing is imported — fix every row shown below and re-upload the whole file. A row that merely already exists (duplicate) doesn't block the rest."
+          description="All-or-nothing: every row is checked first and every problem in every row is listed at once. If any row has an error, nothing is imported — fix them all and re-upload the whole file. Duplicates are the final check: you'll see the evidence and choose to import the rest or cancel."
         />
         <div className="flex flex-col gap-3 p-4">
           <FileInput accept=".xlsx" onChange={(e) => handleFileChange(e.target.files?.[0] ?? null)} />
@@ -177,13 +252,34 @@ export default function ImportFindingsPage() {
             )}
           </p>
           <div>
-            <Button onClick={handleImport} disabled={!file || uploading}>
+            <Button onClick={() => handleImport()} disabled={!file || uploading}>
               {uploading ? "Importing..." : "Import"}
             </Button>
           </div>
           {error && <p className="text-sm text-red-600">{error}</p>}
         </div>
       </Card>
+      </>
+      )}
+
+      {duplicates && (
+        <ImportDuplicatesReview
+          data={duplicates.data}
+          busy={uploading || rowBusy !== null}
+          onCancel={() => {
+            setDuplicates(null);
+            notify.info(notifications.import.cancelled);
+          }}
+          onImportRest={() => {
+            const src = duplicates.source;
+            if (src.kind === "upload") handleImport(true);
+            else {
+              const b = history.find((x) => x.id === src.batchId);
+              if (b) reimport(b, true);
+            }
+          }}
+        />
+      )}
 
       {rejected && (
         <Card className="border-red-200">
@@ -221,7 +317,8 @@ export default function ImportFindingsPage() {
                       by {b.importedByName} · {formatDateTime(b.createdAt)}
                     </span>
                   </div>
-                  <div className="flex items-center gap-2 text-xs">
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    {b.reversedAt && <Badge tone="gray">Reversed</Badge>}
                     <Badge tone="green">{b.importedCount} imported</Badge>
                     {b.duplicateCount > 0 && <Badge tone="amber">{b.duplicateCount} duplicate</Badge>}
                     {b.errorCount > 0 && <Badge tone="red">{b.errorCount} error</Badge>}
@@ -238,8 +335,39 @@ export default function ImportFindingsPage() {
                     <Button variant="secondary" onClick={() => setExpandedBatchId(expandedBatchId === b.id ? null : b.id)}>
                       {expandedBatchId === b.id ? "Hide" : "Details"}
                     </Button>
+                    {canReverse && !b.reversedAt && b.importedCount > 0 && (
+                      <Button variant="danger" onClick={() => setReversingId(reversingId === b.id ? null : b.id)}>
+                        Reverse
+                      </Button>
+                    )}
+                    {canReverse && canImport && b.reversedAt && b.storedFile && (
+                      <Button onClick={() => reimport(b)} disabled={rowBusy !== null}>
+                        {rowBusy === b.id ? "Working..." : "Re-import"}
+                      </Button>
+                    )}
+                    {canReverse && (b.reversedAt || b.importedCount === 0) && (
+                      <Button variant="danger" onClick={() => deleteRecord(b)} disabled={rowBusy !== null}>
+                        Delete record
+                      </Button>
+                    )}
                   </div>
                 </div>
+                {b.reversedAt && (
+                  <p className="mt-1 text-xs text-slate-500">
+                    Reversed by {b.reversedByName} · {formatDateTime(b.reversedAt)}
+                    {b.reverseReason ? ` · "${b.reverseReason}"` : ""}
+                  </p>
+                )}
+                {reversingId === b.id && (
+                  <ImportReversePanel
+                    batch={b}
+                    onCancel={() => setReversingId(null)}
+                    onDone={() => {
+                      setReversingId(null);
+                      load();
+                    }}
+                  />
+                )}
                 {expandedBatchId === b.id && (
                   <div className="mt-2">
                     <BatchRowsTable rows={b.rows} />
@@ -250,6 +378,7 @@ export default function ImportFindingsPage() {
         </div>
         <Pagination page={pager.page} totalPages={pager.totalPages} total={pager.total} pageSize={pager.pageSize} onPageChange={pager.setPage} />
       </Card>
+      {dialog}
     </div>
   );
 }

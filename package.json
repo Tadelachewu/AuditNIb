@@ -13,7 +13,9 @@
     "storage:cleanup": "tsx scripts/storage-cleanup.ts",
     "storage:export": "tsx scripts/storage-export.ts",
     "tunnel": "node scripts/run.mjs tunnel",
-    "tunnel:cloudflare": "node scripts/run.mjs tunnel:cloudflare"
+    "tunnel:cloudflare": "node scripts/run.mjs tunnel:cloudflare",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@emotion/cache": "^11.14.0",
@@ -25,6 +27,7 @@
     "@mui/x-date-pickers": "^8.29.3",
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
+    "@sentry/nextjs": "^11.1.0",
     "bcryptjs": "^3.0.3",
     "exceljs": "^4.4.0",
     "ioredis": "^6.0.0",
@@ -33,14 +36,18 @@
     "material-react-table": "^3.2.1",
     "next": "^16.3.4",
     "nodemailer": "^9.1.1",
+    "pino": "^10.3.1",
     "prisma": "^7.8.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
+    "sonner": "^2.0.8",
     "uuid": "^14.0.2",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@testing-library/dom": "^10.4.2",
+    "@testing-library/react": "^16.3.3",
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20",
     "@types/nodemailer": "^8.0.1",
@@ -51,10 +58,12 @@
     "dotenv": "^17.4.2",
     "eslint": "^9",
     "eslint-config-next": "^16.3.4",
+    "jsdom": "^29.1.1",
     "localtunnel": "^2.0.2",
     "tailwindcss": "^4",
     "tsx": "^4.23.13",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.11"
   },
   "allowScripts": {
     "@prisma/engines@7.8.0": true,

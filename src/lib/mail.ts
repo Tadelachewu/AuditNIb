@@ -1,6 +1,7 @@
 import nodemailer, { type Transporter } from "nodemailer";
 import { isEmailEnabled } from "@/lib/notificationEvents";
 import type { Database, Notification, NotificationSettings } from "@/types";
+import { logger } from "@/lib/logger";
 
 /**
  * Builds an SMTP transporter from Settings.notification (host/port - not
@@ -14,7 +15,7 @@ export function getTransporter(settings: NotificationSettings): Transporter | nu
   if (settings.provider === "NONE") return null;
 
   if (settings.provider === "GRAPH") {
-    console.warn("[mail] Notification provider is GRAPH, which isn't implemented yet - no email sent. See EMAIL_SETUP.md.");
+    logger.warn({ event: "email.provider_unsupported" }, "Notification provider is GRAPH, which isn't implemented yet - no email sent. See EMAIL_SETUP.md.");
     return null;
   }
 
@@ -24,7 +25,7 @@ export function getTransporter(settings: NotificationSettings): Transporter | nu
   const pass = process.env.SMTP_PASSWORD;
 
   if (!host || !port || !user || !pass) {
-    console.warn("[mail] SMTP provider selected but host/port/SMTP_USER/SMTP_PASSWORD aren't all configured - no email sent. See EMAIL_SETUP.md.");
+    logger.warn({ event: "email.smtp_incomplete" }, "SMTP provider selected but host/port/SMTP_USER/SMTP_PASSWORD aren't all configured - no email sent. See EMAIL_SETUP.md.");
     return null;
   }
 
@@ -33,6 +34,11 @@ export function getTransporter(settings: NotificationSettings): Transporter | nu
     port,
     secure: port === 465,
     auth: { user, pass },
+    // Bounded waits: a slow or unreachable SMTP server fails fast instead of
+    // holding sockets open (sending is fire-and-forget for notifications).
+    connectionTimeout: 10_000,
+    greetingTimeout: 10_000,
+    socketTimeout: 20_000,
   });
 }
 
@@ -97,8 +103,8 @@ export function sendNotificationEmail(db: Database, recipientUserId: string, not
           ? `<p>${notification.message}</p><p><a href="${link}">Open in NIB Control360</a></p>`
           : `<p>${notification.message}</p>`,
       })
-      .catch((err) => console.error("[mail] Failed to send notification email:", err));
+      .catch((err) => logger.error({ err, event: "email.send_failed", notificationType: notification.type }, "Failed to send notification email"));
   } catch (err) {
-    console.error("[mail] Failed to send notification email:", err);
+    logger.error({ err, event: "email.send_failed" }, "Failed to send notification email");
   }
 }

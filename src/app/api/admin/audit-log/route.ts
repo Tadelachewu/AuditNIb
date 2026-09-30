@@ -5,6 +5,7 @@ import { ALL_ROWS, paginate, parsePage } from "@/lib/pagination";
 import { verifyAuditLogChain } from "@/lib/audit";
 import { toCsv } from "@/lib/csv";
 import type { AuditLogEntry } from "@/types";
+import { withApiHandler } from "@/lib/api/handler";
 
 function seqCompare(a: string, b: string): number {
   const ai = BigInt(a);
@@ -24,7 +25,7 @@ function seqCompare(a: string, b: string): number {
  *   page, pageSize (max ALL_ROWS - the "All" choice)
  *   format=csv - every matching entry (not just one page) as a CSV file
  */
-export async function GET(request: Request) {
+async function handleGET(request: Request) {
   const auth = await requirePermission("audit-log.view");
   if (!auth.ok) return auth.response;
   const { searchParams: sp } = new URL(request.url);
@@ -89,3 +90,6 @@ export async function GET(request: Request) {
     chainBrokenAtSequence: chain.brokenAtSequence,
   });
 }
+
+// Central error handling, request ID and access logging: src/lib/api/handler.ts
+export const GET = withApiHandler(handleGET);

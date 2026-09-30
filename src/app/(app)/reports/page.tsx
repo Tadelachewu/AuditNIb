@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 import { readDb } from "@/lib/db";
 import { findingsInScope } from "@/lib/findings-scope";
-import { computePerformance, computeEligibleCaseCounts, findingsResidentInPeriod, type FindingPeriodSlice, getActiveScoringAdjustment } from "@/lib/findings";
+import { computePerformance, computeEligibleCaseCounts, findingsResidentInPeriod, type FindingPeriodSlice } from "@/lib/findings";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
 import { paginate, parsePage } from "@/lib/pagination";
 import { Card, CardHeader } from "@/components/ui/Card";
@@ -121,7 +121,6 @@ export default async function ReportsPage({
           rectifiedCases,
           outstandingCases: totalCases - rectifiedCases,
           performance: computePerformance(db, scope),
-          adjustmentReason: getActiveScoringAdjustment(db, scope)?.reason ?? null,
         };
       })
       .filter((r) => r.performance !== null)

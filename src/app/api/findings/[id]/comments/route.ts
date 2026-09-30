@@ -5,6 +5,7 @@ import { requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { assertFindingInScope } from "@/lib/findings-scope";
 import { notifyUsers } from "@/lib/notifications";
+import { withApiHandler } from "@/lib/api/handler";
 
 const commentSchema = z.object({
   text: z.string().trim().min(1, "Comment cannot be empty"),
@@ -15,7 +16,7 @@ const commentSchema = z.object({
 // - comment is the one mutating action that role gets (see db.ts's
 // districtDirectorPermissions). One level of threading: a reply's
 // parentCommentId must point at a top-level comment, not another reply.
-export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+async function handleGET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requirePermission("findings.view");
   if (!auth.ok) return auth.response;
   const { id } = await params;
@@ -30,7 +31,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   return NextResponse.json({ comments: db.comments.filter((c) => c.findingId === id) });
 }
 
-export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+async function handlePOST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requirePermission("findings.comment");
   if (!auth.ok) return auth.response;
   const { id } = await params;
@@ -88,3 +89,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   return NextResponse.json({ comment: created }, { status: 201 });
 }
+
+// Central error handling, request ID and access logging: src/lib/api/handler.ts
+export const GET = withApiHandler(handleGET);
+export const POST = withApiHandler(handlePOST);

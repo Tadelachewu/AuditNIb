@@ -5,7 +5,7 @@ import { Upload, FileDown, CheckCircle2, XCircle } from "lucide-react";
 import { Modal } from "@/components/ui/AddDialog";
 import { Button } from "@/components/ui/Button";
 import { StickyActions } from "@/components/ui/StickyActions";
-import { ApiError } from "@/lib/api-client";
+import { errorMessage } from "@/lib/api-client";
 import { parseCsv, toCsv, downloadCsv, datedFileName } from "@/lib/csv";
 
 export interface ImportColumn {
@@ -14,6 +14,8 @@ export interface ImportColumn {
   required?: boolean;
   example: string;
   help: string;
+  /** Never written back into the downloadable results file (e.g. a temporary password). */
+  sensitive?: boolean;
 }
 
 type RowResult = { rowNumber: number; label: string; ok: boolean; message: string };
@@ -120,7 +122,7 @@ export function ImportCsvDialog({
           await submit(prepared.payload);
           out.push({ rowNumber, label: prepared.label, ok: true, message: "Added" });
         } catch (err) {
-          out.push({ rowNumber, label: prepared.label, ok: false, message: err instanceof ApiError ? err.message : "Failed" });
+          out.push({ rowNumber, label: prepared.label, ok: false, message: errorMessage(err, "Failed") });
         }
       }
       setProgress(i + 1);
@@ -132,7 +134,7 @@ export function ImportCsvDialog({
   function downloadResults() {
     if (!results || !rows) return;
     const withStatus = results.map((r) => ({ ...rows[r.rowNumber - 2], Result: r.ok ? "Added" : "Failed", Message: r.message }));
-    const headers = [...columns.map((c) => c.key), "Result", "Message"];
+    const headers = [...columns.filter((c) => !c.sensitive).map((c) => c.key), "Result", "Message"];
     downloadCsv(datedFileName(`${templateName}-results`), toCsv(withStatus, headers.map((h) => ({ header: h, value: (r: Record<string, string>) => r[h] }))));
   }
 

@@ -19,7 +19,6 @@ const QUICK_LINKS: { label: string; href: string; pageCode: string }[] = [
   { label: "Departments", href: "/admin/departments", pageCode: "departments" },
   { label: "Classified Categories", href: "/admin/categories", pageCode: "categories" },
   { label: "Scoring Rules", href: "/admin/scoring-rules", pageCode: "scoring-rules" },
-  { label: "Scoring Adjustments", href: "/admin/scoring-adjustments", pageCode: "scoring-adjustments" },
   { label: "Reporting Periods", href: "/admin/reporting-periods", pageCode: "reporting-periods" },
   { label: "Roles & Permissions", href: "/admin/roles", pageCode: "roles" },
   { label: "Settings", href: "/admin/settings", pageCode: "settings" },

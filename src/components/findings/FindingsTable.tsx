@@ -9,7 +9,7 @@ import { useUrlTableState } from "@/lib/useUrlTableState";
 import { Button } from "@/components/ui/Button";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { FindingStatusBadge } from "@/components/findings/FindingStatusBadge";
-import { apiSend, ApiError } from "@/lib/api-client";
+import { apiSend, errorMessage } from "@/lib/api-client";
 import { formatDateTime, formatCurrency } from "@/lib/format";
 import type { FindingStatus } from "@/types";
 
@@ -251,7 +251,7 @@ export function FindingsTable({
         await apiSend(url, "POST", body);
         succeeded++;
       } catch (err) {
-        failures.push(`${f.reference}: ${err instanceof ApiError ? err.message : "Failed"}`);
+        failures.push(`${f.reference}: ${errorMessage(err, "Failed")}`);
       }
     }
     setBusy(false);

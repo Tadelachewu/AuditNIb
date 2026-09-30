@@ -5,8 +5,9 @@ import { requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { appendAuditLog } from "@/lib/audit";
 import { FONT_KEYS, TEXT_SIZE_KEYS, TEXT_CONTRAST_KEYS, CHROME_KEYS, normalizeTypography } from "@/lib/typography";
+import { withApiHandler } from "@/lib/api/handler";
 
-export async function GET() {
+async function handleGET() {
   const auth = await requirePermission("settings.view");
   if (!auth.ok) return auth.response;
   const db = await readDb();
@@ -122,7 +123,7 @@ const updateSchema = z.object({
     .optional(),
 });
 
-export async function PATCH(request: Request) {
+async function handlePATCH(request: Request) {
   const auth = await requirePermission("settings.edit");
   if (!auth.ok) return auth.response;
 
@@ -197,3 +198,7 @@ export async function PATCH(request: Request) {
 
   return NextResponse.json({ settings: updated });
 }
+
+// Central error handling, request ID and access logging: src/lib/api/handler.ts
+export const GET = withApiHandler(handleGET);
+export const PATCH = withApiHandler(handlePATCH);

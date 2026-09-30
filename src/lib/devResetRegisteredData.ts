@@ -67,7 +67,7 @@ export interface DevResetSummary {
  *
  *   CLEARED ENTIRELY: findings, findingTransitions, rectifications,
  *   findingTransfers, findingClosures, findingCases, importBatches,
- *   scoringAdjustments, branchCoverageNotes, evidence, comments.
+ *   branchCoverageNotes, evidence, comments.
  *
  *   FILTERED, NOT CLEARED: notifications and auditLogs keep every entry
  *   NOT about a Finding (a role/settings/user/etc. change stays fully
@@ -92,7 +92,6 @@ export function resetRegisteredData(db: Database): DevResetSummary {
     findingClosures: db.findingClosures.length,
     findingCases: db.findingCases.length,
     importBatches: db.importBatches.length,
-    scoringAdjustments: db.scoringAdjustments.length,
     branchCoverageNotes: db.branchCoverageNotes.length,
     evidence: db.evidence.length,
     comments: db.comments.length,
@@ -117,7 +116,6 @@ export function resetRegisteredData(db: Database): DevResetSummary {
   db.findingClosures = [];
   db.findingCases = [];
   db.importBatches = [];
-  db.scoringAdjustments = [];
   db.branchCoverageNotes = [];
   db.evidence = [];
   db.comments = [];

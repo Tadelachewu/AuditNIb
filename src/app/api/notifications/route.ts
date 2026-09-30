@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { checkRectificationReminders, REMINDER_SCAN_COOLDOWN_MS } from "@/lib/notifications";
+import { withApiHandler } from "@/lib/api/handler";
 
 // A notification is always scoped to its own recipientUserId, checked
 // directly here rather than gated through the page-permission system -
@@ -13,7 +14,7 @@ import { checkRectificationReminders, REMINDER_SCAN_COOLDOWN_MS } from "@/lib/no
 // place to piggyback a "is a scan due" check without new infrastructure.
 // A plain readDb() first avoids paying for updateDb()'s write on every
 // poll when a scan isn't due yet.
-export async function GET() {
+async function handleGET() {
   const auth = await requireUser();
   if (!auth.ok) return auth.response;
 
@@ -41,3 +42,6 @@ export async function GET() {
 
   return NextResponse.json({ notifications: mine });
 }
+
+// Central error handling, request ID and access logging: src/lib/api/handler.ts
+export const GET = withApiHandler(handleGET);

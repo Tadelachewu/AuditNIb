@@ -13,7 +13,6 @@ import type {
   ClassifiedCategory,
   UncoveredReason,
   ScoringRule,
-  ScoringAdjustment,
   ReportingPeriod,
   Finding,
   FindingTransition,
@@ -222,20 +221,6 @@ function scoringRuleFromRow(r: Prisma.ScoringRuleGetPayload<object>): ScoringRul
   };
 }
 
-function scoringAdjustmentFromRow(r: Prisma.ScoringAdjustmentGetPayload<object>): ScoringAdjustment {
-  return {
-    id: r.id,
-    targetType: r.targetType,
-    targetId: r.targetId,
-    periodId: r.periodId,
-    value: r.value,
-    reason: r.reason,
-    status: r.status,
-    adjustedBy: r.adjustedBy,
-    createdAt: iso(r.createdAt),
-  };
-}
-
 function periodFromRow(r: Prisma.ReportingPeriodGetPayload<object>): ReportingPeriod {
   return {
     id: r.id,
@@ -387,6 +372,10 @@ function importBatchFromRow(r: Prisma.ImportBatchGetPayload<object>): ImportBatc
     rows: r.rows as unknown as ImportBatch["rows"],
     storedFile: r.storedFile ?? null,
     createdAt: iso(r.createdAt),
+    reversedAt: r.reversedAt ? iso(r.reversedAt) : null,
+    reversedBy: r.reversedBy ?? null,
+    reversedByName: r.reversedByName ?? null,
+    reverseReason: r.reverseReason ?? null,
   };
 }
 
@@ -558,7 +547,6 @@ export async function readDb(): Promise<Database> {
     categories,
     uncoveredReasons,
     scoringRules,
-    scoringAdjustments,
     reportingPeriods,
     findings,
     findingTransitions,
@@ -585,7 +573,6 @@ export async function readDb(): Promise<Database> {
     prisma.classifiedCategory.findMany(),
     prisma.uncoveredReason.findMany(),
     prisma.scoringRule.findMany(),
-    prisma.scoringAdjustment.findMany(),
     prisma.reportingPeriod.findMany(),
     prisma.finding.findMany(),
     prisma.findingTransition.findMany(),
@@ -620,7 +607,6 @@ export async function readDb(): Promise<Database> {
     categories: categories.map(categoryFromRow),
     uncoveredReasons: uncoveredReasons.map(uncoveredReasonFromRow),
     scoringRules: scoringRules.map(scoringRuleFromRow),
-    scoringAdjustments: scoringAdjustments.map(scoringAdjustmentFromRow),
     reportingPeriods: reportingPeriods.map(periodFromRow),
     findings: findings.map(findingFromRow),
     findingTransitions: findingTransitions.map(transitionFromRow),
@@ -802,21 +788,6 @@ function scoringRuleToData(r: ScoringRule) {
   };
 }
 
-function scoringAdjustmentToData(r: ScoringAdjustment) {
-  return {
-    targetType: r.targetType,
-    targetId: r.targetId,
-    periodId: r.periodId,
-    districtId: r.targetType === "DISTRICT" ? r.targetId : null,
-    branchId: r.targetType === "BRANCH" ? r.targetId : null,
-    value: r.value,
-    reason: r.reason,
-    status: r.status,
-    adjustedBy: r.adjustedBy,
-    createdAt: toDate(r.createdAt),
-  };
-}
-
 function periodToData(r: ReportingPeriod) {
   return {
     year: r.year,
@@ -965,6 +936,10 @@ function importBatchToData(r: ImportBatch) {
     rows: r.rows as object,
     storedFile: r.storedFile ?? null,
     createdAt: toDate(r.createdAt),
+    reversedAt: r.reversedAt ? toDate(r.reversedAt) : null,
+    reversedBy: r.reversedBy ?? null,
+    reversedByName: r.reversedByName ?? null,
+    reverseReason: r.reverseReason ?? null,
   };
 }
 
@@ -1074,7 +1049,6 @@ async function persistChanges(before: Database, after: Database): Promise<void> 
       await syncCollection(tx.user, before.users, after.users, userToData);
       await syncCollection(tx.scoringRule, before.scoringRules, after.scoringRules, scoringRuleToData);
       await syncCollection(tx.reportingPeriod, before.reportingPeriods, after.reportingPeriods, periodToData);
-      await syncCollection(tx.scoringAdjustment, before.scoringAdjustments, after.scoringAdjustments, scoringAdjustmentToData);
       await syncCollection(tx.importBatch, before.importBatches, after.importBatches, importBatchToData);
       await syncCollection(tx.finding, before.findings, after.findings, findingToData);
       await syncCollection(tx.findingTransition, before.findingTransitions, after.findingTransitions, transitionToData);

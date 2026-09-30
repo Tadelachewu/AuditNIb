@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { ALL_PERIODS_VALUE } from "@/lib/dashboardFilters";
 import { requirePermission } from "@/lib/guard";
 import { readDb } from "@/lib/db";
 import {
@@ -14,8 +15,10 @@ import {
   getDistrictSnapshotAsOf,
   getTransferredFindings,
   formatPercentageRange,
+  sumDistrictRowsAcrossPeriods,
 } from "@/lib/reportTemplates";
 import type { Database } from "@/types";
+import { withApiHandler } from "@/lib/api/handler";
 
 // One shared text/csv exporter for all report templates - same
 // escaping/header/attachment convention as /api/findings/export, just
@@ -38,8 +41,8 @@ function pct(v: number | null): string {
 // A row's performance %, marked when it's a manual Scoring Adjustment rather
 // than the formula - so an exported sheet shows the same thing the screen
 // does (the "Adjusted" badge), not an unexplained number.
-function pctRow(r: { performance: number | null; adjustment?: { reason: string } | null }): string {
-  return r.adjustment ? `${pct(r.performance)} (adjusted)` : pct(r.performance);
+function pctRow(r: { performance: number | null }): string {
+  return pct(r.performance);
 }
 
 const SLUG_TO_ACTION: Record<string, string> = Object.fromEntries(REPORT_TEMPLATES.map((t) => [t.slug, t.action]));
@@ -141,6 +144,13 @@ function buildCsv(slug: string, db: Database, params: URLSearchParams): string |
       // omitted entirely, this still exports the full history across every
       // period, same as before that page-level filter existed.
       let rows = getMonthlyDistrictSeries(db, "monthly-district-history").otherCases;
+      // "All periods" on the page: one summed row per district.
+      if (periodId === ALL_PERIODS_VALUE) {
+        return toCsv(
+          ["Period", "Total No. of Branches", "District", "Others Cases", "Unrectified", "Rectified", "rectified percetage"],
+          sumDistrictRowsAcrossPeriods(rows).map((r) => ["All periods", r.totalBranches, r.district.name, r.totalCases, r.outstandingCases, r.rectifiedCases, pctRow(r)])
+        );
+      }
       if (periodId) rows = rows.filter((r) => r.period.id === periodId);
       return toCsv(
         ["Period", "Total No. of Branches", "District", "Others Cases", "Unrectified", "Rectified", "rectified percetage"],
@@ -365,7 +375,7 @@ function buildCsv(slug: string, db: Database, params: URLSearchParams): string |
   }
 }
 
-export async function GET(request: Request, { params }: { params: Promise<{ slug: string }> }) {
+async function handleGET(request: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const action = SLUG_TO_ACTION[slug];
   if (!action) return NextResponse.json({ error: "Unknown report template" }, { status: 404 });
@@ -385,3 +395,6 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
     },
   });
 }
+
+// Central error handling, request ID and access logging: src/lib/api/handler.ts
+export const GET = withApiHandler(handleGET);

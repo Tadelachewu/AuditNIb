@@ -1,9 +1,10 @@
 "use client";
 
+import { notify, notifications } from "@/lib/notify";
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { apiSend, ApiError } from "@/lib/api-client";
+import { apiSend, errorMessage, apiUpload } from "@/lib/api-client";
 import { formatDate, formatDateTime, formatNumber, formatCurrency } from "@/lib/format";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -46,6 +47,7 @@ interface Permissions {
   canEdit: boolean;
   canDelete: boolean;
   canDeleteRejected: boolean;
+  canReopen: boolean;
   canSubmit: boolean;
   canDistrictReview: boolean;
   canDistrictReturnReview: boolean;
@@ -198,7 +200,29 @@ export function FindingDetailClient({
       await apiSend(`/api/findings/${finding.id}`, "DELETE");
       router.push("/findings");
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to delete finding");
+      setError(errorMessage(err, "Failed to delete finding"));
+      setBusy(false);
+    }
+  }
+
+  async function handleReopen() {
+    const reason = await confirm({
+      title: "Reopen this finding?",
+      message: `"${finding.reference}" goes back to Sent to Branch Manager as if nothing had been rectified: its rectified, verified and closed cases and amounts are reset to zero and the branch must rectify it again. The full history and audit trail are kept.`,
+      confirmLabel: "Reopen Finding",
+      tone: "danger",
+      needsReason: true,
+    });
+    if (reason === false) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await apiSend(`/api/findings/${finding.id}/reopen`, "POST", { reason });
+      notify.success(notifications.finding.reopened);
+      await refresh();
+    } catch (err) {
+      notify.fromError(err, notifications.finding.reopenFailed);
+    } finally {
       setBusy(false);
     }
   }
@@ -210,7 +234,7 @@ export function FindingDetailClient({
       await apiSend(`/api/findings/${finding.id}/submit`, "POST");
       await refresh();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to submit finding");
+      setError(errorMessage(err, "Failed to submit finding"));
     } finally {
       setBusy(false);
     }
@@ -252,7 +276,7 @@ export function FindingDetailClient({
       await apiSend(`/api/findings/${finding.id}/${stage}`, "POST", { decision, reason });
       await refresh();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to record decision");
+      setError(errorMessage(err, "Failed to record decision"));
     } finally {
       setBusy(false);
     }
@@ -271,7 +295,7 @@ export function FindingDetailClient({
       await apiSend(`/api/findings/${finding.id}/verify-rectification`, "POST");
       await refresh();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to verify rectification");
+      setError(errorMessage(err, "Failed to verify rectification"));
     } finally {
       setBusy(false);
     }
@@ -332,7 +356,7 @@ export function FindingDetailClient({
       setSelectedCaseIds([]);
       await refresh();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to record rectification");
+      setError(errorMessage(err, "Failed to record rectification"));
     } finally {
       setBusy(false);
     }
@@ -356,7 +380,7 @@ export function FindingDetailClient({
       await apiSend(`/api/findings/${finding.id}/close`, "POST");
       await refresh();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to close finding");
+      setError(errorMessage(err, "Failed to close finding"));
     } finally {
       setBusy(false);
     }
@@ -377,7 +401,7 @@ export function FindingDetailClient({
       await apiSend(`/api/findings/${finding.id}/return-rectification`, "POST", { reason: result });
       await refresh();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to return finding for correction");
+      setError(errorMessage(err, "Failed to return finding for correction"));
     } finally {
       setBusy(false);
     }
@@ -390,7 +414,7 @@ export function FindingDetailClient({
       await apiSend(`/api/findings/${finding.id}/resubmit-rectification`, "POST");
       await refresh();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to resubmit finding");
+      setError(errorMessage(err, "Failed to resubmit finding"));
     } finally {
       setBusy(false);
     }
@@ -413,7 +437,7 @@ export function FindingDetailClient({
       setTransferring(false);
       await refresh();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to transfer finding");
+      setError(errorMessage(err, "Failed to transfer finding"));
     } finally {
       setBusy(false);
     }
@@ -425,9 +449,7 @@ export function FindingDetailClient({
   async function uploadEvidence(file: File) {
     const formData = new FormData();
     formData.append("file", file);
-    const res = await fetch(`/api/findings/${finding.id}/evidence`, { method: "POST", body: formData });
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok) throw new ApiError(body?.error ?? "Upload failed", res.status);
+    await apiUpload(`/api/findings/${finding.id}/evidence`, formData);
   }
 
   // Mirrors the DELETE route's rule (the real check is server-side):
@@ -453,7 +475,7 @@ export function FindingDetailClient({
       await apiSend(`/api/findings/${finding.id}/evidence/${e.id}`, "DELETE");
       await refresh();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to remove the file");
+      setError(errorMessage(err, "Failed to remove the file"));
     } finally {
       setBusy(false);
     }
@@ -482,7 +504,7 @@ export function FindingDetailClient({
       await uploadEvidence(file);
       await refresh();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to upload evidence");
+      setError(errorMessage(err, "Failed to upload evidence"));
     } finally {
       setUploadingEvidence(false);
     }
@@ -503,7 +525,7 @@ export function FindingDetailClient({
       setReplyText("");
       await refresh();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to post comment");
+      setError(errorMessage(err, "Failed to post comment"));
     } finally {
       setBusy(false);
     }
@@ -659,7 +681,7 @@ export function FindingDetailClient({
         )}
       </Card>
 
-      {!editing && (permissions.canEdit || permissions.canDelete || permissions.canDeleteRejected || permissions.canSubmit) && (
+      {!editing && (permissions.canEdit || permissions.canDelete || permissions.canDeleteRejected || permissions.canSubmit || permissions.canReopen) && (
         <div className="flex flex-wrap gap-2">
           {permissions.canEdit && (
             <Button variant="neutral" onClick={() => setEditing(true)} disabled={busy}>
@@ -674,6 +696,11 @@ export function FindingDetailClient({
           {(permissions.canDelete || permissions.canDeleteRejected) && (
             <Button variant="danger" onClick={handleDelete} disabled={busy}>
               Delete
+            </Button>
+          )}
+          {permissions.canReopen && (
+            <Button variant="warning" onClick={handleReopen} disabled={busy} title="Reset to Sent to Branch Manager - history is kept">
+              Reopen
             </Button>
           )}
         </div>

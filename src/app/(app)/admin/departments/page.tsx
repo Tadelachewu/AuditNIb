@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { MRT_ColumnDef } from "material-react-table";
-import { apiGet, apiSend, ApiError } from "@/lib/api-client";
+import { apiGet, apiSend, errorMessage } from "@/lib/api-client";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { StickyActions } from "@/components/ui/StickyActions";
@@ -16,6 +16,7 @@ import { hasPermission } from "@/lib/permissions/registry";
 import type { Department, District, Branch, OrgScope } from "@/types";
 import { AdminTable } from "@/components/ui/AdminTable";
 import { ImportCsvDialog } from "@/components/ui/ImportCsvDialog";
+import { notify, notifications } from "@/lib/notify";
 
 const emptyForm = { code: "", name: "", orgScope: "BANK" as OrgScope, districtId: "", branchId: "" };
 const emptyEditForm = { name: "", orgScope: "BANK" as OrgScope, districtId: "", branchId: "" };
@@ -98,7 +99,7 @@ export default function DepartmentsPage() {
       close();
       await load();
     } catch (err) {
-      setFormError(err instanceof ApiError ? err.message : "Failed to create department");
+      setFormError(errorMessage(err, "Failed to create department"));
     } finally {
       setSubmitting(false);
     }
@@ -128,7 +129,7 @@ export default function DepartmentsPage() {
       setEditingId(null);
       await load();
     } catch (err) {
-      setEditError(err instanceof ApiError ? err.message : "Failed to save changes");
+      setEditError(errorMessage(err, "Failed to save changes"));
     } finally {
       setRowBusy(null);
     }
@@ -145,9 +146,10 @@ export default function DepartmentsPage() {
     setRowBusy(d.id);
     try {
       await apiSend(`/api/admin/departments/${d.id}`, "DELETE");
+      notify.success(notifications.department.deleted);
       await load();
     } catch (err) {
-      alert(err instanceof ApiError ? err.message : "Failed to delete department");
+      notify.fromError(err, notifications.department.deleteFailed);
     } finally {
       setRowBusy(null);
     }
@@ -166,9 +168,10 @@ export default function DepartmentsPage() {
     setRowBusy(d.id);
     try {
       await apiSend(`/api/admin/departments/${d.id}`, "PATCH", { active: !d.active });
+      notify.success(d.active ? notifications.department.deactivated : notifications.department.activated);
       await load();
     } catch (err) {
-      alert(err instanceof ApiError ? err.message : "Failed to update department");
+      notify.fromError(err, notifications.department.statusFailed);
     } finally {
       setRowBusy(null);
     }

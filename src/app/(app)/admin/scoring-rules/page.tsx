@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { apiGet, apiSend, ApiError } from "@/lib/api-client";
+import { apiGet, apiSend, errorMessage } from "@/lib/api-client";
 import { formatDate } from "@/lib/format";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -17,6 +17,7 @@ import { useClientPagination } from "@/lib/useClientPagination";
 import { usePermissions } from "@/lib/permissions/PermissionsContext";
 import { hasPermission } from "@/lib/permissions/registry";
 import type { ScoringRule, ClassifiedCategory, Source } from "@/types";
+import { notify, notifications } from "@/lib/notify";
 
 const emptyForm = {
   name: "",
@@ -122,7 +123,7 @@ export default function ScoringRulesPage() {
       setBasisEditedManually(false);
       await load();
     } catch (err) {
-      setFormError(err instanceof ApiError ? err.message : "Failed to create scoring rule");
+      setFormError(errorMessage(err, "Failed to create scoring rule"));
     } finally {
       setSubmitting(false);
     }
@@ -153,7 +154,7 @@ export default function ScoringRulesPage() {
       setEditingRuleId(null);
       await load();
     } catch (err) {
-      setEditError(err instanceof ApiError ? err.message : "Failed to update scoring rule");
+      setEditError(errorMessage(err, "Failed to update scoring rule"));
     } finally {
       setRowBusy(null);
     }
@@ -170,9 +171,10 @@ export default function ScoringRulesPage() {
     setRowBusy(rule.id);
     try {
       await apiSend(`/api/admin/scoring-rules/${rule.id}`, "DELETE");
+      notify.success(notifications.scoringRule.deleted);
       await load();
     } catch (err) {
-      alert(err instanceof ApiError ? err.message : "Failed to delete scoring rule");
+      notify.fromError(err, notifications.scoringRule.deleteFailed);
     } finally {
       setRowBusy(null);
     }
@@ -192,9 +194,10 @@ export default function ScoringRulesPage() {
     setRowBusy(rule.id);
     try {
       await apiSend(`/api/admin/scoring-rules/${rule.id}`, "PATCH", { active });
+      notify.success(active ? notifications.scoringRule.activated : notifications.scoringRule.deactivated);
       await load();
     } catch (err) {
-      alert(err instanceof ApiError ? err.message : "Failed to update scoring rule");
+      notify.fromError(err, notifications.scoringRule.statusFailed);
     } finally {
       setRowBusy(null);
     }

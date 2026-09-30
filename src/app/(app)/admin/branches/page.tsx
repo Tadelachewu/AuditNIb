@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { MRT_ColumnDef } from "material-react-table";
-import { apiGet, apiSend, ApiError } from "@/lib/api-client";
+import { apiGet, apiSend, errorMessage } from "@/lib/api-client";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { StickyActions } from "@/components/ui/StickyActions";
@@ -16,6 +16,7 @@ import { ImportCsvDialog } from "@/components/ui/ImportCsvDialog";
 import { usePermissions } from "@/lib/permissions/PermissionsContext";
 import { hasPermission } from "@/lib/permissions/registry";
 import type { District, Branch } from "@/types";
+import { notify, notifications } from "@/lib/notify";
 
 type BranchRow = Branch & { managerName: string | null; subManagerName: string | null; controllerName: string | null };
 
@@ -68,7 +69,7 @@ export default function BranchesPage() {
       close();
       await load();
     } catch (err) {
-      setFormError(err instanceof ApiError ? err.message : "Failed to create branch");
+      setFormError(errorMessage(err, "Failed to create branch"));
     } finally {
       setSubmitting(false);
     }
@@ -88,7 +89,7 @@ export default function BranchesPage() {
       setEditingId(null);
       await load();
     } catch (err) {
-      setEditError(err instanceof ApiError ? err.message : "Failed to save changes");
+      setEditError(errorMessage(err, "Failed to save changes"));
     } finally {
       setRowBusy(null);
     }
@@ -105,9 +106,10 @@ export default function BranchesPage() {
     setRowBusy(b.id);
     try {
       await apiSend(`/api/admin/branches/${b.id}`, "DELETE");
+      notify.success(notifications.branch.deleted);
       await load();
     } catch (err) {
-      alert(err instanceof ApiError ? err.message : "Failed to delete branch");
+      notify.fromError(err, notifications.branch.deleteFailed);
     } finally {
       setRowBusy(null);
     }
@@ -126,9 +128,10 @@ export default function BranchesPage() {
     setRowBusy(b.id);
     try {
       await apiSend(`/api/admin/branches/${b.id}`, "PATCH", { status: b.status === "ACTIVE" ? "INACTIVE" : "ACTIVE" });
+      notify.success(b.status === "ACTIVE" ? notifications.branch.deactivated : notifications.branch.activated);
       await load();
     } catch (err) {
-      alert(err instanceof ApiError ? err.message : "Failed to update branch");
+      notify.fromError(err, notifications.branch.statusFailed);
     } finally {
       setRowBusy(null);
     }

@@ -5,6 +5,7 @@ import { readDb, updateDb } from "@/lib/db";
 import { assertFindingInScope } from "@/lib/findings-scope";
 import { transitionFinding, hoApproveFinding, assertPeriodWritable } from "@/lib/findings";
 import { notifyFindingsPermissionHolders, notifyUsers, usersWithFindingsPermission } from "@/lib/notifications";
+import { withApiHandler } from "@/lib/api/handler";
 
 const reviewSchema = z
   .object({
@@ -19,7 +20,7 @@ const reviewSchema = z
 // Head Office Internal Controller's second-approval stage. Only acts on
 // findings currently in HO_REVIEW; HO's orgScope is BANK-wide, so
 // assertFindingInScope allows any district/branch here by design.
-export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+async function handlePOST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requirePermission("findings.ho-review");
   if (!auth.ok) return auth.response;
   const { id } = await params;
@@ -55,7 +56,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   const periodError = assertPeriodWritable(db, existing.periodId);
-  if (periodError) return NextResponse.json({ error: periodError }, { status: 409 });
+  if (periodError) return NextResponse.json({ error: periodError, code: "PERIOD_LOCKED" }, { status: 409 });
 
   const updated = await updateDb((current) => {
     const f = current.findings.find((x) => x.id === id)!;
@@ -106,3 +107,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   return NextResponse.json({ finding: updated });
 }
+
+// Central error handling, request ID and access logging: src/lib/api/handler.ts
+export const POST = withApiHandler(handlePOST);

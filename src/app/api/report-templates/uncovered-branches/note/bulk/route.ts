@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { upsertBranchCoverageNote } from "@/lib/branchCoverageNotes";
+import { withApiHandler } from "@/lib/api/handler";
 
 const bulkSchema = z.object({
   branchIds: z.array(z.string().min(1)).min(1, "Select at least one branch"),
@@ -18,7 +19,7 @@ const bulkSchema = z.object({
 // upsert helper (upsertBranchCoverageNote) as the single-branch route -
 // just looped, and all-or-nothing on validation (one out-of-scope or
 // unknown branch fails the whole batch rather than silently skipping it).
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   const auth = await requirePermission("report-templates.uncovered-branches");
   if (!auth.ok) return auth.response;
 
@@ -34,6 +35,9 @@ export async function POST(request: Request) {
   }
   if (reasonId !== null && !db.uncoveredReasons.some((r) => r.id === reasonId)) {
     return NextResponse.json({ error: "Reason not found" }, { status: 404 });
+  }
+  if (reasonId !== null && db.uncoveredReasons.some((r) => r.id === reasonId && !r.active)) {
+    return NextResponse.json({ error: "That reason is deactivated" }, { status: 400 });
   }
 
   const branches = branchIds.map((id) => db.branches.find((b) => b.id === id));
@@ -67,3 +71,6 @@ export async function POST(request: Request) {
 
   return NextResponse.json({ notes });
 }
+
+// Central error handling, request ID and access logging: src/lib/api/handler.ts
+export const POST = withApiHandler(handlePOST);

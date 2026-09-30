@@ -5,6 +5,7 @@ import { readDb, updateDb } from "@/lib/db";
 import { appendAuditLog } from "@/lib/audit";
 import { notifyUsers, usersWithFindingsPermission } from "@/lib/notifications";
 import { autoTransferOnLock } from "@/lib/findings";
+import { withApiHandler } from "@/lib/api/handler";
 
 const updateSchema = z
   .object({
@@ -75,7 +76,7 @@ const updateSchema = z
     path: ["submissionStartsAt"],
   });
 
-export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
+async function handlePATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requirePermission("reporting-periods.lock");
   if (!auth.ok) return auth.response;
   const { id } = await params;
@@ -234,8 +235,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 // references it - stricter than PATCH's own startsAt/endsAt edit gate
 // above (which only checks Finding.periodId, since editing dates is
 // reversible and far less destructive than deleting the row outright).
-// Finding.periodId and ScoringAdjustment.periodId are real Postgres
-// foreign keys (onDelete: Restrict - see schema.prisma) and would block
+// Finding.periodId is a real Postgres
+// foreign key (onDelete: Restrict - see schema.prisma) and would block
 // this at the database level regardless, but RectificationEntry.periodId,
 // FindingClosure.periodId, and FindingTransfer.fromPeriodId/toPeriodId are
 // plain, unconstrained string columns (a finding can rectify/close/
@@ -245,7 +246,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 // reference would leave that historical record pointing at a period that
 // no longer exists, silently breaking anything that displays "which
 // period was this rectification/closure/transfer for."
-export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+async function handleDELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requirePermission("reporting-periods.delete");
   if (!auth.ok) return auth.response;
   const { id } = await params;
@@ -258,13 +259,6 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   if (findingCount > 0) {
     return NextResponse.json(
       { error: `Cannot delete: ${findingCount} finding(s) still reference ${existing.code}.` },
-      { status: 409 }
-    );
-  }
-  const adjustmentCount = db.scoringAdjustments.filter((a) => a.periodId === id).length;
-  if (adjustmentCount > 0) {
-    return NextResponse.json(
-      { error: `Cannot delete: ${adjustmentCount} scoring adjustment(s) still reference ${existing.code}.` },
       { status: 409 }
     );
   }
@@ -304,3 +298,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
 
   return NextResponse.json({ ok: true });
 }
+
+// Central error handling, request ID and access logging: src/lib/api/handler.ts
+export const PATCH = withApiHandler(handlePATCH);
+export const DELETE = withApiHandler(handleDELETE);

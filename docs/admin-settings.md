@@ -77,7 +77,6 @@ export function permissionKey(pageCode: string, action: PermissionAction | strin
 | `uncovered-reasons` | Uncovered Branch Reasons | view, create, edit, toggle-status, delete |
 | `categories` | Classified Categories | view, create, edit, toggle-status, delete |
 | `scoring-rules` | Scoring Rules | view, create, edit, delete, activate *(edit/delete only on a version that never went live)* |
-| `scoring-adjustments` | Scoring Adjustments | view, create, toggle-status *(never edit or delete — permanent record)* |
 | `reporting-periods` | Reporting Periods | view, create, lock (labeled "Lock / Unlock"), delete |
 | `settings` | Settings | view, edit |
 | `audit-log` | Audit Log | view |

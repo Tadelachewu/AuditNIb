@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { apiSend, ApiError } from "@/lib/api-client";
+import { apiSend, errorMessage } from "@/lib/api-client";
 import { Button } from "@/components/ui/Button";
 import { ReasonPicker, reasonToPickerValue, resolveReason } from "@/components/reports/ReasonPicker";
 import type { UncoveredReason } from "@/types";
@@ -66,7 +66,7 @@ export function UncoveredBranchNoteForm({
       setEditing(false);
       router.refresh();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to save");
+      setError(errorMessage(err, "Failed to save"));
     } finally {
       setBusy(false);
     }

@@ -6,12 +6,13 @@ import { readDb, updateDb } from "@/lib/db";
 import { appendAuditLog } from "@/lib/audit";
 import { findBranchManager, findBranchController, findBranchSubManager } from "@/lib/org";
 import { paginate, parsePage } from "@/lib/pagination";
+import { withApiHandler } from "@/lib/api/handler";
 
 // A large bank can have hundreds of branches - paginated the same way
 // Users/Audit Log are. `page` is optional: other callers (e.g. the Users
 // page's own branch-picker dropdowns) still want the full list, so
 // omitting it returns everything unpaginated, same as before.
-export async function GET(request: Request) {
+async function handleGET(request: Request) {
   const auth = await requirePermission("branches.view");
   if (!auth.ok) return auth.response;
   const { searchParams } = new URL(request.url);
@@ -39,7 +40,7 @@ const createSchema = z.object({
   districtId: z.string().min(1, "District is required"),
 });
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   const auth = await requirePermission("branches.create");
   if (!auth.ok) return auth.response;
 
@@ -74,3 +75,7 @@ export async function POST(request: Request) {
 
   return NextResponse.json({ branch }, { status: 201 });
 }
+
+// Central error handling, request ID and access logging: src/lib/api/handler.ts
+export const GET = withApiHandler(handleGET);
+export const POST = withApiHandler(handlePOST);

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { upsertBranchCoverageNote } from "@/lib/branchCoverageNotes";
+import { withApiHandler } from "@/lib/api/handler";
 
 const noteSchema = z.object({
   branchId: z.string().min(1),
@@ -21,7 +22,7 @@ const noteSchema = z.object({
 // lock status, since recording a retrospective reason for an already-locked
 // period is exactly the normal case, not an edge case to block. See
 // note/bulk/route.ts for the multi-branch version of this same upsert.
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   const auth = await requirePermission("report-templates.uncovered-branches");
   if (!auth.ok) return auth.response;
 
@@ -39,6 +40,13 @@ export async function POST(request: Request) {
   }
   if (reasonId !== null && !db.uncoveredReasons.some((r) => r.id === reasonId)) {
     return NextResponse.json({ error: "Reason not found" }, { status: 404 });
+  }
+  // A deactivated reason can't be newly picked; a note already using it
+  // can be saved unchanged (the picker keeps showing its current value).
+  const pickedReason = reasonId !== null ? db.uncoveredReasons.find((r) => r.id === reasonId) : undefined;
+  const keptReason = db.branchCoverageNotes.some((n) => n.branchId === branchId && n.periodId === periodId && n.reasonId === reasonId);
+  if (pickedReason && !pickedReason.active && !keptReason) {
+    return NextResponse.json({ error: `The reason "${pickedReason.name}" is deactivated` }, { status: 400 });
   }
 
   // Same org-scope convention as assertFindingInScope() in
@@ -64,3 +72,6 @@ export async function POST(request: Request) {
 
   return NextResponse.json({ note });
 }
+
+// Central error handling, request ID and access logging: src/lib/api/handler.ts
+export const POST = withApiHandler(handlePOST);

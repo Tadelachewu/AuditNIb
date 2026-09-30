@@ -7,6 +7,8 @@ import { getTransporter } from "@/lib/mail";
 import { appendAuditLog } from "@/lib/audit";
 import { clientIp, isRateLimited, recordAttempt } from "@/lib/rateLimit";
 import { prisma } from "@/lib/prismaClient";
+import { withApiHandler } from "@/lib/api/handler";
+import { logger } from "@/lib/logger";
 
 const schema = z.object({
   identifier: z.string().min(1, "Enter your username or email address"),
@@ -56,7 +58,7 @@ function isValidEmailForSending(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
     return NextResponse.json(
@@ -122,10 +124,7 @@ export async function POST(request: Request) {
 
   const hasUsableEmail = Boolean(user.email) && isValidEmailForSending(user.email);
   if (!hasUsableEmail) {
-    console.warn(
-      `[forgot-password] User "${user.username}" (id=${user.id}) matched but their email "${user.email}" is not deliverable. ` +
-        `An admin must correct it in Admin -> Users.`
-    );
+    logger.warn({ event: "password_reset.undeliverable_email", targetUserId: user.id }, "Password reset matched a user whose email is not deliverable - an admin must correct it in Admin -> Users");
     return NextResponse.json({
       ok: true,
       smtpConfigured,
@@ -136,13 +135,7 @@ export async function POST(request: Request) {
   }
 
   if (!smtpConfigured) {
-    console.warn(
-      `[forgot-password] Password reset requested for "${user.username}" <${user.email}> but ` +
-        `Notification Delivery / SMTP is NOT configured. Go to Admin -> Settings -> Notification Delivery, ` +
-        `set Provider=SMTP Relay with host/port/SMTP_USER/SMTP_PASSWORD, then click "Send Test Email". ` +
-        `See EMAIL_SETUP.md for details. A reset token was STILL created in table password_reset_tokens ` +
-        `(token id only, not the secret value) so an admin can see this attempt in Audit Log.`
-    );
+    logger.warn({ event: "password_reset.smtp_not_configured", targetUserId: user.id }, "Password reset requested but SMTP is not configured (Admin -> Settings -> Notification Delivery); a reset token row was still created");
   }
 
   const tokenRaw = crypto.randomBytes(32).toString("base64url");
@@ -168,7 +161,7 @@ export async function POST(request: Request) {
       });
     });
   } catch (err) {
-    console.error("[forgot-password] Failed to persist reset token row in Postgres:", err);
+    logger.error({ err, event: "password_reset.persist_failed" }, "Failed to persist reset token row");
     return NextResponse.json({ error: "Failed to process request" }, { status: 500 });
   }
 
@@ -229,20 +222,12 @@ export async function POST(request: Request) {
       });
       emailSentSuccessfully = true;
       const accepted: string[] = (info as unknown as { accepted?: string[] })?.accepted ?? [];
-      console.info(
-        `[forgot-password] Password reset email queued to ${user.email} via SMTP relay ` +
-          `(nodemailer accepted=${accepted.includes(user.email) ? "yes" : "pending"}, ` +
-          `messageId=${(info as unknown as { messageId?: string })?.messageId ?? "n/a"}). ` +
-          `If the recipient doesn't see it, have them check spam/junk folder and confirm the SMTP From address ` +
-          `"${fromAddress}" is allowed by the recipient domain's SPF/DKIM/DMARC records.`
+      logger.info(
+        { event: "password_reset.email_queued", targetUserId: user.id, accepted: accepted.includes(user.email) },
+        "Password reset email queued via SMTP relay"
       );
     } catch (err) {
-      console.error(
-        `[forgot-password] Failed to SEND reset email via SMTP to ${user.email}. ` +
-          `Admin: check Admin -> Settings -> Notification Delivery -> "Send Test Email" and confirm host/port/user/pass match your SMTP relay. ` +
-          `Underlying error (server logs only):`,
-        err
-      );
+      logger.error({ err, event: "password_reset.email_failed", targetUserId: user.id }, "Failed to send password reset email - check Admin -> Settings -> Notification Delivery");
       smtpErrorMessage =
         "The password reset link could not be emailed right now. Ask your NIB Control360 administrator to check the outbound SMTP configuration in Admin → Settings → Notification Delivery.";
     }
@@ -262,3 +247,6 @@ export async function POST(request: Request) {
     sentTo: emailSentSuccessfully ? user.email : undefined,
   });
 }
+
+// Central error handling, request ID and access logging: src/lib/api/handler.ts
+export const POST = withApiHandler(handlePOST);

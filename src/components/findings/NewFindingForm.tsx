@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { apiGet, apiSend, ApiError } from "@/lib/api-client";
+import { apiGet, apiSend, errorMessage } from "@/lib/api-client";
 import { formatDateTime, formatCurrency } from "@/lib/format";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -591,7 +591,7 @@ export function NewFindingForm({
         router.refresh();
       }
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to save finding");
+      setError(errorMessage(err, "Failed to save finding"));
     } finally {
       setSubmitting(null);
     }

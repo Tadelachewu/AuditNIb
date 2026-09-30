@@ -3,6 +3,7 @@ import { requirePermission } from "@/lib/guard";
 import { readDb } from "@/lib/db";
 import { findingsInScope } from "@/lib/findings-scope";
 import { SIMILAR_FINDING_FIELDS, type Finding, type SimilarFindingField } from "@/types";
+import { withApiHandler } from "@/lib/api/handler";
 
 // Every accessor returns a plain string so comparison against a URL query
 // param (always a string) is uniform regardless of the underlying field's
@@ -47,7 +48,7 @@ const FIELD_ACCESSORS: Record<SimilarFindingField, (f: Finding) => string> = {
  * (findingsInScope), so this never surfaces a finding outside the
  * caller's own organization.
  */
-export async function GET(request: Request) {
+async function handleGET(request: Request) {
   const auth = await requirePermission("findings.view");
   if (!auth.ok) return auth.response;
 
@@ -77,3 +78,6 @@ export async function GET(request: Request) {
 
   return NextResponse.json({ matches });
 }
+
+// Central error handling, request ID and access logging: src/lib/api/handler.ts
+export const GET = withApiHandler(handleGET);

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { MRT_ColumnDef } from "material-react-table";
-import { apiGet, apiSend, ApiError } from "@/lib/api-client";
+import { apiGet, apiSend, errorMessage } from "@/lib/api-client";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { StickyActions } from "@/components/ui/StickyActions";
@@ -16,6 +16,7 @@ import { hasPermission } from "@/lib/permissions/registry";
 import type { ClassifiedCategory } from "@/types";
 import { AdminTable } from "@/components/ui/AdminTable";
 import { ImportCsvDialog } from "@/components/ui/ImportCsvDialog";
+import { notify, notifications } from "@/lib/notify";
 
 export default function CategoriesPage() {
   const [categories, setCategories] = useState<ClassifiedCategory[]>([]);
@@ -55,7 +56,7 @@ export default function CategoriesPage() {
       close();
       await load();
     } catch (err) {
-      setFormError(err instanceof ApiError ? err.message : "Failed to create category");
+      setFormError(errorMessage(err, "Failed to create category"));
     } finally {
       setSubmitting(false);
     }
@@ -75,7 +76,7 @@ export default function CategoriesPage() {
       setEditingId(null);
       await load();
     } catch (err) {
-      setEditError(err instanceof ApiError ? err.message : "Failed to save changes");
+      setEditError(errorMessage(err, "Failed to save changes"));
     } finally {
       setRowBusy(null);
     }
@@ -94,9 +95,10 @@ export default function CategoriesPage() {
     setRowBusy(c.id);
     try {
       await apiSend(`/api/admin/categories/${c.id}`, "PATCH", { active: !c.active });
+      notify.success(c.active ? notifications.category.deactivated : notifications.category.activated);
       await load();
     } catch (err) {
-      alert(err instanceof ApiError ? err.message : "Failed to update category");
+      notify.fromError(err, notifications.category.statusFailed);
     } finally {
       setRowBusy(null);
     }
@@ -113,9 +115,10 @@ export default function CategoriesPage() {
     setRowBusy(c.id);
     try {
       await apiSend(`/api/admin/categories/${c.id}`, "DELETE");
+      notify.success(notifications.category.deleted);
       await load();
     } catch (err) {
-      alert(err instanceof ApiError ? err.message : "Failed to delete category");
+      notify.fromError(err, notifications.category.deleteFailed);
     } finally {
       setRowBusy(null);
     }
@@ -135,9 +138,10 @@ export default function CategoriesPage() {
     setRowBusy(c.id);
     try {
       await apiSend(`/api/admin/categories/${c.id}`, "PATCH", { scored: goingScored });
+      notify.success(goingScored ? notifications.category.nowScored : notifications.category.notScored);
       await load();
     } catch (err) {
-      alert(err instanceof ApiError ? err.message : "Failed to update category");
+      notify.fromError(err, notifications.category.updateFailed);
     } finally {
       setRowBusy(null);
     }

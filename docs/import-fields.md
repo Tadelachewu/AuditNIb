@@ -1,5 +1,16 @@
 # Bulk Import Template — Column-by-Column Reference
 
+> **Current rules (updated 2026-09-30). Where anything below disagrees, this box wins.**
+> - **Every problem is reported at once:** each rejected row lists *all* its problems (`errors[]`, also joined in `error`), not just the first; the whole file is still checked before anything is saved (all-or-nothing).
+> - **Case-insensitive:** district / branch / period / source / department / category codes, Status, and the list values (operation area, type of irregularity, currency, risk level, priority) match regardless of letter case and are stored in the configured spelling.
+> - **Finding date:** strict `YYYY-MM-DD` real calendar date (or an Excel date cell); **not after the last day of the row's Reporting Period** (earlier is fine), and not in the future. For TRANSFERRED this is the original period.
+> - **Inactive references** are reported as *"… is deactivated"*, separately from unknown codes. A Transferred To period must also be later than the Reporting Period.
+> - **Duplicates** use the importer's own fixed exact-match key (branch, period, source, department, category, finding date, operation area, irregularity type, currency, amount, cases), **not** the admin's Similar Findings setting.
+> - **Duplicates are the final check:** only after every row passes; nothing is imported until the importer reviews the evidence and chooses *Import without duplicates* or *Cancel* (`IMPORT_DUPLICATES_FOUND`, `src/lib/importRun.ts`).
+> - **Reverse an import:** Import History → Reverse (permission *Findings › Reverse an Import*) removes the batch's findings and everything recorded against them, **whatever has happened since** (impact shown first, reason required). Then *Re-import* (stored file, all checks again) or *Delete record*. References stay reserved. Code: `src/lib/importReverse.ts`.
+> - **Root Cause** is an import column (the last one).
+
+
 Every column in the bulk-import `.xlsx` template (`IMPORT_COLUMNS`, `src/lib/import.ts:44-84`), one
 dedicated section each. `docs/import.md` covers the mechanism of bulk import end-to-end (upload/parse
 flow, dedupe, what a successful row writes); this document is the single place to look up one specific
@@ -48,13 +59,13 @@ structural difference between this document and `registration-fields.md`:
 | 6 | Classified Category Code | Classified Case (§10) | Exact-match against **active** `ClassifiedCategory.code` (e.g. `ATM_MISMATCH`). **No "Other" typed-value escape hatch on the import path** — unlike manual registration, an import row's category must resolve to a real, active category or the row errors; there is no equivalent of typing a free-text category value into a spreadsheet cell that the importer treats specially. |
 | 7 | Title | Title (§1) | No format check beyond presence — not part of the duplicate-detection key (`docs/import.md` §7). |
 | 8 | Finding Date (YYYY-MM-DD) | Finding Date (§7) | Must parse as a valid date if present (`new Date(value)`); this is also the value `createdAt` gets backdated to on a successful import (`docs/import.md` §6), so a blank Finding Date on an otherwise-permitted row makes the import moment itself the record's apparent age. |
-| 9 | Operation Area | Operation Area (§8) | Must **exactly** match an entry in `Settings.operationAreas` — case-sensitive exact string match, no "Other" typed-value path on import (unlike manual registration, where an admin-permitted typed value is accepted). |
+| 9 | Operation Area | Operation Area (§8) | Must match an entry in `Settings.operationAreas`, ignoring letter case (stored in the configured spelling), no "Other" typed-value path on import (unlike manual registration, where an admin-permitted typed value is accepted). |
 | 10 | Type of Irregularity | Type of Irregularity (§9) | Same exact-match-only rule as Operation Area. |
 | 11 | Amount | Amount (§12) | Same rule: finite, `>= 0`. Zero is valid here too. |
-| 12 | Currency | Currency (§11) | Exact match against `Settings.currencies`, case-sensitive. |
+| 12 | Currency | Currency (§11) | Match against `Settings.currencies`, case-insensitive. |
 | 13 | Number of Cases | Number of Cases (§13) | Same rule: integer `>= 1`. |
-| 14 | Risk Level | Risk Level (§14) | Exact match against `Settings.riskLevels`. |
-| 15 | Priority | Priority (§15) | Exact match against `Settings.priorityLevels`. |
+| 14 | Risk Level | Risk Level (§14) | Match against `Settings.riskLevels`, case-insensitive. |
+| 15 | Priority | Priority (§15) | Match against `Settings.priorityLevels`, case-insensitive. |
 | 16 | Description | Description (§16) | Presence only, when required. |
 | 17 | Recommendation | Recommendation (§18) | Presence only, when required — **and required by default on import**, contradicting the in-app `ImportGuide.tsx`'s own labeling of it as "never required" (a known, documented discrepancy, see `docs/import.md` §10). |
 | 18 | Evidence Note | Evidence Note (§19) | Presence only, when required — same default-required gotcha as Recommendation. **No file attachment is possible via import at all** — this column is text-only, same limitation as the manual form's own Evidence Note field. |

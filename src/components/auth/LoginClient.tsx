@@ -4,7 +4,8 @@ import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { apiSend, ApiError } from "@/lib/api-client";
+import { apiSend } from "@/lib/api-client";
+import { notify, notifications } from "@/lib/notify";
 import { Button } from "@/components/ui/Button";
 import { Input, Label } from "@/components/ui/Field";
 import { AuthBackdrop, AUTH_PANEL_CLASS } from "@/components/auth/AuthBackdrop";
@@ -34,10 +35,14 @@ export function LoginClient({ demoUsers }: { demoUsers: DemoUser[] | null }) {
     setLoading(true);
     try {
       await apiSend("/api/auth/login", "POST", { username, password });
+      notify.success(notifications.auth.loginSuccess);
       router.push("/dashboard");
       router.refresh();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Something went wrong. Please try again.");
+      // One message, as a notification (announced to screen readers); the
+      // fields are marked invalid below so it's clear where to look.
+      notify.loginError(err);
+      setError("invalid");
     } finally {
       setLoading(false);
     }
@@ -60,7 +65,12 @@ export function LoginClient({ demoUsers }: { demoUsers: DemoUser[] | null }) {
               autoFocus
               autoComplete="username"
               value={username}
-              onChange={(e) => setUsername(e.target.value)}
+              onChange={(e) => {
+                setUsername(e.target.value);
+                setError(null);
+              }}
+              aria-invalid={error ? true : undefined}
+              className={error ? "border-red-400" : undefined}
               required
             />
           </div>
@@ -71,7 +81,12 @@ export function LoginClient({ demoUsers }: { demoUsers: DemoUser[] | null }) {
               type="password"
               autoComplete="current-password"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={(e) => {
+                setPassword(e.target.value);
+                setError(null);
+              }}
+              aria-invalid={error ? true : undefined}
+              className={error ? "border-red-400" : undefined}
               required
             />
             <div className="mt-1.5 text-right">
@@ -84,7 +99,6 @@ export function LoginClient({ demoUsers }: { demoUsers: DemoUser[] | null }) {
             </div>
           </div>
 
-          {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
 
           <Button type="submit" disabled={loading} className="w-full">
             {loading ? "Signing in..." : "Sign in"}

@@ -4,21 +4,21 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { reportClientError } from "@/lib/clientMonitoring";
 
-// Route-level error boundary for every page under (app) - catches a
-// thrown error from a page Server Component (or anything it renders)
-// during this navigation. Next.js requires this to be a Client Component
-// (it's a real React error boundary under the hood). The raw error is
-// logged here (server-side render errors still reach the browser console
-// via Next's error reporting) rather than shown to the user - only a
-// generic message renders, since `error.message` can carry internal
-// detail (a stack frame, a file path, a raw exception from readDb()) that
-// has no business being user-facing.
-export default function AppError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
+// Route-segment error boundary for every signed-in page under (app): an
+// unexpected error while rendering a page keeps the sidebar/top bar and
+// shows this card in place of the page only. Must be a Client Component.
+//
+// Never shows error.message: for Server Component errors Next replaces it
+// with a generic text in production anyway, and a Client Component error's
+// message can still carry internals. The `digest` is the reference that
+// matches the server log line (onRequestError in src/instrumentation.ts).
+export default function AppError({ error, retry }: { error: Error & { digest?: string }; retry: () => void }) {
   const router = useRouter();
 
   useEffect(() => {
-    console.error("App route error:", error);
+    reportClientError(error, "app-segment");
   }, [error]);
 
   return (
@@ -32,7 +32,7 @@ export default function AppError({ error, reset }: { error: Error & { digest?: s
         <Button variant="secondary" onClick={() => router.push("/dashboard")}>
           Go to Dashboard
         </Button>
-        <Button onClick={reset}>Try Again</Button>
+        <Button onClick={() => retry()}>Try Again</Button>
       </div>
     </Card>
   );

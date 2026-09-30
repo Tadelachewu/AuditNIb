@@ -1,5 +1,5 @@
-import type { Database, District, ScoringAdjustment } from "@/types";
-import { computePerformance, computeEligibleCaseCounts, getActiveScoringAdjustment } from "@/lib/findings";
+import type { Database, District } from "@/types";
+import { computePerformance, computeEligibleCaseCounts } from "@/lib/findings";
 import { RankingGrid } from "@/components/dashboard/RankingGrid";
 import { Card, CardHeader } from "@/components/ui/Card";
 
@@ -11,7 +11,6 @@ interface DistrictRow {
   outstandingCases: number;
   performance: number | null;
   // Set when `performance` comes from an active Scoring Adjustment.
-  adjustment: ScoringAdjustment | null;
 }
 
 /**
@@ -52,8 +51,7 @@ export function DistrictRankingTable({
     const performance = hasScope
       ? computePerformance(db, { districtId: d.id, periodId: allPeriods ? undefined : openPeriod!.id })
       : null;
-    const adjustment = hasScope ? getActiveScoringAdjustment(db, { districtId: d.id, periodId: allPeriods ? undefined : openPeriod!.id }) : null;
-    return { district: d, branchCount, totalCases, rectifiedCases, outstandingCases: totalCases - rectifiedCases, performance, adjustment };
+    return { district: d, branchCount, totalCases, rectifiedCases, outstandingCases: totalCases - rectifiedCases, performance };
   });
 
   const ranked = [...rows].sort((a, b) => (b.performance ?? -1) - (a.performance ?? -1));
@@ -75,7 +73,6 @@ export function DistrictRankingTable({
           rectifiedCases: row.rectifiedCases,
           outstandingCases: row.outstandingCases,
           performance: row.performance,
-          adjustmentReason: row.adjustment?.reason ?? null,
         }))}
       />
     </Card>

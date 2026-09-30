@@ -22,7 +22,6 @@ async function main() {
   await prisma.findingTransition.deleteMany();
   await prisma.finding.deleteMany();
   await prisma.importBatch.deleteMany();
-  await prisma.scoringAdjustment.deleteMany();
   await prisma.reportingPeriod.deleteMany();
   await prisma.scoringRule.deleteMany();
   await prisma.user.deleteMany();

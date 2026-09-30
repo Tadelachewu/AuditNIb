@@ -277,6 +277,30 @@ export async function parseImportWorkbook(buffer: Buffer): Promise<ParsedImportR
   return { rows };
 }
 
+/** Case-insensitive code lookup (district/branch/period/source/department/category codes). */
+function findByCode<T extends { code: string }>(list: T[], code: string): T | undefined {
+  const c = code.trim().toLowerCase();
+  return list.find((x) => x.code.trim().toLowerCase() === c);
+}
+
+/** A real calendar date in strict YYYY-MM-DD form (rejects 2026-02-30, 15/09/2026, ...). */
+function isCalendarDate(v: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
+  const d = new Date(`${v}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v;
+}
+
+/**
+ * The server-local calendar date (YYYY-MM-DD) of a timestamp - the same
+ * local-time basis a reporting period's own code/month is derived from
+ * (see POST /api/admin/reporting-periods), so "ends 2026-09-30" matches
+ * the period's real last day rather than its UTC instant.
+ */
+function localDate(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 /**
  * The dedupe key: every field an import row and a manually-registered
  * finding both have, excluding free text (description/recommendation/
@@ -377,204 +401,179 @@ export function validateImportRow(
     importerScope: { orgScope: string; districtId: string | null; branchId: string | null };
   }
 ): ImportBatchRow & { finding?: Finding } {
+  // Every problem in the row is collected and reported together (not just
+  // the first one), so a file can be fixed in one pass. Codes and list
+  // values match regardless of letter case and are stored in the
+  // configured spelling. Rules: docs/import.md and the in-app Import Guide.
+  const errors: string[] = [];
+
   const missing = IMPORT_COLUMNS.filter((c) => columnRequired(db, c) && !row[c.key]?.trim());
-  if (missing.length > 0) {
-    return { rowNumber, outcome: "error", error: `Missing required value(s): ${missing.map((c) => columnHeader(db, c)).join(", ")}` };
-  }
+  if (missing.length > 0) errors.push(`Missing required value(s): ${missing.map((c) => columnHeader(db, c)).join(", ")}`);
 
   const statusInput = (row.status ?? "").trim().toUpperCase();
-  if (!(ALLOWED_IMPORT_STATUSES as readonly string[]).includes(statusInput)) {
-    return {
-      rowNumber,
-      outcome: "error",
-      error: `Invalid status "${row.status}" - must be one of ${ALLOWED_IMPORT_STATUSES.join(", ")}`,
-    };
+  const status: ImportStatus | null = (ALLOWED_IMPORT_STATUSES as readonly string[]).includes(statusInput) ? (statusInput as ImportStatus) : null;
+  if (statusInput && !status) errors.push(`Invalid status "${row.status}" - must be one of ${ALLOWED_IMPORT_STATUSES.join(", ")}`);
+
+  // District / branch: must exist, be active, and belong together.
+  const districtCode = row.districtCode?.trim();
+  const districtAny = districtCode ? findByCode(db.districts, districtCode) : undefined;
+  if (districtCode && !districtAny) errors.push(`Unknown district code "${districtCode}"`);
+  if (districtAny && districtAny.status !== "ACTIVE") errors.push(`District "${districtAny.code}" is deactivated`);
+  const district = districtAny?.status === "ACTIVE" ? districtAny : undefined;
+
+  const branchCode = row.branchCode?.trim();
+  const branchAny = branchCode ? findByCode(db.branches, branchCode) : undefined;
+  if (branchCode && !branchAny) errors.push(`Unknown branch code "${branchCode}"`);
+  if (branchAny && branchAny.status !== "ACTIVE") errors.push(`Branch "${branchAny.code}" is deactivated`);
+  const branch = branchAny?.status === "ACTIVE" ? branchAny : undefined;
+
+  if (district && branch && branch.districtId !== district.id) {
+    errors.push(`Branch "${branch.code}" does not belong to district "${district.code}"`);
   }
-  const status = statusInput as ImportStatus;
-
-  const district = db.districts.find((d) => d.code === row.districtCode?.trim() && d.status === "ACTIVE");
-  if (!district) return { rowNumber, outcome: "error", error: `Unknown or inactive district code "${row.districtCode}"` };
-
-  const branch = db.branches.find((b) => b.code === row.branchCode?.trim() && b.status === "ACTIVE");
-  if (!branch) return { rowNumber, outcome: "error", error: `Unknown or inactive branch code "${row.branchCode}"` };
-  if (branch.districtId !== district.id) {
-    return { rowNumber, outcome: "error", error: `Branch "${row.branchCode}" does not belong to district "${row.districtCode}"` };
+  if (branch && opts.importerScope.orgScope === "BRANCH" && branch.id !== opts.importerScope.branchId) {
+    errors.push(`Branch "${branch.code}" is outside your assigned branch`);
+  }
+  if (district && opts.importerScope.orgScope === "DISTRICT" && district.id !== opts.importerScope.districtId) {
+    errors.push(`District "${district.code}" is outside your assigned district`);
   }
 
-  if (opts.importerScope.orgScope === "BRANCH" && branch.id !== opts.importerScope.branchId) {
-    return { rowNumber, outcome: "error", error: `Branch "${row.branchCode}" is outside your assigned branch` };
-  }
-  if (opts.importerScope.orgScope === "DISTRICT" && district.id !== opts.importerScope.districtId) {
-    return { rowNumber, outcome: "error", error: `District "${row.districtCode}" is outside your assigned district` };
-  }
+  // No "locked periods don't accept new writes" check - every import row
+  // is a historical backfill (see ALLOWED_IMPORT_STATUSES' doc comment);
+  // a period being long since locked is usually *why* it's backfilled now.
+  const periodCode = row.periodCode?.trim();
+  const period = periodCode ? findByCode(db.reportingPeriods, periodCode) : undefined;
+  if (periodCode && !period) errors.push(`Unknown reporting period code "${periodCode}"`);
 
-  const period = db.reportingPeriods.find((p) => p.code === row.periodCode?.trim());
-  if (!period) return { rowNumber, outcome: "error", error: `Unknown reporting period code "${row.periodCode}"` };
-  // No "locked periods don't accept new writes" check here at all - every
-  // import row is a historical backfill (see ALLOWED_IMPORT_STATUSES' own
-  // doc comment), so this is never a new write against a live period in
-  // the sense assertPeriodWritable() guards against elsewhere; a period
-  // being long since locked is usually *why* it's being backfilled now.
-
-  // TRANSFERRED needs a second, *different* period - the one it moved
-  // *into*. Reporting Period Code above stays the finding's own original
-  // period (used for its reference number, exactly like a real transfer
-  // never changes reference - see transferFinding()'s own doc comment).
+  // TRANSFERRED needs a second, *different*, open period - the one it moved
+  // *into*. Reporting Period Code stays the finding's own original period
+  // (used for its reference number, like a live transfer).
   let destinationPeriod: ReportingPeriod | undefined;
   if (status === "TRANSFERRED") {
     const toPeriodCode = row.transferredToPeriodCode?.trim();
     if (!toPeriodCode) {
-      return { rowNumber, outcome: "error", error: `Status "TRANSFERRED" requires Transferred To Period Code` };
-    }
-    destinationPeriod = db.reportingPeriods.find((p) => p.code === toPeriodCode);
-    if (!destinationPeriod) {
-      return { rowNumber, outcome: "error", error: `Unknown reporting period code "${row.transferredToPeriodCode}"` };
-    }
-    if (destinationPeriod.id === period.id) {
-      return { rowNumber, outcome: "error", error: `Transferred To Period Code must differ from Reporting Period Code` };
-    }
-    // Same "destination must be open" rule the live manual-transfer route
-    // enforces (transferFinding() itself doesn't) - a TRANSFERRED finding
-    // always rests in a period still open for further action.
-    if (destinationPeriod.status !== "OPEN") {
-      return { rowNumber, outcome: "error", error: `Transferred To Period "${destinationPeriod.code}" must be open` };
+      errors.push(`Status "TRANSFERRED" requires Transferred To Period Code`);
+    } else {
+      destinationPeriod = findByCode(db.reportingPeriods, toPeriodCode);
+      if (!destinationPeriod) errors.push(`Unknown reporting period code "${toPeriodCode}" (Transferred To)`);
+      else if (period && destinationPeriod.id === period.id) errors.push(`Transferred To Period Code must differ from Reporting Period Code`);
+      else if (destinationPeriod.status !== "OPEN") errors.push(`Transferred To Period "${destinationPeriod.code}" must be open`);
+      else if (period && destinationPeriod.startsAt <= period.startsAt) errors.push(`Transferred To Period "${destinationPeriod.code}" must be later than "${period.code}"`);
     }
   }
 
-  // Each of source/department/category is only looked up (and thus only
-  // validated against reference data) when a code was actually given -
-  // the row can only reach this point with one blank at all because the
-  // `missing` check above already let it through, which only happens
-  // when Settings.requiredFindingFields has opted that field out.
+  // Source / department / category: only checked when given (a blank one
+  // only gets this far when Settings.requiredFindingFields opts it out).
   const sourceCode = row.sourceCode?.trim();
-  const source = sourceCode ? db.sources.find((s) => s.code === sourceCode && s.active) : undefined;
-  if (sourceCode && !source) return { rowNumber, outcome: "error", error: `Unknown or inactive source code "${row.sourceCode}"` };
+  const sourceAny = sourceCode ? findByCode(db.sources, sourceCode) : undefined;
+  if (sourceCode && !sourceAny) errors.push(`Unknown source code "${sourceCode}"`);
+  if (sourceAny && !sourceAny.active) errors.push(`Source "${sourceAny.code}" is deactivated`);
+  const source = sourceAny?.active ? sourceAny : undefined;
 
   const departmentCode = row.departmentCode?.trim();
-  const department = departmentCode ? db.departments.find((d) => d.code === departmentCode && d.active) : undefined;
-  if (departmentCode && !department) return { rowNumber, outcome: "error", error: `Unknown or inactive department code "${row.departmentCode}"` };
-  if (department && !isDepartmentInScope(department, { districtId: district.id, branchId: branch.id })) {
-    return { rowNumber, outcome: "error", error: `Department "${row.departmentCode}" is not available for branch "${row.branchCode}"` };
+  const departmentAny = departmentCode ? findByCode(db.departments, departmentCode) : undefined;
+  if (departmentCode && !departmentAny) errors.push(`Unknown department code "${departmentCode}"`);
+  if (departmentAny && !departmentAny.active) errors.push(`Department "${departmentAny.code}" is deactivated`);
+  const department = departmentAny?.active ? departmentAny : undefined;
+  if (department && district && branch && !isDepartmentInScope(department, { districtId: district.id, branchId: branch.id })) {
+    errors.push(`Department "${department.code}" is not available for branch "${branch.code}"`);
   }
 
   const categoryCode = row.categoryCode?.trim();
-  const category = categoryCode ? db.categories.find((c) => c.code === categoryCode && c.active) : undefined;
-  if (categoryCode && !category) return { rowNumber, outcome: "error", error: `Unknown or inactive classified category code "${row.categoryCode}"` };
+  const categoryAny = categoryCode ? findByCode(db.categories, categoryCode) : undefined;
+  if (categoryCode && !categoryAny) errors.push(`Unknown classified category code "${categoryCode}"`);
+  if (categoryAny && !categoryAny.active) errors.push(`Classified category "${categoryAny.code}" is deactivated`);
+  const category = categoryAny?.active ? categoryAny : undefined;
 
-  // Same reasoning for these five - a blank value only reaches here when
-  // it's been opted out of Settings.requiredFindingFields, in which case
-  // there's nothing to check it against.
-  if (row.currency?.trim() && !db.settings.currencies.includes(row.currency.trim())) {
-    return { rowNumber, outcome: "error", error: `Unknown currency "${row.currency}"` };
-  }
-  if (row.riskLevel?.trim() && !db.settings.riskLevels.includes(row.riskLevel.trim())) {
-    return { rowNumber, outcome: "error", error: `Unknown risk level "${row.riskLevel}"` };
-  }
-  if (row.priority?.trim() && !db.settings.priorityLevels.includes(row.priority.trim())) {
-    return { rowNumber, outcome: "error", error: `Unknown priority "${row.priority}"` };
-  }
-  if (row.operationArea?.trim() && !db.settings.operationAreas.includes(row.operationArea.trim())) {
-    return { rowNumber, outcome: "error", error: `Unknown operation area "${row.operationArea}"` };
-  }
-  if (row.irregularityType?.trim() && !db.settings.irregularityTypes.includes(row.irregularityType.trim())) {
-    return { rowNumber, outcome: "error", error: `Unknown type of irregularity "${row.irregularityType}"` };
-  }
+  // Settings lists - case-insensitive, stored in the configured spelling.
+  const listValue = (list: string[], raw: string | undefined, label: string): string => {
+    const v = (raw ?? "").trim();
+    if (!v) return "";
+    const match = list.find((x) => x.trim().toLowerCase() === v.toLowerCase());
+    if (!match) errors.push(`Unknown ${label} "${v}" - must be one of: ${list.join(", ")}`);
+    return match ?? v;
+  };
+  const currency = listValue(db.settings.currencies, row.currency, "currency");
+  const riskLevel = listValue(db.settings.riskLevels, row.riskLevel, "risk level");
+  const priority = listValue(db.settings.priorityLevels, row.priority, "priority");
+  const operationArea = listValue(db.settings.operationAreas, row.operationArea, "operation area");
+  const irregularityType = listValue(db.settings.irregularityTypes, row.irregularityType, "type of irregularity");
 
+  // Finding date: a real YYYY-MM-DD calendar date, not in the future, and
+  // never after its reporting period ends (inside the period or earlier).
   const findingDate = (row.findingDate ?? "").trim();
-  if (findingDate && Number.isNaN(new Date(findingDate).getTime())) {
-    return { rowNumber, outcome: "error", error: `Invalid finding date "${row.findingDate}" - use YYYY-MM-DD` };
+  if (findingDate) {
+    if (!isCalendarDate(findingDate)) {
+      errors.push(`Invalid finding date "${findingDate}" - use YYYY-MM-DD (e.g. 2026-09-15)`);
+    } else {
+      if (findingDate > localDate(new Date().toISOString())) errors.push(`Finding date ${findingDate} is in the future`);
+      if (period) {
+        const periodEnd = localDate(period.endsAt);
+        if (findingDate > periodEnd) {
+          errors.push(`Finding date ${findingDate} is after reporting period ${period.code} (ends ${periodEnd}) - it must be within the period or before it`);
+        }
+      }
+    }
   }
 
-  const amount = Number(row.amount);
-  if (!Number.isFinite(amount) || amount < 0) {
-    return { rowNumber, outcome: "error", error: `Invalid amount "${row.amount}"` };
-  }
-  const caseCount = Number(row.caseCount);
-  if (!Number.isInteger(caseCount) || caseCount < 1) {
-    return { rowNumber, outcome: "error", error: `Invalid number of cases "${row.caseCount}" - must be a whole number of at least 1` };
-  }
+  const amountRaw = (row.amount ?? "").trim();
+  const amount = Number(amountRaw.replace(/,/g, ""));
+  const amountOk = amountRaw !== "" && Number.isFinite(amount) && amount >= 0;
+  if (amountRaw && !amountOk) errors.push(`Invalid amount "${amountRaw}" - must be a number, 0 or more`);
+  const caseCountRaw = (row.caseCount ?? "").trim();
+  const caseCount = Number(caseCountRaw);
+  const caseCountOk = caseCountRaw !== "" && Number.isInteger(caseCount) && caseCount >= 1;
+  if (caseCountRaw && !caseCountOk) errors.push(`Invalid number of cases "${caseCountRaw}" - must be a whole number of at least 1`);
 
-  // Historical-status amounts: CLOSED implies full resolution (no partial-
-  // accounting columns needed for the common "yes, this was fully dealt
-  // with" case). TRANSFERRED's Rectified Cases/Amount are optional - how
-  // much was rectified *before* the transfer, if any - and when given are
-  // bound-checked the same way the live rectify route validates a real
-  // rectification entry (src/app/api/findings/[id]/rectify/route.ts),
-  // including its "can't leave an orphaned balance" rule, since a non-
-  // itemized finding has no per-case amount to attach a leftover to; but
-  // unlike a live PARTIALLY_RECTIFIED submission, zero/zero is valid here -
-  // a finding can transfer having had no progress at all - while equaling
-  // the full case count/amount is invalid, since that would leave nothing
-  // outstanding to transfer. District verification isn't a separate
-  // column - a historical import is treated as already verified (whoever's
-  // importing it is attesting to its recorded state), same amount as
-  // rectified.
+  // Historical-status amounts: CLOSED implies full resolution. TRANSFERRED's
+  // Rectified Cases/Amount are optional (progress made before the
+  // transfer) and bound-checked like a live rectification, including "no
+  // orphaned balance"; zero/zero is valid, the full finding isn't (nothing
+  // would be left to transfer). A historical import is treated as already
+  // verified and closed for whatever it declares rectified.
   let rectifiedCases = 0;
   let rectifiedAmount = 0;
-  if (status === "TRANSFERRED") {
+  if (status === "TRANSFERRED" && amountOk && caseCountOk) {
     const rectifiedCasesRaw = row.rectifiedCases?.trim();
     const rectifiedAmountRaw = row.rectifiedAmount?.trim();
     rectifiedCases = rectifiedCasesRaw ? Number(rectifiedCasesRaw) : 0;
-    rectifiedAmount = rectifiedAmountRaw ? Number(rectifiedAmountRaw) : 0;
-    if (!Number.isInteger(rectifiedCases) || rectifiedCases < 0 || rectifiedCases > caseCount) {
-      return {
-        rowNumber,
-        outcome: "error",
-        error: `Invalid rectified cases "${row.rectifiedCases}" - must be a whole number from 0 to ${caseCount}`,
-      };
-    }
-    if (!Number.isFinite(rectifiedAmount) || rectifiedAmount < 0 || rectifiedAmount > amount) {
-      return {
-        rowNumber,
-        outcome: "error",
-        error: `Invalid rectified amount "${row.rectifiedAmount}" - must be from 0 to ${amount}`,
-      };
-    }
-    if (rectifiedCases === caseCount && rectifiedAmount === amount) {
-      return {
-        rowNumber,
-        outcome: "error",
-        error: `Rectified cases and amount can't equal the full finding (${caseCount} / ${amount}) - nothing would be outstanding to transfer; use CLOSED instead`,
-      };
-    }
-    if (rectifiedCases === caseCount && rectifiedAmount !== amount) {
-      return {
-        rowNumber,
-        outcome: "error",
-        error: `Rectified cases equals the full case count (${caseCount}) - rectified amount must equal the full amount (${amount}) too`,
-      };
-    }
-    if (rectifiedAmount === amount && rectifiedCases !== caseCount) {
-      return {
-        rowNumber,
-        outcome: "error",
-        error: `Rectified amount equals the full amount (${amount}) - rectified cases must equal the full case count (${caseCount}) too`,
-      };
+    rectifiedAmount = rectifiedAmountRaw ? Number(rectifiedAmountRaw.replace(/,/g, "")) : 0;
+    const casesOk = Number.isInteger(rectifiedCases) && rectifiedCases >= 0 && rectifiedCases <= caseCount;
+    const amountInRange = Number.isFinite(rectifiedAmount) && rectifiedAmount >= 0 && rectifiedAmount <= amount;
+    if (!casesOk) errors.push(`Invalid rectified cases "${row.rectifiedCases}" - must be a whole number from 0 to ${caseCount}`);
+    if (!amountInRange) errors.push(`Invalid rectified amount "${row.rectifiedAmount}" - must be from 0 to ${amount}`);
+    if (casesOk && amountInRange) {
+      if (rectifiedCases === caseCount && rectifiedAmount === amount) {
+        errors.push(`Rectified cases and amount can't equal the full finding (${caseCount} / ${amount}) - nothing would be outstanding to transfer; use CLOSED instead`);
+      } else if (rectifiedCases === caseCount) {
+        errors.push(`Rectified cases equals the full case count (${caseCount}) - rectified amount must equal the full amount (${amount}) too`);
+      } else if (rectifiedAmount === amount) {
+        errors.push(`Rectified amount equals the full amount (${amount}) - rectified cases must equal the full case count (${caseCount}) too`);
+      }
     }
   } else if (status === "CLOSED") {
     rectifiedCases = caseCount;
     rectifiedAmount = amount;
   }
 
-  // TRANSFERRED dedupes (and, on a live finding, is found) by its *current*
-  // period - the destination it moved into, not the origin used for its
-  // reference above - matching what existingDedupeKeys() reads off an
-  // already-transferred live finding's own (destination) periodId. Getting
-  // this backwards would mean re-uploading the same file never recognizes
-  // its own previously-imported TRANSFERRED rows as duplicates.
+  if (errors.length > 0 || !status || !district || !branch || !period) {
+    if (errors.length === 0) errors.push("Row could not be validated");
+    return { rowNumber, outcome: "error", error: errors.join(" · "), errors };
+  }
+
+  // Duplicate check - the import's own exact-match key (see dedupeKey()),
+  // not the Register Finding form's admin-configured similar-finding hint.
+  // TRANSFERRED dedupes by its *current* period (the destination), which is
+  // what an already-imported TRANSFERRED finding's own periodId now is.
   const key = dedupeKey({
     branchId: branch.id,
     periodId: status === "TRANSFERRED" ? destinationPeriod!.id : period.id,
-    // Fall back to "" for any of these three left blank (admin-opted-out
-    // via Settings.requiredFindingFields) - same as operationArea/
-    // irregularityType/currency below, which can equally be blank now.
     sourceId: source?.id ?? "",
     departmentId: department?.id ?? "",
     categoryId: category?.id ?? "",
     findingDate,
-    operationArea: (row.operationArea ?? "").trim(),
-    irregularityType: (row.irregularityType ?? "").trim(),
-    currency: (row.currency ?? "").trim(),
+    operationArea,
+    irregularityType,
+    currency,
     amount,
     caseCount,
   });
@@ -611,14 +610,14 @@ export function validateImportRow(
     districtId: district.id,
     branchId: branch.id,
     findingDate,
-    operationArea: (row.operationArea ?? "").trim(),
-    irregularityType: (row.irregularityType ?? "").trim(),
+    operationArea,
+    irregularityType,
     categoryId: category?.id ?? "",
     amount,
-    currency: (row.currency ?? "").trim(),
+    currency,
     caseCount,
-    riskLevel: (row.riskLevel ?? "").trim(),
-    priority: (row.priority ?? "").trim(),
+    riskLevel,
+    priority,
     description: (row.description ?? "").trim(),
     recommendation: row.recommendation?.trim() || undefined,
     rootCause: row.rootCause?.trim() || undefined,

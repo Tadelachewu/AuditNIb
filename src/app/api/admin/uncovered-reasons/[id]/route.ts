@@ -3,13 +3,14 @@ import { z } from "zod";
 import { requireToggleOrEditPermission, requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { appendAuditLog } from "@/lib/audit";
+import { withApiHandler } from "@/lib/api/handler";
 
 const updateSchema = z.object({
   name: z.string().min(1).optional(),
   active: z.boolean().optional(),
 });
 
-export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
+async function handlePATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
   const parsed = updateSchema.safeParse(await request.json().catch(() => null));
@@ -48,7 +49,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 // Blocked with 409 if any BranchCoverageNote still references this reason
 // (BranchCoverageNote.reasonId is a plain id with no referential-integrity
 // checking of its own) - same convention as Sources' DELETE handler.
-export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+async function handleDELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requirePermission("uncovered-reasons.delete");
   if (!auth.ok) return auth.response;
   const { id } = await params;
@@ -79,3 +80,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
 
   return NextResponse.json({ ok: true });
 }
+
+// Central error handling, request ID and access logging: src/lib/api/handler.ts
+export const PATCH = withApiHandler(handlePATCH);
+export const DELETE = withApiHandler(handleDELETE);

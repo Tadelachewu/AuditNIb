@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { apiSend, ApiError } from "@/lib/api-client";
+import { apiSend, errorMessage } from "@/lib/api-client";
+import { notify, notifications } from "@/lib/notify";
 import { Card } from "@/components/ui/Card";
 import { CollapsibleCard } from "@/components/ui/CollapsibleCard";
 import { Button } from "@/components/ui/Button";
@@ -58,6 +59,7 @@ export function ProfileClient({ forced }: { forced: boolean }) {
     setPasswordSaving(true);
     try {
       await apiSend("/api/auth/change-password", "POST", { currentPassword, newPassword });
+      notify.success(notifications.auth.passwordChanged);
       if (forced) {
         router.replace("/dashboard");
         router.refresh();
@@ -67,7 +69,7 @@ export function ProfileClient({ forced }: { forced: boolean }) {
       setNewPassword("");
       setConfirmPassword("");
     } catch (err) {
-      setPasswordError(err instanceof ApiError ? err.message : "Failed to change password");
+      setPasswordError(errorMessage(err, "Failed to change password"));
     } finally {
       setPasswordSaving(false);
     }

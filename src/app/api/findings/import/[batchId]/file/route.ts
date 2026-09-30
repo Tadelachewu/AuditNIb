@@ -2,12 +2,13 @@ import { NextResponse } from "next/server";
 import { requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { appendAuditLog } from "@/lib/audit";
-import { readStoredFile, attachmentDisposition, FileStorageError } from "@/lib/fileStorage";
+import { readStoredFile, attachmentDisposition } from "@/lib/fileStorage";
+import { withApiHandler } from "@/lib/api/handler";
 
 // Download the original spreadsheet behind an import batch (Import History).
 // Same permission as importing/seeing the history itself; decrypted on the
 // fly, always an attachment, and recorded in the audit log.
-export async function GET(_request: Request, { params }: { params: Promise<{ batchId: string }> }) {
+async function handleGET(_request: Request, { params }: { params: Promise<{ batchId: string }> }) {
   const auth = await requirePermission("findings.import");
   if (!auth.ok) return auth.response;
   const { batchId } = await params;
@@ -19,14 +20,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ bat
     return NextResponse.json({ error: "The original file wasn't kept for this import (imported before files were stored)" }, { status: 404 });
   }
 
-  let buffer: Buffer | null;
-  try {
-    buffer = readStoredFile("imports", batch.storedFile);
-  } catch (err) {
-    console.error("[import] reading stored file failed", err);
-    const message = err instanceof FileStorageError ? err.message : "Could not read the stored file";
-    return NextResponse.json({ error: message }, { status: 500 });
-  }
+  // A storage failure is mapped centrally (src/lib/errors/normalize.ts): logged in
+  // full, the client only gets FILE_STORAGE_UNAVAILABLE / FILE_INTEGRITY_FAILED.
+  const buffer = readStoredFile("imports", batch.storedFile);
   if (!buffer) return NextResponse.json({ error: "File is missing from storage" }, { status: 404 });
 
   await updateDb((current) => {
@@ -49,3 +45,6 @@ export async function GET(_request: Request, { params }: { params: Promise<{ bat
     },
   });
 }
+
+// Central error handling, request ID and access logging: src/lib/api/handler.ts
+export const GET = withApiHandler(handleGET);

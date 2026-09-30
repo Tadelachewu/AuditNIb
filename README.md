@@ -244,7 +244,6 @@ next time that role's users log in (see PHASE2.md §4).
 - Scoring Rules: versioned, one active version at a time (creating and
   activating are separate confirmed actions — see PHASE2.md §5 for why a
   rule is versioned rather than edited in place)
-- Scoring Adjustments: mandatory reason, audit-logged
 - Reporting Periods: open/lock/unlock with mandatory reason
 - Settings: currencies, risk levels, notification provider config
 - Audit Log viewer

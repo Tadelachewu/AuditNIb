@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { apiGet, apiSend, ApiError } from "@/lib/api-client";
+import { apiGet, apiSend, errorMessage } from "@/lib/api-client";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { StickyActions } from "@/components/ui/StickyActions";
@@ -15,6 +15,7 @@ import { Pagination } from "@/components/ui/Pagination";
 import { useClientPagination } from "@/lib/useClientPagination";
 import type { RoleDefinition, OrgScope } from "@/types";
 import { permissionKey, type PageDefinition } from "@/lib/permissions/registry";
+import { notify, notifications } from "@/lib/notify";
 
 const ROLES_MANAGE_KEY = permissionKey("roles", "manage");
 
@@ -76,7 +77,7 @@ export default function RolesPage() {
       setNewPermissions([]);
       await load();
     } catch (err) {
-      setFormError(err instanceof ApiError ? err.message : "Failed to create role");
+      setFormError(errorMessage(err, "Failed to create role"));
     } finally {
       setSubmitting(false);
     }
@@ -102,7 +103,7 @@ export default function RolesPage() {
       setExpandedRoleId(null);
       await load();
     } catch (err) {
-      setEditError(err instanceof ApiError ? err.message : "Failed to update role");
+      setEditError(errorMessage(err, "Failed to update role"));
     } finally {
       setRowBusy(null);
     }
@@ -119,9 +120,10 @@ export default function RolesPage() {
     setRowBusy(role.id);
     try {
       await apiSend(`/api/admin/roles/${role.id}`, "DELETE");
+      notify.success(notifications.role.deleted);
       await load();
     } catch (err) {
-      alert(err instanceof ApiError ? err.message : "Failed to delete role");
+      notify.fromError(err, notifications.role.deleteFailed);
     } finally {
       setRowBusy(null);
     }
@@ -140,9 +142,10 @@ export default function RolesPage() {
     setRowBusy(role.id);
     try {
       await apiSend(`/api/admin/roles/${role.id}`, "PATCH", { status: role.status === "ACTIVE" ? "INACTIVE" : "ACTIVE" });
+      notify.success(role.status === "ACTIVE" ? notifications.role.deactivated : notifications.role.activated);
       await load();
     } catch (err) {
-      alert(err instanceof ApiError ? err.message : "Failed to update role");
+      notify.fromError(err, notifications.role.statusFailed);
     } finally {
       setRowBusy(null);
     }

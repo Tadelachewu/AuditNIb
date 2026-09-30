@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { requirePermission } from "@/lib/guard";
 import { readDb } from "@/lib/db";
 import { getTransporter } from "@/lib/mail";
+import { withApiHandler } from "@/lib/api/handler";
+import { logger } from "@/lib/logger";
 
 /**
  * The concrete way to confirm "the emailing system is implemented" - not
@@ -9,7 +11,7 @@ import { getTransporter } from "@/lib/mail";
  * leaves the server. Sends to the logged-in admin's own email so no
  * separate recipient needs to be picked.
  */
-export async function POST() {
+async function handlePOST() {
   const auth = await requirePermission("settings.edit");
   if (!auth.ok) return auth.response;
 
@@ -41,12 +43,15 @@ export async function POST() {
     // that shouldn't reach the client even though this endpoint is
     // admin-only. The generic message still points at exactly what to
     // check, without echoing the exception itself.
-    console.error("[test-email] Failed to send test email:", err);
+    logger.error({ err, event: "email.test_failed" }, "Failed to send test email");
     return NextResponse.json(
-      { error: "Failed to send - check the server logs and your SMTP host/port/credentials." },
+      { error: "Failed to send - check the server logs and your SMTP host/port/credentials.", code: "EMAIL_DELIVERY_FAILED" },
       { status: 502 }
     );
   }
 
   return NextResponse.json({ ok: true, sentTo: recipient.email });
 }
+
+// Central error handling, request ID and access logging: src/lib/api/handler.ts
+export const POST = withApiHandler(handlePOST);

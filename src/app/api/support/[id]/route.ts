@@ -2,12 +2,13 @@ import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/guard";
 import { hasPermission, hasAnyPermission } from "@/lib/permissions/registry";
 import { readDb } from "@/lib/db";
+import { withApiHandler } from "@/lib/api/handler";
 
 // The thread's own owner needs support.create (the requester side); anyone
 // else needs support.view or support.respond (either one - the inbox list
 // is gated by support.view alone, so opening a thread it lists must not
 // additionally require support.respond, which only gates posting a reply).
-export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+async function handleGET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireUser();
   if (!auth.ok) return auth.response;
   const { id } = await params;
@@ -30,3 +31,6 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 
   return NextResponse.json({ thread, messages });
 }
+
+// Central error handling, request ID and access logging: src/lib/api/handler.ts
+export const GET = withApiHandler(handleGET);

@@ -5,7 +5,6 @@ import { findBranchManager, findBranchSubManager, findBranchController } from "@
 import {
   computePerformance,
   computeEligibleCaseCounts,
-  getActiveScoringAdjustment,
   queueStatusesForSession,
   findingCaseTotals,
   findingCaseTotalsInPeriod,
@@ -30,7 +29,6 @@ import { FindingStatusBadge } from "@/components/findings/FindingStatusBadge";
 import { CaseBasedPerformance } from "@/components/dashboard/CaseBasedPerformance";
 import { FindingsByCategoryChart } from "@/components/dashboard/FindingsByCategoryChart";
 import { SourcePerformanceSummary } from "@/components/dashboard/SourcePerformanceSummary";
-import { AdjustedBadge } from "@/components/ui/AdjustedBadge";
 
 // Per master.txt §10: "Selected month; category totals; total/rectified/
 // outstanding; Other Case summary; performance; monthly trend; risk
@@ -126,10 +124,6 @@ export function BranchDashboard({
   // "lifetime, no period filter" mode - exactly what "All periods" means.
   const performanceScope = { branchId: branch.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id };
   const performance = hasPeriodScope ? computePerformance(db, performanceScope) : null;
-  // Surfaced so the detail below can explain *why* the number doesn't
-  // match eligibleCounts' own math - computePerformance() returns this
-  // value outright once one is active, ignoring the mechanical formula.
-  const scoringAdjustment = hasPeriodScope ? getActiveScoringAdjustment(db, performanceScope) : null;
   // Same eligible-case counts computePerformance() itself divides to get
   // that percentage - surfaced so the StatCard can show its own math on
   // click (see StatCard's `detail` prop) instead of a bare, unexplained %.
@@ -280,7 +274,6 @@ export function BranchDashboard({
       performance: hasPeriodScope
         ? computePerformance(db, { branchId: b.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id })
         : null,
-      adjustment: getActiveScoringAdjustment(db, { branchId: b.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id }),
     }))
     .sort((a, b) => (b.performance ?? -1) - (a.performance ?? -1));
 
@@ -334,20 +327,12 @@ export function BranchDashboard({
           label="Branch Performance"
           value={performance !== null ? `${performance.toFixed(1)}%` : "--"}
           hint={
-            scoringAdjustment
-              ? "Manually overridden - click % for detail"
-              : activeScoringRule
+            activeScoringRule
                 ? `v${activeScoringRule.version} formula - click % for detail`
                 : "No active scoring rule"
           }
           detail={
-            scoringAdjustment ? (
-              <p>
-                Manually overridden to <span className="font-medium text-slate-900">{performance!.toFixed(1)}%</span>, overriding the
-                computed formula. Reason: &quot;{scoringAdjustment.reason}&quot; (recorded {formatDateTime(scoringAdjustment.createdAt)}).
-                Deactivate it in Scoring Adjustments to revert to the computed figure.
-              </p>
-            ) : performance !== null && eligibleCounts ? (
+            performance !== null && eligibleCounts ? (
               <>
                 <p>
                   <span className="font-medium text-slate-900">{eligibleCounts.rectifiedCases}</span> of{" "}
@@ -408,7 +393,7 @@ export function BranchDashboard({
                         {row.branch.id === branch.id && <Badge tone="blue">Your Branch</Badge>}
                       </span>
                     </td>
-                    <td className="px-4 py-2 text-slate-700">{row.performance !== null ? <>{row.performance.toFixed(1)}%<AdjustedBadge adjustment={row.adjustment} /></> : "--"}</td>
+                    <td className="px-4 py-2 text-slate-700">{row.performance !== null ? <>{row.performance.toFixed(1)}%</> : "--"}</td>
                   </tr>
                 ))}
               </tbody>

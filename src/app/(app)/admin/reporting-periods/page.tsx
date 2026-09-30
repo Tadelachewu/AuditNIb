@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { MRT_ColumnDef } from "material-react-table";
-import { apiGet, apiSend, ApiError } from "@/lib/api-client";
+import { apiGet, apiSend, errorMessage } from "@/lib/api-client";
 import { formatDateTime } from "@/lib/format";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -17,6 +17,7 @@ import { usePermissions } from "@/lib/permissions/PermissionsContext";
 import { hasPermission } from "@/lib/permissions/registry";
 import type { ReportingPeriod } from "@/types";
 import { AdminTable } from "@/components/ui/AdminTable";
+import { notify, notifications } from "@/lib/notify";
 
 // The GET route annotates each period with a live transfer preview (see
 // outstandingTransferPreview() in src/lib/findings.ts) so the Lock dialog
@@ -123,7 +124,7 @@ export default function ReportingPeriodsPage() {
       setWindowTarget(null);
       await load();
     } catch (err) {
-      setWindowError(err instanceof ApiError ? err.message : "Failed to update submission window");
+      setWindowError(errorMessage(err, "Failed to update submission window"));
     } finally {
       setWindowBusy(false);
     }
@@ -166,7 +167,7 @@ export default function ReportingPeriodsPage() {
       setRenamingId(null);
       await load();
     } catch (err) {
-      setRenameError(err instanceof ApiError ? err.message : "Failed to rename period");
+      setRenameError(errorMessage(err, "Failed to rename period"));
     } finally {
       setRenameBusy(false);
     }
@@ -214,7 +215,7 @@ export default function ReportingPeriodsPage() {
       setPeriodEditTarget(null);
       await load();
     } catch (err) {
-      setPeriodEditError(err instanceof ApiError ? err.message : "Failed to update period dates");
+      setPeriodEditError(errorMessage(err, "Failed to update period dates"));
     } finally {
       setPeriodEditBusy(false);
     }
@@ -255,7 +256,7 @@ export default function ReportingPeriodsPage() {
       close();
       await load();
     } catch (err) {
-      setFormError(err instanceof ApiError ? err.message : "Failed to create reporting period");
+      setFormError(errorMessage(err, "Failed to create reporting period"));
     } finally {
       setSubmitting(false);
     }
@@ -290,9 +291,10 @@ export default function ReportingPeriodsPage() {
     setRowBusy(p.id);
     try {
       await apiSend(`/api/admin/reporting-periods/${p.id}`, "PATCH", { status: "OPEN", reason });
+      notify.success(notifications.reportingPeriod.unlocked);
       await load();
     } catch (err) {
-      alert(err instanceof ApiError ? err.message : "Failed to update reporting period");
+      notify.fromError(err, notifications.reportingPeriod.lockFailed);
     } finally {
       setRowBusy(null);
     }
@@ -309,9 +311,10 @@ export default function ReportingPeriodsPage() {
     setRowBusy(p.id);
     try {
       await apiSend(`/api/admin/reporting-periods/${p.id}`, "DELETE");
+      notify.success(notifications.reportingPeriod.deleted);
       await load();
     } catch (err) {
-      alert(err instanceof ApiError ? err.message : "Failed to delete reporting period");
+      notify.fromError(err, notifications.reportingPeriod.deleteFailed);
     } finally {
       setRowBusy(null);
     }
@@ -331,10 +334,11 @@ export default function ReportingPeriodsPage() {
         reason: lockReasonInput,
         draftsAllowedWhileLocked: lockDraftsAllowed,
       });
+      notify.success(isFlagEditOnly ? notifications.reportingPeriod.updated : notifications.reportingPeriod.locked);
       setLockTarget(null);
       await load();
     } catch (err) {
-      alert(err instanceof ApiError ? err.message : "Failed to update reporting period");
+      notify.fromError(err, notifications.reportingPeriod.lockFailed);
     } finally {
       setLockBusy(false);
     }
