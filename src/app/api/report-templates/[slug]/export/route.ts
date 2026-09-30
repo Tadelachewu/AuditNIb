@@ -130,15 +130,15 @@ function buildCsv(slug: string, db: Database, params: URLSearchParams): string |
       ]);
       dataRows.push([
         "",
-        "",
+        rows.reduce((sum, row) => sum + row.totalBranches, 0),
         "TOTAL",
-        ...categories.map(() => ""),
+        ...categories.map((_, i) => rows.reduce((sum, row) => sum + (row.perCategory[i]?.total ?? 0), 0)),
         ...(currencies.length ? currencies : ["ETB"]).map((c) => totalRow.totalAmount[c] ?? 0),
         totalRow.totalOutstanding,
         totalRow.officialRectified,
-        "",
-        "",
-        "",
+        pct(totalRow.totalOutstanding + totalRow.officialRectified > 0 ? (totalRow.officialRectified / (totalRow.totalOutstanding + totalRow.officialRectified)) * 100 : null),
+        rows.reduce((sum, row) => sum + row.branchesNotDispatched, 0),
+        rows.reduce((sum, row) => sum + row.branchesDispatched, 0),
         totalRow.totalCases,
       ]);
       return toCsv(header, dataRows);

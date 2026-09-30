@@ -1,12 +1,12 @@
 import Link from "next/link";
-import { formatCurrencyTotals } from "@/lib/currency";
+import { currenciesIn, formatCurrencyTotals } from "@/lib/currency";
 import { SESSION_ENDED_PATH } from "@/lib/session";
 import { ALL_PERIODS_VALUE } from "@/lib/dashboardFilters";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 import { readDb } from "@/lib/db";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
-import { formatNumber } from "@/lib/format";
+import { formatNumber, formatCurrency } from "@/lib/format";
 import { getMonthlySummaryReport, templateSourceNote } from "@/lib/reportTemplates";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -35,6 +35,10 @@ export default async function MonthlySummaryReportPage({
   const { rows, categories, totalRow } = periodId
     ? getMonthlySummaryReport(db, allPeriods ? undefined : periodId)
     : { rows: [], categories: [], totalRow: { totalOutstanding: 0, officialRectified: 0, totalAmount: {}, totalCases: 0 } };
+
+  // Currency sub-columns under "Amount Involved": every currency present (ETB when none yet).
+  const found = currenciesIn([totalRow.totalAmount, ...rows.map((row) => row.amountInvolved)]);
+  const currencies = found.length > 0 ? found : ["ETB"];
 
   return (
     <div className="flex flex-col gap-5">
@@ -89,27 +93,37 @@ export default async function MonthlySummaryReportPage({
           <table className="w-full text-left text-sm">
             <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-600">
               <tr>
-                <th className="px-4 py-2 font-medium">SN</th>
-                <th className="px-4 py-2 font-medium">Total No. of Branches</th>
-                <th className="px-4 py-2 font-medium">District</th>
+                <th className="px-4 py-2 font-medium" rowSpan={2}>SN</th>
+                <th className="px-4 py-2 font-medium" rowSpan={2}>Total No. of Branches</th>
+                <th className="px-4 py-2 font-medium" rowSpan={2}>District</th>
                 {categories.map((c) => (
-                  <th key={c.id} className="px-2 py-2 text-center font-medium">
+                  <th key={c.id} className="px-2 py-2 text-center font-medium" rowSpan={2}>
                     {c.name}
                   </th>
                 ))}
-                <th className="px-4 py-2 text-center font-medium">Amount Involved</th>
-                <th className="px-4 py-2 text-center font-medium">Unrect.</th>
-                <th className="px-4 py-2 text-center font-medium">Rect.</th>
-                <th className="px-4 py-2 text-center font-medium">Rect. %</th>
-                <th className="px-4 py-2 text-center font-medium">Dispatched</th>
-                <th className="px-4 py-2 text-center font-medium">Not Dispatched</th>
-                <th className="px-4 py-2 text-center font-medium">Total Cases</th>
+                {/* One sub-column per currency - amounts are never added across currencies. */}
+                <th className="px-4 py-2 text-center font-medium" colSpan={currencies.length}>
+                  Amount Involved
+                </th>
+                <th className="px-4 py-2 text-center font-medium" rowSpan={2}>Unrect.</th>
+                <th className="px-4 py-2 text-center font-medium" rowSpan={2}>Rect.</th>
+                <th className="px-4 py-2 text-center font-medium" rowSpan={2}>Rect. %</th>
+                <th className="px-4 py-2 text-center font-medium" rowSpan={2}>Dispatched</th>
+                <th className="px-4 py-2 text-center font-medium" rowSpan={2}>Not Dispatched</th>
+                <th className="px-4 py-2 text-center font-medium" rowSpan={2}>Total Cases</th>
+              </tr>
+              <tr>
+                {currencies.map((c) => (
+                  <th key={c} className="px-2 py-1 text-center font-normal">
+                    {c}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {rows.length === 0 && (
                 <tr>
-                  <td className="px-4 py-6 text-center text-slate-500" colSpan={10 + categories.length}>
+                  <td className="px-4 py-6 text-center text-slate-500" colSpan={9 + categories.length + currencies.length}>
                     No districts configured yet.
                   </td>
                 </tr>
@@ -124,7 +138,11 @@ export default async function MonthlySummaryReportPage({
                       {formatNumber(c.total)}
                     </td>
                   ))}
-                  <td className="px-2 py-2 text-center text-slate-700">{formatCurrencyTotals(r.amountInvolved)}</td>
+                  {currencies.map((cur) => (
+                    <td key={cur} className="whitespace-nowrap px-2 py-2 text-right tabular-nums text-slate-700">
+                      {r.amountInvolved[cur] ? formatCurrency(r.amountInvolved[cur]) : "--"}
+                    </td>
+                  ))}
                   <td className="px-2 py-2 text-center text-slate-700">{formatNumber(r.totalOutstanding)}</td>
                   <td className="px-2 py-2 text-center text-slate-700">{formatNumber(r.officialRectified)}</td>
                   <td className="px-2 py-2 text-center text-slate-700">{r.officialPerformance !== null ? `${r.officialPerformance.toFixed(1)}%` : "--"}</td>
@@ -138,15 +156,26 @@ export default async function MonthlySummaryReportPage({
                   <td className="px-4 py-2 text-slate-900" colSpan={3}>
                     TOTAL
                   </td>
-                  {categories.map((c) => (
-                    <td key={c.id} className="px-2 py-2" />
+                  {categories.map((c, i) => (
+                    <td key={c.id} className="px-2 py-2 text-center text-slate-900">
+                      {formatNumber(rows.reduce((sum, row) => sum + (row.perCategory[i]?.total ?? 0), 0))}
+                    </td>
                   ))}
-                  <td className="px-2 py-2 text-center text-slate-900">{formatCurrencyTotals(totalRow.totalAmount)}</td>
+                  {currencies.map((cur) => (
+                    <td key={cur} className="whitespace-nowrap px-2 py-2 text-right tabular-nums text-slate-900">
+                      {totalRow.totalAmount[cur] ? formatCurrency(totalRow.totalAmount[cur]) : "--"}
+                    </td>
+                  ))}
                   <td className="px-2 py-2 text-center text-slate-900">{formatNumber(totalRow.totalOutstanding)}</td>
                   <td className="px-2 py-2 text-center text-slate-900">{formatNumber(totalRow.officialRectified)}</td>
-                  <td className="px-2 py-2" />
-                  <td className="px-2 py-2" />
-                  <td className="px-2 py-2" />
+                  <td className="px-2 py-2 text-center text-slate-900">
+                    {(() => {
+                      const pct = totalRow.totalOutstanding + totalRow.officialRectified;
+                      return pct > 0 ? `${((totalRow.officialRectified / pct) * 100).toFixed(1)}%` : "--";
+                    })()}
+                  </td>
+                  <td className="px-2 py-2 text-center text-slate-900">{formatNumber(rows.reduce((sum, row) => sum + row.branchesDispatched, 0))}</td>
+                  <td className="px-2 py-2 text-center text-slate-900">{formatNumber(rows.reduce((sum, row) => sum + row.branchesNotDispatched, 0))}</td>
                   <td className="px-2 py-2 text-center text-slate-900">{formatNumber(totalRow.totalCases)}</td>
                 </tr>
               )}
