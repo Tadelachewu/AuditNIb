@@ -20,6 +20,7 @@ const TONES: Record<FindingStatus, "green" | "gray" | "amber" | "red" | "blue"> 
   HO_APPROVED: "blue",
   PENDING_BANK_APPROVAL: "blue",
   SENT_TO_BRANCH_MANAGER: "amber",
+  REVERSED: "amber",
   PARTIALLY_RECTIFIED: "amber",
   RECTIFIED: "green",
   TRANSFERRED: "gray",

@@ -28,9 +28,9 @@ async function handlePOST(request: Request, { params }: { params: Promise<{ id: 
     const scopeError = assertFindingInScope(auth.session, f);
     if (scopeError) throw new AuthorizationError(scopeError);
     if (!canReopen(f)) throw new BusinessRuleError("FINDING_NOT_REOPENABLE");
-    // Reversing a closure changes the figures of every period it was
-    // credited to (e.g. the origin period of a transferred finding), so
-    // none of them may be locked.
+    // Reversing changes the figures of every period its rectifications /
+    // closures were credited to (e.g. the origin period of a transferred
+    // finding), so none of them may be locked.
     for (const pid of periodsAffectedByReopen(db, f)) {
       const periodError = assertPeriodWritable(db, pid);
       if (periodError) throw new BusinessRuleError("PERIOD_LOCKED", periodError);
@@ -45,12 +45,11 @@ async function handlePOST(request: Request, { params }: { params: Promise<{ id: 
     const opts = {
       type: "REOPENED" as const,
       title: `Finding ${f.reference} reopened`,
-      message: `The closure of ${f.reference} was reversed by ${auth.session.name} - status is now ${toStatus.replaceAll("_", " ").toLowerCase()} and it can be reviewed and closed again. Reason: ${parsed.data.reason}`,
+      message: `${f.reference} was reversed by ${auth.session.name} (status ${toStatus}) and is back with the branch to rectify again. Reason: ${parsed.data.reason}`,
       entityType: "Finding",
       entityId: f.id,
     };
-    // Whoever can close it again, plus the branch and the registrant.
-    notifyFindingsPermissionHolders(current, "close", { districtId: f.districtId }, opts);
+    // The branch that must rectify it again, and the registrant.
     notifyFindingsPermissionHolders(current, "rectify", { branchId: f.branchId }, opts);
     notifyUsers(current, [f.createdBy], opts);
   });

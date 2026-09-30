@@ -460,6 +460,11 @@ export const FINDING_STATUSES = [
   // DISTRICT_REVIEW/HO_REVIEW as before.
   "PENDING_BANK_APPROVAL",
   "SENT_TO_BRANCH_MANAGER",
+  // A reopened finding (its closure reversed - src/lib/findingReopen.ts):
+  // back in the same state as SENT_TO_BRANCH_MANAGER (nothing rectified,
+  // the branch must rectify again) and handled exactly like it by the
+  // workflow, but shown as REVERSED so everyone can see it was reopened.
+  "REVERSED",
   "PARTIALLY_RECTIFIED",
   "RECTIFIED",
   "TRANSFERRED",
@@ -493,6 +498,7 @@ export type FindingStatus = (typeof FINDING_STATUSES)[number];
 // doc comment).
 export const HO_APPROVED_OR_LATER_STATUSES: FindingStatus[] = [
   "SENT_TO_BRANCH_MANAGER",
+  "REVERSED",
   "PARTIALLY_RECTIFIED",
   "RECTIFICATION_RETURNED",
   "RECTIFIED",

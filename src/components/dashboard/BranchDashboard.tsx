@@ -249,7 +249,7 @@ export function BranchDashboard({
   // Same statuses as queueStatusesForSession()'s own "rectify" matcher.
   const pendingRectificationFindings = db.findings
     .filter((f) => f.branchId === branch.id)
-    .filter((f) => ["SENT_TO_BRANCH_MANAGER", "PARTIALLY_RECTIFIED", "RECTIFICATION_RETURNED"].includes(f.status)).length;
+    .filter((f) => ["SENT_TO_BRANCH_MANAGER", "REVERSED", "PARTIALLY_RECTIFIED", "RECTIFICATION_RETURNED"].includes(f.status)).length;
 
   const isQueued = queueStatusesForSession(user, db);
   const workQueue = db.findings

@@ -3,67 +3,85 @@ import { transitionFinding } from "@/lib/findings";
 import type { Database, Finding, FindingStatus } from "@/types";
 
 /**
- * Reopen = reverse the CLOSURE of a closed or partially closed finding
- * (including a transferred finding part of which was closed before it
- * moved). Permission: Findings › Reopen Closed / Partially Closed Findings.
+ * Reopen = reverse a closed or partially closed finding (including a
+ * transferred finding part of which was closed before it moved) back to
+ * its original "sent to the branch" state, with status REVERSED.
+ * Permission: Findings › Reopen Closed / Partially Closed Findings.
  *
- *   - every closure record is removed and closed cases / amount go to 0,
- *     so the closure no longer counts in performance or reports (in
- *     whichever period it was credited)
- *   - status is REVERSED: a fully CLOSED finding returns to the status it
- *     had just before it was closed (from its own history - e.g. Rectified,
- *     Partially Rectified, Transferred); a partially closed one keeps its
- *     current status (e.g. Transferred)
- *   - rectifications and district verifications are kept - only the
- *     closure is undone, so the closer can review and close again
+ *   - status -> REVERSED: the same state as SENT_TO_BRANCH_MANAGER (the
+ *     workflow treats them alike - the branch must rectify it again), but
+ *     labelled so everyone can see it was reversed
+ *   - rectified / district-verified / closed cases & amounts -> 0
+ *   - rectification and closure records removed, so they no longer count
+ *     in performance or reports (in whichever period they were credited);
+ *     itemized cases back to OUTSTANDING
+ *   - transfers are kept (movement history)
  *
- * History is kept: the workflow trail gets a REOPEN step (when the status
- * changes) and the audit log records the reason plus a snapshot of every
- * removed closure and the previous figures.
+ * History is kept: the workflow trail gets a REOPEN step (old status ->
+ * REVERSED) with the reason, and the audit log records a snapshot of every
+ * removed rectification / closure and the previous figures.
  */
+export const REVERSED_STATUS: FindingStatus = "REVERSED";
+
 export function canReopen(f: Finding): boolean {
   return f.status === "CLOSED" || f.closedCases > 0 || f.closedAmount > 0;
 }
 
-/** The status a closed finding had just before its (latest) closure. */
-export function statusBeforeClosure(db: Database, finding: Finding): FindingStatus {
-  if (finding.status !== "CLOSED") return finding.status;
-  const closing = db.findingTransitions
-    .filter((t) => t.findingId === finding.id && t.toStatus === "CLOSED")
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
-  const from = closing?.fromStatus as FindingStatus | undefined;
-  return from && from !== "CLOSED" ? from : "RECTIFIED";
-}
-
-/** Periods whose figures the reversal changes (where the closures were credited). */
+/** Periods whose figures the reversal changes (where rectifications / closures were credited). */
 export function periodsAffectedByReopen(db: Database, finding: Finding): string[] {
-  return [...new Set([finding.periodId, ...db.findingClosures.filter((c) => c.findingId === finding.id).map((c) => c.periodId)])];
+  return [
+    ...new Set([
+      finding.periodId,
+      ...db.findingClosures.filter((c) => c.findingId === finding.id).map((c) => c.periodId),
+      ...db.rectifications.filter((r) => r.findingId === finding.id).map((r) => r.periodId),
+    ]),
+  ];
 }
 
 export function reopenFinding(db: Database, finding: Finding, actor: { userId: string; userName: string }, reason: string): { fromStatus: FindingStatus; toStatus: FindingStatus } {
+  const rectifications = db.rectifications.filter((r) => r.findingId === finding.id);
   const closures = db.findingClosures.filter((c) => c.findingId === finding.id);
   const fromStatus = finding.status;
-  const toStatus = statusBeforeClosure(db, finding);
-  const before = { status: fromStatus, closedCases: finding.closedCases, closedAmount: finding.closedAmount, closures };
+  const before = {
+    status: fromStatus,
+    rectifiedCases: finding.rectifiedCases,
+    rectifiedAmount: finding.rectifiedAmount,
+    districtVerifiedCases: finding.districtVerifiedCases,
+    districtVerifiedAmount: finding.districtVerifiedAmount,
+    closedCases: finding.closedCases,
+    closedAmount: finding.closedAmount,
+    rectifications,
+    closures,
+  };
 
+  db.rectifications = db.rectifications.filter((r) => r.findingId !== finding.id);
   db.findingClosures = db.findingClosures.filter((c) => c.findingId !== finding.id);
+  for (const c of db.findingCases) {
+    if (c.findingId !== finding.id) continue;
+    c.status = "OUTSTANDING";
+    c.rectificationId = undefined;
+    c.rectifiedAt = undefined;
+    c.rectifiedBy = undefined;
+    c.rectifiedByName = undefined;
+  }
+  finding.rectifiedCases = 0;
+  finding.rectifiedAmount = 0;
+  finding.districtVerifiedCases = 0;
+  finding.districtVerifiedAmount = 0;
   finding.closedCases = 0;
   finding.closedAmount = 0;
+  finding.lastReminderAt = undefined;
 
-  if (toStatus !== fromStatus) {
-    transitionFinding(db, finding, { toStatus, action: "REOPEN", userId: actor.userId, userName: actor.userName, reason });
-  } else {
-    finding.updatedAt = new Date().toISOString();
-  }
+  transitionFinding(db, finding, { toStatus: REVERSED_STATUS, action: "REOPEN", userId: actor.userId, userName: actor.userName, reason });
   appendAuditLog(db, {
     userId: actor.userId,
     userName: actor.userName,
-    action: "REOPEN_CLOSURE_REVERSED",
+    action: "REOPEN_REVERSED",
     entityType: "Finding",
     entityId: finding.id,
     oldValue: before,
-    newValue: { status: toStatus, closedCases: 0, closedAmount: 0 },
+    newValue: { status: REVERSED_STATUS, rectifiedCases: 0, districtVerifiedCases: 0, closedCases: 0 },
     reason,
   });
-  return { fromStatus, toStatus };
+  return { fromStatus, toStatus: REVERSED_STATUS };
 }

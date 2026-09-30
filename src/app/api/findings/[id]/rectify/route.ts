@@ -18,7 +18,7 @@ import { withApiHandler } from "@/lib/api/handler";
 // address it by recording more rectification directly - the usual
 // fullyRectified computation below naturally moves it back to
 // PARTIALLY_RECTIFIED/RECTIFIED, out of the returned state.
-const RECTIFIABLE_STATUSES = ["SENT_TO_BRANCH_MANAGER", "PARTIALLY_RECTIFIED", "TRANSFERRED", "RECTIFICATION_RETURNED"];
+const RECTIFIABLE_STATUSES = ["SENT_TO_BRANCH_MANAGER", "REVERSED", "PARTIALLY_RECTIFIED", "TRANSFERRED", "RECTIFICATION_RETURNED"];
 
 // rectifiedCases/rectifiedAmount are used for a plain (non-itemized)
 // finding; caseIds is used instead for one whose cases are itemized

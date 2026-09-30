@@ -64,16 +64,14 @@ Removes an uploaded evidence file (or an older comment attachment).
 
 ## 4. Reopen Closed / Partially Closed Findings (`findings.reopen`)
 
-**Reverses a closure.** It works for a closed finding and for a partially closed one, including a **transferred** finding part of which was closed before it moved.
+**Reverses** a closed or partially closed finding, including a **transferred** finding part of which was closed, back to its original "sent to the branch" state with status **REVERSED**.
 
 - **Where:** the finding's page → **Reopen**. A confirmation with a required reason comes first.
-- **What changes:**
-  - the closure records are removed, and closed cases and amount go to 0 (they stop counting in performance, dashboards and reports)
-  - **status is reversed:** a closed finding returns to its status just before it was closed (from its history, e.g. *Rectified*); a partially closed one keeps its status (e.g. *Transferred*)
-  - rectifications, district verifications and transfers are **kept**, so it can be reviewed and closed again
-- **What's kept:** the full history plus a *Reopen* step with the reason, and an audit entry with a snapshot of the removed closures.
-- **Who is told:** the district's closers, the branch's rectifiers and the registrant get a **Reopened** notification.
-- **Conditions:** the finding is in your scope, and no period the closure was credited to is locked.
+- **What changes:** status → *REVERSED*; rectified, verified and closed cases and amounts → 0; rectification and closure records are removed, so they stop counting in performance, dashboards and reports; itemized cases go back to *Outstanding*; transfers are kept.
+- **REVERSED** behaves exactly like *Sent to Branch Manager*: the branch must rectify it again and it moves on through the normal workflow. The name just shows it was reversed.
+- **What's kept:** the full history plus a *Reopen* step with the reason, and an audit entry with a snapshot of everything reset.
+- **Who is told:** the branch's rectifiers and the registrant.
+- **Conditions:** the finding is in your scope, and no period its rectifications or closures were credited to is locked.
 - **Default holder:** Administrator.
 
 Details: [reopen-findings.md](reopen-findings.md).

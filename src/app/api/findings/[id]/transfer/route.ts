@@ -12,7 +12,7 @@ import { withApiHandler } from "@/lib/api/handler";
 // (kept in lockstep with this array by hand, not by import) and
 // transferFinding()'s own doc comment for why this doesn't touch the
 // source period's lock.
-const TRANSFERABLE_STATUSES = ["SENT_TO_BRANCH_MANAGER", "PARTIALLY_RECTIFIED", "RECTIFIED", "RECTIFICATION_RETURNED", "TRANSFERRED"];
+const TRANSFERABLE_STATUSES = ["SENT_TO_BRANCH_MANAGER", "REVERSED", "PARTIALLY_RECTIFIED", "RECTIFIED", "RECTIFICATION_RETURNED", "TRANSFERRED"];
 
 const transferSchema = z.object({
   toPeriodId: z.string().min(1),

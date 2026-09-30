@@ -119,7 +119,7 @@ export function usersWithSupportRespondPermission(db: Database): string[] {
 // RECTIFICATION_RETURNED's own separate return-for-correction reason
 // notification from double-firing the same day (both can still land on
 // the same finding over time, just not from the same check).
-const REMINDABLE_STATUSES = ["SENT_TO_BRANCH_MANAGER", "PARTIALLY_RECTIFIED", "TRANSFERRED", "RECTIFICATION_RETURNED"];
+const REMINDABLE_STATUSES = ["SENT_TO_BRANCH_MANAGER", "REVERSED", "PARTIALLY_RECTIFIED", "TRANSFERRED", "RECTIFICATION_RETURNED"];
 
 // How often the scan itself is allowed to run at all, regardless of the
 // Admin's configured per-finding threshold - protects against re-scanning

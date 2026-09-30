@@ -95,7 +95,7 @@ export function DistrictDashboard({
   // HO_REVIEW/HO_APPROVED, still mid-review) since this card is tracking
   // workflow progress, not "is this finding official yet."
   const approvedFindings = periodFindings.filter((f) =>
-    ["HO_REVIEW", "HO_APPROVED", "SENT_TO_BRANCH_MANAGER", "PARTIALLY_RECTIFIED", "RECTIFIED", "TRANSFERRED", "CLOSED"].includes(f.status)
+    ["HO_REVIEW", "HO_APPROVED", "SENT_TO_BRANCH_MANAGER", "REVERSED", "PARTIALLY_RECTIFIED", "RECTIFIED", "TRANSFERRED", "CLOSED"].includes(f.status)
   ).length;
   const rejectedFindings = periodFindings.filter((f) => f.status === "REJECTED").length;
   const returnedFindings = periodFindings.filter((f) => f.status === "RETURNED").length;

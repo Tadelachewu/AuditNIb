@@ -131,9 +131,9 @@ export const PAGE_REGISTRY: PageDefinition[] = [
       { action: "district-return-rectification", label: "District: Return Rectification for Correction" },
       { action: "ho-return-rectification", label: "HO: Return Rectification for Correction (after District verification)" },
       { action: "close", label: "Close (Verify)" },
-      // Reverse a closure (closed, or partially closed incl. transferred):
-      // closures removed, status back to its pre-closure value, history
-      // kept. See src/lib/findingReopen.ts.
+      // Reverse a closed / partially closed finding (incl. transferred) to
+      // its original sent-to-branch state, status REVERSED; history kept.
+      // See src/lib/findingReopen.ts.
       { action: "reopen", label: "Reopen Closed / Partially Closed Findings" },
       { action: "transfer", label: "Transfer to Next Period" },
       { action: "evidence", label: "Upload Evidence" },

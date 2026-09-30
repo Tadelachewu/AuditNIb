@@ -11,7 +11,7 @@ import type { Finding } from "@/types";
 // finding, closed and rejected included, by where it sits in the workflow.
 const STAGE_BUCKETS: { key: string; label: string; statuses: Finding["status"][] }[] = [
   { key: "review", label: "Draft / In Review", statuses: ["DRAFT", "SUBMITTED", "DISTRICT_REVIEW", "DISTRICT_APPROVED", "HO_REVIEW", "HO_APPROVED"] },
-  { key: "in_progress", label: "In Progress", statuses: ["SENT_TO_BRANCH_MANAGER", "PARTIALLY_RECTIFIED", "RECTIFICATION_RETURNED"] },
+  { key: "in_progress", label: "In Progress", statuses: ["SENT_TO_BRANCH_MANAGER", "REVERSED", "PARTIALLY_RECTIFIED", "RECTIFICATION_RETURNED"] },
   { key: "rectified", label: "Rectified (awaiting close)", statuses: ["RECTIFIED"] },
   { key: "transferred", label: "Transferred", statuses: ["TRANSFERRED"] },
   { key: "closed", label: "Closed", statuses: ["CLOSED"] },

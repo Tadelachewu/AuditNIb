@@ -105,7 +105,7 @@ export function transferFinding(
 // on the same "sweep everything not-closed" reasoning; the return itself
 // (and its reason) travels with the finding across the transfer just like
 // any other in-flight state does.
-const AUTO_TRANSFERABLE_STATUSES = ["SENT_TO_BRANCH_MANAGER", "PARTIALLY_RECTIFIED", "RECTIFIED", "RECTIFICATION_RETURNED", "TRANSFERRED"];
+const AUTO_TRANSFERABLE_STATUSES = ["SENT_TO_BRANCH_MANAGER", "REVERSED", "PARTIALLY_RECTIFIED", "RECTIFIED", "RECTIFICATION_RETURNED", "TRANSFERRED"];
 
 // Shared by outstandingTransferPreview() and autoTransferOnLock() so the
 // count a locking user is shown in the confirmation prompt can never drift
@@ -691,7 +691,7 @@ export function queueStatusesForSession(session: SessionData, db: Database): (fi
   if (has("rectify"))
     matchers.push(
       (f) =>
-        f.status === "SENT_TO_BRANCH_MANAGER" || f.status === "PARTIALLY_RECTIFIED" || f.status === "RECTIFICATION_RETURNED"
+        f.status === "SENT_TO_BRANCH_MANAGER" || f.status === "REVERSED" || f.status === "PARTIALLY_RECTIFIED" || f.status === "RECTIFICATION_RETURNED"
     );
   // District's gate on a recorded rectification, before it's HO's turn -
   // "has something rectified that hasn't been district-verified yet." Either

@@ -44,7 +44,7 @@ export const notifications = {
     rectified: n("FINDING_RECTIFIED", "Rectification recorded successfully."),
     verified: n("FINDING_VERIFIED", "Rectification verified successfully."),
     closed: n("FINDING_CLOSED", "Finding closed successfully."),
-    reopened: n("FINDING_REOPENED", "Finding reopened successfully."),
+    reopened: n("FINDING_REOPENED", "Finding reversed successfully."),
     rectificationReturned: n("FINDING_RECTIFICATION_RETURNED", "Rectification returned for correction."),
     rectificationResubmitted: n("FINDING_RECTIFICATION_RESUBMITTED", "Rectification resubmitted successfully."),
     partiallyClosed: n("FINDING_PARTIALLY_CLOSED", "Rectified portion closed successfully."),

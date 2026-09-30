@@ -73,7 +73,7 @@ export default async function FindingDetailPage({ params }: { params: Promise<{ 
   // Kept in lockstep by hand with transfer/route.ts and
   // findings.ts's AUTO_TRANSFERABLE_STATUSES (see the latter's own doc
   // comment for the full reasoning).
-  const TRANSFERABLE_STATUSES = ["SENT_TO_BRANCH_MANAGER", "PARTIALLY_RECTIFIED", "RECTIFIED", "RECTIFICATION_RETURNED", "TRANSFERRED"];
+  const TRANSFERABLE_STATUSES = ["SENT_TO_BRANCH_MANAGER", "REVERSED", "PARTIALLY_RECTIFIED", "RECTIFIED", "RECTIFICATION_RETURNED", "TRANSFERRED"];
   // Deliberately excludes SENT_TO_BRANCH_MANAGER - see
   // return-rectification/route.ts's own doc comment: "return for
   // correction" only makes sense once there's a recorded rectification to
@@ -222,7 +222,7 @@ export default async function FindingDetailPage({ params }: { params: Promise<{ 
         // choice.
         canRectify:
           has("rectify") &&
-          ["SENT_TO_BRANCH_MANAGER", "PARTIALLY_RECTIFIED", "TRANSFERRED", "RECTIFICATION_RETURNED"].includes(finding.status) &&
+          ["SENT_TO_BRANCH_MANAGER", "REVERSED", "PARTIALLY_RECTIFIED", "TRANSFERRED", "RECTIFICATION_RETURNED"].includes(finding.status) &&
           (finding.rectifiedCases < finding.caseCount || finding.rectifiedAmount < finding.amount),
         // Closeable whenever there's a district-verified-but-not-yet-closed
         // portion waiting, regardless of overall status - see
