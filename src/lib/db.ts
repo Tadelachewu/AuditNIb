@@ -1,7 +1,6 @@
 import { prisma } from "@/lib/prismaClient";
 import { Prisma } from "@/generated/prisma/client";
 import { ALL_PERMISSION_KEYS } from "@/lib/permissions/registry";
-import { normalizeTypography } from "@/lib/typography";
 import type {
   Database,
   User,
@@ -493,7 +492,6 @@ function settingsFromRow(r: Prisma.SettingsGetPayload<object>): Settings {
     requiredFindingFields: r.requiredFindingFields as unknown as Settings["requiredFindingFields"],
     allowOtherValueFields: r.allowOtherValueFields as unknown as Settings["allowOtherValueFields"],
     reportTemplateSources: (r as unknown as { reportTemplateSources?: Record<string, string[]> }).reportTemplateSources ?? {},
-    typography: normalizeTypography(r.typography),
     updatedAt: iso(r.updatedAt),
     updatedBy: u(r.updatedBy),
   };
@@ -1091,7 +1089,6 @@ async function persistChanges(before: Database, after: Database): Promise<void> 
           requiredFindingFields: s.requiredFindingFields as object,
           allowOtherValueFields: s.allowOtherValueFields as object,
           reportTemplateSources: s.reportTemplateSources as object,
-          typography: s.typography as object,
           permissionRegistrySyncedKeys: after.permissionRegistrySyncedKeys,
           updatedAt: toDate(s.updatedAt),
           updatedBy: s.updatedBy ?? null,

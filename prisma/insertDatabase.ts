@@ -422,7 +422,6 @@ export async function insertDatabaseIntoPostgres(prisma: PrismaClient, db: Datab
       requiredFindingFields: db.settings.requiredFindingFields as object,
       allowOtherValueFields: db.settings.allowOtherValueFields as object,
       reportTemplateSources: (db.settings.reportTemplateSources ?? {}) as object,
-      typography: (db.settings.typography ?? {}) as object,
       permissionRegistrySyncedKeys: db.permissionRegistrySyncedKeys,
       updatedAt: toDate(db.settings.updatedAt),
       updatedBy: db.settings.updatedBy ?? null,

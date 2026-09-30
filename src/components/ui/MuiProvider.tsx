@@ -12,8 +12,8 @@ import { ThemeProvider, createTheme } from "@mui/material/styles";
  *    `enableCssLayer` puts MUI's CSS in its own cascade layer, so the app's
  *    Tailwind styles keep priority wherever the two meet.
  *  - A theme in the app's own look: brand gold as the primary colour,
- *    brand brown as the secondary, the admin-chosen font and text size
- *    (fontFamily/fontSize inherit from <body>, see Settings > Appearance),
+ *    brand brown as the secondary, the app's font and text size
+ *    (fontFamily/fontSize inherit from <body>, see globals.css),
  *    and light/dark following the app's own theme toggle - data-theme on
  *    <html>, or the OS setting when it's "system" - not MUI's own switch.
  */

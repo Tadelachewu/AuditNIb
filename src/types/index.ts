@@ -1,4 +1,3 @@
-import type { Typography } from "@/lib/typography";
 // Core domain types for NIB Control360 (ICFMS).
 // Data currently persists to a local JSON file (see src/lib/db.ts) and is
 // designed to be swapped for a real relational database later without
@@ -438,10 +437,6 @@ export interface Settings {
   // also go through computeEligibleCaseCounts(). Admin-configurable from
   // /admin/settings' "Report Template Source Filters" section.
   reportTemplateSources: Record<string, string[]>;
-  // App-wide font family, text size, and secondary-text contrast, applied
-  // to every page by (app)/layout.tsx - see src/lib/typography.ts. Always
-  // normalized on read, so it's never partial or missing here.
-  typography: Typography;
   updatedAt: string;
   updatedBy?: string;
 }

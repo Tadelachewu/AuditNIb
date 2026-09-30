@@ -15,20 +15,6 @@ import { usePermissions } from "@/lib/permissions/PermissionsContext";
 import { hasPermission } from "@/lib/permissions/registry";
 import type { Settings, SafeUser, Source } from "@/types";
 import { FormSkeleton } from "@/components/ui/Skeleton";
-import {
-  DEFAULT_TYPOGRAPHY,
-  FONT_GROUPS,
-  FONT_OPTIONS,
-  TEXT_SIZE_OPTIONS,
-  TEXT_CONTRAST_OPTIONS,
-  CHROME_OPTIONS,
-  CHROME_GROUPS,
-  chromeStyle,
-  isDefaultTypography,
-  fontStack,
-  normalizeTypography,
-  type Typography,
-} from "@/lib/typography";
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -83,13 +69,10 @@ export default function SettingsPage() {
         requiredFindingFields: settings.requiredFindingFields,
         allowOtherValueFields: settings.allowOtherValueFields,
         reportTemplateSources: settings.reportTemplateSources ?? {},
-        typography: normalizeTypography(settings.typography),
       };
       const res = await apiSend<{ settings: Settings }>("/api/admin/settings", "PATCH", payload);
       setSettings({ ...res.settings, reportTemplateSources: res.settings.reportTemplateSources ?? {} });
       setSaved(true);
-      // Re-renders (app)/layout.tsx so a Typography change applies to the
-      // whole app immediately, not just after the next navigation.
       router.refresh();
     } catch (err) {
       setError(errorMessage(err, "Failed to save settings"));
@@ -622,161 +605,6 @@ export default function SettingsPage() {
         </div>
       </CollapsibleCard>
 
-      <CollapsibleCard disabled={!canEdit}
-        className="xl:col-span-2"
-        title="Appearance"
-        description="Font, text size, text contrast, and header & sidebar color used on every page of the app."
-      >
-        {(() => {
-          const typography = normalizeTypography(settings.typography);
-          const setTypography = (patch: Partial<Typography>) =>
-            setSettings({ ...settings, typography: { ...typography, ...patch } });
-          const sizeScale = { compact: 0.9375, default: 1, comfortable: 1.0625, large: 1.125 }[typography.textSize];
-          const high = typography.textContrast === "high";
-          const isDefault = isDefaultTypography(typography);
-          return (
-            <div className="flex flex-col gap-4 p-4">
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <div>
-                  <Label htmlFor="typo-font">Font</Label>
-                  <Select
-                    id="typo-font"
-                    value={typography.fontFamily}
-                    onChange={(e) => setTypography({ fontFamily: e.target.value as Typography["fontFamily"] })}
-                  >
-                    {FONT_GROUPS.map((g) => (
-                      <optgroup key={g.key} label={g.label}>
-                        {FONT_OPTIONS.filter((o) => o.group === g.key).map((o) => (
-                          <option key={o.key} value={o.key} style={{ fontFamily: fontStack(o.key) }}>
-                            {o.label}
-                          </option>
-                        ))}
-                      </optgroup>
-                    ))}
-                  </Select>
-                </div>
-                <div>
-                  <Label htmlFor="typo-size">Text size</Label>
-                  <Select
-                    id="typo-size"
-                    value={typography.textSize}
-                    onChange={(e) => setTypography({ textSize: e.target.value as Typography["textSize"] })}
-                  >
-                    {TEXT_SIZE_OPTIONS.map((o) => (
-                      <option key={o.key} value={o.key}>
-                        {o.label}
-                        {o.key === DEFAULT_TYPOGRAPHY.textSize ? " (default)" : ""}
-                      </option>
-                    ))}
-                  </Select>
-                </div>
-                <div>
-                  <Label htmlFor="typo-contrast">Text contrast</Label>
-                  <Select
-                    id="typo-contrast"
-                    value={typography.textContrast}
-                    onChange={(e) => setTypography({ textContrast: e.target.value as Typography["textContrast"] })}
-                  >
-                    {TEXT_CONTRAST_OPTIONS.map((o) => (
-                      <option key={o.key} value={o.key}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </Select>
-                </div>
-              </div>
-
-              <div>
-                <p className="mb-1.5 text-xs font-medium text-slate-600">Header &amp; sidebar color</p>
-                {CHROME_GROUPS.map((g) => (
-                <div key={g.key} className="mb-3 last:mb-0">
-                <p className="mb-1 text-xs text-slate-500">{g.label}</p>
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7" role="radiogroup" aria-label={`Header and sidebar color - ${g.label}`}>
-                  {CHROME_OPTIONS.filter((o) => o.group === g.key).map((o) => {
-                    const selected = typography.chrome === o.key;
-                    return (
-                      <button
-                        key={o.key}
-                        type="button"
-                        role="radio"
-                        aria-checked={selected}
-                        onClick={() => setTypography({ chrome: o.key })}
-                        className={`flex flex-col overflow-hidden rounded-md border text-left transition-shadow ${
-                          selected ? "border-brand-gold ring-2 ring-brand-gold/60" : "border-slate-200 hover:border-slate-300"
-                        }`}
-                      >
-                        {/* Miniature app: header bar + sidebar in the option's
-                            own palette, beside the (unchanged) page canvas. */}
-                        <div className="flex h-14 bg-slate-100" style={chromeStyle(o.key)}>
-                          <div className="flex w-1/3 flex-col gap-1 border-r border-chrome-border bg-chrome-bg p-1.5">
-                            <span className="h-1 w-3/4 rounded-full bg-chrome-accent" />
-                            <span className="h-1 w-full rounded-full bg-chrome-fg opacity-80" />
-                            <span className="h-1.5 w-full rounded-sm bg-brand-gold" />
-                            <span className="h-1 w-2/3 rounded-full bg-chrome-fg opacity-80" />
-                          </div>
-                          <div className="flex flex-1 flex-col">
-                            <div className="flex h-3 items-center justify-end gap-0.5 border-b border-chrome-border bg-chrome-bg px-1">
-                              <span className="h-1 w-3 rounded-full bg-chrome-fg opacity-80" />
-                            </div>
-                            <div className="m-1 flex-1 rounded-sm bg-white" />
-                          </div>
-                        </div>
-                        <span className="flex items-center gap-1.5 px-2 py-1.5 text-xs text-slate-700">
-                          <span className="h-2.5 w-2.5 shrink-0 rounded-full border border-slate-300" style={{ background: o.swatch }} />
-                          <span className="truncate">{o.label}</span>
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-                </div>
-              ))}
-                <p className="mt-1.5 text-xs text-slate-500">
-                  The highlighted page link stays gold on every option. Light options add a thin border so the
-                  sidebar and header stay distinct from the page, even on &quot;Page&quot;.
-                </p>
-              </div>
-
-              <div>
-                <p className="mb-1 text-xs font-medium text-slate-600">
-                  Preview <span className="font-normal text-slate-500">- sample text only, not real data</span>
-                </p>
-                <div
-                  className="rounded-md border border-slate-200 bg-slate-50 p-4"
-                  style={{ fontFamily: fontStack(typography.fontFamily) }}
-                >
-                  <p className="font-semibold text-slate-900" style={{ fontSize: `${1.125 * sizeScale}rem` }}>
-                    Findings Register
-                  </p>
-                  <p className={high ? "text-slate-700" : "text-slate-600"} style={{ fontSize: `${0.875 * sizeScale}rem` }}>
-                    Every finding registered for the current reporting period, by district and branch.
-                  </p>
-                  <p className="mt-3 text-slate-800" style={{ fontSize: `${0.875 * sizeScale}rem` }}>
-                    Cash shortage at teller 3 - ETB 12,450.00 - 4 cases
-                  </p>
-                  <p className={high ? "text-slate-600" : "text-slate-500"} style={{ fontSize: `${0.75 * sizeScale}rem` }}>
-                    Registered 28 Sep 2026 by the Branch Controller · ሰላም 0123456789
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-xs text-slate-500">
-                  Applies to every signed-in page for every user once saved. Web fonts look identical for everyone;
-                  installed fonts depend on each user&apos;s computer and fall back to the closest match if missing. Text size scales spacing along with
-                  text, so layouts keep their proportions. High contrast darkens secondary text (descriptions,
-                  hints, table headers) one shade, in both light and dark themes.
-                </p>
-                {!isDefault && canEdit && (
-                  <Button type="button" variant="secondary" onClick={() => setTypography({ ...DEFAULT_TYPOGRAPHY })}>
-                    Reset to default
-                  </Button>
-                )}
-              </div>
-            </div>
-          );
-        })()}
-      </CollapsibleCard>
       </div>
 
       {/* Pinned to the bottom of the screen: with a dozen collapsible

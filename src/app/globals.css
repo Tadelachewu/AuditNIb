@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+/* Hidden sidebar (SidebarToggle.tsx / Ctrl+B, remembered in localStorage and
+   applied before first paint by the init script in app/layout.tsx):
+   `sidebar-collapsed:` classes apply while <html data-sidebar="collapsed">. */
+@custom-variant sidebar-collapsed (&:where([data-sidebar="collapsed"], [data-sidebar="collapsed"] *));
+
 :root {
   --background: #ffffff;
   --foreground: #171717;
@@ -65,13 +70,21 @@
        hover    - hover wash behind a nav item / icon button
        border   - hairline between chrome and page
        scroll   - sidebar scrollbar thumb */
-  --chrome-bg: var(--brand-sidebar);
-  --chrome-fg: #ffffff;
-  --chrome-muted: rgb(255 255 255 / 0.75);
-  --chrome-accent: var(--brand-gold);
-  --chrome-hover: rgb(255 255 255 / 0.1);
-  --chrome-border: rgb(255 255 255 / 0.1);
-  --chrome-scroll: rgb(255 255 255 / 0.18);
+  /* The app's fixed appearance: header & sidebar use the page's own
+     background (light, dark text; follows light/dark mode). */
+  --chrome-bg: var(--color-slate-100);
+  --chrome-fg: var(--color-slate-900);
+  --chrome-muted: var(--color-slate-600);
+  --chrome-accent: var(--color-amber-700);
+  --chrome-hover: var(--color-slate-200);
+  --chrome-border: var(--color-slate-200);
+  --chrome-scroll: var(--color-slate-300);
+
+  /* High contrast: secondary text (slate-400/500/600) one shade stronger
+     than Tailwind's defaults. Dark-mode equivalents are in the dark blocks. */
+  --color-slate-400: #64748b;
+  --color-slate-500: #475569;
+  --color-slate-600: #334155;
 }
 
 @theme inline {
@@ -90,7 +103,7 @@
   --color-chrome-accent: var(--chrome-accent);
   --color-chrome-hover: var(--chrome-hover);
   --color-chrome-border: var(--chrome-border);
-  --font-sans: var(--font-geist-sans);
+  --font-sans: Verdana, Geneva, "DejaVu Sans", system-ui, sans-serif;
   --font-mono: var(--font-geist-mono);
 }
 
@@ -134,9 +147,9 @@
     --color-slate-100: #1e293b;
     --color-slate-200: #334155;
     --color-slate-300: #475569;
-    --color-slate-400: #64748b;
-    --color-slate-500: #94a3b8;
-    --color-slate-600: #cbd5e1;
+    --color-slate-400: #94a3b8;
+    --color-slate-500: #cbd5e1;
+    --color-slate-600: #e2e8f0;
     --color-slate-700: #e2e8f0;
     --color-slate-800: #f1f5f9;
     --color-slate-900: #f8fafc;
@@ -183,9 +196,9 @@
   --color-slate-100: #1e293b;
   --color-slate-200: #334155;
   --color-slate-300: #475569;
-  --color-slate-400: #64748b;
-  --color-slate-500: #94a3b8;
-  --color-slate-600: #cbd5e1;
+  --color-slate-400: #94a3b8;
+  --color-slate-500: #cbd5e1;
+  --color-slate-600: #e2e8f0;
   --color-slate-700: #e2e8f0;
   --color-slate-800: #f1f5f9;
   --color-slate-900: #f8fafc;
@@ -229,10 +242,15 @@ input[type="radio"] {
   accent-color: var(--brand-ink);
 }
 
+/* The app's fixed typography: Verdana, compact size (15px base). */
+html {
+  font-size: 93.75%;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-geist-sans), system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-family: Verdana, Geneva, "DejaVu Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 
 /* The sidebar's own internal scrollbar (Sidebar.tsx's overflow-y-auto,

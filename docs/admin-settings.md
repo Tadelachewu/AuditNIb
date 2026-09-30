@@ -334,7 +334,7 @@ This is one of the most heavily-gated features in the codebase, not an under-pro
 - **`performanceThresholds`**: top/bottom percentile cutoffs.
 - **`hoApproval`**: `required` (bank-wide approval stage on/off) + `approverUserIds` — every id is validated to be an **active, bank-wide-scoped** user before saving (`settings/route.ts:116-130`), since this stage bypasses the normal district/HO review chain.
 - **`similarFindingFields`** / **`requiredFindingFields`** / **`allowOtherValueFields`**: configure duplicate-detection, which fields are mandatory on the finding form, and which fields accept a free-typed "Other" value.
-- **`typography`**: app-wide font family, text size and text contrast, applied to every signed-in page. Optional on PATCH (omitted keeps the stored value). Also holds the header & sidebar color (`typography.chrome`). Full reference: [typography-settings.md](typography-settings.md).
+- **Appearance** is no longer a setting: the app has one fixed look (Verdana, compact text, high contrast, page-coloured header/sidebar). See [typography-settings.md](typography-settings.md).
 
 There is no separate "Notifications" admin sub-page distinct from Settings — delivery configuration lives entirely inside `/admin/settings`.
 
