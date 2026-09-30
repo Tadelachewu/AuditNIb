@@ -9,13 +9,14 @@ import { ALL_ROWS } from "@/lib/pagination";
  */
 
 export interface FindingNames {
+  districtName: (id: string) => string;
   branchName: (id: string) => string;
   departmentName: (id: string) => string;
   categoryName: (id: string) => string;
   sourceName: (id: string) => string;
 }
 
-export const FINDING_SORT_KEYS = ["reference", "title", "branch", "department", "category", "source", "risk", "amount", "reportedCases", "cases", "status", "updatedAt"] as const;
+export const FINDING_SORT_KEYS = ["reference", "title", "district", "branch", "department", "category", "source", "risk", "amount", "reportedCases", "cases", "status", "updatedAt"] as const;
 export type FindingSortKey = (typeof FINDING_SORT_KEYS)[number];
 
 export function parseFindingSort(sort: string | null | undefined, dir: string | null | undefined): { key: FindingSortKey; desc: boolean } {
@@ -33,6 +34,7 @@ export function filterFindingsByText<T extends { finding: Finding }>(rows: T[], 
     const hay = [
       f.reference,
       f.title,
+      names.districtName(f.districtId),
       names.branchName(f.branchId),
       names.departmentName(f.departmentId),
       names.categoryName(f.categoryId),
@@ -60,6 +62,8 @@ export function sortFindings<T extends { finding: Finding; amount?: number }>(
         return f.reference;
       case "title":
         return f.title;
+      case "district":
+        return names.districtName(f.districtId);
       case "branch":
         return names.branchName(f.branchId);
       case "department":

@@ -158,7 +158,8 @@ export function buildReportsData(db: Database, user: SessionData, get: (key: str
   // the Findings list does (src/lib/findingListQuery.ts), so its Export
   // CSV (/api/findings/export) returns what the grid shows. The aggregates
   // above use every filtered finding, not just the searched ones.
-  const names = { branchName, departmentName, categoryName, sourceName };
+  const districtName = (id: string) => db.districts.find((d) => d.id === id)?.name ?? "—";
+  const names = { districtName, branchName, departmentName, categoryName, sourceName };
   const sort = parseFindingSort(get("sort"), get("dir"));
   const amountOf = (r: ResidentFinding) => (r.slice ? r.slice.eligibleAmount : r.finding.amount);
   const listed = sortFindings(filterFindingsByText(resident, searchText, names), sort, names, amountOf);
@@ -167,6 +168,7 @@ export function buildReportsData(db: Database, user: SessionData, get: (key: str
     id: f.id,
     reference: f.reference,
     title: f.title,
+    districtName: districtName(f.districtId),
     branchName: branchName(f.branchId),
     departmentName: departmentName(f.departmentId),
     categoryName: categoryName(f.categoryId),

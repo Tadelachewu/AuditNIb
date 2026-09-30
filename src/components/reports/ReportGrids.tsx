@@ -18,6 +18,7 @@ export interface ReportFindingRow {
   id: string;
   reference: string;
   title: string;
+  districtName: string;
   branchName: string;
   departmentName: string;
   categoryName: string;
@@ -66,6 +67,7 @@ export function ReportFindingsGrid({
         ),
       },
       { id: "title", accessorKey: "title", header: "Title" },
+      { id: "district", accessorKey: "districtName", header: "District" },
       { id: "branch", accessorKey: "branchName", header: "Branch" },
       { id: "department", accessorKey: "departmentName", header: "Department" },
       { id: "category", accessorKey: "categoryName", header: "Category" },

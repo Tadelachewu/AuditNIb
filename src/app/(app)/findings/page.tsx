@@ -81,7 +81,7 @@ export default async function FindingsPage({
   // here, server-side, across every matching finding rather than just the
   // visible page; the CSV export reuses the same helpers so it always
   // matches the list (src/lib/findingListQuery.ts).
-  const names = { branchName, departmentName, categoryName, sourceName };
+  const names = { districtName, branchName, departmentName, categoryName, sourceName };
   const searchText = get("q");
   const sort = parseFindingSort(get("sort"), get("dir"));
   resident = filterFindingsByText(resident, searchText, names);
@@ -97,6 +97,9 @@ export default async function FindingsPage({
   const branch = db.branches.find((b) => b.id === user.branchId);
   const canCreate = hasPermission(user.permissions, permissionKey("findings", "create"));
 
+  function districtName(id: string) {
+    return db.districts.find((d) => d.id === id)?.name ?? "—";
+  }
   function branchName(id: string) {
     return db.branches.find((b) => b.id === id)?.name ?? "—";
   }
@@ -133,6 +136,7 @@ export default async function FindingsPage({
     id: f.id,
     reference: f.reference,
     title: f.title,
+    districtName: districtName(f.districtId),
     branchName: branchName(f.branchId),
     departmentName: departmentName(f.departmentId),
     categoryName: categoryName(f.categoryId),

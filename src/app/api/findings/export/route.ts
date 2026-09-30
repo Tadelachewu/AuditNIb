@@ -77,7 +77,7 @@ async function handleGET(request: Request) {
     const isQueued = queueStatusesForSession(auth.session, db);
     resident = resident.filter((r) => (r.slice === null || r.slice.isCurrentPeriod) && isQueued(r.finding));
   }
-  const names = { branchName, departmentName, categoryName, sourceName };
+  const names = { districtName, branchName, departmentName, categoryName, sourceName };
   resident = filterFindingsByText(resident, url.searchParams.get("q") ?? "", names);
   resident = sortFindings(
     resident,

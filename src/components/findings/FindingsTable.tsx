@@ -17,6 +17,7 @@ export interface FindingRow {
   id: string;
   reference: string;
   title: string;
+  districtName: string;
   branchName: string;
   departmentName: string;
   categoryName: string;
@@ -281,6 +282,7 @@ export function FindingsTable({
         ),
       },
       { id: "title", accessorKey: "title", header: "Title", Cell: ({ row }) => <span className="text-slate-900">{row.original.title}</span> },
+      { id: "district", accessorKey: "districtName", header: "District" },
       { id: "branch", accessorKey: "branchName", header: "Branch" },
       { id: "department", accessorKey: "departmentName", header: "Department" },
       { id: "category", accessorKey: "categoryName", header: "Category" },
