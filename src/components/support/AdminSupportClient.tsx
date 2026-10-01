@@ -43,7 +43,7 @@ export function AdminSupportClient({ canRespond }: { canRespond: boolean }) {
 
   const loadThreads = useCallback(async () => {
     try {
-      const data = await apiGet<{ threads: AdminThread[] }>("/api/admin/support");
+      const data = await apiGet<{ threads: AdminThread[] }>("/api/admin/support", { background: true });
       setThreads(data.threads);
     } catch (err) {
       setError(errorMessage(err, "Failed to load threads"));
@@ -52,7 +52,7 @@ export function AdminSupportClient({ canRespond }: { canRespond: boolean }) {
 
   const loadThread = useCallback(async (id: string) => {
     try {
-      const data = await apiGet<{ thread: SupportThread; messages: SupportMessage[] }>(`/api/support/${id}`);
+      const data = await apiGet<{ thread: SupportThread; messages: SupportMessage[] }>(`/api/support/${id}`, { background: true });
       if (selectedIdRef.current !== id) return;
       setMessages(data.messages);
     } catch (err) {

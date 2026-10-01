@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getIronSession } from "iron-session";
-import { sessionOptions, type SessionData } from "@/lib/session";
+import { sessionOptions, IDLE_TIMEOUT_MS, ABSOLUTE_TIMEOUT_MS, SESSION_ENDED_PATH, type SessionData } from "@/lib/session";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
 import { REQUEST_ID_HEADER, resolveRequestId } from "@/lib/requestId";
 
@@ -170,8 +170,22 @@ export async function proxy(request: NextRequest) {
 
   const response = withId(NextResponse.next({ request: { headers: forwardedHeaders } }));
   const session = await getIronSession<SessionData>(request, response, sessionOptions);
-  const isLoggedIn = Boolean(session.isLoggedIn && session.userId);
+  const hasSession = Boolean(session.isLoggedIn && session.userId);
   const isPublicPath = PUBLIC_PATHS.includes(pathname);
+
+  // Session timeouts (SESSION_IDLE_TIMEOUT_MINUTES / SESSION_ABSOLUTE_TIMEOUT_HOURS),
+  // enforced here on every page navigation - the database checks (deactivated,
+  // signed in elsewhere) still happen in getCurrentUser().
+  const now = Date.now();
+  const expired =
+    hasSession &&
+    ((session.sessionCreatedAt !== undefined && now - session.sessionCreatedAt >= ABSOLUTE_TIMEOUT_MS) ||
+      (session.lastActivityAt !== undefined && now - session.lastActivityAt >= IDLE_TIMEOUT_MS));
+  if (expired && !isPublicPath) {
+    return withId(NextResponse.redirect(new URL(SESSION_ENDED_PATH, request.url)));
+  }
+  if (expired) session.destroy();
+  const isLoggedIn = hasSession && !expired;
 
   if (!isLoggedIn && !isPublicPath) {
     const loginUrl = new URL("/login", request.url);
@@ -194,6 +208,19 @@ export async function proxy(request: NextRequest) {
   const pageCode = pageCodeFor(pathname);
   if (isLoggedIn && pageCode && !hasPermission(session.permissions, permissionKey(pageCode, "view"))) {
     return forwardSessionCookies(response, withId(NextResponse.redirect(new URL("/dashboard", request.url))));
+  }
+
+  // A real page navigation is user activity: slide the idle window forward.
+  // (Pages can't set cookies while rendering, so this is where navigations
+  // count.) Automatic link prefetches are not activity.
+  const isPrefetch =
+    request.headers.get("next-router-prefetch") === "1" ||
+    request.headers.get("purpose") === "prefetch" ||
+    (request.headers.get("sec-purpose") ?? "").includes("prefetch");
+  if (isLoggedIn && !isPrefetch) {
+    session.lastActivityAt = now;
+    if (!session.sessionCreatedAt) session.sessionCreatedAt = now;
+    await session.save();
   }
 
   return response;

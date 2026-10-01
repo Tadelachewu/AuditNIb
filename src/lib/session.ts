@@ -1,4 +1,4 @@
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { getIronSession, type IronSession, type SessionOptions } from "iron-session";
 import { prisma } from "@/lib/prismaClient";
 import type { OrgScope } from "@/types";
@@ -196,7 +196,19 @@ export async function getCurrentUser(): Promise<SessionData | null> {
   // inside a Route Handler where save works), and the absolute timeout
   // plus browser cookie maxAge act as safety nets even if no
   // idle-refreshing call is ever made.
+  // Automatic background requests (the notification bell's 30-second poll,
+  // support-page refreshes - marked with BACKGROUND_REQUEST_HEADER) are NOT
+  // user activity: counting them kept every open tab "active" forever, so
+  // the idle timeout could never fire. They are still checked against both
+  // timeouts above, just without sliding the idle window forward.
+  let background = false;
+  try {
+    background = (await headers()).get(BACKGROUND_REQUEST_HEADER) === "1";
+  } catch {
+    // No request context (scripts/tests) - treat as normal activity.
+  }
   if (createdAtMissing) session.sessionCreatedAt = now;
+  if (background && !createdAtMissing && !lastActiveMissing) return session;
   session.lastActivityAt = now;
   try {
     await session.save();
@@ -213,3 +225,10 @@ export async function getCurrentUser(): Promise<SessionData | null> {
  * clears the stale cookie first - see src/app/api/auth/session-ended/route.ts.
  */
 export const SESSION_ENDED_PATH = "/api/auth/session-ended";
+
+/**
+ * Header marking an automatic background request (polling) - such requests
+ * never count as user activity for the idle timeout. Sent by apiGet(url,
+ * { background: true }) in src/lib/api-client.ts.
+ */
+export const BACKGROUND_REQUEST_HEADER = "x-background-request";

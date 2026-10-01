@@ -48,7 +48,7 @@ export function SupportClient() {
 
   const loadThreads = useCallback(async () => {
     try {
-      const data = await apiGet<{ threads: SupportThread[] }>("/api/support");
+      const data = await apiGet<{ threads: SupportThread[] }>("/api/support", { background: true });
       setThreads(data.threads);
     } catch (err) {
       setError(errorMessage(err, "Failed to load threads"));
@@ -57,7 +57,7 @@ export function SupportClient() {
 
   const loadThread = useCallback(async (id: string) => {
     try {
-      const data = await apiGet<{ thread: SupportThread; messages: SupportMessage[] }>(`/api/support/${id}`);
+      const data = await apiGet<{ thread: SupportThread; messages: SupportMessage[] }>(`/api/support/${id}`, { background: true });
       if (selectedIdRef.current !== id) return;
       setMessages(data.messages);
       setThreads((prev) => (prev ? prev.map((t) => (t.id === id ? data.thread : t)) : prev));

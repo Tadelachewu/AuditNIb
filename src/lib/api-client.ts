@@ -73,8 +73,27 @@ async function request<T>(url: string, init: RequestInit): Promise<T> {
   return (await res.json().catch(() => ({}))) as T;
 }
 
-export async function apiGet<T>(url: string, init: { signal?: AbortSignal } = {}): Promise<T> {
-  return request<T>(url, { cache: "no-store", signal: init.signal });
+/**
+ * `background: true` = an automatic poll (not something the user did): it
+ * doesn't count as activity for the session idle timeout, and if it finds
+ * the session has ended the page goes to sign-in right away instead of
+ * sitting there until the next click.
+ */
+export async function apiGet<T>(url: string, init: { signal?: AbortSignal; background?: boolean } = {}): Promise<T> {
+  try {
+    return await request<T>(url, {
+      cache: "no-store",
+      signal: init.signal,
+      headers: init.background ? { "x-background-request": "1" } : undefined,
+    });
+  } catch (err) {
+    if (init.background && err instanceof ApiError && err.status === 401 && typeof window !== "undefined") {
+      // Full page load on purpose: the route clears the stale cookie, then shows sign-in.
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+      window.location.assign("/api/auth/session-ended");
+    }
+    throw err;
+  }
 }
 
 export async function apiSend<T>(url: string, method: "POST" | "PATCH" | "DELETE", data?: unknown): Promise<T> {

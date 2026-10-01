@@ -28,7 +28,7 @@ export function NotificationBell() {
 
   async function load() {
     try {
-      const { notifications } = await apiGet<{ notifications: Notification[] }>("/api/notifications");
+      const { notifications } = await apiGet<{ notifications: Notification[] }>("/api/notifications", { background: true });
       setNotifications(notifications);
     } catch {
       // Non-critical - the bell just stays at its last known state.
