@@ -54,13 +54,10 @@ async function handlePOST(request: Request, { params }: { params: Promise<{ id: 
   if (destination.status !== "OPEN") {
     return NextResponse.json({ error: "Destination period must be open" }, { status: 409 });
   }
-  // Carry forward only: moving a finding back into an earlier period would
-  // re-open that period's figures after the fact (and made period totals
-  // disagree before residency handled return trips).
-  const current = db.reportingPeriods.find((p) => p.id === existing.periodId);
-  if (current && destination.startsAt <= current.startsAt) {
-    return NextResponse.json({ error: `Findings can only be transferred forward - choose a period after ${current.code}`, code: "BUSINESS_RULE_VIOLATION" }, { status: 409 });
-  }
+  // Manual transfer works in both directions: any other OPEN period, earlier
+  // or later. Period figures stay correct for return trips because
+  // findingResidencyInPeriod() credits each stay separately and sums them.
+  // Automatic transfer on lock stays forward-only (autoTransferOnLock()).
 
   const updated = await updateDb((current) => {
     const f = current.findings.find((x) => x.id === id)!;

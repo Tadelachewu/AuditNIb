@@ -112,7 +112,7 @@ export function FindingDetailClient({
   findingCases: FindingCase[];
   evidence: Evidence[];
   comments: Comment[];
-  otherOpenPeriods: { id: string; code: string }[];
+  otherOpenPeriods: { id: string; code: string; earlier: boolean }[];
   caseAgeDays: number;
   operationAreas: string[];
   priorityLevels: string[];
@@ -431,8 +431,8 @@ export function FindingDetailClient({
   async function handleTransfer() {
     const period = otherOpenPeriods.find((p) => p.id === transferPeriodId);
     const result = await confirm({
-      title: `Transfer to ${period?.code ?? "next period"}?`,
-      message: `Moves the outstanding ${finding.currency} ${transferOutstandingAmount.toLocaleString()} (${transferOutstandingCases} case(s)) forward. The finding stays open under this new period.`,
+      title: `Transfer to ${period?.code ?? "another period"}?`,
+      message: `Moves the outstanding ${finding.currency} ${transferOutstandingAmount.toLocaleString()} (${transferOutstandingCases} case(s)) to ${period?.earlier ? "the earlier" : "the later"} period ${period?.code ?? ""}. The finding stays open under that period.`,
       confirmLabel: "Transfer",
       tone: "danger",
       needsReason: true,
@@ -989,7 +989,7 @@ export function FindingDetailClient({
       {permissions.canTransfer && (
         <Card>
           <CardHeader
-            title="Transfer to Next Period"
+            title="Transfer to Another Period"
             description={`Case age: ${caseAgeDays} day${caseAgeDays === 1 ? "" : "s"} since original finding date.`}
           />
           {transferring ? (
@@ -1007,7 +1007,7 @@ export function FindingDetailClient({
                   >
                     {otherOpenPeriods.map((p) => (
                       <option key={p.id} value={p.id}>
-                        {p.code}
+                        {p.code}{p.earlier ? " (earlier period)" : ""}
                       </option>
                     ))}
                   </select>
@@ -1017,7 +1017,7 @@ export function FindingDetailClient({
                     that will be persisted in the FindingTransfer row, so the
                     Controller can verify all 15 data points before clicking
                     Transfer. Outstanding = total - closed (what's actually
-                    being moved forward), not just rectified. */}
+                    being moved), not just rectified. */}
                 <div className="rounded-md border border-slate-200 bg-slate-50">
                   <div className="border-b border-slate-200 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
                     15. Transfer Data — Preview
@@ -1095,7 +1095,7 @@ export function FindingDetailClient({
           ) : (
             <div className="p-4">
               <Button variant="info" onClick={() => setTransferring(true)}>
-                Transfer to Next Period
+                Transfer to Another Period
               </Button>
             </div>
           )}

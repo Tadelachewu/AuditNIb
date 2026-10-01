@@ -62,10 +62,19 @@ export default async function FindingDetailPage({ params }: { params: Promise<{ 
   const category = db.categories.find((c) => c.id === finding.categoryId);
   const period = db.reportingPeriods.find((p) => p.id === finding.periodId);
 
+  // Manual transfer goes either way (same rule as the transfer API): later
+  // periods first, nearest first, so the default is still the next period;
+  // then earlier periods, nearest first.
+  const isEarlier = (p: { startsAt: string }) => !!period && p.startsAt < period.startsAt;
   const otherOpenPeriods = db.reportingPeriods
-    // Forward only (same rule as the transfer API).
-    .filter((p) => p.status === "OPEN" && p.id !== finding.periodId && (!period || p.startsAt > period.startsAt))
-    .map((p) => ({ id: p.id, code: p.code }));
+    .filter((p) => p.status === "OPEN" && p.id !== finding.periodId)
+    .sort((a, b) => {
+      const ea = isEarlier(a);
+      const eb = isEarlier(b);
+      if (ea !== eb) return ea ? 1 : -1;
+      return ea ? b.startsAt.localeCompare(a.startsAt) : a.startsAt.localeCompare(b.startsAt);
+    })
+    .map((p) => ({ id: p.id, code: p.code, earlier: isEarlier(p) }));
 
   const has = (action: string) => hasPermission(user.permissions, permissionKey("findings", action));
 

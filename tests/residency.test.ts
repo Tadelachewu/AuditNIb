@@ -21,6 +21,11 @@ describe("period residency", () => {
     expect([share(d, f, "p9"), share(d, f, "p10")]).toEqual([1, 3]);
   });
 
+  it("backward transfer splits the cases the same way", () => {
+    const { db: d, f } = db([["p10", "p8", 3]]);
+    expect([share(d, f, "p8"), share(d, f, "p10")]).toEqual([3, 1]);
+  });
+
   it("a return trip is counted, so period shares still add up to caseCount", () => {
     const { db: d, f } = db([["p9", "p10", 2], ["p10", "p9", 2]]);
     const shares = ["p8", "p9", "p10"].map((p) => share(d, f, p));
