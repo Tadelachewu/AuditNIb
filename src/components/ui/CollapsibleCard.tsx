@@ -47,12 +47,12 @@ export function CollapsibleCard({
   const setOpen = (next: boolean) => (onOpenChange ? onOpenChange(next) : setUncontrolledOpen(next));
 
   return (
-    <div className={`rounded-lg border border-slate-200 bg-white shadow-sm ${className}`}>
+    <div className={`app-card rounded-lg border border-slate-200 bg-white shadow-sm ${className}`}>
       <button
         type="button"
         onClick={() => setOpen(!open)}
         aria-expanded={open}
-        className="flex w-full items-start justify-between gap-4 px-4 py-3 text-left"
+        className={`app-card-header flex w-full items-start justify-between gap-4 px-4 py-3 text-left ${open ? "rounded-t-lg" : "rounded-lg"}`}
       >
         <div className="flex items-start gap-2.5">
           {Icon && (

@@ -36,7 +36,7 @@ function BatchRowsTable({ rows }: { rows: DisplayRow[] }) {
   return (
     <div className="max-h-72 overflow-auto rounded-md border border-slate-100">
       <table className="w-full text-left text-xs">
-        <thead className="sticky top-0 border-b border-slate-100 bg-slate-50 uppercase tracking-wide text-slate-600">
+        <thead className="sticky top-0 border-b border-slate-100 bg-slate-50 text-slate-600">
           <tr>
             <th className="px-3 py-1.5 font-medium">Row</th>
             <th className="px-3 py-1.5 font-medium">Outcome</th>

@@ -273,7 +273,7 @@ export default function UsersPage() {
       { accessorKey: "name", header: "Name", Cell: ({ row }) => <span className="font-medium text-slate-900">{row.original.name}</span> },
       {
         accessorKey: "username",
-        header: "Username",
+        header: "User Name",
         Cell: ({ row }) => <span className="font-mono text-xs text-slate-600">{row.original.username}</span>,
       },
       { id: "email", header: "Email", accessorFn: (u) => u.email || "—" },

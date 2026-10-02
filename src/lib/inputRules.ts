@@ -76,7 +76,11 @@ export function emailError(value: string | null | undefined, label = "Email addr
   const v = trimmed(value);
   if (!v) return `${label} is required`;
   if (v.length > LIMITS.email.max) return `${label} must be at most ${LIMITS.email.max} characters`;
-  if (!z.email().safeParse(v).success) return "Enter a valid email address";
+  if (!z.email().safeParse(v).success) {
+    return label === "Email address"
+      ? "Enter a valid email address (e.g. name@nibbank.com.et)"
+      : `${label} must be a valid email address (e.g. noreply@nibbank.com.et)`;
+  }
   return null;
 }
 

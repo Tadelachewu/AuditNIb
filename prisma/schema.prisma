@@ -1,33 +1,3 @@
-// NIB Control360 (ICFMS) — relational schema.
-//
-// A 1:1 mapping of src/types/index.ts's `Database` interface (one model per
-// top-level array field, one row per singleton `settings`), designed so
-// src/lib/db.ts's readDb()/updateDb() can keep handing every existing route
-// the exact same `Database`-shaped object they already consume — see that
-// file's own doc comment for how the Prisma-backed read/write layer
-// reassembles this into that shape. Column names are snake_case (Postgres
-// convention) via @map/@@map; the generated Prisma Client and every field
-// above stays camelCase, matching the TS types exactly.
-//
-// IDs are plain strings (the app generates its own UUIDs via uuid() before
-// insert, unchanged from the JSON-file version - see PHASE1.md), not
-// Prisma-generated defaults, so the one-time ETL from data/db.json can
-// preserve every existing id byte-for-byte.
-//
-// Foreign keys use onDelete: Restrict for reference data (District,
-// Branch, Source, Department, ClassifiedCategory, ReportingPeriod, User,
-// RoleDefinition) - nothing in this app hard-deletes those once a Finding
-// depends on them (they're deactivated via status/active, never removed),
-// matching the existing soft-delete-only convention. Cascade is used only
-// for a Finding's own genuinely-owned child rows (transitions,
-// rectifications, transfers, closures, cases, evidence, comments) - rows
-// that exist purely because their parent Finding does, mirroring
-// findings/[id]/route.ts's own manual cleanup on a DRAFT finding's delete.
-
-// Prisma 7: the client is generated to a project-owned path (no longer
-// node_modules/@prisma/client) and the connection is supplied at runtime by
-// a driver adapter (see src/lib/prismaClient.ts), not by a `url` here - the
-// datasource block below only declares which SQL dialect to target.
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"
@@ -37,9 +7,495 @@ datasource db {
   provider = "postgresql"
 }
 
-// ---------------------------------------------------------------------------
-// Shared enums
-// ---------------------------------------------------------------------------
+model PasswordResetToken {
+  id        String    @id
+  userId    String    @map("user_id")
+  token     String    @unique
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  issuedIp  String?   @map("issued_ip")
+  issuedUa  String?   @map("issued_ua")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([token])
+  @@map("password_reset_tokens")
+}
+
+model RoleDefinition {
+  id              String   @id
+  code            String   @unique
+  name            String
+  description     String?
+  orgScope        OrgScope @map("org_scope")
+  branchSingleton Boolean  @map("branch_singleton")
+  isSystem        Boolean  @map("is_system")
+  permissions     String[]
+  status          Status
+  createdAt       DateTime @map("created_at")
+  updatedAt       DateTime @map("updated_at")
+  users           User[]
+
+  @@map("roles")
+}
+
+model User {
+  id                  String               @id
+  name                String
+  username            String               @unique
+  email               String               @unique
+  passwordHash        String               @map("password_hash")
+  role                String
+  status              Status
+  districtId          String?              @map("district_id")
+  branchId            String?              @map("branch_id")
+  departmentId        String?              @map("department_id")
+  createdAt           DateTime             @map("created_at")
+  updatedAt           DateTime             @map("updated_at")
+  lastLoginAt         DateTime?            @map("last_login_at")
+  mustChangePassword  Boolean              @default(false) @map("must_change_password")
+  passwordExpiresAt   DateTime?            @map("password_expires_at")
+  sessionVersion      Int                  @default(1) @map("session_version")
+  phone               String?
+  passwordResetTokens PasswordResetToken[]
+  supportThreads      SupportThread[]
+  branch              Branch?              @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  department          Department?          @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  district            District?            @relation(fields: [districtId], references: [id], onDelete: Restrict)
+  roleRef             RoleDefinition       @relation(fields: [role], references: [code])
+
+  @@map("users")
+}
+
+model District {
+  id        String    @id
+  code      String    @unique
+  name      String
+  status    Status
+  createdAt DateTime  @map("created_at")
+  updatedAt DateTime  @map("updated_at")
+  branches  Branch[]
+  findings  Finding[]
+  users     User[]
+
+  @@map("districts")
+}
+
+model Branch {
+  id                  String               @id
+  code                String               @unique
+  name                String
+  districtId          String               @map("district_id")
+  status              Status
+  createdAt           DateTime             @map("created_at")
+  updatedAt           DateTime             @map("updated_at")
+  branchCoverageNotes BranchCoverageNote[]
+  district            District             @relation(fields: [districtId], references: [id])
+  findings            Finding[]
+  users               User[]
+
+  @@map("branches")
+}
+
+model Source {
+  id        String    @id
+  code      String    @unique
+  name      String
+  active    Boolean
+  createdAt DateTime  @map("created_at")
+  updatedAt DateTime  @map("updated_at")
+  isDefault Boolean   @default(false) @map("is_default")
+  findings  Finding[]
+
+  @@map("sources")
+}
+
+model Department {
+  id         String    @id
+  code       String    @unique
+  name       String
+  active     Boolean
+  orgScope   OrgScope  @map("org_scope")
+  districtId String?   @map("district_id")
+  branchId   String?   @map("branch_id")
+  createdAt  DateTime  @map("created_at")
+  updatedAt  DateTime  @map("updated_at")
+  findings   Finding[]
+  users      User[]
+
+  @@map("departments")
+}
+
+model ClassifiedCategory {
+  id        String   @id
+  code      String   @unique
+  name      String
+  scored    Boolean
+  active    Boolean
+  createdAt DateTime @map("created_at")
+  updatedAt DateTime @map("updated_at")
+
+  @@map("classified_categories")
+}
+
+model UncoveredReason {
+  id                  String               @id
+  code                String               @unique
+  name                String
+  active              Boolean
+  createdAt           DateTime             @map("created_at")
+  updatedAt           DateTime             @map("updated_at")
+  branchCoverageNotes BranchCoverageNote[]
+
+  @@map("uncovered_reasons")
+}
+
+model ScoringRule {
+  id            String   @id
+  version       Int
+  name          String
+  active        Boolean
+  everActivated Boolean  @map("ever_activated")
+  effectiveFrom DateTime @map("effective_from")
+  categories    String[]
+  sources       String[]
+  basis         String
+  formulaType   String   @map("formula_type")
+  createdBy     String   @map("created_by")
+  createdAt     DateTime @map("created_at")
+
+  @@map("scoring_rules")
+}
+
+model ReportingPeriod {
+  id                       String               @id
+  year                     Int
+  month                    Int
+  code                     String               @unique
+  startsAt                 DateTime             @map("starts_at")
+  endsAt                   DateTime             @map("ends_at")
+  submissionStartsAt       DateTime             @map("submission_starts_at")
+  submissionEndsAt         DateTime             @map("submission_ends_at")
+  status                   PeriodStatus
+  lockedBy                 String?              @map("locked_by")
+  lockedAt                 DateTime?            @map("locked_at")
+  lockReason               String?              @map("lock_reason")
+  draftsAllowedWhileLocked Boolean              @map("drafts_allowed_while_locked")
+  createdAt                DateTime             @map("created_at")
+  updatedAt                DateTime             @map("updated_at")
+  name                     String?
+  branchCoverageNotes      BranchCoverageNote[]
+  findings                 Finding[]
+
+  @@map("reporting_periods")
+}
+
+model Finding {
+  id                     String               @id
+  reference              String               @unique
+  title                  String
+  sourceId               String?              @map("source_id")
+  departmentId           String?              @map("department_id")
+  periodId               String               @map("period_id")
+  districtId             String               @map("district_id")
+  branchId               String               @map("branch_id")
+  findingDate            String               @map("finding_date")
+  operationArea          String               @map("operation_area")
+  irregularityType       String               @map("irregularity_type")
+  categoryId             String?              @map("category_id")
+  amount                 Float
+  currency               String
+  caseCount              Int                  @map("case_count")
+  riskLevel              String               @map("risk_level")
+  priority               String
+  description            String
+  recommendation         String?
+  rootCause              String?              @map("root_cause")
+  evidenceNote           String?              @map("evidence_note")
+  status                 FindingStatus
+  rectifiedCases         Int                  @map("rectified_cases")
+  rectifiedAmount        Float                @map("rectified_amount")
+  closedCases            Int                  @map("closed_cases")
+  closedAmount           Float                @map("closed_amount")
+  districtVerifiedCases  Int                  @map("district_verified_cases")
+  districtVerifiedAmount Float                @map("district_verified_amount")
+  externalReference      String?              @map("external_reference")
+  importBatchId          String?              @map("import_batch_id")
+  lastReminderAt         DateTime?            @map("last_reminder_at")
+  createdBy              String               @map("created_by")
+  createdAt              DateTime             @map("created_at")
+  updatedAt              DateTime             @map("updated_at")
+  registeredByBankScope  Boolean              @default(false) @map("registered_by_bank_scope")
+  comments               Comment[]
+  evidence               Evidence[]
+  cases                  FindingCase[]
+  closures               FindingClosure[]
+  transfers              FindingTransfer[]
+  transitions            FindingTransition[]
+  branch                 Branch               @relation(fields: [branchId], references: [id])
+  department             Department?          @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  district               District             @relation(fields: [districtId], references: [id])
+  importBatch            ImportBatch?         @relation(fields: [importBatchId], references: [id])
+  period                 ReportingPeriod      @relation(fields: [periodId], references: [id])
+  source                 Source?              @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  rectifications         RectificationEntry[]
+
+  @@index([periodId])
+  @@index([branchId])
+  @@index([districtId])
+  @@index([status])
+  @@index([categoryId])
+  @@map("findings")
+}
+
+model FindingTransition {
+  id         String   @id
+  findingId  String   @map("finding_id")
+  fromStatus String   @map("from_status")
+  toStatus   String   @map("to_status")
+  action     String
+  userId     String   @map("user_id")
+  userName   String   @map("user_name")
+  reason     String?
+  createdAt  DateTime @map("created_at")
+  finding    Finding  @relation(fields: [findingId], references: [id], onDelete: Cascade)
+
+  @@index([findingId])
+  @@map("finding_transitions")
+}
+
+model RectificationEntry {
+  id              String   @id
+  findingId       String   @map("finding_id")
+  periodId        String   @map("period_id")
+  rectifiedCases  Int      @map("rectified_cases")
+  rectifiedAmount Float    @map("rectified_amount")
+  note            String?
+  submittedBy     String   @map("submitted_by")
+  submittedByName String   @map("submitted_by_name")
+  createdAt       DateTime @map("created_at")
+  caseIds         String[] @map("case_ids")
+  finding         Finding  @relation(fields: [findingId], references: [id], onDelete: Cascade)
+
+  @@index([findingId])
+  @@map("rectifications")
+}
+
+model FindingCase {
+  id              String            @id
+  findingId       String            @map("finding_id")
+  seq             Int
+  amount          Float
+  description     String?
+  status          FindingCaseStatus
+  rectificationId String?           @map("rectification_id")
+  rectifiedAt     DateTime?         @map("rectified_at")
+  rectifiedBy     String?           @map("rectified_by")
+  rectifiedByName String?           @map("rectified_by_name")
+  createdAt       DateTime          @map("created_at")
+  finding         Finding           @relation(fields: [findingId], references: [id], onDelete: Cascade)
+
+  @@index([findingId])
+  @@map("finding_cases")
+}
+
+model FindingTransfer {
+  id                    String         @id
+  findingId             String         @map("finding_id")
+  fromPeriodId          String         @map("from_period_id")
+  toPeriodId            String         @map("to_period_id")
+  casesTransferred      Int            @map("cases_transferred")
+  amountTransferred     Float          @map("amount_transferred")
+  originalCaseCount     Int            @map("original_case_count")
+  originalAmount        Float          @map("original_amount")
+  caseAgeAtTransferDays Int            @map("case_age_at_transfer_days")
+  reason                String
+  createdBy             String         @map("created_by")
+  createdByName         String         @map("created_by_name")
+  createdAt             DateTime       @map("created_at")
+  method                TransferMethod
+  finding               Finding        @relation(fields: [findingId], references: [id], onDelete: Cascade)
+
+  @@index([findingId])
+  @@map("finding_transfers")
+}
+
+model FindingClosure {
+  id              String   @id
+  findingId       String   @map("finding_id")
+  periodId        String   @map("period_id")
+  closedCases     Int      @map("closed_cases")
+  closedAmount    Float    @map("closed_amount")
+  submittedBy     String   @map("submitted_by")
+  submittedByName String   @map("submitted_by_name")
+  createdAt       DateTime @map("created_at")
+  finding         Finding  @relation(fields: [findingId], references: [id], onDelete: Cascade)
+
+  @@index([findingId])
+  @@map("finding_closures")
+}
+
+model ImportBatch {
+  id             String    @id
+  fileName       String    @map("file_name")
+  importedBy     String    @map("imported_by")
+  importedByName String    @map("imported_by_name")
+  totalRows      Int       @map("total_rows")
+  importedCount  Int       @map("imported_count")
+  duplicateCount Int       @map("duplicate_count")
+  errorCount     Int       @map("error_count")
+  rows           Json
+  createdAt      DateTime  @map("created_at")
+  storedFile     String?   @map("stored_file")
+  reversedAt     DateTime? @map("reversed_at")
+  reversedBy     String?   @map("reversed_by")
+  reversedByName String?   @map("reversed_by_name")
+  reverseReason  String?   @map("reverse_reason")
+  findings       Finding[]
+
+  @@map("import_batches")
+}
+
+model Evidence {
+  id             String   @id
+  findingId      String   @map("finding_id")
+  commentId      String?  @map("comment_id")
+  fileName       String   @map("file_name")
+  mimeType       String   @map("mime_type")
+  size           Int
+  storagePath    String   @map("storage_path")
+  uploadedBy     String   @map("uploaded_by")
+  uploadedByName String   @map("uploaded_by_name")
+  createdAt      DateTime @map("created_at")
+  comment        Comment? @relation(fields: [commentId], references: [id])
+  finding        Finding  @relation(fields: [findingId], references: [id], onDelete: Cascade)
+
+  @@index([findingId])
+  @@map("evidence")
+}
+
+model Comment {
+  id              String     @id
+  findingId       String     @map("finding_id")
+  parentCommentId String?    @map("parent_comment_id")
+  authorId        String     @map("author_id")
+  authorName      String     @map("author_name")
+  text            String
+  createdAt       DateTime   @map("created_at")
+  finding         Finding    @relation(fields: [findingId], references: [id], onDelete: Cascade)
+  parent          Comment?   @relation("CommentReplies", fields: [parentCommentId], references: [id], onDelete: Cascade)
+  replies         Comment[]  @relation("CommentReplies")
+  evidence        Evidence[]
+
+  @@index([findingId])
+  @@map("comments")
+}
+
+model Notification {
+  id              String    @id
+  recipientUserId String    @map("recipient_user_id")
+  type            String
+  title           String
+  message         String
+  entityType      String    @map("entity_type")
+  entityId        String    @map("entity_id")
+  readAt          DateTime? @map("read_at")
+  createdAt       DateTime  @map("created_at")
+
+  @@index([recipientUserId])
+  @@map("notifications")
+}
+
+model AuditLogEntry {
+  id           String   @id
+  userId       String   @map("user_id")
+  userName     String   @map("user_name")
+  action       String
+  entityType   String   @map("entity_type")
+  entityId     String   @map("entity_id")
+  oldValue     Json?    @map("old_value")
+  newValue     Json?    @map("new_value")
+  reason       String?
+  timestamp    DateTime
+  sequence     BigInt   @unique @map("sequence")
+  previousHash String   @map("previous_hash")
+  hash         String   @map("hash")
+
+  @@index([entityType, entityId])
+  @@map("audit_logs")
+}
+
+model BranchCoverageNote {
+  id             String           @id
+  branchId       String           @map("branch_id")
+  periodId       String           @map("period_id")
+  reason         String
+  reasonId       String?          @map("reason_id")
+  recordedBy     String           @map("recorded_by")
+  recordedByName String           @map("recorded_by_name")
+  createdAt      DateTime         @map("created_at")
+  updatedAt      DateTime         @map("updated_at")
+  branch         Branch           @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  period         ReportingPeriod  @relation(fields: [periodId], references: [id], onDelete: Cascade)
+  reasonRef      UncoveredReason? @relation(fields: [reasonId], references: [id])
+
+  @@unique([branchId, periodId])
+  @@map("branch_coverage_notes")
+}
+
+model Settings {
+  id                           String   @id @default("singleton")
+  currencies                   String[]
+  riskLevels                   String[] @map("risk_levels")
+  operationAreas               String[] @map("operation_areas")
+  priorityLevels               String[] @map("priority_levels")
+  irregularityTypes            String[] @map("irregularity_types")
+  notification                 Json
+  autoTransferOnLock           Boolean  @map("auto_transfer_on_lock")
+  rankingVisibility            Json     @map("ranking_visibility")
+  performanceThresholds        Json     @map("performance_thresholds")
+  hoApproval                   Json     @map("ho_approval")
+  rectificationReminders       Json     @map("rectification_reminders")
+  similarFindingFields         String[] @map("similar_finding_fields")
+  requiredFindingFields        Json     @map("required_finding_fields")
+  allowOtherValueFields        Json     @map("allow_other_value_fields")
+  permissionRegistrySyncedKeys String[] @map("permission_registry_synced_keys")
+  updatedAt                    DateTime @map("updated_at")
+  updatedBy                    String?  @map("updated_by")
+  reportTemplateSources        Json     @default("{}") @map("report_template_sources")
+
+  @@map("settings")
+}
+
+model SupportThread {
+  id        String              @id
+  userId    String              @map("user_id")
+  subject   String
+  status    SupportThreadStatus @default(OPEN)
+  rating    Int?
+  createdAt DateTime            @map("created_at")
+  updatedAt DateTime            @map("updated_at")
+  messages  SupportMessage[]
+  user      User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("support_threads")
+}
+
+model SupportMessage {
+  id              String        @id
+  threadId        String        @map("thread_id")
+  senderId        String        @map("sender_id")
+  senderName      String        @map("sender_name")
+  senderIsSupport Boolean       @map("sender_is_support")
+  body            String
+  createdAt       DateTime      @map("created_at")
+  thread          SupportThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  @@index([threadId])
+  @@map("support_messages")
+}
 
 enum Status {
   ACTIVE
@@ -92,684 +548,7 @@ enum ImportOutcome {
   error
 }
 
-// ---------------------------------------------------------------------------
-// Identity & org structure
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
-// Password reset (self-service forgot-password flow)
-// ---------------------------------------------------------------------------
-
-// Single-use, time-limited token for the "Forgot password?" link on the
-// login page. A user enters their email (or username) on /forgot-password;
-// if a matching, ACTIVE user exists and has an email on file, one row is
-// created here, all older tokens for that same userId are revoked, and a
-// signed reset link containing the `token` value is emailed to them.
-// Visiting /reset-password?token=... lets them set a new password; on
-// success the token is consumed (usedAt set) so it can't be reused.
-model PasswordResetToken {
-  id        String   @id
-  userId    String   @map("user_id")
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  // The raw token value (long random string) is what travels in the email
-  // link and is matched on redemption. Stored directly rather than hashed
-  // because it's already single-use, 32 crypto-random bytes, and the
-  // threat model for a DB read is: "attacker already has the full users
-  // table including passwordHash and sessionVersion" - at that point a
-  // reset token is the least of your worries.
-  token     String   @unique
-  expiresAt DateTime @map("expires_at")
-  usedAt    DateTime? @map("used_at")
-  createdAt DateTime @default(now()) @map("created_at")
-  // Issuing IP + UA for audit / lockout purposes; never displayed in the UI.
-  issuedIp  String?  @map("issued_ip")
-  issuedUa  String?  @map("issued_ua")
-
-  @@index([userId])
-  @@index([token])
-  @@map("password_reset_tokens")
-}
-
-// `code` stays a plain string, never an enum - roles are admin-editable
-// data (Phase 2), not a fixed set. See RoleDefinition.code's own doc
-// comment in src/types/index.ts for why this must never become a literal
-// union.
-model RoleDefinition {
-  id             String   @id
-  code           String   @unique
-  name           String
-  description    String?
-  orgScope       OrgScope @map("org_scope")
-  branchSingleton Boolean @map("branch_singleton")
-  isSystem       Boolean  @map("is_system")
-  permissions    String[]
-  status         Status
-  createdAt      DateTime @map("created_at")
-  updatedAt      DateTime @map("updated_at")
-
-  users User[]
-
-  @@map("roles")
-}
-
-model User {
-  id                String    @id
-  name              String
-  username          String    @unique
-  // Email is MANDATORY for every user. Why it can't be optional:
-  //   1. The self-service Forgot Password flow (src/app/forgot-password)
-  //      needs a deliverable address - without one, a locked-out user can
-  //      only recover via a DBA running SQL - which the NIB deploy just hit.
-  //   2. Notification emails - Findings submissions, approvals, rectification
-  //      requests, period-lock events, support answers - are all addressed
-  //      to this field; missing means silent non-delivery.
-  //   3. It's a reliable lookup key for the forgot-password "username OR
-  //      email" prompt.
-  email             String    @unique
-  // Optional (unlike email) - not every existing account has one on file
-  // yet. Admin-set/changed only, same as email - see User.phone's own doc
-  // comment in src/types/index.ts.
-  phone             String?
-  passwordHash      String    @map("password_hash")
-  // Plain string FK to RoleDefinition.code (not .id) - matches
-  // User.role's existing shape exactly (src/types/index.ts stores the
-  // role's code, not a foreign id).
-  role              String
-  roleRef           RoleDefinition @relation(fields: [role], references: [code], onDelete: Restrict)
-  status            Status
-  districtId        String?   @map("district_id")
-  district          District? @relation(fields: [districtId], references: [id], onDelete: Restrict)
-  branchId          String?   @map("branch_id")
-  branch            Branch?   @relation(fields: [branchId], references: [id], onDelete: Restrict)
-  departmentId      String?   @map("department_id")
-  department        Department? @relation(fields: [departmentId], references: [id], onDelete: Restrict)
-  createdAt         DateTime  @map("created_at")
-  updatedAt         DateTime  @map("updated_at")
-  lastLoginAt       DateTime? @map("last_login_at")
-  mustChangePassword Boolean  @default(false) @map("must_change_password")
-  // A temporary/admin-set password is only good for 24h from when it was
-  // set (see the login route's own check) - null once the user has chosen
-  // their own password (cleared alongside mustChangePassword).
-  passwordExpiresAt DateTime? @map("password_expires_at")
-  // Bumped on every password change; embedded in the session cookie at
-  // login and compared against this column on every guarded request (see
-  // src/lib/guard.ts's requireUser()) - a mismatch means the password
-  // changed (or the account was otherwise force-logged-out) since that
-  // cookie was issued, so the session is treated as dead immediately
-  // rather than staying valid until it naturally expires.
-  sessionVersion    Int       @default(1) @map("session_version")
-  supportThreads    SupportThread[]
-  passwordResetTokens PasswordResetToken[]
-
-  @@map("users")
-}
-
-model District {
-  id        String   @id
-  code      String   @unique
-  name      String
-  status    Status
-  createdAt DateTime @map("created_at")
-  updatedAt DateTime @map("updated_at")
-
-  branches           Branch[]
-  users              User[]
-  findings           Finding[]
-
-  @@map("districts")
-}
-
-model Branch {
-  id         String   @id
-  code       String   @unique
-  name       String
-  districtId String   @map("district_id")
-  district   District @relation(fields: [districtId], references: [id], onDelete: Restrict)
-  status     Status
-  createdAt  DateTime @map("created_at")
-  updatedAt  DateTime @map("updated_at")
-
-  users               User[]
-  findings            Finding[]
-  branchCoverageNotes BranchCoverageNote[]
-
-  @@map("branches")
-}
-
-model Source {
-  id        String   @id
-  code      String   @unique
-  name      String
-  active    Boolean
-  // At most one Source has this true at a time, enforced in the PATCH
-  // route (not a DB constraint - a partial unique index on `is_default`
-  // would work too, but the app-level "unset every other row first, in
-  // the same transaction" approach matches how every other single-select
-  // admin flag in this codebase is enforced). Read by the Register
-  // Finding form to pre-fill sourceId for a brand-new finding; never
-  // overrides an already-saved finding's own stored source on edit.
-  isDefault Boolean  @default(false) @map("is_default")
-  createdAt DateTime @map("created_at")
-  updatedAt DateTime @map("updated_at")
-
-  findings Finding[]
-
-  @@map("sources")
-}
-
-model Department {
-  id         String    @id
-  code       String    @unique
-  name       String
-  active     Boolean
-  orgScope   OrgScope  @map("org_scope")
-  districtId String?   @map("district_id")
-  branchId   String?   @map("branch_id")
-  createdAt  DateTime  @map("created_at")
-  updatedAt  DateTime  @map("updated_at")
-
-  users    User[]
-  findings Finding[]
-
-  @@map("departments")
-}
-
-model ClassifiedCategory {
-  id        String   @id
-  code      String   @unique
-  name      String
-  scored    Boolean
-  active    Boolean
-  createdAt DateTime @map("created_at")
-  updatedAt DateTime @map("updated_at")
-
-  // No back-relation to Finding: Finding.categoryId is deliberately
-  // unconstrained (see the comment on Finding.categoryId) since the "Other"
-  // free-text category feature lets it hold values with no matching row here.
-
-  @@map("classified_categories")
-}
-
-model UncoveredReason {
-  id        String   @id
-  code      String   @unique
-  name      String
-  active    Boolean
-  createdAt DateTime @map("created_at")
-  updatedAt DateTime @map("updated_at")
-
-  branchCoverageNotes BranchCoverageNote[]
-
-  @@map("uncovered_reasons")
-}
-
-// ---------------------------------------------------------------------------
-// Scoring
-// ---------------------------------------------------------------------------
-
-model ScoringRule {
-  id             String   @id
-  version        Int
-  name           String
-  active         Boolean
-  everActivated  Boolean  @map("ever_activated")
-  effectiveFrom  DateTime @map("effective_from")
-  // Category/source *codes*, not ids - matches ScoringRule.categories'
-  // existing shape (src/types/index.ts) exactly; kept as a plain scalar
-  // list rather than a join table since nothing queries "which rules
-  // reference category X" the other way.
-  categories     String[]
-  sources        String[]
-  basis          String
-  formulaType    String   @map("formula_type")
-  createdBy      String   @map("created_by")
-  createdAt      DateTime @map("created_at")
-
-  @@map("scoring_rules")
-}
-
-model ReportingPeriod {
-  id                     String       @id
-  year                   Int
-  month                  Int
-  code                   String       @unique
-  // Optional human-readable label set at creation (or later) - `code` (a
-  // machine-derived "2026-09") is what every dropdown/report across the
-  // app still displays by default; `name` is a free-text addition shown
-  // only where a period is called out specifically, e.g. Monthly District
-  // Detail's Month column ("2026-09 (September Review)").
-  name                   String?
-  startsAt               DateTime     @map("starts_at")
-  endsAt                 DateTime     @map("ends_at")
-  submissionStartsAt     DateTime     @map("submission_starts_at")
-  submissionEndsAt       DateTime     @map("submission_ends_at")
-  status                 PeriodStatus
-  lockedBy               String?      @map("locked_by")
-  lockedAt               DateTime?    @map("locked_at")
-  lockReason             String?      @map("lock_reason")
-  draftsAllowedWhileLocked Boolean    @map("drafts_allowed_while_locked")
-  createdAt              DateTime     @map("created_at")
-  updatedAt              DateTime     @map("updated_at")
-
-  findings            Finding[]
-  branchCoverageNotes BranchCoverageNote[]
-
-  @@map("reporting_periods")
-}
-
-// ---------------------------------------------------------------------------
-// Findings — the core workflow entity and its owned child records
-// ---------------------------------------------------------------------------
-
-model Finding {
-  id                     String        @id
-  reference              String        @unique
-  title                  String
-  // sourceId/departmentId are nullable at the database level even though
-  // the TS Finding type keeps them as a plain (never-undefined) `string` -
-  // Settings.requiredFindingFields can make either optional on the live
-  // form, and the app's own convention for "left blank" is `""`, not
-  // omitting the field. `""` can never satisfy a foreign key (no Source or
-  // Department has that id), so the mapper layer in src/lib/db.ts
-  // converts "" <-> null at exactly this boundary - nowhere else in the
-  // app needs to know the column is nullable.
-  sourceId               String?       @map("source_id")
-  source                 Source?       @relation(fields: [sourceId], references: [id], onDelete: Restrict)
-  departmentId           String?       @map("department_id")
-  department             Department?   @relation(fields: [departmentId], references: [id], onDelete: Restrict)
-  periodId               String        @map("period_id")
-  period                 ReportingPeriod @relation(fields: [periodId], references: [id], onDelete: Restrict)
-  districtId             String        @map("district_id")
-  district               District      @relation(fields: [districtId], references: [id], onDelete: Restrict)
-  branchId               String        @map("branch_id")
-  branch                 Branch        @relation(fields: [branchId], references: [id], onDelete: Restrict)
-  findingDate            String        @map("finding_date")
-  operationArea          String        @map("operation_area")
-  irregularityType       String        @map("irregularity_type")
-  // Deliberately NOT a foreign key at all, unlike every other reference
-  // field on this model - a free-typed "Other" value is routinely a
-  // string that matches no ClassifiedCategory row by design (see
-  // OTHER_VALUE_ALLOWED_FIELDS' own doc comment: this trades away
-  // referential integrity specifically here in exchange for never
-  // blocking registration on the admin's category list being
-  // incomplete), so a real FK constraint would reject exactly the values
-  // this column exists to hold. Nullable for the same "" <-> null
-  // reason as sourceId/departmentId above. Looking up the matching
-  // ClassifiedCategory (when there is one) stays purely an application-
-  // level `db.categories.find(...)`, same as it's always been - there was
-  // never a Prisma relation involved in that lookup to begin with.
-  categoryId             String?       @map("category_id")
-  amount                 Float
-  currency               String
-  caseCount              Int           @map("case_count")
-  riskLevel              String        @map("risk_level")
-  priority               String
-  description            String
-  recommendation         String?
-  rootCause              String?       @map("root_cause")
-  evidenceNote           String?       @map("evidence_note")
-  status                 FindingStatus
-  // Set (and re-set on every resubmission) by submitFinding() to whether
-  // *that* submitting user's session.orgScope was "BANK" - see its own
-  // doc comment in src/lib/findings.ts. Persisted (not just a transient
-  // submit-time decision) because it's also read much later in the
-  // lifecycle, to decide who can return a rectification for correction
-  // (see return-rectification/route.ts) - a bank-registered finding never
-  // went through District Review, so District shouldn't gain rectification-
-  // return authority over it either, by the same "no natural district
-  // reviewed this" reasoning.
-  registeredByBankScope  Boolean       @default(false) @map("registered_by_bank_scope")
-  rectifiedCases         Int           @map("rectified_cases")
-  rectifiedAmount        Float         @map("rectified_amount")
-  closedCases            Int           @map("closed_cases")
-  closedAmount           Float         @map("closed_amount")
-  districtVerifiedCases  Int           @map("district_verified_cases")
-  districtVerifiedAmount Float         @map("district_verified_amount")
-  externalReference      String?       @map("external_reference")
-  importBatchId          String?       @map("import_batch_id")
-  importBatch            ImportBatch?  @relation(fields: [importBatchId], references: [id], onDelete: SetNull)
-  lastReminderAt         DateTime?     @map("last_reminder_at")
-  createdBy              String        @map("created_by")
-  createdAt              DateTime      @map("created_at")
-  updatedAt              DateTime      @map("updated_at")
-
-  transitions   FindingTransition[]
-  rectifications RectificationEntry[]
-  transfers     FindingTransfer[]
-  closures      FindingClosure[]
-  cases         FindingCase[]
-  evidence      Evidence[]
-  comments      Comment[]
-
-  @@index([periodId])
-  @@index([branchId])
-  @@index([districtId])
-  @@index([status])
-  @@index([categoryId])
-  @@map("findings")
-}
-
-model FindingTransition {
-  id         String   @id
-  findingId  String   @map("finding_id")
-  finding    Finding  @relation(fields: [findingId], references: [id], onDelete: Cascade)
-  fromStatus String   @map("from_status")
-  toStatus   String   @map("to_status")
-  action     String
-  userId     String   @map("user_id")
-  userName   String   @map("user_name")
-  reason     String?
-  createdAt  DateTime @map("created_at")
-
-  @@index([findingId])
-  @@map("finding_transitions")
-}
-
-model RectificationEntry {
-  id              String   @id
-  findingId       String   @map("finding_id")
-  finding         Finding  @relation(fields: [findingId], references: [id], onDelete: Cascade)
-  periodId        String   @map("period_id")
-  rectifiedCases  Int      @map("rectified_cases")
-  rectifiedAmount Float    @map("rectified_amount")
-  note            String?
-  submittedBy     String   @map("submitted_by")
-  submittedByName String   @map("submitted_by_name")
-  createdAt       DateTime @map("created_at")
-  // Only set for an itemized finding - which specific FindingCase rows
-  // this entry rectified. Kept as a scalar id list (not a join table)
-  // since it's a point-in-time snapshot of a decision, not a live
-  // relation - a case can only ever be claimed by one rectification.
-  caseIds         String[] @map("case_ids")
-
-  @@index([findingId])
-  @@map("rectifications")
-}
-
-model FindingCase {
-  id               String            @id
-  findingId        String            @map("finding_id")
-  finding          Finding           @relation(fields: [findingId], references: [id], onDelete: Cascade)
-  seq              Int
-  amount           Float
-  description      String?
-  status           FindingCaseStatus
-  rectificationId  String?           @map("rectification_id")
-  rectifiedAt      DateTime?         @map("rectified_at")
-  rectifiedBy      String?           @map("rectified_by")
-  rectifiedByName  String?           @map("rectified_by_name")
-  createdAt        DateTime          @map("created_at")
-
-  @@index([findingId])
-  @@map("finding_cases")
-}
-
-model FindingTransfer {
-  id                  String         @id
-  findingId           String         @map("finding_id")
-  finding             Finding        @relation(fields: [findingId], references: [id], onDelete: Cascade)
-  fromPeriodId        String         @map("from_period_id")
-  toPeriodId          String         @map("to_period_id")
-  casesTransferred    Int            @map("cases_transferred")
-  amountTransferred   Float          @map("amount_transferred")
-  originalCaseCount   Int            @map("original_case_count")
-  originalAmount      Float          @map("original_amount")
-  caseAgeAtTransferDays Int          @map("case_age_at_transfer_days")
-  reason              String
-  createdBy           String         @map("created_by")
-  createdByName       String         @map("created_by_name")
-  createdAt           DateTime       @map("created_at")
-  method              TransferMethod
-
-  @@index([findingId])
-  @@map("finding_transfers")
-}
-
-model FindingClosure {
-  id              String   @id
-  findingId       String   @map("finding_id")
-  finding         Finding  @relation(fields: [findingId], references: [id], onDelete: Cascade)
-  periodId        String   @map("period_id")
-  closedCases     Int      @map("closed_cases")
-  closedAmount    Float    @map("closed_amount")
-  submittedBy     String   @map("submitted_by")
-  submittedByName String   @map("submitted_by_name")
-  createdAt       DateTime @map("created_at")
-
-  @@index([findingId])
-  @@map("finding_closures")
-}
-
-// rows: ImportBatchRow[] is stored as jsonb, not a child table - the whole
-// batch is immutable after creation (never mutated once written, per this
-// model's own doc comment in src/types/index.ts) and nothing ever queries
-// one row across batches, so a structured log blob is the pragmatic,
-// correct choice here, not a shortcut.
-model ImportBatch {
-  id               String   @id
-  fileName         String   @map("file_name")
-  importedBy       String   @map("imported_by")
-  importedByName   String   @map("imported_by_name")
-  totalRows        Int      @map("total_rows")
-  importedCount    Int      @map("imported_count")
-  duplicateCount   Int      @map("duplicate_count")
-  errorCount       Int      @map("error_count")
-  rows             Json
-  // Original spreadsheet in <STORAGE_DIR>/imports/ (encrypted); null for
-  // batches imported before originals were kept.
-  storedFile       String?  @map("stored_file")
-  createdAt        DateTime @map("created_at")
-  // Set when the batch was reversed (its findings removed; this row kept).
-  reversedAt       DateTime? @map("reversed_at")
-  reversedBy       String?   @map("reversed_by")
-  reversedByName   String?   @map("reversed_by_name")
-  reverseReason    String?   @map("reverse_reason")
-
-  findings Finding[]
-
-  @@map("import_batches")
-}
-
-// ---------------------------------------------------------------------------
-// Evidence, comments, notifications, audit
-// ---------------------------------------------------------------------------
-
-model Evidence {
-  id             String   @id
-  findingId      String   @map("finding_id")
-  finding        Finding  @relation(fields: [findingId], references: [id], onDelete: Cascade)
-  commentId      String?  @map("comment_id")
-  comment        Comment? @relation(fields: [commentId], references: [id], onDelete: SetNull)
-  fileName       String   @map("file_name")
-  mimeType       String   @map("mime_type")
-  size           Int
-  storagePath    String   @map("storage_path")
-  uploadedBy     String   @map("uploaded_by")
-  uploadedByName String   @map("uploaded_by_name")
-  createdAt      DateTime @map("created_at")
-
-  @@index([findingId])
-  @@map("evidence")
-}
-
-model Comment {
-  id              String   @id
-  findingId       String   @map("finding_id")
-  finding         Finding  @relation(fields: [findingId], references: [id], onDelete: Cascade)
-  parentCommentId String?  @map("parent_comment_id")
-  parent          Comment? @relation("CommentReplies", fields: [parentCommentId], references: [id], onDelete: Cascade)
-  replies         Comment[] @relation("CommentReplies")
-  authorId        String   @map("author_id")
-  authorName      String   @map("author_name")
-  text            String
-  createdAt       DateTime @map("created_at")
-
-  evidence Evidence[]
-
-  @@index([findingId])
-  @@map("comments")
-}
-
-model Notification {
-  id              String    @id
-  recipientUserId String    @map("recipient_user_id")
-  type            String
-  title           String
-  message         String
-  entityType      String    @map("entity_type")
-  entityId        String    @map("entity_id")
-  readAt          DateTime? @map("read_at")
-  createdAt       DateTime  @map("created_at")
-
-  @@index([recipientUserId])
-  @@map("notifications")
-}
-
-model AuditLogEntry {
-  id         String   @id
-  userId     String   @map("user_id")
-  userName   String   @map("user_name")
-  action     String
-  entityType String   @map("entity_type")
-  entityId   String   @map("entity_id")
-  oldValue   Json?    @map("old_value")
-  newValue   Json?    @map("new_value")
-  reason     String?
-  timestamp  DateTime
-  // Tamper-evidence chain (see src/lib/audit.ts's own doc comment):
-  // `sequence` is assigned by the application, not the database (it must
-  // be known before the row is ever inserted, so a DB autoincrement -
-  // only assigned at insert time - can't be used for it), and is what
-  // orders the chain, not `timestamp` (client-set, not monotonic) or
-  // insertion order (Postgres doesn't guarantee `findMany()` returns rows
-  // in insertion order without an explicit ORDER BY). `hash` covers this
-  // entry's own fields plus `previousHash`, so altering or reordering any
-  // past entry breaks every hash after it - detectable by
-  // verifyAuditLogChain() without needing a separate authority.
-  //
-  // BIGINT (signed 64-bit, max 9,223,372,036,854,775,807) rather than
-  // INTEGER (32-bit, max ~2.1B), so the chain ceiling is effectively
-  // unreachable at any realistic write rate — see REFERENCE_ID.md §"Audit
-  // log sequence (chain number)" for the capacity math.  The app reads
-  // it into a base-10 string (JSON can't serialize native BigInt), so
-  // db.ts's mapper pair handles both directions.
-  sequence     BigInt @unique @map("sequence")
-  previousHash String @map("previous_hash")
-  hash         String @map("hash")
-
-  @@index([entityType, entityId])
-  @@map("audit_logs")
-}
-
-model BranchCoverageNote {
-  id             String   @id
-  branchId       String   @map("branch_id")
-  branch         Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  periodId       String   @map("period_id")
-  period         ReportingPeriod @relation(fields: [periodId], references: [id], onDelete: Cascade)
-  reason         String
-  reasonId       String?  @map("reason_id")
-  reasonRef      UncoveredReason? @relation(fields: [reasonId], references: [id], onDelete: SetNull)
-  recordedBy     String   @map("recorded_by")
-  recordedByName String   @map("recorded_by_name")
-  createdAt      DateTime @map("created_at")
-  updatedAt      DateTime @map("updated_at")
-
-  @@unique([branchId, periodId])
-  @@map("branch_coverage_notes")
-}
-
-// ---------------------------------------------------------------------------
-// Settings — a genuine singleton (one row, id fixed to "singleton") and
-// permissionRegistrySyncedKeys, which travels with it. Every nested config
-// group (notification, rankingVisibility, performanceThresholds,
-// hoApproval, rectificationReminders, requiredFindingFields,
-// allowOtherValueFields) is jsonb rather than flattened into columns - the
-// admin-configurable field lists these last two are keyed by
-// (REQUIRABLE_FINDING_FIELDS / OTHER_VALUE_ALLOWED_FIELDS in
-// src/types/index.ts) can grow without a schema migration, the same
-// "config, not code" flexibility the JSON-file version always had for
-// exactly this reason - a real column per key would need a migration
-// every time either constant gains an entry.
-// ---------------------------------------------------------------------------
-
-model Settings {
-  id                          String   @id @default("singleton")
-  currencies                  String[]
-  riskLevels                  String[] @map("risk_levels")
-  operationAreas              String[] @map("operation_areas")
-  priorityLevels              String[] @map("priority_levels")
-  irregularityTypes           String[] @map("irregularity_types")
-  notification                Json
-  autoTransferOnLock          Boolean  @map("auto_transfer_on_lock")
-  rankingVisibility           Json     @map("ranking_visibility")
-  performanceThresholds       Json     @map("performance_thresholds")
-  hoApproval                  Json     @map("ho_approval")
-  rectificationReminders      Json     @map("rectification_reminders")
-  similarFindingFields        String[] @map("similar_finding_fields")
-  requiredFindingFields       Json     @map("required_finding_fields")
-  allowOtherValueFields       Json     @map("allow_other_value_fields")
-  reportTemplateSources       Json     @default("{}") @map("report_template_sources")
-  permissionRegistrySyncedKeys String[] @map("permission_registry_synced_keys")
-  updatedAt                   DateTime @map("updated_at")
-  updatedBy                   String?  @map("updated_by")
-
-  @@map("settings")
-}
-
-// ---------------------------------------------------------------------------
-// Support: any logged-in user can send a support message (no permission
-// needed - same "everyone gets this" precedent as Profile's own
-// change-password/email self-service); anyone holding support.respond
-// (support.view for the admin inbox list) can see every thread and reply.
-// One thread = one back-and-forth conversation. A user rates a thread
-// (1-5) once they consider it answered - 5 stars closes it (RESOLVED);
-// anything less leaves it OPEN so the user can add a follow-up message,
-// which reopens the same conversation for another round rather than
-// starting a new thread each time.
-// ---------------------------------------------------------------------------
-
 enum SupportThreadStatus {
   OPEN
   RESOLVED
-}
-
-model SupportThread {
-  id        String              @id
-  userId    String              @map("user_id")
-  user      User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  // The opening message's own first ~80 characters - a short label for
-  // the admin inbox list, not separately entered by the user.
-  subject   String
-  status    SupportThreadStatus @default(OPEN)
-  // Set once the user rates the conversation - null until then. Only ever
-  // written by the thread's own owner (see rate/route.ts).
-  rating    Int?
-  createdAt DateTime            @map("created_at")
-  updatedAt DateTime            @map("updated_at")
-  messages  SupportMessage[]
-
-  @@index([userId])
-  @@map("support_threads")
-}
-
-model SupportMessage {
-  id       String        @id
-  threadId String        @map("thread_id")
-  thread   SupportThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
-  senderId String        @map("sender_id")
-  // Denormalized, same convention as every other actor field in this app
-  // (FindingTransition.userName, Comment.authorName, ...) - the sender's
-  // display name survives even if their account is later deleted.
-  senderName      String   @map("sender_name")
-  // Whether this message came from someone holding support.respond at the
-  // time they sent it - lets the UI render "You" vs "Support" bubbles
-  // without re-deriving it from the sender's current (possibly since
-  // revoked or deleted) permissions.
-  senderIsSupport Boolean  @map("sender_is_support")
-  body            String
-  createdAt       DateTime @map("created_at")
-
-  @@index([threadId])
-  @@map("support_messages")
 }

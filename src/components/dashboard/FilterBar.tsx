@@ -115,7 +115,7 @@ export function FilterBar({
   const sortedCategories = [...categories].sort((a, b) => a.name.localeCompare(b.name));
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+    <div className="app-card rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
       <div className="flex flex-wrap items-end gap-3">
         <div>
           <Label htmlFor="f-period">Period</Label>

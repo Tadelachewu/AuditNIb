@@ -162,18 +162,22 @@ export function AdminTable<T extends MRT_RowData>({
     state: { isLoading, showSkeletons: isLoading },
     muiPaginationProps: { rowsPerPageOptions: PAGE_SIZE_OPTIONS, showFirstButton: true, showLastButton: true },
     muiSearchTextFieldProps: { placeholder: "Search all columns", size: "small", variant: "outlined" },
+    // Table body = the card's own colour (white), the same as an open Settings
+    // section - not the theme's grey page background, MRT's default. The
+    // Clean white template re-tints it with the card colour (globals.css).
+    mrtTheme: (theme) => ({ baseBackgroundColor: theme.palette.background.paper }),
     muiTablePaperProps: { elevation: 0, sx: { borderRadius: 0, overflow: "visible", backgroundColor: "transparent" } },
     muiTableHeadCellProps: {
-      sx: { fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.025em", color: "text.secondary", fontWeight: 600 },
+      sx: { fontSize: "0.75rem", color: "text.secondary", fontWeight: 600 },
     },
     muiTableBodyCellProps: { sx: { fontSize: "0.875rem" } },
     // Pagination pinned to the bottom of the screen while the list scrolls
     // (same behaviour as the rest of the app's lists).
     // Toolbars (search, export, page bar) are hidden when printing - only
     // the rows print (the "no-print" rule, e.g. on the Reports page).
-    muiTopToolbarProps: { className: "no-print" },
+    muiTopToolbarProps: { className: "no-print app-table-toolbar" },
     muiBottomToolbarProps: {
-      className: "no-print",
+      className: "no-print app-table-toolbar",
       sx: { position: "sticky", bottom: 0, zIndex: 3, backgroundColor: "background.paper", borderTop: 1, borderColor: "divider" },
     },
     localization: { noRecordsToDisplay: emptyText },

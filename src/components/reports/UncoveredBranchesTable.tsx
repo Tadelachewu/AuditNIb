@@ -47,7 +47,7 @@ export function UncoveredBranchesTable({ rows, periodId, reasons }: { rows: Row[
       { id: "district", header: "Name of Districts", accessorFn: (r) => r.district?.name ?? "—", filterVariant: "select" },
       {
         id: "reason",
-        header: "Reasons for failing to uncover",
+        header: "Reasons for Failing to Uncover",
         accessorFn: (r) => r.note?.reason ?? "",
         enableSorting: false,
         size: 360,

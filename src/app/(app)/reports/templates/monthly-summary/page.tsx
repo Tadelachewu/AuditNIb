@@ -91,7 +91,7 @@ export default async function MonthlySummaryReportPage({
         />
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-600">
+            <thead className="border-b border-slate-200 text-xs text-slate-600">
               <tr>
                 <th className="px-4 py-2 font-medium" rowSpan={2}>SN</th>
                 <th className="px-4 py-2 font-medium" rowSpan={2}>Total No. of Branches</th>

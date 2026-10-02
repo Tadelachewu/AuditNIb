@@ -44,12 +44,12 @@ export function ImportDuplicatesReview({
         </p>
         <div className="max-h-96 overflow-auto rounded-md border border-slate-200">
           <table className="w-full text-left text-xs">
-            <thead className="sticky top-0 border-b border-slate-200 bg-slate-50 uppercase tracking-wide text-slate-600">
+            <thead className="sticky top-0 border-b border-slate-200 bg-slate-50 text-slate-600">
               <tr>
                 <th className="px-3 py-1.5 font-medium">Row</th>
-                <th className="px-3 py-1.5 font-medium">Title in file</th>
+                <th className="px-3 py-1.5 font-medium">Title in File</th>
                 <th className="px-3 py-1.5 font-medium">Matches</th>
-                <th className="px-3 py-1.5 font-medium">Evidence (matching values)</th>
+                <th className="px-3 py-1.5 font-medium">Evidence (Matching Values)</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">

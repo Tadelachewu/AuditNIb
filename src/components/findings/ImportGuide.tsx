@@ -168,10 +168,10 @@ export function ImportGuide() {
           </p>
           <div className="overflow-x-auto rounded-md border border-slate-200">
             <table className="w-full text-left text-xs">
-              <thead className="border-b border-slate-200 bg-slate-50 uppercase tracking-wide text-slate-600">
+              <thead className="border-b border-slate-200 bg-slate-50 text-slate-600">
                 <tr>
-                  <th className="px-3 py-1.5 font-medium">On the registration form</th>
-                  <th className="px-3 py-1.5 font-medium">In the import file</th>
+                  <th className="px-3 py-1.5 font-medium">On the Registration Form</th>
+                  <th className="px-3 py-1.5 font-medium">In the Import File</th>
                   <th className="px-3 py-1.5 font-medium">Note</th>
                 </tr>
               </thead>
@@ -230,12 +230,12 @@ export function ImportGuide() {
           </p>
           <div className="max-h-96 overflow-y-auto overflow-x-auto rounded-md border border-slate-200">
             <table className="w-full text-left text-xs">
-              <thead className="sticky top-0 border-b border-slate-200 bg-slate-50 uppercase tracking-wide text-slate-600">
+              <thead className="sticky top-0 border-b border-slate-200 bg-slate-50 text-slate-600">
                 <tr>
                   <th className="px-3 py-1.5 font-medium">#</th>
                   <th className="px-3 py-1.5 font-medium">Column</th>
                   <th className="px-3 py-1.5 font-medium">Required</th>
-                  <th className="px-3 py-1.5 font-medium">Format / example</th>
+                  <th className="px-3 py-1.5 font-medium">Format / Example</th>
                   <th className="px-3 py-1.5 font-medium">Notes</th>
                 </tr>
               </thead>
@@ -452,13 +452,13 @@ export function ImportGuide() {
           </p>
           <div className="max-h-96 overflow-y-auto overflow-x-auto rounded-md border border-slate-200">
             <table className="w-full text-left text-xs">
-              <thead className="sticky top-0 border-b border-slate-200 bg-slate-50 uppercase tracking-wide text-slate-600">
+              <thead className="sticky top-0 border-b border-slate-200 bg-slate-50 text-slate-600">
                 <tr>
                   <th className="px-3 py-1.5 font-medium">#</th>
                   <th className="px-3 py-1.5 font-medium">Scenario</th>
                   <th className="px-3 py-1.5 font-medium">Status</th>
-                  <th className="px-3 py-1.5 font-medium">Key values</th>
-                  <th className="px-3 py-1.5 font-medium">Expected result</th>
+                  <th className="px-3 py-1.5 font-medium">Key Values</th>
+                  <th className="px-3 py-1.5 font-medium">Expected Result</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">

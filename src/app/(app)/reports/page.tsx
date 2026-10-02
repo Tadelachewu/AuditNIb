@@ -121,7 +121,7 @@ export default async function ReportsPage({
           <CardHeader title="Category Breakdown" description="Matching the current filters" />
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
-              <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-600">
+              <thead className="border-b border-slate-200 text-xs text-slate-600">
                 <tr>
                   <th className="px-4 py-2 font-medium">Category</th>
                   <th className="px-4 py-2 font-medium">Total</th>

@@ -21,6 +21,9 @@ import { FormSkeleton } from "@/components/ui/Skeleton";
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<Settings | null>(null);
+  // Opened (and scrolled to) when Save finds a problem in it.
+  const [notificationOpen, setNotificationOpen] = useState(false);
+  const [showEmailProblems, setShowEmailProblems] = useState(false);
   const [bankUsers, setBankUsers] = useState<SafeUser[]>([]);
   const [sources, setSources] = useState<Source[]>([]);
   const [saving, setSaving] = useState(false);
@@ -58,8 +61,12 @@ export default function SettingsPage() {
         ? null
         : (emailError(n.fromAddress, "From address") ?? (n.provider === "SMTP" ? (hostError(n.smtpHost) ?? portError(n.smtpPort)) : null));
     if (emailProblem) {
-      setError(`${emailProblem}.`);
+      // Say where the field is, and take the user there: the section may be collapsed.
+      setError(`Notification Delivery: ${emailProblem}. Fix it (or set the provider to "None (disabled)") to save your other changes.`);
       notify.warning(notifications.generic.fixFields);
+      setNotificationOpen(true);
+      setShowEmailProblems(true);
+      requestAnimationFrame(() => document.getElementById("notification-delivery")?.scrollIntoView({ behavior: "smooth", block: "start" }));
       return;
     }
     setSaving(true);
@@ -168,7 +175,8 @@ export default function SettingsPage() {
         </div>
       </CollapsibleCard>
 
-      <CollapsibleCard disabled={!canEdit} title="Notification Delivery">
+      <div id="notification-delivery" className="scroll-mt-20">
+      <CollapsibleCard disabled={!canEdit} title="Notification Delivery" open={notificationOpen} onOpenChange={setNotificationOpen}>
         <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2">
           <div>
             <Label htmlFor="provider">Provider</Label>
@@ -191,6 +199,8 @@ export default function SettingsPage() {
               type="email"
               maxLength={LIMITS.email.max}
               check={(v) => (settings.notification.provider === "NONE" ? null : emailError(v, "From address"))}
+              showProblemNow={showEmailProblems}
+              placeholder="noreply@nibbank.com.et"
               value={settings.notification.fromAddress}
               onChange={(e) => setSettings({ ...settings, notification: { ...settings.notification, fromAddress: e.target.value } })}
             />
@@ -203,6 +213,7 @@ export default function SettingsPage() {
                   id="smtpHost"
                   maxLength={253}
                   check={(v) => hostError(v)}
+                  showProblemNow={showEmailProblems}
                   value={settings.notification.smtpHost ?? ""}
                   onChange={(e) => setSettings({ ...settings, notification: { ...settings.notification, smtpHost: e.target.value } })}
                 />
@@ -216,6 +227,7 @@ export default function SettingsPage() {
                   max={65535}
                   step={1}
                   check={(v) => portError(v)}
+                  showProblemNow={showEmailProblems}
                   value={String(settings.notification.smtpPort ?? "")}
                   onChange={(e) =>
                     setSettings({ ...settings, notification: { ...settings.notification, smtpPort: Number(e.target.value) } })
@@ -239,6 +251,7 @@ export default function SettingsPage() {
         </div>
         )}
       </CollapsibleCard>
+      </div>
 
       <CollapsibleCard disabled={!canEdit}
         className="xl:col-span-2"

@@ -348,6 +348,10 @@ Support has a requester side (`/support`, `support.create`) and a staff side:
 
 ---
 
+## 7a. Appearance (fixed)
+
+The app has **one look**, not configurable: the **clean white template**. The page, header and sidebar are white; cards, table bodies and their toolbars are nearly white (`#f9fafb`); card header strips and table column headers carry a faint tint; table rows highlight in a gold tint on hover. It follows light / dark mode. Defined in `src/app/globals.css` and applied by `(app)/layout.tsx` (`data-ui-template="white"`). Typography (Verdana, compact size) is fixed too.
+
 ## 8. Edge cases & known gotchas
 
 1. **Permission edits don't apply until next login.** `session.permissions` is a snapshot taken at login (`login/route.ts:152`); `getCurrentUser()` only re-validates `sessionVersion`/`status`, not the role's live permission set (`session.ts:87-95`). Narrowing or widening a role at `/admin/roles` has no effect on an already-open session until it re-authenticates.

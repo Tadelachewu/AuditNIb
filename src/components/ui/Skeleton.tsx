@@ -64,7 +64,7 @@ export function FormSkeleton({ cards = 3, grid = false }: { cards?: number; grid
   return (
     <div className={grid ? "grid grid-cols-1 gap-4 xl:grid-cols-2" : "flex flex-col gap-4"} role="status" aria-label="Loading">
       {Array.from({ length: cards }).map((_, i) => (
-        <div key={i} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+        <div key={i} className="app-card rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
           <Skeleton className="h-4 w-40" />
           <Skeleton className="mt-2 h-3 w-72 max-w-full" />
           <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">

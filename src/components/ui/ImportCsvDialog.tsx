@@ -168,7 +168,7 @@ export function ImportCsvDialog({
                     <tr>
                       <th className="px-3 py-1.5 font-semibold">Column</th>
                       <th className="px-3 py-1.5 font-semibold">Required</th>
-                      <th className="px-3 py-1.5 font-semibold">What to put</th>
+                      <th className="px-3 py-1.5 font-semibold">What to Put</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">

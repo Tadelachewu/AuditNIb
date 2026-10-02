@@ -62,7 +62,7 @@ export function Pagination({
   }
 
   return (
-    <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-2 rounded-b-lg border-t border-slate-200 bg-white/95 px-4 py-2.5 text-sm text-slate-500 shadow-[0_-4px_10px_-8px_rgb(15_23_42/0.25)] backdrop-blur-sm">
+    <div className="app-card-bar sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-2 rounded-b-lg border-t border-slate-200 bg-white/95 px-4 py-2.5 text-sm text-slate-500 shadow-[0_-4px_10px_-8px_rgb(15_23_42/0.25)] backdrop-blur-sm">
       <p>
         Showing{" "}
         <span className="font-medium text-slate-700">

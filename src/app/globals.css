@@ -83,6 +83,8 @@
   --chrome-hover: var(--color-slate-200);
   --chrome-border: var(--color-slate-200);
   --chrome-scroll: var(--color-slate-300);
+  /* Page (main body) background behind the cards. */
+  --page-bg: var(--color-slate-100);
 
   /* High contrast: secondary text (slate-400/500/600) one shade stronger
      than Tailwind's defaults. Dark-mode equivalents are in the dark blocks. */
@@ -107,6 +109,7 @@
   --color-chrome-accent: var(--chrome-accent);
   --color-chrome-hover: var(--chrome-hover);
   --color-chrome-border: var(--chrome-border);
+  --color-page: var(--page-bg);
   --font-sans: Verdana, Geneva, "DejaVu Sans", system-ui, sans-serif;
   --font-mono: var(--font-geist-mono);
 }
@@ -318,4 +321,86 @@ select option,
 select optgroup {
   background-color: var(--color-white);
   color: var(--color-slate-900);
+}
+
+/* Admin > Settings > Appearance > "Clean white" UI template: the page, the
+   header and the sidebar are white, separated by thin borders (set on the
+   app shell by (app)/layout.tsx). --color-white follows dark mode, so the
+   template does too. "Standard" (the original light-grey look) needs no
+   rule - it's the default above. */
+[data-ui-template="white"] {
+  --page-bg: var(--color-white);
+  --chrome-bg: var(--color-white);
+  --chrome-hover: var(--color-slate-100);
+  --chrome-border: var(--color-slate-200);
+}
+
+/* On the white page, cards and tables keep a slight difference from the
+   body, in near-white steps (light / dark mode):
+     page / header / sidebar   white
+     cards                     --tpl-card       nearly white, just off the page
+     card header strip,        --tpl-card-head  one step greyer
+     table column headers
+     table rows                --tpl-table      same as the card, so a table reads as part of its card
+   Input fields stay pure white, so they still stand out inside a card. */
+[data-ui-template="white"] {
+  --tpl-card: #f9fafb;
+  --tpl-card-head: #f1f4f7;
+  --tpl-table: var(--tpl-card);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) [data-ui-template="white"] {
+    --tpl-card: #222d4c;
+    --tpl-card-head: #2a365a;
+    --tpl-table: var(--tpl-card);
+  }
+}
+:root[data-theme="dark"] [data-ui-template="white"] {
+  --tpl-card: #222d4c;
+  --tpl-card-head: #2a365a;
+  --tpl-table: var(--tpl-card);
+}
+
+[data-ui-template="white"] .app-card {
+  background-color: var(--tpl-card);
+  border-color: var(--color-slate-200);
+  box-shadow:
+    0 1px 2px rgb(15 23 42 / 0.05),
+    0 4px 14px -6px rgb(15 23 42 / 0.08);
+}
+/* Toolbars (search, export, page bar), the page bar under a list and a
+   card's sticky Save / Cancel bar take the card's colour. */
+[data-ui-template="white"] .app-card .app-table-toolbar,
+[data-ui-template="white"] .app-card .app-card-bar {
+  background-color: var(--tpl-card);
+}
+/* Table rows: the card's colour (admin / report tables and plain tables). Set on
+   the rows, not the cells, so a highlighted row (e.g. a report's TOTAL row)
+   keeps its own tint - mapped to the header tint below. */
+[data-ui-template="white"] .app-card .MuiTableBody-root .MuiTableRow-root,
+[data-ui-template="white"] .app-card .MuiTableBody-root .MuiTableCell-root,
+[data-ui-template="white"] .app-card tbody {
+  background-color: var(--tpl-table);
+}
+[data-ui-template="white"] .app-card tbody tr[class*="bg-slate-50"],
+[data-ui-template="white"] .app-card tfoot tr {
+  background-color: var(--tpl-card-head);
+}
+[data-ui-template="white"] .app-card-header,
+[data-ui-template="white"] .app-card thead,
+[data-ui-template="white"] .app-card thead th,
+[data-ui-template="white"] .app-card .MuiTableHead-root .MuiTableCell-root {
+  background-color: var(--tpl-card-head);
+}
+
+/* Table rows on hover: the sidebar's selected-item gold, as a tint so the
+   row's text (and any links / badges in it) stays readable. Every table in
+   the app - the shared admin / report tables and plain tables - in every
+   template and in dark mode. Header rows are not affected. */
+tbody tr:hover > td,
+.MuiTableBody-root .MuiTableRow-root:hover > td {
+  background-color: color-mix(in srgb, var(--brand-gold) 28%, transparent) !important;
+}
+.MuiTableBody-root .MuiTableRow-root:hover > td::after {
+  background-color: transparent !important;
 }

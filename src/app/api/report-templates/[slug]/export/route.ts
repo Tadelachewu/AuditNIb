@@ -59,7 +59,7 @@ function buildCsv(slug: string, db: Database, params: URLSearchParams): string |
     case "uncovered-branches": {
       const rows = getUncoveredBranches(db, periodId);
       return toCsv(
-        ["Ser. No", "Name of Branches", "Name of Districts", "Reasons for failing to uncover"],
+        ["Ser. No", "Name of Branches", "Name of Districts", "Reasons for Failing to Uncover"],
         rows.map((r, i) => [i + 1, r.branch.name, r.district?.name ?? "", r.note?.reason ?? ""])
       );
     }
@@ -107,7 +107,7 @@ function buildCsv(slug: string, db: Database, params: URLSearchParams): string |
         "Total No. of Branches",
         "District",
         ...categories.map((c) => c.name),
-        ...(currencies.length ? currencies : ["ETB"]).map((c) => `Amount involved (${c})`),
+        ...(currencies.length ? currencies : ["ETB"]).map((c) => `Amount Involved (${c})`),
         "Unrectified",
         "Rectified",
         "rectified percetage",
@@ -227,7 +227,7 @@ function buildCsv(slug: string, db: Database, params: URLSearchParams): string |
     }
     case "district-ranking-other-cases": {
       const { rows, totalRow, narrative } = getDistrictRankingOtherCases(db, periodIds);
-      const header = ["SN", "Total No. of Branches", "District", "Total Others Cases", "Rectified", "Total outstanding unrectified", "Rank"];
+      const header = ["SN", "Total No. of Branches", "District", "Total Others Cases", "Rectified", "Total Outstanding Unrectified", "Rank"];
       const dataRows: (string | number)[][] = rows.map((r, i) => [i + 1, r.totalBranches, r.district.name, r.totalCases, r.rectifiedCases, r.outstandingCases, pctRow(r)]);
       if (rows.length > 0) {
         dataRows.push(["", totalRow.totalBranches, "TOTAL", totalRow.totalCases, totalRow.rectifiedCases, totalRow.outstandingCases, pct(totalRow.performance)]);
@@ -243,7 +243,7 @@ function buildCsv(slug: string, db: Database, params: URLSearchParams): string |
       const sections = getWeeklyExecutiveSummary(db, thisWeekDate, lastWeekDate);
       const header = [
         "Section",
-        "Types of cases",
+        "Types of Cases",
         "SN",
         "Total No. of Branches",
         "District",
@@ -289,7 +289,7 @@ function buildCsv(slug: string, db: Database, params: URLSearchParams): string |
     }
     case "district-ranking-all-cases": {
       const { rows, totalRow } = getDistrictRankingAllCases(db, periodIds);
-      const header = ["SN", "Total No. of Branches", "District", "Total Cases", "Rectified", "Total outstanding unrectified", "Rank in all cases"];
+      const header = ["SN", "Total No. of Branches", "District", "Total Cases", "Rectified", "Total Outstanding Unrectified", "Rank in All Cases"];
       const dataRows = rows.map((r, i) => [i + 1, r.totalBranches, r.district.name, r.totalCases, r.rectifiedCases, r.outstandingCases, pctRow(r)]);
       if (rows.length > 0) {
         dataRows.push(["", totalRow.totalBranches, "TOTAL", totalRow.totalCases, totalRow.rectifiedCases, totalRow.outstandingCases, pct(totalRow.performance)]);
@@ -298,7 +298,7 @@ function buildCsv(slug: string, db: Database, params: URLSearchParams): string |
     }
     case "category-performance-summary": {
       const { rows, totalRow, grossPercentage } = getCategoryPerformanceSummary(db, periodId || undefined);
-      const header = ["SN", "Types of cases", "Unrectified", "Rectified", "Total outstanding unrectified", "Percentage ranges", "Gross percentage", "Previous period"];
+      const header = ["SN", "Types of Cases", "Unrectified", "Rectified", "Total Outstanding Unrectified", "Percentage Ranges", "Gross Percentage", "Previous Period"];
       const dataRows = rows.map((r, i) => [
         i + 1,
         r.category.name,

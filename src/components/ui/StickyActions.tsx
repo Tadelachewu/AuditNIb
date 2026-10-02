@@ -58,7 +58,7 @@ export function StickyActions({
 }) {
   return (
     <div
-      className={`sticky bottom-0 z-20 col-span-full mt-2 flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 bg-white/95 py-3 backdrop-blur-sm ${VARIANTS[variant]} ${className}`}
+      className={`app-card-bar sticky bottom-0 z-20 col-span-full mt-2 flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 bg-white/95 py-3 backdrop-blur-sm ${VARIANTS[variant]} ${className}`}
     >
       {/* The message takes the free space and wraps its own text; the buttons
           stay together as one group, so a long message never splits them

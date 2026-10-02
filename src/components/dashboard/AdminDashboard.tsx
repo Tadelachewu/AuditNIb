@@ -99,18 +99,19 @@ export function AdminDashboard({ user, db }: { user: SessionData; db: Database }
           <CardHeader title="Quick Links" />
           {/* Compact buttons stacked in one column, each only as wide as its
               label (items-start stops them stretching to the card's width),
-              with the same icon the sidebar uses for that page. */}
+              each with the sidebar's icon for that page shown beside it. */}
           <div className="flex flex-col items-start gap-1.5 p-3">
             {visibleLinks.map((link) => {
               const Icon = NAV_ICON_BY_HREF.get(link.href);
               return (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  className="inline-flex items-center gap-1.5 rounded-md bg-brand-gold px-2.5 py-1 text-xs font-medium text-on-gold transition-colors hover:bg-brand-gold-dark"
-                >
-                  {Icon && <Icon className="h-3.5 w-3.5 shrink-0" strokeWidth={2} />}
-                  {link.label}
+                // The icon sits outside the gold button, beside its name.
+                <Link key={link.href} href={link.href} className="group inline-flex items-center gap-2">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center text-slate-500 transition-colors group-hover:text-brand-brown" aria-hidden="true">
+                    {Icon && <Icon className="h-4 w-4" strokeWidth={2} />}
+                  </span>
+                  <span className="rounded-md bg-brand-gold px-2.5 py-1 text-xs font-medium text-on-gold transition-colors group-hover:bg-brand-gold-dark">
+                    {link.label}
+                  </span>
                 </Link>
               );
             })}

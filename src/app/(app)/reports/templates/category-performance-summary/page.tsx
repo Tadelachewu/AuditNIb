@@ -76,10 +76,10 @@ export default async function CategoryPerformanceSummaryPage({
         />
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-600">
+            <thead className="border-b border-slate-200 text-xs text-slate-600">
               <tr>
                 <th className="px-4 py-2 font-medium">SN</th>
-                <th className="px-4 py-2 font-medium">Types of cases</th>
+                <th className="px-4 py-2 font-medium">Types of Cases</th>
                 <th className="px-4 py-2 font-medium">Unrectified</th>
                 <th className="px-4 py-2 font-medium">Rectified</th>
                 <th className="px-4 py-2 font-medium">Total Outstanding Unrectified</th>
