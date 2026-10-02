@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { zDateTime, zReason, zText } from "@/lib/inputRules";
 import { requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { appendAuditLog } from "@/lib/audit";
@@ -13,7 +14,7 @@ const updateSchema = z
     // leaves an already-LOCKED period's status untouched and just flips
     // draftsAllowedWhileLocked, without a pointless unlock/relock cycle.
     status: z.enum(["OPEN", "LOCKED"]).optional(),
-    reason: z.string().min(5, "A reason of at least 5 characters is required"),
+    reason: zReason(),
     // Only meaningful while LOCKED - whether DRAFT findings can still be
     // created/edited against this period. Optional so a status-changing
     // call that doesn't want to touch it can omit it and leave whatever
@@ -29,8 +30,8 @@ const updateSchema = z
     // startsAt/endsAt below - both provided together or neither. It's no
     // longer required to stay inside startsAt/endsAt (a grace period may
     // run earlier or later than the reporting window itself).
-    submissionStartsAt: z.string().min(1).optional(),
-    submissionEndsAt: z.string().min(1).optional(),
+    submissionStartsAt: zDateTime("Submission window start").optional(),
+    submissionEndsAt: zDateTime("Submission window end").optional(),
     // Editing the period's own overall range - only safe while nothing
     // references it yet (checked below, since a period with even one
     // finding has its reference-number sequence, dedupe keys, and every
@@ -39,12 +40,12 @@ const updateSchema = z
     // refine below) means the combined range is always validated
     // together, never left in a state where the submission window no
     // longer fits inside the just-changed period range.
-    startsAt: z.string().min(1).optional(),
-    endsAt: z.string().min(1).optional(),
+    startsAt: zDateTime("Start date/time").optional(),
+    endsAt: zDateTime("End date/time").optional(),
     // Renaming carries none of the date-range safety concerns above - safe
     // to change regardless of whether findings already reference this
     // period. `""` clears an existing name back to unset.
-    name: z.string().optional(),
+    name: zText("Name", 100).optional(),
   })
   .refine(
     (v) =>

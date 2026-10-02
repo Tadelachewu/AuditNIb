@@ -1,20 +1,21 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { zReason } from "@/lib/inputRules";
 import { requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { assertFindingInScope } from "@/lib/findings-scope";
-import { assertPeriodWritable } from "@/lib/findings";
-import { canReopen, periodsAffectedByReopen, reopenFinding } from "@/lib/findingReopen";
+import { canReverse, reverseFinding } from "@/lib/findingReverse";
 import { notifyFindingsPermissionHolders, notifyUsers } from "@/lib/notifications";
 import { AuthorizationError, BusinessRuleError, NotFoundError } from "@/lib/errors";
 import { fromZodError } from "@/lib/errors/normalize";
 import { withApiHandler } from "@/lib/api/handler";
 
-const bodySchema = z.object({ reason: z.string().trim().min(5, "Give a reason (at least 5 characters)").max(500) });
+const bodySchema = z.object({ reason: zReason() });
 
-// Reopen a closed / partially closed finding back to a fresh "Sent to
-// Branch Manager" (src/lib/findingReopen.ts). Permission: findings.reopen;
-// the finding must be in the caller's scope and its period writable.
+// Reverse what was closed in the finding's current period and send it back
+// to "Sent to Branch Manager/R" (src/lib/findingReverse.ts). Permission key
+// findings.reopen (stored in roles, so kept). The finding must be in the
+// caller's scope; period locks don't block it.
 async function handlePOST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requirePermission("findings.reopen");
   if (!auth.ok) return auth.response;
@@ -27,25 +28,20 @@ async function handlePOST(request: Request, { params }: { params: Promise<{ id: 
     if (!f) throw new NotFoundError("finding");
     const scopeError = assertFindingInScope(auth.session, f);
     if (scopeError) throw new AuthorizationError(scopeError);
-    if (!canReopen(f)) throw new BusinessRuleError("FINDING_NOT_REOPENABLE");
-    // Reversing changes the figures of every period its rectifications /
-    // closures were credited to (e.g. the origin period of a transferred
-    // finding), so none of them may be locked.
-    for (const pid of periodsAffectedByReopen(db, f)) {
-      const periodError = assertPeriodWritable(db, pid);
-      if (periodError) throw new BusinessRuleError("PERIOD_LOCKED", periodError);
-    }
+    if (!canReverse(db, f)) throw new BusinessRuleError("FINDING_NOT_REVERSIBLE");
     return f;
   };
   check(await readDb());
 
   await updateDb((current) => {
     const f = check(current);
-    const { toStatus } = reopenFinding(current, f, { userId: auth.session.userId!, userName: auth.session.name! }, parsed.data.reason);
+    reverseFinding(current, f, { userId: auth.session.userId!, userName: auth.session.name! }, parsed.data.reason);
+    const period = current.reportingPeriods.find((p) => p.id === f.periodId);
     const opts = {
+      // Stored notification type (email-event setting) - name kept.
       type: "REOPENED" as const,
-      title: `Finding ${f.reference} reopened`,
-      message: `${f.reference} was reversed by ${auth.session.name} (status ${toStatus}) and is back with the branch to rectify again. Reason: ${parsed.data.reason}`,
+      title: `Finding ${f.reference} reversed`,
+      message: `${f.reference} was reversed in ${period?.code ?? "its current period"} by ${auth.session.name} (status Sent to Branch Manager/R) and is back with the branch to rectify again. Reason: ${parsed.data.reason}`,
       entityType: "Finding",
       entityId: f.id,
     };

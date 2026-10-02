@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Star } from "lucide-react";
-import { apiGet, apiSend, errorMessage } from "@/lib/api-client";
+import { apiGet, apiSend } from "@/lib/api-client";
 import { formatDateTime } from "@/lib/format";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -12,7 +12,7 @@ import type { SupportThread, SupportMessage } from "@/types";
 import { ListSkeleton } from "@/components/ui/Skeleton";
 import { Pagination } from "@/components/ui/Pagination";
 import { useClientPagination } from "@/lib/useClientPagination";
-import { notify, notifications } from "@/lib/notify";
+import { notify, notifications, presentError } from "@/lib/notify";
 
 function StatusBadge({ thread }: { thread: SupportThread }) {
   if (thread.status === "RESOLVED") return <Badge tone="green">Resolved{thread.rating ? ` - ${thread.rating}★` : ""}</Badge>;
@@ -51,7 +51,7 @@ export function SupportClient() {
       const data = await apiGet<{ threads: SupportThread[] }>("/api/support", { background: true });
       setThreads(data.threads);
     } catch (err) {
-      setError(errorMessage(err, "Failed to load threads"));
+      setError(presentError(err, notifications.support.loadFailed).message);
     }
   }, []);
 
@@ -62,7 +62,7 @@ export function SupportClient() {
       setMessages(data.messages);
       setThreads((prev) => (prev ? prev.map((t) => (t.id === id ? data.thread : t)) : prev));
     } catch (err) {
-      setError(errorMessage(err, "Failed to load conversation"));
+      setError(presentError(err, notifications.support.loadFailed).message);
     }
   }, []);
 
@@ -93,10 +93,11 @@ export function SupportClient() {
     try {
       const data = await apiSend<{ thread: SupportThread }>("/api/support", "POST", { body: newBody });
       setNewBody("");
+      notify.success(notifications.support.replySent);
       await loadThreads();
       setSelectedId(data.thread.id);
     } catch (err) {
-      setError(errorMessage(err, "Failed to send message"));
+      setError(notify.formError(err, notifications.support.sendFailed));
     } finally {
       setSendingNew(false);
     }
@@ -113,7 +114,7 @@ export function SupportClient() {
       setReplyBody("");
       await Promise.all([loadThread(selectedId), loadThreads()]);
     } catch (err) {
-      setError(errorMessage(err, "Failed to send message"));
+      setError(notify.formError(err, notifications.support.sendFailed));
     } finally {
       setSendingReply(false);
     }
@@ -129,7 +130,7 @@ export function SupportClient() {
       setRating(stars);
       await Promise.all([loadThread(selectedId), loadThreads()]);
     } catch (err) {
-      setError(errorMessage(err, "Failed to save rating"));
+      setError(notify.formError(err, notifications.support.rateFailed));
     } finally {
       setRatingSaving(false);
     }
@@ -145,6 +146,7 @@ export function SupportClient() {
           <CardHeader title="New Message" description="Start a new conversation with support." />
           <form onSubmit={sendNew} className="flex flex-col gap-2 p-4">
             <Textarea
+                  maxLength={5000}
               rows={3}
               placeholder="Describe your question or issue..."
               value={newBody}
@@ -225,6 +227,7 @@ export function SupportClient() {
             {selectedThread.status === "OPEN" ? (
               <form onSubmit={sendReply} className="flex flex-col gap-2 border-t border-slate-200 p-4">
                 <Textarea
+                  maxLength={5000}
                   rows={2}
                   placeholder="Type a message..."
                   value={replyBody}

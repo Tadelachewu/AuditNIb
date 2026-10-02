@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { v4 as uuid } from "uuid";
 import { z } from "zod";
+import { zEntityName, zRoleCode, zText } from "@/lib/inputRules";
 import { requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { appendAuditLog } from "@/lib/audit";
@@ -24,12 +25,9 @@ async function handleGET() {
 }
 
 const createSchema = z.object({
-  code: z
-    .string()
-    .min(2, "Code is required")
-    .regex(/^[A-Z][A-Z0-9_]*$/, "Code must be UPPER_SNAKE_CASE, starting with a letter"),
-  name: z.string().min(1, "Name is required"),
-  description: z.string().optional(),
+  code: zRoleCode(),
+  name: zEntityName(),
+  description: zText("Description", 500).optional(),
   orgScope: z.enum(["BANK", "DISTRICT", "BRANCH"]),
   branchSingleton: z.boolean().default(false),
   permissions: z.array(z.string()).default([]),

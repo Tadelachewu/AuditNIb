@@ -9,7 +9,8 @@ import { useUrlTableState } from "@/lib/useUrlTableState";
 import { Button } from "@/components/ui/Button";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { FindingStatusBadge } from "@/components/findings/FindingStatusBadge";
-import { apiSend, errorMessage } from "@/lib/api-client";
+import { apiSend } from "@/lib/api-client";
+import { notify, notifications, presentError } from "@/lib/notify";
 import { formatDateTime, formatCurrency, formatNumber } from "@/lib/format";
 import type { FindingStatus } from "@/types";
 
@@ -256,7 +257,7 @@ export function FindingsTable({
         await apiSend(url, "POST", body);
         succeeded++;
       } catch (err) {
-        failures.push(`${f.reference}: ${errorMessage(err, "Failed")}`);
+        failures.push(`${f.reference}: ${presentError(err).message}`);
       }
     }
     setBusy(false);
@@ -265,6 +266,8 @@ export function FindingsTable({
     if (skipped > 0) parts.push(`${skipped} skipped (not eligible)`);
     if (failures.length > 0) parts.push(`${failures.length} failed`);
     setSummary(`${label}: ${parts.join(", ")}.${failures.length > 0 ? " " + failures.slice(0, 3).join("; ") : ""}`);
+    if (failures.length === 0) notify.success(notifications.finding.bulkCompleted, { description: `${label}: ${parts.join(", ")}.` });
+    else notify.error(notifications.finding.bulkFailed, { description: `${label}: ${parts.join(", ")}.` });
     router.refresh();
   }
 

@@ -460,10 +460,10 @@ export const FINDING_STATUSES = [
   // DISTRICT_REVIEW/HO_REVIEW as before.
   "PENDING_BANK_APPROVAL",
   "SENT_TO_BRANCH_MANAGER",
-  // A reopened finding (its closure reversed - src/lib/findingReopen.ts):
+  // A reversed finding (its current period's closure undone - src/lib/findingReverse.ts):
   // back in the same state as SENT_TO_BRANCH_MANAGER (nothing rectified,
   // the branch must rectify again) and handled exactly like it by the
-  // workflow, but shown as REVERSED so everyone can see it was reopened.
+  // workflow, but shown as "Sent to Branch Manager/R" so everyone can see it was reversed.
   "REVERSED",
   "PARTIALLY_RECTIFIED",
   "RECTIFIED",
@@ -484,6 +484,16 @@ export const FINDING_STATUSES = [
 ] as const;
 
 export type FindingStatus = (typeof FINDING_STATUSES)[number];
+
+// How a status is shown. REVERSED is the Sent to Branch Manager state after
+// a reversal, so it reads "Sent to Branch Manager/R" everywhere.
+export function findingStatusLabel(status: FindingStatus | string): string {
+  return status === "REVERSED" ? "SENT TO BRANCH MANAGER/R" : status.replaceAll("_", " ");
+}
+// Same for CSV exports, which keep the status codes.
+export function findingStatusCode(status: FindingStatus | string): string {
+  return status === "REVERSED" ? "SENT_TO_BRANCH_MANAGER/R" : status;
+}
 
 // The subset of FINDING_STATUSES a finding must be in to count toward any
 // dashboard's "official" figures - see src/lib/findings.ts's

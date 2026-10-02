@@ -5,13 +5,13 @@ import { readDb, updateDb } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { hashPassword, verifyPassword } from "@/lib/auth";
 import { appendAuditLog } from "@/lib/audit";
-import { validatePasswordFull } from "@/lib/passwordValidation";
+import { PASSWORD_MIN_LENGTH, validatePasswordFull } from "@/lib/passwordValidation";
 import { checkLockout, recordFailureForLockout, clearLockout, isRateLimited, recordAttempt, clearRateLimit } from "@/lib/rateLimit";
 import { withApiHandler } from "@/lib/api/handler";
 
 const schema = z.object({
   currentPassword: z.string().min(1, "Current password is required"),
-  newPassword: z.string().min(8, "New password must be at least 8 characters"),
+  newPassword: z.string().min(PASSWORD_MIN_LENGTH, `New password must be at least ${PASSWORD_MIN_LENGTH} characters`),
 });
 
 // Same shape of protection as login (see that route's own doc comment) -

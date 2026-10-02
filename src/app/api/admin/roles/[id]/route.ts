@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { lockoutError } from "@/lib/permissions/lockout";
 import { z } from "zod";
+import { zEntityName, zText } from "@/lib/inputRules";
 import { requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { appendAuditLog } from "@/lib/audit";
@@ -10,8 +11,8 @@ import { withApiHandler } from "@/lib/api/handler";
 const ROLES_MANAGE_KEY = permissionKey("roles", "manage");
 
 const updateSchema = z.object({
-  name: z.string().min(1).optional(),
-  description: z.string().optional(),
+  name: zEntityName().optional(),
+  description: zText("Description", 500).optional(),
   permissions: z.array(z.string()).optional(),
   branchSingleton: z.boolean().optional(),
   status: z.enum(["ACTIVE", "INACTIVE"]).optional(),

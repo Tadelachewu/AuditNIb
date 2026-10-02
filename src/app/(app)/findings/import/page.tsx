@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Download } from "lucide-react";
-import { apiGet, ApiError, errorMessage, apiUpload, apiSend } from "@/lib/api-client";
+import { apiGet, ApiError, apiUpload, apiSend } from "@/lib/api-client";
 import { notify, notifications } from "@/lib/notify";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { ImportDuplicatesReview, type DuplicatesFound } from "@/components/findings/ImportDuplicatesReview";
@@ -107,7 +107,7 @@ export default function ImportFindingsPage() {
       setRejected({ error: err.message, rows });
       return;
     }
-    if (source.kind === "upload") setError(errorMessage(err, notifications.import.failed.message));
+    if (source.kind === "upload") setError(notify.formError(err, notifications.import.failed));
     else notify.fromError(err, notifications.import.reimportFailed);
   }
 

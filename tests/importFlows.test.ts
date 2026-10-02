@@ -96,6 +96,14 @@ beforeEach(() => {
   db = fixture();
 });
 
+describe("import: finding date within its reporting period (import-only rule)", () => {
+  it("a row dated after its reporting period ends is rejected", async () => {
+    const res = await runImport(await workbook([row({ "Finding Date (YYYY-MM-DD)": "2026-10-01" })]), "late.xlsx", actor, { importDuplicates: false }).catch((e) => e);
+    expect(JSON.stringify(res)).toMatch(/after reporting period 2026-09/);
+    expect(db.findings).toHaveLength(0);
+  });
+});
+
 describe("import: duplicates are the final decision", () => {
   it("errors come first - a file with errors never reaches the duplicate check", async () => {
     const file = await workbook([row(), row({ "Branch Code": "NOPE" })]);
@@ -191,57 +199,76 @@ describe("import: reverse regardless of later work, then re-import or delete", (
   });
 });
 
-describe("reopen = reverse to the original sent-to-branch state, status REVERSED", () => {
-  it("a closed finding is reset (rectified / verified / closed = 0) with status REVERSED; history kept", async () => {
-    const { reopenFinding, canReopen } = await import("@/lib/findingReopen");
+describe("reverse = undo the current period only, status REVERSED (Sent to Branch Manager/R)", () => {
+  const transferredRow = () =>
+    row({
+      "Status (SENT_TO_BRANCH_MANAGER / TRANSFERRED / CLOSED)": "TRANSFERRED",
+      "Transferred To Period Code (required only if Status is TRANSFERRED)": "2026-10",
+      "Rectified Cases (optional - only for a TRANSFERRED row with some progress already made)": 1,
+      "Rectified Amount (optional - only for a TRANSFERRED row with some progress already made)": 2000,
+    });
+  const slice = async (periodId: string) => {
+    const { findingsResidentInPeriod } = await import("@/lib/findings");
+    return findingsResidentInPeriod(db, periodId, [db.findings[0]])[0]?.slice;
+  };
+
+  it("a finding closed in its originally reported period is reversed in that period; history kept", async () => {
+    const { reverseFinding, canReverse } = await import("@/lib/findingReverse");
     await runImport(await workbook([row({ "Status (SENT_TO_BRANCH_MANAGER / TRANSFERRED / CLOSED)": "CLOSED" })]), "f.xlsx", actor, { importDuplicates: false });
     const f = db.findings[0];
-    expect(f).toMatchObject({ status: "CLOSED", closedCases: 2, rectifiedCases: 2 });
-    expect(canReopen(f)).toBe(true);
+    expect(f).toMatchObject({ status: "CLOSED", closedCases: 2, rectifiedCases: 2, periodId: "p9" });
+    expect(canReverse(db, f)).toBe(true);
     const transitionsBefore = db.findingTransitions.filter((t) => t.findingId === f.id).length;
 
-    const r = reopenFinding(db, f, { userId: "u1", userName: "HO" }, "closed by mistake");
+    const r = reverseFinding(db, f, { userId: "u1", userName: "HO" }, "closed by mistake");
 
     expect(r).toEqual({ fromStatus: "CLOSED", toStatus: "REVERSED" });
-    expect(f).toMatchObject({ status: "REVERSED", rectifiedCases: 0, rectifiedAmount: 0, districtVerifiedCases: 0, closedCases: 0, closedAmount: 0 });
+    expect(f).toMatchObject({ status: "REVERSED", periodId: "p9", rectifiedCases: 0, rectifiedAmount: 0, districtVerifiedCases: 0, closedCases: 0, closedAmount: 0 });
     expect(db.findingClosures.filter((c) => c.findingId === f.id)).toHaveLength(0);
     expect(db.rectifications.filter((x) => x.findingId === f.id)).toHaveLength(0);
+    expect(await slice("p9")).toMatchObject({ eligibleCases: 2, closedCases: 0 });
     const transitions = db.findingTransitions.filter((t) => t.findingId === f.id);
     expect(transitions.length).toBe(transitionsBefore + 1);
-    expect(transitions.some((t) => t.action === "REOPEN" && t.fromStatus === "CLOSED" && t.toStatus === "REVERSED" && t.reason === "closed by mistake")).toBe(true);
-    const audit = db.auditLogs.find((l) => l.action === "REOPEN_REVERSED");
-    expect((audit?.oldValue as { closedCases: number; closures: unknown[] }).closedCases).toBe(2);
-    expect(canReopen(f)).toBe(false);
+    expect(transitions.some((t) => t.action === "REVERSE" && t.fromStatus === "CLOSED" && t.toStatus === "REVERSED" && t.reason === "closed by mistake")).toBe(true);
+    const audit = db.auditLogs.find((l) => l.action === "FINDING_REVERSED");
+    expect((audit?.oldValue as { closedCases: number }).closedCases).toBe(2);
+    expect(canReverse(db, f)).toBe(false);
 
     // REVERSED is treated like Sent to Branch Manager: officially approved, and rectifiable again.
     const { isHoApproved } = await import("@/lib/findings");
     expect(isHoApproved(f)).toBe(true);
   });
 
-  it("a transferred finding with part closed is reversed too; its transfer is kept", async () => {
-    const { reopenFinding, canReopen, periodsAffectedByReopen } = await import("@/lib/findingReopen");
-    await runImport(
-      await workbook([
-        row({
-          "Status (SENT_TO_BRANCH_MANAGER / TRANSFERRED / CLOSED)": "TRANSFERRED",
-          "Transferred To Period Code (required only if Status is TRANSFERRED)": "2026-10",
-          "Rectified Cases (optional - only for a TRANSFERRED row with some progress already made)": 1,
-          "Rectified Amount (optional - only for a TRANSFERRED row with some progress already made)": 2000,
-        }),
-      ]),
-      "t.xlsx",
-      actor,
-      { importDuplicates: false }
-    );
+  it("a transferred finding with nothing closed in its current period can't be reversed", async () => {
+    const { canReverse } = await import("@/lib/findingReverse");
+    await runImport(await workbook([transferredRow()]), "t.xlsx", actor, { importDuplicates: false });
     const f = db.findings[0];
+    // 1 case closed in 2026-09, 1 transferred to 2026-10 and not closed there.
     expect(f).toMatchObject({ status: "TRANSFERRED", closedCases: 1, periodId: "p10" });
-    expect(canReopen(f)).toBe(true);
-    expect(periodsAffectedByReopen(db, f).sort()).toEqual(["p10", "p9"]);
+    expect(canReverse(db, f)).toBe(false);
+  });
 
-    const r = reopenFinding(db, f, { userId: "u1", userName: "HO" }, "closure was wrong");
+  it("a transferred finding is reversed in its current period only; the previous period is untouched", async () => {
+    const { reverseFinding, canReverse } = await import("@/lib/findingReverse");
+    await runImport(await workbook([transferredRow()]), "t.xlsx", actor, { importDuplicates: false });
+    const f = db.findings[0];
+    // Close the transferred case in 2026-10.
+    db.findingClosures.push({ id: "c-p10", findingId: f.id, periodId: "p10", closedCases: 1, closedAmount: 3000, submittedBy: "u1", submittedByName: "HO", createdAt: "2026-10-05T00:00:00.000Z" });
+    Object.assign(f, { status: "CLOSED", rectifiedCases: 2, rectifiedAmount: 5000, districtVerifiedCases: 2, districtVerifiedAmount: 5000, closedCases: 2, closedAmount: 5000 });
+    const p9Before = await slice("p9");
+    expect(p9Before).toMatchObject({ eligibleCases: 1, closedCases: 1 });
+    expect(canReverse(db, f)).toBe(true);
 
-    expect(r).toEqual({ fromStatus: "TRANSFERRED", toStatus: "REVERSED" });
-    expect(f).toMatchObject({ status: "REVERSED", closedCases: 0, rectifiedCases: 0 });
+    reverseFinding(db, f, { userId: "u1", userName: "HO" }, "closure was wrong");
+
+    // Only 2026-10 changed.
+    expect(await slice("p9")).toEqual(p9Before);
+    expect(await slice("p10")).toMatchObject({ eligibleCases: 1, closedCases: 0, isCurrentPeriod: true });
+    expect(f).toMatchObject({ status: "REVERSED", periodId: "p10", rectifiedCases: 1, districtVerifiedCases: 1, closedCases: 1, closedAmount: 2000 });
     expect(db.findingTransfers.filter((t) => t.findingId === f.id)).toHaveLength(1);
+    expect(db.findingClosures.filter((c) => c.findingId === f.id).map((c) => c.periodId)).toEqual(["p9"]);
+    // No gap: what's left to rectify is exactly what 2026-10 holds.
+    expect(f.caseCount - f.rectifiedCases).toBe(1);
+    expect(canReverse(db, f)).toBe(false);
   });
 });

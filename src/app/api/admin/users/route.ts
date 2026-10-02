@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { v4 as uuid } from "uuid";
 import { z } from "zod";
+import { zEmail, zPersonName, zPhone, zUsername } from "@/lib/inputRules";
 import { requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { hashPassword } from "@/lib/auth";
-import { validatePasswordFull } from "@/lib/passwordValidation";
+import { PASSWORD_MIN_LENGTH, validatePasswordFull } from "@/lib/passwordValidation";
 import { resolveOrgAssignment, isDepartmentExactScopeForUser, inactiveOrgUnitError } from "@/lib/org";
 import { appendAuditLog } from "@/lib/audit";
 import { toSafeUser } from "@/lib/sanitize";
@@ -48,23 +49,16 @@ async function handleGET(request: Request) {
 }
 
 const createUserSchema = z.object({
-  name: z.string().min(1, "Name is required"),
-  username: z
-    .string()
-    .min(3, "Username must be at least 3 characters")
-    .regex(/^[a-zA-Z0-9._-]+$/, "Username may only contain letters, numbers, dots, dashes and underscores"),
-  email: z.string().min(1, "Email address is required").email("Enter a valid email address"),
+  name: zPersonName(),
+  // Shared with the Add User form and CSV import (src/lib/usernameValidation.ts).
+  username: zUsername(),
+  email: zEmail(),
   // Optional, loosely validated - international formats vary too much for
   // a strict pattern to be worth the false rejections; just reject stray
   // letters/junk. Admin-only, like email (see User.phone's own doc
   // comment in src/types/index.ts).
-  phone: z
-    .string()
-    .trim()
-    .regex(/^[+0-9()\-.\s]{6,20}$/, "Enter a valid phone number")
-    .optional()
-    .or(z.literal("")),
-  password: z.string().min(8, "Password must be at least 8 characters"),
+  phone: zPhone().optional(),
+  password: z.string().min(PASSWORD_MIN_LENGTH, `Password must be at least ${PASSWORD_MIN_LENGTH} characters`),
   role: z.string().min(1, "Role is required"),
   districtId: z.string().nullable().optional(),
   branchId: z.string().nullable().optional(),

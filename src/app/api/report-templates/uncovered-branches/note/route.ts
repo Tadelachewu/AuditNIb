@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { zRequiredText } from "@/lib/inputRules";
 import { requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { upsertBranchCoverageNote } from "@/lib/branchCoverageNotes";
@@ -8,7 +9,7 @@ import { withApiHandler } from "@/lib/api/handler";
 const noteSchema = z.object({
   branchId: z.string().min(1),
   periodId: z.string().min(1),
-  reason: z.string().trim().min(1, "A reason is required"),
+  reason: zRequiredText("Reason", 500),
   // The canned UncoveredReason picked from the admin list, or null when the
   // reporter chose "Other" and typed `reason` by hand.
   reasonId: z.string().min(1).nullable().optional(),

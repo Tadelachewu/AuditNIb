@@ -15,6 +15,10 @@ const GAP = 10; // between the anchor button and the dialog (room for the arrow)
 const EDGE = 16; // minimum distance from the viewport edges
 const MIN_BELOW = 320; // below this much room under the button, open above it instead
 
+// Open dialogs, oldest first: Escape closes only the top one (a confirmation
+// opened over an Edit dialog closes alone, not both).
+const openDialogs: symbol[] = [];
+
 type Placement = {
   left: number;
   width: number;
@@ -43,6 +47,10 @@ type Placement = {
  *    menu that's already closed): centred, as usual.
  * Either way tall forms scroll inside the dialog (their StickyActions
  * footer stays pinned) instead of past the viewport.
+ *
+ * THE one dialog look for the whole app - Add, Edit, Import and every
+ * confirmation (useConfirm) use it: header with title + X, body `p-4`,
+ * actions in a <StickyActions> footer. Don't build another overlay.
  */
 export function Modal({
   title,
@@ -97,17 +105,27 @@ export function Modal({
   }, [anchor, size]);
 
   useEffect(() => {
+    const me = Symbol("dialog");
+    openDialogs.push(me);
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onCloseRef.current();
+      if (e.key === "Escape" && openDialogs[openDialogs.length - 1] === me) {
+        e.stopPropagation();
+        onCloseRef.current();
+      }
     }
     document.addEventListener("keydown", onKey);
     // Lock page scroll behind the dialog, restoring whatever it was.
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    panelRef.current?.querySelector<HTMLElement>("input, select, textarea")?.focus();
+    // First field, else an element marked data-autofocus (e.g. a confirmation's Cancel).
+    (
+      panelRef.current?.querySelector<HTMLElement>("input, select, textarea") ??
+      panelRef.current?.querySelector<HTMLElement>("[data-autofocus]")
+    )?.focus();
     // Next frame: flip to the "shown" state so the enter transition runs.
     const raf = requestAnimationFrame(() => setShown(true));
     return () => {
+      openDialogs.splice(openDialogs.indexOf(me), 1);
       cancelAnimationFrame(raf);
       document.removeEventListener("keydown", onKey);
       document.body.style.overflow = prevOverflow;
@@ -173,13 +191,14 @@ export function Modal({
   }
 
   return createPortal(
-    <div className={`fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/40 p-4 transition-opacity duration-150 sm:items-center ${shown ? "opacity-100" : "opacity-0"}`}>
+    <div className={`fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/25 p-4 transition-opacity duration-150 sm:items-center ${shown ? "opacity-100" : "opacity-0"}`}>
       <div
         ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className={`flex max-h-[calc(100vh-2rem)] w-full flex-col rounded-lg bg-white shadow-xl ${SIZES[size].cls} ${enter}`}
+        // Same backdrop, shadow and border as the anchored (Add) dialog - one look for every dialog.
+        className={`flex max-h-[calc(100vh-2rem)] w-full flex-col rounded-lg bg-white shadow-2xl ring-1 ring-slate-900/10 ${SIZES[size].cls} ${enter}`}
       >
         {header}
         <div className="overflow-y-auto">{children}</div>

@@ -1,4 +1,4 @@
-import { type InputHTMLAttributes, type SelectHTMLAttributes, type TextareaHTMLAttributes, type ReactNode } from "react";
+import { type ComponentProps, type SelectHTMLAttributes, type TextareaHTMLAttributes, type ReactNode } from "react";
 
 /**
  * The one focus style for every text field, select and textarea in the app
@@ -12,7 +12,7 @@ export const FIELD_FOCUS =
 
 const fieldClass = `w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm text-slate-900 ${FIELD_FOCUS}`;
 
-export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
+export function Input(props: ComponentProps<"input">) {
   return <input {...props} className={`${fieldClass} ${props.className ?? ""}`} />;
 }
 
@@ -31,7 +31,7 @@ export function Textarea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
 // button pseudo-element (the filename text stays plain), matching
 // Button's own `primary` gold treatment exactly so it reads as one of the
 // app's real actions.
-export function FileInput(props: InputHTMLAttributes<HTMLInputElement>) {
+export function FileInput(props: ComponentProps<"input">) {
   return (
     <input
       type="file"

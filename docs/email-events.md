@@ -49,7 +49,7 @@ While the provider is *None*, the Email Events section shows a warning: you can 
 | | **Rectification verified** | The district verifies a rectification | Closers |
 | | **Rectification reminder** | No rectification progress for the configured days (Settings → Rectification Reminders) | Branch rectifiers |
 | | **Closed** | A finding is closed | The registrant |
-| | **Reopened** | A closed / partially closed finding was reset to Sent to Branch Manager | Branch rectifiers, the registrant |
+| | **Reversed** | What was closed in a finding's current period was undone; it is back with the branch as Sent to Branch Manager/R ([reverse-findings.md](reverse-findings.md)) | Branch rectifiers, the registrant |
 | Transfers & periods | **Transferred** | A finding moves to another period | The registrant, transferers |
 | | **Period locked** | A reporting period is locked | District reviewers, branch rectifiers |
 | | **Period unlocked** | A reporting period is unlocked | District reviewers, branch rectifiers |

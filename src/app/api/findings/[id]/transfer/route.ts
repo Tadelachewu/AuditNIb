@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { zReason } from "@/lib/inputRules";
 import { requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { assertFindingInScope } from "@/lib/findings-scope";
@@ -16,7 +17,7 @@ const TRANSFERABLE_STATUSES = ["SENT_TO_BRANCH_MANAGER", "REVERSED", "PARTIALLY_
 
 const transferSchema = z.object({
   toPeriodId: z.string().min(1),
-  reason: z.string().min(1, "A reason is required"),
+  reason: zReason(),
 });
 
 // icfms.txt / master.txt §8: "Transfer outstanding cases to the next
@@ -51,11 +52,8 @@ async function handlePOST(request: Request, { params }: { params: Promise<{ id: 
   }
   const destination = db.reportingPeriods.find((p) => p.id === input.toPeriodId);
   if (!destination) return NextResponse.json({ error: "Destination period not found" }, { status: 404 });
-  if (destination.status !== "OPEN") {
-    return NextResponse.json({ error: "Destination period must be open" }, { status: 409 });
-  }
-  // Manual transfer works in both directions: any other OPEN period, earlier
-  // or later. Period figures stay correct for return trips because
+  // Manual transfer works in both directions: any other period, earlier or
+  // later, open or locked (a locked period only blocks submission). Period figures stay correct for return trips because
   // findingResidencyInPeriod() credits each stay separately and sums them.
   // Automatic transfer on lock stays forward-only (autoTransferOnLock()).
 

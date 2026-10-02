@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { zEntityName } from "@/lib/inputRules";
 import { requireToggleOrEditPermission, requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { appendAuditLog } from "@/lib/audit";
@@ -7,7 +8,7 @@ import { resolveOrgScope } from "@/lib/org";
 import { withApiHandler } from "@/lib/api/handler";
 
 const updateSchema = z.object({
-  name: z.string().min(1).optional(),
+  name: zEntityName().optional(),
   active: z.boolean().optional(),
   orgScope: z.enum(["BANK", "DISTRICT", "BRANCH"]).optional(),
   districtId: z.string().optional(),

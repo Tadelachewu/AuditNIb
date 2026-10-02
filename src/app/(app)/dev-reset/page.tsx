@@ -23,7 +23,8 @@
 // =============================================================================
 
 import { useEffect, useState } from "react";
-import { apiGet, apiSend, ApiError, errorMessage } from "@/lib/api-client";
+import { apiGet, apiSend, ApiError } from "@/lib/api-client";
+import { notify, notifications } from "@/lib/notify";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input, Label } from "@/components/ui/Field";
@@ -93,11 +94,12 @@ export default function DevResetPage() {
     setError(null);
     try {
       const res = await apiSend<{ summary: DevResetSummary }>("/api/admin/dev-reset", "POST", { confirm: confirmText });
+      notify.success(notifications.devReset.completed);
       setSummary(res.summary);
       setConfirmText("");
       await load();
     } catch (err) {
-      setError(errorMessage(err, "Reset failed"));
+      setError(notify.formError(err, notifications.devReset.failed));
     } finally {
       setResetting(false);
     }

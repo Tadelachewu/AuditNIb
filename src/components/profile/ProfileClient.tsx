@@ -2,12 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { apiSend, errorMessage } from "@/lib/api-client";
+import { apiSend } from "@/lib/api-client";
 import { notify, notifications } from "@/lib/notify";
 import { Card } from "@/components/ui/Card";
 import { CollapsibleCard } from "@/components/ui/CollapsibleCard";
 import { Button } from "@/components/ui/Button";
 import { Input, Label } from "@/components/ui/Field";
+import { PasswordRules } from "@/components/ui/PasswordRules";
+import { validatePasswordStrength } from "@/lib/passwordValidation";
 import { OPEN_CHANGE_PASSWORD_EVENT } from "@/components/layout/UserMenu";
 
 /**
@@ -49,6 +51,10 @@ export function ProfileClient({ forced }: { forced: boolean }) {
     return () => window.removeEventListener(OPEN_CHANGE_PASSWORD_EVENT, openSection);
   }, [sectionParam]);
 
+  // Same policy as the server (src/lib/passwordValidation.ts).
+  const confirmMismatch = confirmPassword.length > 0 && confirmPassword !== newPassword;
+  const canChangePassword = currentPassword.length > 0 && validatePasswordStrength(newPassword).valid && confirmPassword === newPassword;
+
   async function savePassword(e: React.FormEvent) {
     e.preventDefault();
     setPasswordError(null);
@@ -69,7 +75,7 @@ export function ProfileClient({ forced }: { forced: boolean }) {
       setNewPassword("");
       setConfirmPassword("");
     } catch (err) {
-      setPasswordError(errorMessage(err, "Failed to change password"));
+      setPasswordError(notify.formError(err, notifications.auth.passwordChangeFailed));
     } finally {
       setPasswordSaving(false);
     }
@@ -113,10 +119,12 @@ export function ProfileClient({ forced }: { forced: boolean }) {
               id="new-password"
               type="password"
               required
-              minLength={8}
+              autoComplete="new-password"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
+              aria-describedby="new-password-rules"
             />
+            <PasswordRules password={newPassword} id="new-password-rules" />
           </div>
           <div>
             <Label htmlFor="confirm-password">Confirm new password</Label>
@@ -124,14 +132,22 @@ export function ProfileClient({ forced }: { forced: boolean }) {
               id="confirm-password"
               type="password"
               required
-              minLength={8}
+              autoComplete="new-password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
+              aria-invalid={confirmMismatch ? true : undefined}
+              aria-describedby={confirmMismatch ? "confirm-password-error" : undefined}
+              className={confirmMismatch ? "border-red-400" : undefined}
             />
+            {confirmMismatch && (
+              <p id="confirm-password-error" className="mt-1 text-xs text-red-600">
+                Doesn&apos;t match the new password.
+              </p>
+            )}
           </div>
           {passwordError && <p className="text-sm text-red-600">{passwordError}</p>}
           <div>
-            <Button type="submit" disabled={passwordSaving}>
+            <Button type="submit" disabled={passwordSaving || !canChangePassword}>
               {passwordSaving ? "Changing..." : "Change Password"}
             </Button>
           </div>

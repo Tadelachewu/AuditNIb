@@ -21,6 +21,7 @@ import { notify, notifications } from "@/lib/notify";
 
 notify.success(notifications.branch.deleted);                       // "Branch deleted successfully."
 notify.fromError(err, notifications.branch.deleteFailed);           // mapped by error code (section 6)
+setFormError(notify.formError(err, notifications.branch.createFailed)); // forms: same toast; returns field errors (only) for inline display
 await notify.promise(saveFinding(), {                                 // ONE toast: loading → success / error
   loading: "Saving finding...",
   success: notifications.finding.updated,
@@ -85,6 +86,21 @@ Toasts are announced by a polite `aria-live` region, and each type has its own i
 
 ## 9. Where it's used today
 
-- Admin row actions (delete, activate/deactivate, lock/unlock, default source, scored category) in Users, Districts, Branches, Departments, Categories, Sources, Uncovered Reasons, Reporting Periods, Roles and Scoring Rules: a success toast, or a mapped error.
-- Import: completed / re-imported / reversed / deleted / cancelled. Duplicates and file errors use inline review cards.
-- Forms keep their existing inline errors and sticky action-bar messages.
+Every user action follows the standard: **success → catalog success toast; failure → `notify.fromError` (one-click actions) or `notify.formError` (forms)**. Raw error text is never shown, and `errorMessage()` is not used in components (a test fails if it comes back).
+
+| Area | Success | Failure |
+|---|---|---|
+| **Finding page**: submit, approve / return / reject, record rectification, verify, close, return / resubmit rectification, transfer, reverse, delete, evidence upload / remove, comments | catalog toast | toast (`reviewFailed`, `rectifyFailed`, `verifyFailed`, `closeFailed`, `transferFailed`, ...). The **Record Rectification** form's own checks (amount vs cases) show **inside the form** with the "correct the highlighted fields" warning |
+| **Register / edit finding** | created / draft saved / submitted / updated | `formError`: toast; field errors inline in the sticky bar |
+| **Admin lists** (Users, Districts, Branches, Departments, Categories, Sources, Uncovered Reasons, Reporting Periods, Roles, Scoring Rules): add / edit / delete / activate / lock | catalog toast | add / edit forms: `formError`; row actions: `fromError` |
+| **CSV import (Add many)** | "Rows imported successfully." + count | "Unable to import some rows…" + counts; per-row results table stays |
+| **Findings list bulk actions** | "Bulk action completed successfully." + counts | "Unable to apply the action to some findings…" + counts; summary line stays |
+| **Settings** | "Settings saved successfully." | `formError`. *Send test email* shows its result in the test panel |
+| **Import** (upload, re-import, reverse, delete) | completed / reimported / reversed / deleted | toast; duplicates and file errors use their review cards |
+| **Profile** (change password), **Forgot / Reset password** | password changed / reset | `formError` |
+| **Uncovered branches** (reason, bulk reason) | saved / applied | `formError` |
+| **Support** (new message, reply, rating) | message sent / rating saved | `formError`; a conversation that fails to load shows the standard text in place |
+| **Notification bell** (reply to a comment) | comment posted | `formError` |
+| **Dev reset** | "Registered data reset successfully." | `formError` |
+
+Silent by design (no toast): draft autosave, marking notifications read, and optional look-ups a role may not have permission for.

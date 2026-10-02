@@ -310,11 +310,11 @@ bug where they didn't (doc comment, `passwordValidation.ts:7-19`).
 
 ### 4.1 `validatePasswordStrength()` — synchronous, no network, usable client- or server-side
 
-In order (`passwordValidation.ts:49-68`), first failure wins:
+In order (the `PASSWORD_RULES` list in `passwordValidation.ts`), first failure wins:
 
 | # | Rule | Error message |
 |---|---|---|
-| 1 | Length ≥ 8 | *"Password must be at least 8 characters"* |
+| 1 | Length ≥ 8 (`PASSWORD_MIN_LENGTH`) | *"Password must be at least 8 characters"* |
 | 2 | At least one lowercase (`[a-z]`) | *"Password must include a lowercase letter"* |
 | 3 | At least one uppercase (`[A-Z]`) | *"Password must include an uppercase letter"* |
 | 4 | At least one digit (`[0-9]`) | *"Password must include a number"* |
@@ -353,6 +353,24 @@ database using **k-anonymity** (`passwordValidation.ts:82-100`):
 `change-password/route.ts:77`, and the admin create/reset-user routes); `validatePasswordStrength()`
 alone is reserved for contexts that can't await a network call — client-side hinting being the only one
 in this codebase.
+
+### 4.3 Where the rules are checked (kept in sync)
+
+The rules live in **one place each** and both the server and every form use them, so a form never
+accepts what the server will reject:
+
+| Rule | Source | Server | Forms (live, before submit) |
+|---|---|---|---|
+| **Password policy** (§4.1) | `PASSWORD_RULES` in `src/lib/passwordValidation.ts` (`passwordRuleChecks()`, `validatePasswordStrength()`) | `validatePasswordFull()` in create user, admin reset (edit user), change password, reset password | A live checklist (`src/components/ui/PasswordRules.tsx`) under: **Add User** temporary password, **Edit User** reset password, **Profile → Change password**, **Reset password** page. The submit button stays disabled until every rule is met (and the confirmation matches). **Import CSV (users)** rejects a row whose password fails the policy before sending it. |
+| **Username** | `src/lib/usernameValidation.ts`: 3–50 characters; letters, numbers, dots, dashes, underscores; no spaces | Create user (trimmed first); unique case-insensitively | **Add User**: the rule is shown under the field, the exact problem replaces it after leaving the field, and **Create User** stays disabled until it's valid. **Import CSV (users)** checks each row's username the same way. |
+
+Only the breach check (§4.2) runs on the server alone; a password that passes the checklist can still
+be rejected for that reason, with the server's message.
+
+**Sign in** checks only that both fields are filled in (the button stays disabled until they are). It
+deliberately does not apply the policy or the username format: older passwords and usernames may
+predate the current rules. It trims the username, matching how usernames are stored (no spaces) and
+looked up (case-insensitively).
 
 ---
 

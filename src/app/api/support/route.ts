@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { v4 as uuid } from "uuid";
 import { z } from "zod";
+import { zRequiredText } from "@/lib/inputRules";
 import { requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { notifyUsers, usersWithSupportRespondPermission } from "@/lib/notifications";
@@ -21,7 +22,7 @@ async function handleGET() {
 }
 
 const createSchema = z.object({
-  body: z.string().trim().min(1, "Message cannot be empty"),
+  body: zRequiredText("Message"),
 });
 
 async function handlePOST(request: Request) {

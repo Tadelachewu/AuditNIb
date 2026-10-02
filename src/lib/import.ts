@@ -4,6 +4,7 @@ import { appendAuditLog } from "@/lib/audit";
 import { similarityKey } from "@/lib/similarFindings";
 import { nextFindingReference, transitionFinding, transferFinding } from "@/lib/findings";
 import { isDepartmentInScope } from "@/lib/org";
+import { amountError, findingDateInPeriodError, LIMITS, textError, titleError } from "@/lib/inputRules";
 import type { Database, Finding, ImportBatchRow, ReportingPeriod, RequirableFindingField } from "@/types";
 
 // Import exists purely to backfill a bank's already-resolved paper/Excel
@@ -212,7 +213,7 @@ export async function buildImportTemplate(db: Database): Promise<Buffer> {
       ["SENT_TO_BRANCH_MANAGER", "Historical - already approved, nothing rectified yet."],
       [
         "TRANSFERRED",
-        "Historical - moved to a later still-open period with an outstanding balance. Requires Transferred To Period Code; Rectified Cases/Amount are optional (how much was rectified before the transfer, if any).",
+        "Historical - moved to a later period with an outstanding balance. Requires Transferred To Period Code; Rectified Cases/Amount are optional (how much was rectified before the transfer, if any).",
       ],
       ["CLOSED", "Historical - fully resolved."],
     ]
@@ -393,7 +394,7 @@ export function validateImportRow(
   const period = periodCode ? findByCode(db.reportingPeriods, periodCode) : undefined;
   if (periodCode && !period) errors.push(`Unknown reporting period code "${periodCode}"`);
 
-  // TRANSFERRED needs a second, *different*, open period - the one it moved
+  // TRANSFERRED needs a second, *different*, later period - the one it moved
   // *into*. Reporting Period Code stays the finding's own original period
   // (used for its reference number, like a live transfer).
   let destinationPeriod: ReportingPeriod | undefined;
@@ -405,7 +406,6 @@ export function validateImportRow(
       destinationPeriod = findByCode(db.reportingPeriods, toPeriodCode);
       if (!destinationPeriod) errors.push(`Unknown reporting period code "${toPeriodCode}" (Transferred To)`);
       else if (period && destinationPeriod.id === period.id) errors.push(`Transferred To Period Code must differ from Reporting Period Code`);
-      else if (destinationPeriod.status !== "OPEN") errors.push(`Transferred To Period "${destinationPeriod.code}" must be open`);
       else if (period && destinationPeriod.startsAt <= period.startsAt) errors.push(`Transferred To Period "${destinationPeriod.code}" must be later than "${period.code}"`);
     }
   }
@@ -455,23 +455,31 @@ export function validateImportRow(
       errors.push(`Invalid finding date "${findingDate}" - use YYYY-MM-DD (e.g. 2026-09-15)`);
     } else {
       if (findingDate > localDate(new Date().toISOString())) errors.push(`Finding date ${findingDate} is in the future`);
-      if (period) {
-        const periodEnd = localDate(period.endsAt);
-        if (findingDate > periodEnd) {
-          errors.push(`Finding date ${findingDate} is after reporting period ${period.code} (ends ${periodEnd}) - it must be within the period or before it`);
-        }
-      }
+      // Import only (registering / editing a finding doesn't apply this).
+      const outsidePeriod = period ? findingDateInPeriodError(findingDate, period) : null;
+      if (outsidePeriod) errors.push(outsidePeriod);
     }
+  }
+
+  // Same text rules as the Register Finding form (src/lib/inputRules.ts).
+  for (const problem of [
+    titleError(row.title),
+    textError(row.description, "Description"),
+    textError(row.recommendation, "Recommendation"),
+    textError(row.rootCause, "Root cause"),
+    textError(row.evidenceNote, "Evidence note"),
+  ]) {
+    if (problem) errors.push(problem);
   }
 
   const amountRaw = (row.amount ?? "").trim();
   const amount = Number(amountRaw.replace(/,/g, ""));
-  const amountOk = amountRaw !== "" && Number.isFinite(amount) && amount >= 0;
-  if (amountRaw && !amountOk) errors.push(`Invalid amount "${amountRaw}" - must be a number, 0 or more`);
+  const amountOk = amountRaw !== "" && amountError(amount) === null;
+  if (amountRaw && !amountOk) errors.push(`Invalid amount "${amountRaw}" - ${amountError(amount)?.replace(/^Amount /, "") ?? "must be a number, 0 or more"}`);
   const caseCountRaw = (row.caseCount ?? "").trim();
   const caseCount = Number(caseCountRaw);
-  const caseCountOk = caseCountRaw !== "" && Number.isInteger(caseCount) && caseCount >= 1;
-  if (caseCountRaw && !caseCountOk) errors.push(`Invalid number of cases "${caseCountRaw}" - must be a whole number of at least 1`);
+  const caseCountOk = caseCountRaw !== "" && Number.isInteger(caseCount) && caseCount >= 1 && caseCount <= LIMITS.caseCount.max;
+  if (caseCountRaw && !caseCountOk) errors.push(`Invalid number of cases "${caseCountRaw}" - must be a whole number from 1 to ${LIMITS.caseCount.max}`);
 
   // Historical-status amounts: CLOSED implies full resolution. TRANSFERRED's
   // Rectified Cases/Amount are optional (progress made before the

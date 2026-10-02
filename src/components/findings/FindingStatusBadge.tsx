@@ -1,5 +1,5 @@
 import { Badge } from "@/components/ui/Badge";
-import type { FindingStatus } from "@/types";
+import { findingStatusLabel, type FindingStatus } from "@/types";
 
 // Tone reflects severity, not just workflow stage: red is reserved for
 // REJECTED, the one truly terminal-negative status (no path back - see
@@ -31,5 +31,5 @@ const TONES: Record<FindingStatus, "green" | "gray" | "amber" | "red" | "blue"> 
 };
 
 export function FindingStatusBadge({ status }: { status: FindingStatus }) {
-  return <Badge tone={TONES[status]}>{status.replaceAll("_", " ")}</Badge>;
+  return <Badge tone={TONES[status]}>{findingStatusLabel(status)}</Badge>;
 }

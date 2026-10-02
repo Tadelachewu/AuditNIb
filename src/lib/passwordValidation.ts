@@ -41,31 +41,32 @@ export interface PasswordCheckResult {
   error?: string;
 }
 
-// Requires: 8+ characters, at least one lowercase, one uppercase, one digit,
-// one special character, and not a top-of-the-list common password. This is
-// exactly the shape of this app's own seeded demo passwords (e.g.
-// "Admin@123", "District@123" - see prisma/seedData.ts) so seeding an
-// install doesn't itself fail this check.
+export const PASSWORD_MIN_LENGTH = 8;
+
+// The password policy, one rule per line - the single source for the server
+// check (validatePasswordStrength) and the live checklist every password
+// field shows (src/components/ui/PasswordRules.tsx). Requires: 8+
+// characters, a lowercase, an uppercase, a digit, a special character, and
+// not a top-of-the-list common password. This is exactly the shape of this
+// app's own seeded demo passwords (e.g. "Admin@123", "District@123" - see
+// prisma/seedData.ts) so seeding an install doesn't itself fail this check.
+const PASSWORD_RULES: { label: string; error: string; test: (p: string) => boolean }[] = [
+  { label: `At least ${PASSWORD_MIN_LENGTH} characters`, error: `Password must be at least ${PASSWORD_MIN_LENGTH} characters`, test: (p) => p.length >= PASSWORD_MIN_LENGTH },
+  { label: "A lowercase letter", error: "Password must include a lowercase letter", test: (p) => /[a-z]/.test(p) },
+  { label: "An uppercase letter", error: "Password must include an uppercase letter", test: (p) => /[A-Z]/.test(p) },
+  { label: "A number", error: "Password must include a number", test: (p) => /[0-9]/.test(p) },
+  { label: "A special character (e.g. @ # $ !)", error: "Password must include a special character", test: (p) => /[^A-Za-z0-9]/.test(p) },
+  { label: "Not a commonly used password", error: "This password is too common - choose something less predictable", test: (p) => !COMMON_PASSWORDS.has(p.toLowerCase()) },
+];
+
+/** Each policy rule and whether `password` meets it (for the live checklist). */
+export function passwordRuleChecks(password: string): { label: string; ok: boolean }[] {
+  return PASSWORD_RULES.map((r) => ({ label: r.label, ok: r.test(password) }));
+}
+
 export function validatePasswordStrength(password: string): PasswordCheckResult {
-  if (password.length < 8) {
-    return { valid: false, error: "Password must be at least 8 characters" };
-  }
-  if (!/[a-z]/.test(password)) {
-    return { valid: false, error: "Password must include a lowercase letter" };
-  }
-  if (!/[A-Z]/.test(password)) {
-    return { valid: false, error: "Password must include an uppercase letter" };
-  }
-  if (!/[0-9]/.test(password)) {
-    return { valid: false, error: "Password must include a number" };
-  }
-  if (!/[^A-Za-z0-9]/.test(password)) {
-    return { valid: false, error: "Password must include a special character" };
-  }
-  if (COMMON_PASSWORDS.has(password.toLowerCase())) {
-    return { valid: false, error: "This password is too common - choose something less predictable" };
-  }
-  return { valid: true };
+  const failed = PASSWORD_RULES.find((r) => !r.test(password));
+  return failed ? { valid: false, error: failed.error } : { valid: true };
 }
 
 // Have I Been Pwned's k-anonymity range API: only the first 5 hex

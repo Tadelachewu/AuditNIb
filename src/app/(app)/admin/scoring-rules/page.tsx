@@ -1,15 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { apiGet, apiSend, errorMessage } from "@/lib/api-client";
+import { apiGet, apiSend } from "@/lib/api-client";
 import { formatDate } from "@/lib/format";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { StickyActions } from "@/components/ui/StickyActions";
 import { Input, Label } from "@/components/ui/Field";
+import { entityNameError, LIMITS } from "@/lib/inputRules";
+import { RuleInput } from "@/components/ui/RuleInput";
 import { Badge } from "@/components/ui/Badge";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
-import { AddDialog } from "@/components/ui/AddDialog";
+import { AddDialog, Modal } from "@/components/ui/AddDialog";
 import { RowAction, RowActions, StatusToggleAction } from "@/components/ui/RowActions";
 import { ListSkeleton } from "@/components/ui/Skeleton";
 import { Pagination } from "@/components/ui/Pagination";
@@ -124,11 +126,13 @@ export default function ScoringRulesPage() {
       setBasisEditedManually(false);
       await load();
     } catch (err) {
-      setFormError(errorMessage(err, "Failed to create scoring rule"));
+      setFormError(notify.formError(err, notifications.scoringRule.createFailed));
     } finally {
       setSubmitting(false);
     }
   }
+
+  const editingRule = rules.find((x) => x.id === editingRuleId) ?? null;
 
   function startEditRule(rule: ScoringRule) {
     setEditingRuleId(rule.id);
@@ -156,7 +160,7 @@ export default function ScoringRulesPage() {
       setEditingRuleId(null);
       await load();
     } catch (err) {
-      setEditError(errorMessage(err, "Failed to update scoring rule"));
+      setEditError(notify.formError(err, notifications.scoringRule.updateFailed));
     } finally {
       setRowBusy(null);
     }
@@ -223,7 +227,7 @@ export default function ScoringRulesPage() {
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
                     <Label htmlFor="name">Name</Label>
-                    <Input id="name" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+                    <RuleInput id="name" required maxLength={LIMITS.entityName.max} check={(v) => entityNameError(v)} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
                   </div>
                   <div>
                     <Label htmlFor="effectiveFrom">Effective from</Label>
@@ -308,7 +312,7 @@ export default function ScoringRulesPage() {
                   <Button type="button" variant="cancel" onClick={close}>
                     Cancel
                   </Button>
-                  <Button type="submit" disabled={submitting}>
+                  <Button type="submit" disabled={submitting || !!entityNameError(form.name)}>
                     {submitting ? "Saving..." : "Create Version"}
                   </Button>
                 </StickyActions>
@@ -332,12 +336,7 @@ export default function ScoringRulesPage() {
                   </div>
                   <RowActions>
                     {!r.everActivated && canEdit && (
-                      <RowAction
-                        kind="edit"
-                        disabled={rowBusy === r.id || editingRuleId === r.id}
-                        title={editingRuleId === r.id ? "Already editing - use Save Changes or Cancel below" : "Edit"}
-                        onClick={() => startEditRule(r)}
-                      />
+                      <RowAction kind="edit" disabled={rowBusy === r.id} onClick={() => startEditRule(r)} />
                     )}
                     {canActivate && (
                       <StatusToggleAction active={r.active} busy={rowBusy === r.id} onClick={() => setActive(r, !r.active)} />
@@ -348,103 +347,6 @@ export default function ScoringRulesPage() {
                   </RowActions>
                 </div>
 
-                {editingRuleId === r.id ? (
-                  <div className="mt-3 flex flex-col gap-3 rounded-md border border-slate-200 p-3">
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      <div>
-                        <Label htmlFor={`edit-name-${r.id}`}>Name</Label>
-                        <Input
-                          id={`edit-name-${r.id}`}
-                          value={editDraft.name}
-                          onChange={(e) => setEditDraft({ ...editDraft, name: e.target.value })}
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor={`edit-effectiveFrom-${r.id}`}>Effective from</Label>
-                        <Input
-                          id={`edit-effectiveFrom-${r.id}`}
-                          type="date"
-                          value={editDraft.effectiveFrom}
-                          onChange={(e) => setEditDraft({ ...editDraft, effectiveFrom: e.target.value })}
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <Label>Included categories</Label>
-                      <div className="flex flex-wrap gap-2">
-                        {categories.map((c) => (
-                          <button
-                            type="button"
-                            key={c.id}
-                            onClick={() =>
-                              setEditDraft((d) => {
-                                const nextCategories = d.categories.includes(c.id)
-                                  ? d.categories.filter((x) => x !== c.id)
-                                  : [...d.categories, c.id];
-                                return {
-                                  ...d,
-                                  categories: nextCategories,
-                                  basis: editBasisEditedManually
-                                    ? d.basis
-                                    : generateBasisText(nextCategories.map((cid) => nameFor(categories, cid))),
-                                };
-                              })
-                            }
-                            className={`rounded-full px-2.5 py-1 text-xs ring-1 ring-inset ${
-                              editDraft.categories.includes(c.id) ? "bg-[#1e3a8a] text-on-dark ring-[#1e3a8a]" : "bg-white text-slate-600 ring-slate-300"
-                            }`}
-                          >
-                            {c.name}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <div>
-                      <Label>Included sources</Label>
-                      <div className="flex flex-wrap gap-2">
-                        {sources.map((s) => (
-                          <button
-                            type="button"
-                            key={s.id}
-                            onClick={() =>
-                              setEditDraft((d) => ({
-                                ...d,
-                                sources: d.sources.includes(s.id) ? d.sources.filter((x) => x !== s.id) : [...d.sources, s.id],
-                              }))
-                            }
-                            className={`rounded-full px-2.5 py-1 text-xs ring-1 ring-inset ${
-                              editDraft.sources.includes(s.id) ? "bg-[#1e3a8a] text-on-dark ring-[#1e3a8a]" : "bg-white text-slate-600 ring-slate-300"
-                            }`}
-                          >
-                            {s.name}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <div>
-                      <Label htmlFor={`edit-basis-${r.id}`}>Calculation basis</Label>
-                      <Input
-                        id={`edit-basis-${r.id}`}
-                        value={editDraft.basis}
-                        onChange={(e) => {
-                          setEditBasisEditedManually(true);
-                          setEditDraft({ ...editDraft, basis: e.target.value });
-                        }}
-                      />
-                      <p className="mt-1 text-xs text-slate-500">
-                        Auto-fills from the categories selected above - edit it directly to override.
-                      </p>
-                    </div>
-                    <StickyActions variant="inset" className="mt-3" error={editError}>
-                      <Button variant="cancel" onClick={() => setEditingRuleId(null)}>
-                        Cancel
-                      </Button>
-                      <Button disabled={rowBusy === r.id} onClick={() => saveRuleEdit(r)}>
-                        {rowBusy === r.id ? "Saving..." : "Save Changes"}
-                      </Button>
-                    </StickyActions>
-                  </div>
-                ) : (
                   <>
                     <p className="mt-1 text-xs text-slate-500">{r.basis}</p>
                     <p className="mt-1 text-xs text-slate-500">
@@ -453,12 +355,118 @@ export default function ScoringRulesPage() {
                       {r.sources.map((id) => nameFor(sources, id)).join(", ") || "—"}
                     </p>
                   </>
-                )}
               </div>
             ))}
         </div>
         <Pagination page={pager.page} totalPages={pager.totalPages} total={pager.total} pageSize={pager.pageSize} onPageChange={pager.setPage} />
       </Card>
+      {editingRule && (
+        <Modal title={`Edit ${editingRule.name}`} description={`v${editingRule.version}`} onClose={() => setEditingRuleId(null)}>
+          <form
+            className="grid grid-cols-1 gap-4 p-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void saveRuleEdit(editingRule);
+            }}
+          >
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div>
+                <Label htmlFor={`edit-name-${editingRule.id}`}>Name</Label>
+                <RuleInput
+                  id={`edit-name-${editingRule.id}`}
+                  maxLength={LIMITS.entityName.max}
+                  check={(v) => entityNameError(v)}
+                  value={editDraft.name}
+                  onChange={(e) => setEditDraft({ ...editDraft, name: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label htmlFor={`edit-effectiveFrom-${editingRule.id}`}>Effective from</Label>
+                <Input
+                  id={`edit-effectiveFrom-${editingRule.id}`}
+                  type="date"
+                  value={editDraft.effectiveFrom}
+                  onChange={(e) => setEditDraft({ ...editDraft, effectiveFrom: e.target.value })}
+                />
+              </div>
+            </div>
+            <div>
+              <Label>Included categories</Label>
+              <div className="flex flex-wrap gap-2">
+                {categories.map((c) => (
+                  <button
+                    type="button"
+                    key={c.id}
+                    onClick={() =>
+                      setEditDraft((d) => {
+                        const nextCategories = d.categories.includes(c.id)
+                          ? d.categories.filter((x) => x !== c.id)
+                          : [...d.categories, c.id];
+                        return {
+                          ...d,
+                          categories: nextCategories,
+                          basis: editBasisEditedManually
+                            ? d.basis
+                            : generateBasisText(nextCategories.map((cid) => nameFor(categories, cid))),
+                        };
+                      })
+                    }
+                    className={`rounded-full px-2.5 py-1 text-xs ring-1 ring-inset ${
+                      editDraft.categories.includes(c.id) ? "bg-[#1e3a8a] text-on-dark ring-[#1e3a8a]" : "bg-white text-slate-600 ring-slate-300"
+                    }`}
+                  >
+                    {c.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <Label>Included sources</Label>
+              <div className="flex flex-wrap gap-2">
+                {sources.map((s) => (
+                  <button
+                    type="button"
+                    key={s.id}
+                    onClick={() =>
+                      setEditDraft((d) => ({
+                        ...d,
+                        sources: d.sources.includes(s.id) ? d.sources.filter((x) => x !== s.id) : [...d.sources, s.id],
+                      }))
+                    }
+                    className={`rounded-full px-2.5 py-1 text-xs ring-1 ring-inset ${
+                      editDraft.sources.includes(s.id) ? "bg-[#1e3a8a] text-on-dark ring-[#1e3a8a]" : "bg-white text-slate-600 ring-slate-300"
+                    }`}
+                  >
+                    {s.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <Label htmlFor={`edit-basis-${editingRule.id}`}>Calculation basis</Label>
+              <Input
+                id={`edit-basis-${editingRule.id}`}
+                value={editDraft.basis}
+                onChange={(e) => {
+                  setEditBasisEditedManually(true);
+                  setEditDraft({ ...editDraft, basis: e.target.value });
+                }}
+              />
+              <p className="mt-1 text-xs text-slate-500">
+                Auto-fills from the categories selected above - edit it directly to override.
+              </p>
+            </div>
+            <StickyActions error={editError}>
+              <Button type="button" variant="cancel" onClick={() => setEditingRuleId(null)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={rowBusy === editingRule.id || !!entityNameError(editDraft.name)}>
+                {rowBusy === editingRule.id ? "Saving..." : "Save Changes"}
+              </Button>
+            </StickyActions>
+          </form>
+        </Modal>
+      )}
       {dialog}
     </div>
   );

@@ -1,5 +1,4 @@
-import { redis } from "@/lib/redisClient";
-import { logger } from "@/lib/logger";
+import { redis, logRedisFailure as logFailure } from "@/lib/redisClient";
 
 // Redis-backed login/password-change abuse protection - replaces an
 // earlier in-memory (per-process Map) version, which reset on every
@@ -26,8 +25,9 @@ import { logger } from "@/lib/logger";
 //     request, so an already-locked-out caller gets an immediate 429
 //     without spending any of their rate-limit budget re-triggering it.
 
+// Quiet while Redis is known to be down (redisClient.ts warns once per outage).
 function logRedisFailure(op: string, err: unknown): void {
-  logger.error({ err, event: "redis.failed", op }, "Rate limit Redis operation failed - failing open");
+  logFailure(op, err, "Rate limit Redis operation failed - failing open");
 }
 
 export interface RateLimitOptions {

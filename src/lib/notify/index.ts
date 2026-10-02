@@ -105,6 +105,17 @@ export const notify = {
     show("error", { code: notifications.auth.loginFailed.code, message: safe }, { description: p.kind === "system" && p.reference ? `Reference: ${p.reference}` : undefined });
   },
 
+  /**
+   * For forms: presents the error the standard way (fromError) and returns
+   * the text to show inline next to the form - only for field errors
+   * (VALIDATION_ERROR with field details), otherwise null, since every other
+   * failure is already shown as a notification.
+   */
+  formError(err: unknown, failure?: Notice): string | null {
+    const p = notify.fromError(err, failure);
+    return p.kind === "field" ? Object.values(p.fieldErrors).flat().join(" ") || p.message : null;
+  },
+
   fromError(err: unknown, failure?: Notice, opts: { id?: string } = {}): ErrorPresentation {
     const p = presentError(err, failure);
     switch (p.kind) {

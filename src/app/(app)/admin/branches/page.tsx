@@ -2,14 +2,16 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { MRT_ColumnDef } from "material-react-table";
-import { apiGet, apiSend, errorMessage } from "@/lib/api-client";
+import { apiGet, apiSend } from "@/lib/api-client";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { StickyActions } from "@/components/ui/StickyActions";
-import { Input, Select, Label } from "@/components/ui/Field";
+import { Select, Label } from "@/components/ui/Field";
+import { INPUT_FILTERS, codeError, entityNameError, LIMITS } from "@/lib/inputRules";
+import { RuleInput } from "@/components/ui/RuleInput";
 import { StatusBadge, Badge } from "@/components/ui/Badge";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
-import { AddDialog } from "@/components/ui/AddDialog";
+import { AddDialog, Modal } from "@/components/ui/AddDialog";
 import { RowAction, RowActions, StatusToggleAction } from "@/components/ui/RowActions";
 import { AdminTable } from "@/components/ui/AdminTable";
 import { ImportCsvDialog } from "@/components/ui/ImportCsvDialog";
@@ -70,11 +72,13 @@ export default function BranchesPage() {
       close();
       await load();
     } catch (err) {
-      setFormError(errorMessage(err, "Failed to create branch"));
+      setFormError(notify.formError(err, notifications.branch.createFailed));
     } finally {
       setSubmitting(false);
     }
   }
+
+  const editingItem = branches.find((x) => x.id === editingId) ?? null;
 
   function startEdit(b: BranchRow) {
     setEditingId(b.id);
@@ -91,7 +95,7 @@ export default function BranchesPage() {
       setEditingId(null);
       await load();
     } catch (err) {
-      setEditError(errorMessage(err, "Failed to save changes"));
+      setEditError(notify.formError(err, notifications.branch.updateFailed));
     } finally {
       setRowBusy(null);
     }
@@ -150,30 +154,14 @@ export default function BranchesPage() {
       {
         accessorKey: "name",
         header: "Name",
-        Cell: ({ row }) =>
-          editingId === row.original.id ? (
-            <Input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} className="max-w-48" autoFocus />
-          ) : (
-            <span className="font-medium text-slate-900">{row.original.name}</span>
-          ),
+        Cell: ({ row }) => <span className="font-medium text-slate-900">{row.original.name}</span>,
       },
       {
         id: "district",
         header: "District",
         accessorFn: (b) => districtName(b.districtId),
         filterVariant: "select",
-        Cell: ({ row, cell }) =>
-          editingId === row.original.id ? (
-            <Select value={editForm.districtId} onChange={(e) => setEditForm({ ...editForm, districtId: e.target.value })}>
-              {districts.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name}
-                </option>
-              ))}
-            </Select>
-          ) : (
-            <>{cell.getValue<string>()}</>
-          ),
+        Cell: ({ cell }) => <>{cell.getValue<string>()}</>,
       },
       {
         id: "manager",
@@ -203,7 +191,7 @@ export default function BranchesPage() {
       },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [editingId, editForm, districts]
+    [districts]
   );
 
   return (
@@ -221,11 +209,11 @@ export default function BranchesPage() {
               <form onSubmit={(e) => handleCreate(e, close)} className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3">
                 <div>
                   <Label htmlFor="code">Code</Label>
-                  <Input id="code" required value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} />
+                  <RuleInput id="code" required filter={INPUT_FILTERS.code} maxLength={LIMITS.code.max} check={(v) => codeError(v)} hint="Letters, numbers, dashes and underscores; no spaces" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} />
                 </div>
                 <div>
                   <Label htmlFor="name">Name</Label>
-                  <Input id="name" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+                  <RuleInput id="name" required maxLength={LIMITS.entityName.max} check={(v) => entityNameError(v)} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
                 </div>
                 <div>
                   <Label htmlFor="districtId">District</Label>
@@ -247,7 +235,7 @@ export default function BranchesPage() {
                   <Button type="button" variant="cancel" onClick={close}>
                     Cancel
                   </Button>
-                  <Button type="submit" disabled={submitting}>
+                  <Button type="submit" disabled={submitting || !!codeError(form.code) || !!entityNameError(form.name)}>
                     {submitting ? "Adding..." : "Add Branch"}
                   </Button>
                 </StickyActions>
@@ -275,7 +263,9 @@ export default function BranchesPage() {
                 ]}
                 toPayload={(row) => {
                   const label = row.code ? `${row.code} - ${row.name}` : row.name || "(blank)";
-                  if (!row.code || !row.name || !row.district) return { error: "code, name and district are required", label };
+                  if (!row.district) return { error: "district is required", label };
+                  const bad = codeError(row.code) || entityNameError(row.name);
+                  if (bad) return { error: bad, label };
                   const key = row.district.trim().toLowerCase();
                   const district = districts.find((d) => d.code.toLowerCase() === key || d.name.toLowerCase() === key);
                   if (!district) return { error: `Unknown district "${row.district}"`, label };
@@ -286,25 +276,55 @@ export default function BranchesPage() {
               />
             )
           }
-          renderRowActions={(b) =>
-            editingId === b.id ? (
-              <div className="flex flex-col items-end gap-1">
-                {editError && <p className="text-xs text-red-600">{editError}</p>}
-                <RowActions inline>
-                  <RowAction kind="cancel" onClick={() => setEditingId(null)} />
-                  <RowAction kind="save" busy={rowBusy === b.id} label={rowBusy === b.id ? "Saving..." : "Save"} onClick={() => saveEdit(b)} />
-                </RowActions>
-              </div>
-            ) : (
-              <RowActions>
-                {canEdit && <RowAction kind="edit" onClick={() => startEdit(b)} />}
-                {canToggle && <StatusToggleAction active={b.status === "ACTIVE"} busy={rowBusy === b.id} onClick={() => toggleStatus(b)} />}
-                {canDelete && <RowAction kind="delete" busy={rowBusy === b.id} onClick={() => deleteBranch(b)} />}
-              </RowActions>
-            )
-          }
+          renderRowActions={(b) => (
+            <RowActions>
+              {canEdit && <RowAction kind="edit" onClick={() => startEdit(b)} />}
+              {canToggle && <StatusToggleAction active={b.status === "ACTIVE"} busy={rowBusy === b.id} onClick={() => toggleStatus(b)} />}
+              {canDelete && <RowAction kind="delete" busy={rowBusy === b.id} onClick={() => deleteBranch(b)} />}
+            </RowActions>
+          )}
         />
       </Card>
+      {editingItem && (
+        <Modal title={`Edit ${editingItem.name}`} description={editingItem.code} onClose={() => setEditingId(null)}>
+          <form
+            className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void saveEdit(editingItem);
+            }}
+          >
+            <div>
+              <Label htmlFor="edit-name">Branch name</Label>
+              <RuleInput
+                id="edit-name"
+                maxLength={LIMITS.entityName.max}
+                check={(v) => entityNameError(v)}
+                value={editForm.name}
+                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+              />
+            </div>
+            <div>
+              <Label htmlFor="edit-district">District</Label>
+              <Select id="edit-district" value={editForm.districtId} onChange={(e) => setEditForm({ ...editForm, districtId: e.target.value })}>
+                {districts.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <StickyActions error={editError}>
+              <Button type="button" variant="cancel" onClick={() => setEditingId(null)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={rowBusy === editingItem.id || !!entityNameError(editForm.name) || !editForm.districtId}>
+                {rowBusy === editingItem.id ? "Saving..." : "Save Changes"}
+              </Button>
+            </StickyActions>
+          </form>
+        </Modal>
+      )}
       {dialog}
     </div>
   );

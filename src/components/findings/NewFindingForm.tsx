@@ -3,13 +3,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { apiGet, apiSend, errorMessage } from "@/lib/api-client";
-import { formatDateTime, formatCurrency } from "@/lib/format";
+import { apiGet, apiSend } from "@/lib/api-client";
+import { formatDate, formatDateTime, formatCurrency } from "@/lib/format";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { StickyActions } from "@/components/ui/StickyActions";
-import { Input, Select, Label, Textarea } from "@/components/ui/Field";
+import { Input, Select, Label } from "@/components/ui/Field";
+import { RuleInput } from "@/components/ui/RuleInput";
+import { amountError, findingDateError, LIMITS, localToday, textError, titleError } from "@/lib/inputRules";
 import { FindingStatusBadge } from "@/components/findings/FindingStatusBadge";
+import { Info } from "lucide-react";
 import { notify, notifications } from "@/lib/notify";
 import type {
   Source,
@@ -23,6 +26,7 @@ import type {
   RequirableFindingField,
   OtherValueAllowedField,
 } from "@/types";
+import { REQUIRABLE_FINDING_FIELDS } from "@/types";
 
 interface SimilarFindingMatch {
   id: string;
@@ -514,8 +518,65 @@ export function NewFindingForm({
   // DRAFT (see findings/new/page.tsx) - but a LOCKED-drafts-allowed period
   // still can't take a submit, so that half of the choice is disabled
   // here rather than hidden, with a reason shown next to the button.
+  // Read once when the form opens (render must stay pure); the server re-checks the window on submit.
+  const [pageOpenedAt] = useState(() => Date.now());
   const selectedPeriod = periods.find((p) => p.id === form.periodId);
-  const periodBlocksSubmit = selectedPeriod?.status === "LOCKED";
+  // Submitting needs an OPEN period whose submission window covers today
+  // (same rules as the API); a draft can always be saved in an open period.
+  const submissionWindowClosed =
+    selectedPeriod?.status === "OPEN" &&
+    !!selectedPeriod.submissionStartsAt &&
+    !!selectedPeriod.submissionEndsAt &&
+    (pageOpenedAt < new Date(selectedPeriod.submissionStartsAt).getTime() || pageOpenedAt > new Date(selectedPeriod.submissionEndsAt).getTime());
+  const periodBlocksSubmit = selectedPeriod?.status === "LOCKED" || submissionWindowClosed;
+  // Why only a draft can be saved for the selected period (null = it can be submitted).
+  const draftOnlyReason = !selectedPeriod
+    ? null
+    : selectedPeriod.status === "LOCKED"
+      ? {
+          title: `${selectedPeriod.code} is locked - you can save a draft, but not submit.`,
+          detail: "Submit it once an administrator unlocks the period (Reporting Periods).",
+        }
+      : submissionWindowClosed
+        ? {
+            title: `${selectedPeriod.code} isn't accepting submissions today - you can save a draft, but not submit.`,
+            detail: `Its submission window is ${formatDate(selectedPeriod.submissionStartsAt)} – ${formatDate(selectedPeriod.submissionEndsAt)}. To submit now, an administrator can extend the window (Reporting Periods → Edit submission window), or choose a period that is open for submissions.`,
+          }
+        : null;
+
+  // The same rules the API applies (src/lib/inputRules.ts) - checked here so
+  // nothing invalid is sent; each field shows its own message under it.
+  const caseCountError = (v: string) => {
+    const n = Number(v);
+    if (!v.trim()) return "Number of cases is required";
+    if (!Number.isInteger(n) || n < 1) return "Number of cases must be a whole number of at least 1";
+    if (n > LIMITS.caseCount.max) return `Number of cases must be at most ${LIMITS.caseCount.max}`;
+    return null;
+  };
+  // A real date, not in the future. (Within-the-period applies to the Excel import only.)
+  const dateProblem = (v: string) => findingDateError(v);
+  // Required fields first: always the period (and district / branch when they
+  // aren't fixed by the user's scope), then whatever the administrator made
+  // required in Settings (REQUIRABLE_FINDING_FIELDS) - the same list the API
+  // enforces for drafts and submissions alike.
+  const missingRequired =
+    (!form.periodId ? "Reporting period is required" : null) ??
+    (!fixedDistrict && !form.districtId ? "District is required" : null) ??
+    (!fixedBranch && !form.branchId ? "Branch is required" : null) ??
+    (() => {
+      const missing = REQUIRABLE_FINDING_FIELDS.find(({ key }) => requiredFields[key] && !String(form[key] ?? "").trim());
+      return missing ? `${missing.label} is required` : null;
+    })();
+  const formProblem =
+    missingRequired ??
+    titleError(form.title, "Finding title") ??
+    dateProblem(form.findingDate) ??
+    amountError(form.amount, "Amount involved") ??
+    caseCountError(form.caseCount) ??
+    textError(form.description, "Description") ??
+    textError(form.rootCause, "Root cause") ??
+    textError(form.recommendation, "Recommendation") ??
+    textError(form.evidenceNote, "Evidence note");
 
   // Alphabetical - these are free-text, admin-configured lists (Settings)
   // with no inherent order of their own, unlike riskLevels/priorityLevels
@@ -551,6 +612,11 @@ export function NewFindingForm({
 
   async function save(submit: boolean) {
     setError(null);
+    if (formProblem) {
+      setError(`${formProblem}.`);
+      notify.warning(notifications.generic.fixFields);
+      return;
+    }
     if (!isEditing && itemizeCases && !caseAmountsMatch) {
       setError("Case breakdown must add up to the amount involved before saving");
       return;
@@ -558,7 +624,7 @@ export function NewFindingForm({
     setSubmitting(submit ? "submit" : "draft");
     try {
       const payload = {
-        title: form.title,
+        title: form.title.trim(),
         sourceId: form.sourceId,
         departmentId: form.departmentId,
         periodId: form.periodId,
@@ -594,7 +660,7 @@ export function NewFindingForm({
         router.refresh();
       }
     } catch (err) {
-      setError(errorMessage(err, "Failed to save finding"));
+      setError(notify.formError(err, submit ? notifications.finding.submitFailed : notifications.finding.saveFailed));
     } finally {
       setSubmitting(null);
     }
@@ -619,9 +685,11 @@ export function NewFindingForm({
 
         <div>
           <Label htmlFor="title">{fieldLabel("Finding title", "title")}</Label>
-          <Input
+          <RuleInput
             id="title"
             required={requiredFields.title}
+            maxLength={LIMITS.title.max}
+            check={(v) => titleError(v, "Finding title")}
             placeholder="A short, descriptive title for this finding"
             value={form.title}
             onChange={(e) => setForm({ ...form, title: e.target.value })}
@@ -669,10 +737,23 @@ export function NewFindingForm({
               {periods.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.code}
-                  {p.status === "LOCKED" ? " (locked - drafts only)" : ""}
+                  {p.status === "LOCKED"
+                    ? " (locked - drafts only)"
+                    : p.submissionEndsAt && (pageOpenedAt > new Date(p.submissionEndsAt).getTime() || pageOpenedAt < new Date(p.submissionStartsAt).getTime())
+                      ? " (submission closed - drafts only)"
+                      : ""}
                 </option>
               ))}
             </Select>
+            {!isEditing && draftOnlyReason && (
+              <div role="status" className="mt-2 flex gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                <Info className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" aria-hidden="true" />
+                <div>
+                  <p className="font-medium">{draftOnlyReason.title}</p>
+                  <p className="mt-0.5 text-xs text-amber-800">{draftOnlyReason.detail}</p>
+                </div>
+              </div>
+            )}
           </div>
 
           {fixedDistrict ? (
@@ -724,9 +805,12 @@ export function NewFindingForm({
 
           <div>
             <Label htmlFor="findingDate">{fieldLabel("Finding date", "findingDate")}</Label>
-            <Input
+            <RuleInput
               id="findingDate"
               type="date"
+              max={localToday()}
+              check={dateProblem}
+              showProblemNow
               required={requiredFields.findingDate}
               value={form.findingDate}
               onChange={(e) => setForm({ ...form, findingDate: e.target.value })}
@@ -784,11 +868,13 @@ export function NewFindingForm({
           </div>
           <div>
             <Label htmlFor="amount">Amount involved</Label>
-            <Input
+            <RuleInput
               id="amount"
               type="number"
               min="0"
+              max={LIMITS.amount.max}
               step="0.01"
+              check={(v) => amountError(v, "Amount involved")}
               required
               value={form.amount}
               onChange={(e) => setForm({ ...form, amount: e.target.value })}
@@ -797,11 +883,13 @@ export function NewFindingForm({
 
           <div>
             <Label htmlFor="caseCount">Number of cases</Label>
-            <Input
+            <RuleInput
               id="caseCount"
               type="number"
               min="1"
+              max={LIMITS.caseCount.max}
               step="1"
+              check={caseCountError}
               required
               value={form.caseCount}
               onChange={(e) => setCaseCount(e.target.value)}
@@ -876,20 +964,24 @@ export function NewFindingForm({
 
         <div>
           <Label htmlFor="description">{fieldLabel("Description", "description")}</Label>
-          <Textarea
+          <RuleInput
+            multiline
             id="description"
+            maxLength={LIMITS.longText.max}
+            check={(v) => textError(v, "Description")}
             required={requiredFields.description}
-            rows={3}
             value={form.description}
             onChange={(e) => setForm({ ...form, description: e.target.value })}
           />
         </div>
         <div>
           <Label htmlFor="rootCause">{fieldLabel("Root cause", "rootCause")}</Label>
-          <Textarea
+          <RuleInput
+            multiline
             id="rootCause"
+            maxLength={LIMITS.longText.max}
+            check={(v) => textError(v, "Root cause")}
             required={requiredFields.rootCause}
-            rows={2}
             placeholder="Why did this happen? - distinct from the description of what happened"
             value={form.rootCause}
             onChange={(e) => setForm({ ...form, rootCause: e.target.value })}
@@ -897,18 +989,22 @@ export function NewFindingForm({
         </div>
         <div>
           <Label htmlFor="recommendation">{fieldLabel("Recommendation", "recommendation")}</Label>
-          <Textarea
+          <RuleInput
+            multiline
             id="recommendation"
+            maxLength={LIMITS.longText.max}
+            check={(v) => textError(v, "Recommendation")}
             required={requiredFields.recommendation}
-            rows={2}
             value={form.recommendation}
             onChange={(e) => setForm({ ...form, recommendation: e.target.value })}
           />
         </div>
         <div>
           <Label htmlFor="evidenceNote">{fieldLabel("Evidence note", "evidenceNote")}</Label>
-          <Input
+          <RuleInput
             id="evidenceNote"
+            maxLength={LIMITS.longText.max}
+            check={(v) => textError(v, "Evidence note")}
             required={requiredFields.evidenceNote}
             placeholder="e.g. filed in branch cabinet, ref #4 - no file upload yet"
             value={form.evidenceNote}
@@ -945,23 +1041,24 @@ export function NewFindingForm({
         <StickyActions
           variant={isEditing ? "inset" : "card"}
           error={error}
-          hint={!isEditing && periodBlocksSubmit ? `${selectedPeriod?.code} is locked - only a draft can be saved against it until it's open.` : undefined}
+          hint={formProblem ? `Can't save yet: ${formProblem}.` : !isEditing && draftOnlyReason ? draftOnlyReason.title : undefined}
+          hintTone={formProblem ? "danger" : "warning"}
         >
           {isEditing ? (
             <>
               <Button type="button" variant="cancel" disabled={submitting !== null} onClick={onCancel}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={submitting !== null}>
+              <Button type="submit" disabled={submitting !== null || !!formProblem}>
                 {submitting === "draft" ? "Saving..." : "Save Changes"}
               </Button>
             </>
           ) : (
             <>
-              <Button type="submit" variant="neutral" disabled={submitting !== null}>
+              <Button type="submit" variant="neutral" disabled={submitting !== null || !!formProblem}>
                 {submitting === "draft" ? "Saving..." : "Save Draft"}
               </Button>
-              <Button type="button" variant="info" disabled={submitting !== null || periodBlocksSubmit} onClick={() => save(true)}>
+              <Button type="button" variant="info" disabled={submitting !== null || periodBlocksSubmit || !!formProblem} onClick={() => save(true)}>
                 {submitting === "submit" ? "Submitting..." : "Save & Submit"}
               </Button>
             </>

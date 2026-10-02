@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { apiSend, errorMessage } from "@/lib/api-client";
+import { apiSend } from "@/lib/api-client";
+import { notify, notifications } from "@/lib/notify";
 import { Button } from "@/components/ui/Button";
 import { Input, Label } from "@/components/ui/Field";
 import { validatePasswordStrength } from "@/lib/passwordValidation";
+import { PasswordRules } from "@/components/ui/PasswordRules";
 import { AuthBackdrop, AUTH_PANEL_CLASS } from "@/components/auth/AuthBackdrop";
 
 export function ResetPasswordClient({ token: token }: { token: string | null }) {
@@ -17,12 +19,9 @@ export function ResetPasswordClient({ token: token }: { token: string | null }) 
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
 
-  const strengthHint = useMemo(() => {
-    if (!newPassword) return null;
-    const r = validatePasswordStrength(newPassword);
-    if (r.valid) return { ok: true, text: "Password looks good" } as const;
-    return { ok: false, text: r.error ?? "" } as const;
-  }, [newPassword]);
+  // Same policy as the server (src/lib/passwordValidation.ts).
+  const confirmMismatch = confirmPassword.length > 0 && confirmPassword !== newPassword;
+  const canSubmit = validatePasswordStrength(newPassword).valid && confirmPassword === newPassword && !loading;
 
   useEffect(() => {
     setError(null);
@@ -42,9 +41,10 @@ export function ResetPasswordClient({ token: token }: { token: string | null }) 
     setLoading(true);
     try {
       await apiSend("/api/auth/reset-password", "POST", { token, newPassword });
+      notify.success(notifications.auth.passwordReset);
       setDone(true);
     } catch (err) {
-      setError(errorMessage(err, "Something went wrong. Please try again."));
+      setError(notify.formError(err, notifications.auth.passwordResetFailed));
     } finally {
       setLoading(false);
     }
@@ -131,16 +131,16 @@ export function ResetPasswordClient({ token: token }: { token: string | null }) 
               autoComplete="new-password"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
+              aria-describedby="new-password-rules"
               required
             />
-            {strengthHint && (
-              <p className={`mt-1 text-xs ${strengthHint.ok ? "text-green-700" : "text-amber-700"}`}>
-                {strengthHint.text}
+            {newPassword ? (
+              <PasswordRules password={newPassword} id="new-password-rules" />
+            ) : (
+              <p id="new-password-rules" className="mt-1 text-xs text-slate-500">
+                8+ characters, with uppercase, lowercase, a number, and a special character.
               </p>
             )}
-            <p className="mt-1 text-xs text-slate-500">
-              8+ characters, with uppercase, lowercase, a number, and a special character.
-            </p>
           </div>
           <div className="mb-4">
             <Label htmlFor="confirmPassword" brand>Confirm new password</Label>
@@ -150,13 +150,21 @@ export function ResetPasswordClient({ token: token }: { token: string | null }) 
               autoComplete="new-password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
+              aria-invalid={confirmMismatch ? true : undefined}
+              aria-describedby={confirmMismatch ? "confirm-password-error" : undefined}
+              className={confirmMismatch ? "border-red-400" : undefined}
               required
             />
+            {confirmMismatch && (
+              <p id="confirm-password-error" className="mt-1 text-xs text-red-600">
+                Doesn&apos;t match the new password.
+              </p>
+            )}
           </div>
 
           {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
 
-          <Button type="submit" disabled={loading} className="w-full">
+          <Button type="submit" disabled={!canSubmit} className="w-full">
             {loading ? "Updating password..." : "Reset password"}
           </Button>
 

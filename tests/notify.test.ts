@@ -142,3 +142,41 @@ describe("catalog consistency", () => {
     }
   });
 });
+
+describe("forms: notify.formError", () => {
+  it("field errors -> one warning toast, and the field messages returned for inline display", () => {
+    const text = notify.formError(apiErr(422, "VALIDATION_ERROR", "Invalid input", { details: { fieldErrors: { code: ["Code is required"], name: ["Name is required"] } } }), notifications.branch.createFailed);
+    expect(text).toBe("Code is required Name is required");
+    expect(t.warning).toHaveBeenCalledTimes(1);
+    expect(t.error).not.toHaveBeenCalled();
+  });
+
+  it("business rule (e.g. rectification limit) -> error toast with the server's rule, nothing inline", () => {
+    const text = notify.formError(apiErr(400, "BUSINESS_RULE_VIOLATION", "Rectified cases (2) cannot exceed the outstanding 1"), notifications.finding.rectifyFailed);
+    expect(text).toBeNull();
+    expect(lastCall(t.error)[0]).toBe("Rectified cases (2) cannot exceed the outstanding 1");
+  });
+
+  it("system error -> the action's own failure text + reference, nothing inline", () => {
+    const text = notify.formError(apiErr(500, "INTERNAL_SERVER_ERROR", "db exploded", { requestId: "abcdef1234" }), notifications.finding.rectifyFailed);
+    expect(text).toBeNull();
+    expect(lastCall(t.error)).toEqual(["Unable to record the rectification. Please try again.", expect.objectContaining({ description: "Reference: abcdef12" })]);
+  });
+});
+
+describe("every component follows the standard", () => {
+  it("no component shows a caught API error with errorMessage() (use notify.fromError / notify.formError)", async () => {
+    const { readdirSync, readFileSync, statSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const offenders: string[] = [];
+    const walk = (dir: string) => {
+      for (const name of readdirSync(dir)) {
+        const path = join(dir, name);
+        if (statSync(path).isDirectory()) walk(path);
+        else if (path.endsWith(".tsx") && /errorMessage\(/.test(readFileSync(path, "utf-8"))) offenders.push(path);
+      }
+    };
+    walk("src");
+    expect(offenders).toEqual([]);
+  });
+});

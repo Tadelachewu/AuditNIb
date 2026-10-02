@@ -50,6 +50,7 @@ export function ReasonPicker({
       </Select>
       {value === OTHER_VALUE && (
         <Input
+          maxLength={500}
           value={customText}
           onChange={(e) => onCustomTextChange(e.target.value)}
           placeholder="Describe the reason"

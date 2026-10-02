@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { zEntityName } from "@/lib/inputRules";
 import { requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { appendAuditLog } from "@/lib/audit";
@@ -17,7 +18,7 @@ const activateSchema = z.object({
 // still-in-draft version can be corrected freely, a version that ever
 // went live can only be superseded by a new one, never rewritten.
 const editSchema = z.object({
-  name: z.string().min(1).optional(),
+  name: zEntityName().optional(),
   effectiveFrom: z.string().min(1).optional(),
   categories: z.array(z.string()).min(1).optional(),
   sources: z.array(z.string()).min(1).optional(),

@@ -5,6 +5,7 @@ import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { formatCurrency } from "@/lib/format";
 import type { DuplicateEvidence } from "@/lib/importRun";
+import { findingStatusLabel } from "@/types";
 
 export interface DuplicatesFound {
   message: string;
@@ -68,7 +69,7 @@ export function ImportDuplicatesReview({
                     )}
                     {d.existing && !d.withinFile && (
                       <p className="mt-0.5 text-slate-500">
-                        &quot;{d.existing.title}&quot; · {d.existing.status.replaceAll("_", " ").toLowerCase()}
+                        &quot;{d.existing.title}&quot; · {findingStatusLabel(d.existing.status).toLowerCase()}
                       </p>
                     )}
                   </td>

@@ -82,8 +82,9 @@ export const PAGE_REGISTRY: PageDefinition[] = [
   {
     code: "findings",
     label: "Findings",
-    // "delete" only ever applies while a finding is still DRAFT, and only
-    // for the finding's own creator (see src/app/api/findings/[id]/route.ts)
+    // "delete" only ever applies while a finding is DRAFT or RETURNED (back
+    // with its registrant), and only for the finding's own creator (see
+    // src/app/api/findings/[id]/route.ts)
     // - matching Users/edit-while-draft-or-returned's rule that the action
     // set here is the ceiling, not a guarantee the action always succeeds.
     // "delete-rejected" is a deliberately separate permission, not a status
@@ -131,11 +132,12 @@ export const PAGE_REGISTRY: PageDefinition[] = [
       { action: "district-return-rectification", label: "District: Return Rectification for Correction" },
       { action: "ho-return-rectification", label: "HO: Return Rectification for Correction (after District verification)" },
       { action: "close", label: "Close (Verify)" },
-      // Reverse a closed / partially closed finding (incl. transferred) to
-      // its original sent-to-branch state, status REVERSED; history kept.
-      // See src/lib/findingReopen.ts.
-      { action: "reopen", label: "Reopen Closed / Partially Closed Findings" },
-      { action: "transfer", label: "Transfer to Next Period" },
+      // Reverse: undo what was closed in the finding's current period only
+      // (previous periods untouched), status Sent to Branch Manager/R;
+      // history kept. Key stays "reopen" - it's stored in roles.
+      // See src/lib/findingReverse.ts.
+      { action: "reopen", label: "Reverse Closed / Partially Closed Findings" },
+      { action: "transfer", label: "Transfer to Another Period" },
       { action: "evidence", label: "Upload Evidence" },
       // Removing *anyone's* evidence/attachment (housekeeping - a wrong or
       // sensitive file). Uploaders can always remove their own upload while

@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { AlertTriangle, Info } from "lucide-react";
 
 /**
  * The action row (Save / Cancel / Submit ...) of any form or editor that can
@@ -37,14 +38,21 @@ export function StickyActions({
   children,
   error,
   hint,
+  hintTone = "neutral",
   variant = "card",
   className = "",
 }: {
   children: ReactNode;
   /** Shown at the left of the bar, in red. */
   error?: string | null;
-  /** Neutral note at the left of the bar (e.g. why Submit is disabled). */
+  /** Note at the left of the bar (e.g. why Submit is disabled). */
   hint?: ReactNode;
+  /**
+   * How the hint reads: `neutral` (small grey note), `warning` (amber, with
+   * an icon - "only a draft can be saved") or `danger` (red, with an icon -
+   * something must be fixed before saving).
+   */
+  hintTone?: "neutral" | "warning" | "danger";
   variant?: keyof typeof VARIANTS;
   className?: string;
 }) {
@@ -57,7 +65,16 @@ export function StickyActions({
           (on a narrow screen the whole group moves below the message). */}
       {(error || hint) && (
         <div className="min-w-0 flex-1 basis-60 text-sm" role={error ? "alert" : undefined}>
-          {error ? <p className="text-red-600">{error}</p> : <p className="text-xs text-slate-500">{hint}</p>}
+          {error ? (
+            <p className="text-red-600">{error}</p>
+          ) : hintTone === "neutral" ? (
+            <p className="text-xs text-slate-500">{hint}</p>
+          ) : (
+            <p role="status" className={`flex items-start gap-1.5 font-medium ${hintTone === "danger" ? "text-red-700" : "text-amber-800"}`}>
+              {hintTone === "danger" ? <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" /> : <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />}
+              <span>{hint}</span>
+            </p>
+          )}
         </div>
       )}
       <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2">{children}</div>

@@ -1,17 +1,18 @@
 import { NextResponse } from "next/server";
 import { lockoutError } from "@/lib/permissions/lockout";
 import { z } from "zod";
+import { zEmail, zPersonName, zPhone } from "@/lib/inputRules";
 import { requireToggleOrEditPermission, requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { hashPassword } from "@/lib/auth";
-import { validatePasswordFull } from "@/lib/passwordValidation";
+import { PASSWORD_MIN_LENGTH, validatePasswordFull } from "@/lib/passwordValidation";
 import { resolveOrgAssignment, isDepartmentExactScopeForUser, inactiveOrgUnitError } from "@/lib/org";
 import { appendAuditLog } from "@/lib/audit";
 import { toSafeUser } from "@/lib/sanitize";
 import { withApiHandler } from "@/lib/api/handler";
 
 const updateUserSchema = z.object({
-  name: z.string().min(1).optional(),
+  name: zPersonName().optional(),
   // Email is mandatory - we accept ".min(1)" alongside `.email()` so the
   // error on "empty string submitted to clear the field" is "Email address
   // is required" rather than "Enter a valid email address". We also accept
@@ -21,19 +22,19 @@ const updateUserSchema = z.object({
   // .optional(): a status-only PATCH (Activate/Deactivate) sends no email.
   // Zod 4 treats a union with z.undefined() as a *required* key unless
   // marked optional - that broke every user status toggle.
-  email: z.string().min(1, "Email address is required").email("Enter a valid email address").optional(),
+  email: zEmail().optional(),
   // Optional and nullable (unlike email) - not every account has one, and
   // an admin can clear it back out. Loosely validated, same reasoning as
   // POST /api/admin/users' own phone field.
   phone: z
-    .union([z.string().trim().regex(/^[+0-9()\-.\s]{6,20}$/, "Enter a valid phone number"), z.literal(""), z.null()])
+    .union([zPhone(), z.null()])
     .optional(),
   role: z.string().min(1).optional(),
   districtId: z.string().nullable().optional(),
   branchId: z.string().nullable().optional(),
   departmentId: z.string().nullable().optional(),
   status: z.enum(["ACTIVE", "INACTIVE"]).optional(),
-  password: z.string().min(8).optional(),
+  password: z.string().min(PASSWORD_MIN_LENGTH, `Password must be at least ${PASSWORD_MIN_LENGTH} characters`).optional(),
 });
 
 async function handlePATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {

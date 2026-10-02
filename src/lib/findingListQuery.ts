@@ -1,4 +1,4 @@
-import type { Finding } from "@/types";
+import { findingStatusLabel, type Finding } from "@/types";
 import { ALL_ROWS } from "@/lib/pagination";
 
 /**
@@ -41,7 +41,7 @@ export function filterFindingsByText<T extends { finding: Finding }>(rows: T[], 
       names.sourceName(f.sourceId),
       f.riskLevel,
       f.status,
-      f.status.replace(/_/g, " "),
+      findingStatusLabel(f.status),
     ]
       .join(" ")
       .toLowerCase();

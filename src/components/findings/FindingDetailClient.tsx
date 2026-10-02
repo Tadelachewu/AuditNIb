@@ -4,7 +4,7 @@ import { notify, notifications } from "@/lib/notify";
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { apiSend, errorMessage, apiUpload } from "@/lib/api-client";
+import { apiSend, apiUpload } from "@/lib/api-client";
 import { formatDate, formatDateTime, formatNumber, formatCurrency } from "@/lib/format";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -14,6 +14,8 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { Trash2 } from "lucide-react";
 import { FindingStatusBadge } from "@/components/findings/FindingStatusBadge";
 import { NewFindingForm } from "@/components/findings/NewFindingForm";
+import { findingStatusLabel } from "@/types";
+import { amountError } from "@/lib/inputRules";
 import type {
   Finding,
   FindingTransition,
@@ -47,7 +49,7 @@ interface Permissions {
   canEdit: boolean;
   canDelete: boolean;
   canDeleteRejected: boolean;
-  canReopen: boolean;
+  canReverse: boolean;
   canSubmit: boolean;
   canDistrictReview: boolean;
   canDistrictReturnReview: boolean;
@@ -112,7 +114,7 @@ export function FindingDetailClient({
   findingCases: FindingCase[];
   evidence: Evidence[];
   comments: Comment[];
-  otherOpenPeriods: { id: string; code: string; earlier: boolean }[];
+  otherOpenPeriods: { id: string; code: string; earlier: boolean; locked: boolean }[];
   caseAgeDays: number;
   operationAreas: string[];
   priorityLevels: string[];
@@ -137,11 +139,11 @@ export function FindingDetailClient({
   const router = useRouter();
   const { confirm, dialog } = useConfirm();
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const [editing, setEditing] = useState(false);
 
   const [rectifying, setRectifying] = useState(false);
+  const [rectifyError, setRectifyError] = useState<string | null>(null);
   const [rectifyForm, setRectifyForm] = useState({ rectifiedCases: "", rectifiedAmount: "", note: "" });
   const [selectedCaseIds, setSelectedCaseIds] = useState<string[]>([]);
   const outstandingFindingCases = findingCases.filter((fc) => fc.status === "OUTSTANDING");
@@ -188,41 +190,47 @@ export function FindingDetailClient({
 
   async function handleDelete() {
     const result = await confirm({
-      title: finding.status === "REJECTED" ? "Delete this rejected finding?" : "Delete this draft?",
-      message: `"${finding.reference}" will be permanently removed. This cannot be undone.`,
+      title:
+        finding.status === "REJECTED"
+          ? "Delete this rejected finding?"
+          : finding.status === "RETURNED"
+            ? "Delete this returned finding?"
+            : "Delete this draft?",
+      message:
+        finding.status === "DRAFT"
+          ? `"${finding.reference}" will be permanently removed. This cannot be undone.`
+          : `"${finding.reference}" and its review history will be permanently removed. This cannot be undone. The audit log keeps a record, and the reference number is never reused.`,
       confirmLabel: "Delete Permanently",
       tone: "danger",
     });
     if (result === false) return;
     setBusy(true);
-    setError(null);
     try {
       await apiSend(`/api/findings/${finding.id}`, "DELETE");
       notify.success(notifications.finding.deleted);
       router.push("/findings");
     } catch (err) {
-      setError(errorMessage(err, "Failed to delete finding"));
+      notify.fromError(err, notifications.finding.deleteFailed);
       setBusy(false);
     }
   }
 
-  async function handleReopen() {
+  async function handleReverse() {
     const reason = await confirm({
-      title: "Reopen this finding?",
-      message: `"${finding.reference}" is reversed to its original sent-to-branch state with status REVERSED: its rectified, verified and closed cases and amounts go back to zero and the branch must rectify it again. Transfers, the full history and the audit trail are kept.`,
-      confirmLabel: "Reopen Finding",
+      title: "Reverse this finding?",
+      message: `"${finding.reference}" is reversed in ${lookups.periodCode} only: what was closed in ${lookups.periodCode} is undone, every case it holds there is outstanding again, and it goes back to the branch with status Sent to Branch Manager/R to rectify again. Anything closed in a previous period stays closed there, so previous periods are not affected. The full history and the audit trail are kept.`,
+      confirmLabel: "Reverse Finding",
       tone: "danger",
       needsReason: true,
     });
     if (reason === false) return;
     setBusy(true);
-    setError(null);
     try {
-      await apiSend(`/api/findings/${finding.id}/reopen`, "POST", { reason });
-      notify.success(notifications.finding.reopened);
+      await apiSend(`/api/findings/${finding.id}/reverse`, "POST", { reason });
+      notify.success(notifications.finding.reversed);
       await refresh();
     } catch (err) {
-      notify.fromError(err, notifications.finding.reopenFailed);
+      notify.fromError(err, notifications.finding.reverseFailed);
     } finally {
       setBusy(false);
     }
@@ -230,13 +238,12 @@ export function FindingDetailClient({
 
   async function handleSubmit() {
     setBusy(true);
-    setError(null);
     try {
       await apiSend(`/api/findings/${finding.id}/submit`, "POST");
       notify.success(notifications.finding.submitted);
       await refresh();
     } catch (err) {
-      setError(errorMessage(err, "Failed to submit finding"));
+      notify.fromError(err, notifications.finding.submitFailed);
     } finally {
       setBusy(false);
     }
@@ -273,13 +280,12 @@ export function FindingDetailClient({
     }
 
     setBusy(true);
-    setError(null);
     try {
       await apiSend(`/api/findings/${finding.id}/${stage}`, "POST", { decision, reason });
       notify.success(decision === "APPROVE" ? notifications.finding.approved : decision === "REJECT" ? notifications.finding.rejected : notifications.finding.returned);
       await refresh();
     } catch (err) {
-      setError(errorMessage(err, "Failed to record decision"));
+      notify.fromError(err, notifications.finding.reviewFailed);
     } finally {
       setBusy(false);
     }
@@ -293,40 +299,55 @@ export function FindingDetailClient({
     });
     if (result === false) return;
     setBusy(true);
-    setError(null);
     try {
       await apiSend(`/api/findings/${finding.id}/verify-rectification`, "POST");
       notify.success(notifications.finding.verified);
       await refresh();
     } catch (err) {
-      setError(errorMessage(err, "Failed to verify rectification"));
+      notify.fromError(err, notifications.finding.verifyFailed);
     } finally {
       setBusy(false);
     }
   }
 
+  // A rule the entry breaks is shown inside the form, next to the fields,
+  // with the standard "correct the highlighted fields" warning.
+  function rejectRectifyEntry(message: string) {
+    setRectifyError(message);
+    notify.warning(notifications.generic.fixFields);
+  }
+
   async function handleRectify() {
-    setError(null);
+    setRectifyError(null);
     // Mirrors rectify/route.ts's own validation (see its doc comment) so a
     // mismatched entry is caught immediately instead of round-tripping to
     // the server first - that route is still the authoritative check.
     if (!isItemized) {
       const cases = Number(rectifyForm.rectifiedCases || 0);
       const amount = Number(rectifyForm.rectifiedAmount || 0);
+      if (!Number.isInteger(cases) || cases < 0) {
+        rejectRectifyEntry("Rectified cases must be a whole number, 0 or more");
+        return;
+      }
+      const amountProblem = amountError(rectifyForm.rectifiedAmount || 0, "Rectified amount");
+      if (amountProblem) {
+        rejectRectifyEntry(amountProblem);
+        return;
+      }
       // A rectified amount with no case count doesn't represent a real
       // rectification. The reverse is valid: a case can genuinely rectify
       // to zero monetary impact (e.g. a documentation error rather than an
       // actual shortage), so cases > 0 with amount === 0 is allowed - a
       // zero-amount finding must still be rectifiable case by case.
       if (amount > 0 && cases === 0) {
-        setError("A rectified amount must have at least one rectified case attached to it");
+        rejectRectifyEntry("A rectified amount must have at least one rectified case attached to it");
         return;
       }
       // Whenever this entry exhausts one dimension entirely (every
       // remaining case, or every remaining birr), it must exhaust the
       // other one too - see rectify/route.ts's own doc comment for why.
       if (cases === outstandingCases && amount !== outstandingAmount) {
-        setError(
+        rejectRectifyEntry(
           `This rectifies every remaining case (${outstandingCases}) - the amount must be the full remaining balance (${outstandingAmount}), not a partial amount`
         );
         return;
@@ -336,7 +357,7 @@ export function FindingDetailClient({
       // every partial entry purely because there was never any money to
       // begin with, forcing every remaining case to be finished at once.
       if (outstandingAmount > 0 && amount === outstandingAmount && cases !== outstandingCases) {
-        setError(
+        rejectRectifyEntry(
           `This rectifies the full remaining amount (${outstandingAmount}) - the case count must be the full remaining ${outstandingCases} case(s), not a partial count`
         );
         return;
@@ -361,7 +382,7 @@ export function FindingDetailClient({
       setSelectedCaseIds([]);
       await refresh();
     } catch (err) {
-      setError(errorMessage(err, "Failed to record rectification"));
+      setRectifyError(notify.formError(err, notifications.finding.rectifyFailed));
     } finally {
       setBusy(false);
     }
@@ -373,20 +394,19 @@ export function FindingDetailClient({
     const result = await confirm({
       title: willFullyClose ? "Close this finding?" : "Close the rectified portion?",
       message: willFullyClose
-        ? "This verifies the rectification and is terminal - the finding cannot be reopened."
+        ? "This verifies the rectification and closes the finding. Only a holder of Reverse can undo it, in this period."
         : `This verifies and closes ${closableCases} case(s) / ${finding.currency} ${closableAmount.toLocaleString()} that's been rectified so far. The remaining ${outstandingCases} case(s) / ${finding.currency} ${outstandingAmount.toLocaleString()} stays open until it's rectified and closed too.`,
       confirmLabel: "Accept",
       tone: "success",
     });
     if (result === false) return;
     setBusy(true);
-    setError(null);
     try {
       await apiSend(`/api/findings/${finding.id}/close`, "POST");
       notify.success(willFullyClose ? notifications.finding.closed : notifications.finding.partiallyClosed);
       await refresh();
     } catch (err) {
-      setError(errorMessage(err, "Failed to close finding"));
+      notify.fromError(err, notifications.finding.closeFailed);
     } finally {
       setBusy(false);
     }
@@ -402,13 +422,12 @@ export function FindingDetailClient({
     });
     if (result === false) return;
     setBusy(true);
-    setError(null);
     try {
       await apiSend(`/api/findings/${finding.id}/return-rectification`, "POST", { reason: result });
       notify.success(notifications.finding.rectificationReturned);
       await refresh();
     } catch (err) {
-      setError(errorMessage(err, "Failed to return finding for correction"));
+      notify.fromError(err, notifications.finding.returnRectificationFailed);
     } finally {
       setBusy(false);
     }
@@ -416,13 +435,12 @@ export function FindingDetailClient({
 
   async function handleResubmitRectification() {
     setBusy(true);
-    setError(null);
     try {
       await apiSend(`/api/findings/${finding.id}/resubmit-rectification`, "POST");
       notify.success(notifications.finding.rectificationResubmitted);
       await refresh();
     } catch (err) {
-      setError(errorMessage(err, "Failed to resubmit finding"));
+      notify.fromError(err, notifications.finding.resubmitRectificationFailed);
     } finally {
       setBusy(false);
     }
@@ -439,14 +457,13 @@ export function FindingDetailClient({
     });
     if (result === false) return;
     setBusy(true);
-    setError(null);
     try {
       await apiSend(`/api/findings/${finding.id}/transfer`, "POST", { toPeriodId: transferPeriodId, reason: result });
       notify.success(notifications.finding.transferred);
       setTransferring(false);
       await refresh();
     } catch (err) {
-      setError(errorMessage(err, "Failed to transfer finding"));
+      notify.fromError(err, notifications.finding.transferFailed);
     } finally {
       setBusy(false);
     }
@@ -480,13 +497,12 @@ export function FindingDetailClient({
     });
     if (result === false) return;
     setBusy(true);
-    setError(null);
     try {
       await apiSend(`/api/findings/${finding.id}/evidence/${e.id}`, "DELETE");
       notify.success(notifications.finding.evidenceRemoved);
       await refresh();
     } catch (err) {
-      setError(errorMessage(err, "Failed to remove the file"));
+      notify.fromError(err, notifications.finding.evidenceRemoveFailed);
     } finally {
       setBusy(false);
     }
@@ -510,12 +526,11 @@ export function FindingDetailClient({
 
   async function handleEvidenceUpload(file: File) {
     setUploadingEvidence(true);
-    setError(null);
     try {
       await uploadEvidence(file);
       await refresh();
     } catch (err) {
-      setError(errorMessage(err, "Failed to upload evidence"));
+      notify.fromError(err, notifications.finding.evidenceUploadFailed);
     } finally {
       setUploadingEvidence(false);
     }
@@ -525,7 +540,6 @@ export function FindingDetailClient({
   async function postComment(text: string, parentCommentId?: string) {
     if (!text.trim()) return;
     setBusy(true);
-    setError(null);
     try {
       await apiSend<{ comment: Comment }>(`/api/findings/${finding.id}/comments`, "POST", {
         text,
@@ -537,7 +551,7 @@ export function FindingDetailClient({
       notify.success(notifications.finding.commentPosted);
       await refresh();
     } catch (err) {
-      setError(errorMessage(err, "Failed to post comment"));
+      notify.fromError(err, notifications.finding.commentFailed);
     } finally {
       setBusy(false);
     }
@@ -562,7 +576,6 @@ export function FindingDetailClient({
         <FindingStatusBadge status={finding.status} />
       </div>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
 
       <Card>
         <CardHeader title="Finding Details" />
@@ -693,7 +706,7 @@ export function FindingDetailClient({
         )}
       </Card>
 
-      {!editing && (permissions.canEdit || permissions.canDelete || permissions.canDeleteRejected || permissions.canSubmit || permissions.canReopen) && (
+      {!editing && (permissions.canEdit || permissions.canDelete || permissions.canDeleteRejected || permissions.canSubmit || permissions.canReverse) && (
         <div className="flex flex-wrap gap-2">
           {permissions.canEdit && (
             <Button variant="neutral" onClick={() => setEditing(true)} disabled={busy}>
@@ -710,9 +723,9 @@ export function FindingDetailClient({
               Delete
             </Button>
           )}
-          {permissions.canReopen && (
-            <Button variant="warning" onClick={handleReopen} disabled={busy} title="Reset to Sent to Branch Manager - history is kept">
-              Reopen
+          {permissions.canReverse && (
+            <Button variant="warning" onClick={handleReverse} disabled={busy} title="Undo what was closed in this period - back to Sent to Branch Manager/R, history kept">
+              Reverse
             </Button>
           )}
         </div>
@@ -877,13 +890,19 @@ export function FindingDetailClient({
               )}
               <div>
                 <Label htmlFor="r-note">Note (optional)</Label>
-                <Input id="r-note" value={rectifyForm.note} onChange={(e) => setRectifyForm({ ...rectifyForm, note: e.target.value })} />
+                <Input id="r-note" maxLength={500} value={rectifyForm.note} onChange={(e) => setRectifyForm({ ...rectifyForm, note: e.target.value })} />
               </div>
+              {rectifyError && (
+                <p role="alert" className="text-sm text-red-600">
+                  {rectifyError}
+                </p>
+              )}
               <div className="flex gap-2">
                 <Button
                   variant="cancel"
                   onClick={() => {
                     setRectifying(false);
+                    setRectifyError(null);
                     setSelectedCaseIds([]);
                   }}
                   disabled={busy}
@@ -930,7 +949,7 @@ export function FindingDetailClient({
                 return "Recorded rectification awaiting District review. Approve it via Verify, or send it back to the Branch Manager for correction.";
               }
               if (permissions.canHoReturnRectification) {
-                return `${finding.districtVerifiedCases} case(s) / ${finding.currency} ${formatCurrency(finding.districtVerifiedAmount)} already District-verified. You can return this finding to the Branch Manager for further correction only after District verification — which this portion has already passed.`;
+                return `${finding.districtVerifiedCases - finding.closedCases} case(s) / ${finding.currency} ${formatCurrency(finding.districtVerifiedAmount - finding.closedAmount)} District-verified and awaiting closure, with nothing still awaiting District. You can close it, or return it to the Branch Manager for correction.`;
               }
               return "";
             })()}
@@ -994,7 +1013,7 @@ export function FindingDetailClient({
           />
           {transferring ? (
             otherOpenPeriods.length === 0 ? (
-              <p className="p-4 text-sm text-slate-500">No other open reporting period is available to transfer into.</p>
+              <p className="p-4 text-sm text-slate-500">No other reporting period is available to transfer into.</p>
             ) : (
               <div className="flex flex-col gap-3 p-4">
                 <div>
@@ -1007,7 +1026,7 @@ export function FindingDetailClient({
                   >
                     {otherOpenPeriods.map((p) => (
                       <option key={p.id} value={p.id}>
-                        {p.code}{p.earlier ? " (earlier period)" : ""}
+                        {p.code}{p.earlier ? " (earlier period)" : ""}{p.locked ? " (locked)" : ""}
                       </option>
                     ))}
                   </select>
@@ -1213,6 +1232,7 @@ export function FindingDetailClient({
                           <div className="ml-6 flex flex-col gap-1.5">
                             <div className="flex gap-2">
                               <Input
+                                maxLength={5000}
                                 value={replyText}
                                 onChange={(e) => setReplyText(e.target.value)}
                                 placeholder="Write a reply..."
@@ -1232,6 +1252,7 @@ export function FindingDetailClient({
               <div className="flex flex-col gap-1.5 border-t border-slate-100 pt-3">
                 <div className="flex gap-2">
                   <Input
+                    maxLength={5000}
                     value={commentText}
                     onChange={(e) => setCommentText(e.target.value)}
                     placeholder="Add a comment..."
@@ -1413,7 +1434,7 @@ export function FindingDetailClient({
               <span className="text-slate-600">
                 <span className="font-medium text-slate-900">{t.userName}</span> {t.action.replaceAll("_", " ").toLowerCase()}{" "}
                 <span className="text-slate-500">
-                  ({t.fromStatus.replaceAll("_", " ")} → {t.toStatus.replaceAll("_", " ")})
+                  ({findingStatusLabel(t.fromStatus)} → {findingStatusLabel(t.toStatus)})
                 </span>
                 {t.reason && !isReturnEvent && <span className="text-slate-500"> — {t.reason}</span>}
               </span>

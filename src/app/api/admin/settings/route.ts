@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { NOTIFICATION_EVENT_TYPES } from "@/lib/notificationEvents";
 import { z } from "zod";
+import { emailError, hostError, LIMITS, zUniqueList } from "@/lib/inputRules";
 import { requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { appendAuditLog } from "@/lib/audit";
@@ -14,18 +15,28 @@ async function handleGET() {
 }
 
 const updateSchema = z.object({
-  currencies: z.array(z.string().min(1)).min(1, "At least one currency is required"),
-  riskLevels: z.array(z.string().min(1)).min(1, "At least one risk level is required"),
-  operationAreas: z.array(z.string().min(1)).min(1, "At least one operation area is required"),
-  priorityLevels: z.array(z.string().min(1)).min(1, "At least one priority level is required"),
-  irregularityTypes: z.array(z.string().min(1)).min(1, "At least one irregularity type is required"),
+  currencies: zUniqueList("Currency").min(1, "At least one currency is required"),
+  riskLevels: zUniqueList("Risk level").min(1, "At least one risk level is required"),
+  operationAreas: zUniqueList("Operation area").min(1, "At least one operation area is required"),
+  priorityLevels: zUniqueList("Priority level").min(1, "At least one priority level is required"),
+  irregularityTypes: zUniqueList("Irregularity type").min(1, "At least one irregularity type is required"),
   notification: z.object({
     provider: z.enum(["NONE", "SMTP", "GRAPH"]),
-    fromAddress: z.string(),
+    fromAddress: z.string().trim().max(LIMITS.email.max),
     smtpHost: z.string().optional(),
-    smtpPort: z.number().int().optional(),
+    smtpPort: z.number().int().min(1, "SMTP port must be 1-65535").max(65535, "SMTP port must be 1-65535").optional(),
     // Per-event email on/off (src/lib/notificationEvents.ts); keys checked below.
     emailEvents: z.record(z.string(), z.boolean()).optional(),
+  }).superRefine((n, ctx) => {
+    // Email on: a real sender address, and for SMTP a host and port.
+    if (n.provider === "NONE") return;
+    const fromProblem = emailError(n.fromAddress, "From address");
+    if (fromProblem) ctx.addIssue({ code: "custom", path: ["fromAddress"], message: fromProblem });
+    if (n.provider === "SMTP") {
+      const hostProblem = hostError(n.smtpHost);
+      if (hostProblem) ctx.addIssue({ code: "custom", path: ["smtpHost"], message: hostProblem });
+      if (!n.smtpPort) ctx.addIssue({ code: "custom", path: ["smtpPort"], message: "SMTP port is required" });
+    }
   }),
   autoTransferOnLock: z.boolean(),
   rankingVisibility: z.object({

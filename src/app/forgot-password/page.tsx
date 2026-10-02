@@ -3,7 +3,8 @@
 import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { apiSend, errorMessage } from "@/lib/api-client";
+import { apiSend } from "@/lib/api-client";
+import { notify, notifications } from "@/lib/notify";
 import { Button } from "@/components/ui/Button";
 import { Input, Label } from "@/components/ui/Field";
 import { AuthBackdrop, AUTH_PANEL_CLASS } from "@/components/auth/AuthBackdrop";
@@ -42,7 +43,7 @@ export default function ForgotPasswordPage() {
         noDeliverableEmail: r.noDeliverableEmail,
       });
     } catch (err) {
-      setError(errorMessage(err, "Something went wrong. Please try again."));
+      setError(notify.formError(err, notifications.auth.resetLinkFailed));
     } finally {
       setLoading(false);
     }

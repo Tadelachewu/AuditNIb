@@ -1,16 +1,17 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { zText } from "@/lib/inputRules";
 import { requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { assertFindingInScope } from "@/lib/findings-scope";
-import { transitionFinding, hoApproveFinding, assertPeriodWritable } from "@/lib/findings";
+import { transitionFinding, hoApproveFinding } from "@/lib/findings";
 import { notifyFindingsPermissionHolders, notifyUsers, usersWithFindingsPermission } from "@/lib/notifications";
 import { withApiHandler } from "@/lib/api/handler";
 
 const reviewSchema = z
   .object({
     decision: z.enum(["APPROVE", "REJECT", "RETURN"]),
-    reason: z.string().optional(),
+    reason: zText("Reason", 500).optional(),
   })
   .refine((v) => v.decision === "APPROVE" || (v.reason && v.reason.trim().length >= 5), {
     message: "A reason of at least 5 characters is required to reject or return a finding",
@@ -55,8 +56,7 @@ async function handlePOST(request: Request, { params }: { params: Promise<{ id: 
     );
   }
 
-  const periodError = assertPeriodWritable(db, existing.periodId);
-  if (periodError) return NextResponse.json({ error: periodError, code: "PERIOD_LOCKED" }, { status: 409 });
+  // A locked period only blocks submission - not this action.
 
   const updated = await updateDb((current) => {
     const f = current.findings.find((x) => x.id === id)!;

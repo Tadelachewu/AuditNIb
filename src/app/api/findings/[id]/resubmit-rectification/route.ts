@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { assertFindingInScope } from "@/lib/findings-scope";
-import { transitionFinding, assertPeriodWritable } from "@/lib/findings";
+import { transitionFinding } from "@/lib/findings";
 import { notifyFindingsPermissionHolders } from "@/lib/notifications";
 import type { FindingStatus } from "@/types";
 import { withApiHandler } from "@/lib/api/handler";
@@ -38,8 +38,7 @@ async function handlePOST(_request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "This finding isn't awaiting resubmission" }, { status: 409 });
   }
 
-  const periodError = assertPeriodWritable(db, existing.periodId);
-  if (periodError) return NextResponse.json({ error: periodError, code: "PERIOD_LOCKED" }, { status: 409 });
+  // A locked period only blocks submission - not this action.
 
   const updated = await updateDb((current) => {
     const f = current.findings.find((x) => x.id === id)!;

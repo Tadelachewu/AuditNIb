@@ -37,7 +37,7 @@ export const ERROR_CODES = {
   BUSINESS_RULE_VIOLATION: { status: 409, message: "This action isn't allowed in the current state." },
   FINDING_NOT_READY_FOR_CLOSURE: { status: 409, message: "Nothing is ready to close - rectifications must be recorded and verified first." },
   PERIOD_LOCKED: { status: 409, message: "The reporting period is locked." },
-  FINDING_NOT_REOPENABLE: { status: 409, message: "Only a closed or partially closed finding can be reopened." },
+  FINDING_NOT_REVERSIBLE: { status: 409, message: "Only a finding with cases closed in its current period can be reversed." },
   LOCKOUT_PREVENTED: { status: 409, message: "This change would leave nobody able to undo it." },
   IMPORT_FILE_INVALID: { status: 422, message: "The import file has problems. Nothing was imported." },
   IMPORT_DUPLICATES_FOUND: { status: 409, message: "Some rows already exist. Choose whether to import the rest or cancel." },

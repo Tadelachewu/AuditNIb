@@ -5,7 +5,7 @@ import { Upload, FileDown, CheckCircle2, XCircle } from "lucide-react";
 import { Modal } from "@/components/ui/AddDialog";
 import { Button } from "@/components/ui/Button";
 import { StickyActions } from "@/components/ui/StickyActions";
-import { errorMessage } from "@/lib/api-client";
+import { notify, notifications, presentError } from "@/lib/notify";
 import { parseCsv, toCsv, downloadCsv, datedFileName } from "@/lib/csv";
 
 export interface ImportColumn {
@@ -122,13 +122,17 @@ export function ImportCsvDialog({
           await submit(prepared.payload);
           out.push({ rowNumber, label: prepared.label, ok: true, message: "Added" });
         } catch (err) {
-          out.push({ rowNumber, label: prepared.label, ok: false, message: errorMessage(err, "Failed") });
+          out.push({ rowNumber, label: prepared.label, ok: false, message: presentError(err).message });
         }
       }
       setProgress(i + 1);
       setResults([...out]);
     }
     setRunning(false);
+    const ok = out.filter((r) => r.ok).length;
+    const notOk = out.length - ok;
+    if (notOk === 0) notify.success(notifications.csvImport.completed, { description: `${ok} row(s) added.` });
+    else notify.error(notifications.csvImport.partialFailed, { description: `${ok} added, ${notOk} failed - see the results below.` });
   }
 
   function downloadResults() {

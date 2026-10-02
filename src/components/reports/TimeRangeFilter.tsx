@@ -113,7 +113,7 @@ export function TimeRangeFilter() {
           </div>
           <div>
             <Label htmlFor="dateTo">To</Label>
-            <Input id="dateTo" type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} />
+            <Input id="dateTo" type="date" min={customFrom || undefined} value={customTo} onChange={(e) => setCustomTo(e.target.value)} />
           </div>
           <Button onClick={() => pushRange(customFrom, customTo)} disabled={!customFrom || !customTo}>
             Apply

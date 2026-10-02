@@ -2,11 +2,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { MRT_ColumnDef } from "material-react-table";
-import { apiGet, apiSend, errorMessage } from "@/lib/api-client";
+import { apiGet, apiSend } from "@/lib/api-client";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { StickyActions } from "@/components/ui/StickyActions";
 import { Input, Select, Label } from "@/components/ui/Field";
+import { INPUT_FILTERS, codeError, entityNameError, LIMITS } from "@/lib/inputRules";
+import { RuleInput } from "@/components/ui/RuleInput";
 import { Badge } from "@/components/ui/Badge";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { AddDialog, Modal } from "@/components/ui/AddDialog";
@@ -100,7 +102,7 @@ export default function DepartmentsPage() {
       close();
       await load();
     } catch (err) {
-      setFormError(errorMessage(err, "Failed to create department"));
+      setFormError(notify.formError(err, notifications.department.createFailed));
     } finally {
       setSubmitting(false);
     }
@@ -131,7 +133,7 @@ export default function DepartmentsPage() {
       setEditingId(null);
       await load();
     } catch (err) {
-      setEditError(errorMessage(err, "Failed to save changes"));
+      setEditError(notify.formError(err, notifications.department.updateFailed));
     } finally {
       setRowBusy(null);
     }
@@ -239,11 +241,11 @@ export default function DepartmentsPage() {
               <form onSubmit={(e) => handleCreate(e, close)} className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4">
                 <div>
                   <Label htmlFor="code">Code</Label>
-                  <Input id="code" required value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} />
+                  <RuleInput id="code" required filter={INPUT_FILTERS.code} maxLength={LIMITS.code.max} check={(v) => codeError(v)} hint="Letters, numbers, dashes and underscores; no spaces" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} />
                 </div>
                 <div>
                   <Label htmlFor="name">Name</Label>
-                  <Input id="name" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+                  <RuleInput id="name" required maxLength={LIMITS.entityName.max} check={(v) => entityNameError(v)} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
                 </div>
                 <div>
                   <Label htmlFor="orgScope">Scope</Label>
@@ -292,7 +294,7 @@ export default function DepartmentsPage() {
                   <Button type="button" variant="cancel" onClick={close}>
                     Cancel
                   </Button>
-                  <Button type="submit" disabled={submitting}>
+                  <Button type="submit" disabled={submitting || !!codeError(form.code) || !!entityNameError(form.name)}>
                     {submitting ? "Adding..." : "Add Department"}
                   </Button>
                 </StickyActions>
@@ -322,7 +324,8 @@ export default function DepartmentsPage() {
                 ]}
                 toPayload={(row) => {
                   const label = row.code ? `${row.code} - ${row.name}` : row.name || "(blank)";
-                  if (!row.code || !row.name) return { error: "code and name are required", label };
+                  const bad = codeError(row.code) || entityNameError(row.name);
+                  if (bad) return { error: bad, label };
                   const scope = (row.scope ?? "").trim().toUpperCase();
                   if (!["BANK", "DISTRICT", "BRANCH"].includes(scope)) return { error: `scope must be BANK, DISTRICT or BRANCH, not "${row.scope}"`, label };
                   const find = <T extends { code: string; name: string }>(list: T[], v: string) => {
@@ -363,75 +366,79 @@ export default function DepartmentsPage() {
         />
         {/* Editor in a dialog, like Add (see the Users page's note). */}
         {editingDept && (
-        <Modal title={`Edit ${editingDept.name}`} description={editingDept.code} size="xl" onClose={() => setEditingId(null)}>
-          <div className="p-4">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <Modal title={`Edit ${editingDept.name}`} description={editingDept.code} onClose={() => setEditingId(null)}>
+          <form
+            className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void saveEdit(editingDept);
+            }}
+        >
+            <div>
+              <Label htmlFor="edit-name">Name</Label>
+              <Input
+                id="edit-name"
+                value={editForm.name}
+                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+              />
+            </div>
+            <div>
+              <Label htmlFor="edit-orgScope">Scope</Label>
+              <Select
+                id="edit-orgScope"
+                value={editForm.orgScope}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, orgScope: e.target.value as OrgScope, districtId: "", branchId: "" })
+                }
+              >
+                <option value="BANK">Bank-wide</option>
+                <option value="DISTRICT">District</option>
+                <option value="BRANCH">Branch</option>
+              </Select>
+            </div>
+            {(editIsDistrictScoped || editIsBranchScoped) && (
               <div>
-                <Label htmlFor="edit-name">Name</Label>
-                <Input
-                  id="edit-name"
-                  value={editForm.name}
-                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label htmlFor="edit-orgScope">Scope</Label>
+                <Label htmlFor="edit-districtId">District</Label>
                 <Select
-                  id="edit-orgScope"
-                  value={editForm.orgScope}
-                  onChange={(e) =>
-                    setEditForm({ ...editForm, orgScope: e.target.value as OrgScope, districtId: "", branchId: "" })
-                  }
+                  id="edit-districtId"
+                  value={editForm.districtId}
+                  onChange={(e) => setEditForm({ ...editForm, districtId: e.target.value, branchId: "" })}
                 >
-                  <option value="BANK">Bank-wide</option>
-                  <option value="DISTRICT">District</option>
-                  <option value="BRANCH">Branch</option>
+                  <option value="">Select district</option>
+                  {districts.map((dist) => (
+                    <option key={dist.id} value={dist.id}>
+                      {dist.name}
+                    </option>
+                  ))}
                 </Select>
               </div>
-              {(editIsDistrictScoped || editIsBranchScoped) && (
-                <div>
-                  <Label htmlFor="edit-districtId">District</Label>
-                  <Select
-                    id="edit-districtId"
-                    value={editForm.districtId}
-                    onChange={(e) => setEditForm({ ...editForm, districtId: e.target.value, branchId: "" })}
-                  >
-                    <option value="">Select district</option>
-                    {districts.map((dist) => (
-                      <option key={dist.id} value={dist.id}>
-                        {dist.name}
-                      </option>
-                    ))}
-                  </Select>
-                </div>
-              )}
-              {editIsBranchScoped && (
-                <div>
-                  <Label htmlFor="edit-branchId">Branch</Label>
-                  <Select
-                    id="edit-branchId"
-                    value={editForm.branchId}
-                    onChange={(e) => setEditForm({ ...editForm, branchId: e.target.value })}
-                  >
-                    <option value="">Select branch</option>
-                    {editBranchOptions.map((b) => (
-                      <option key={b.id} value={b.id}>
-                        {b.name}
-                      </option>
-                    ))}
-                  </Select>
-                </div>
-              )}
-            </div>
-            <StickyActions className="mt-4" error={editError}>
-              <Button variant="cancel" onClick={() => setEditingId(null)}>
+            )}
+            {editIsBranchScoped && (
+              <div>
+                <Label htmlFor="edit-branchId">Branch</Label>
+                <Select
+                  id="edit-branchId"
+                  value={editForm.branchId}
+                  onChange={(e) => setEditForm({ ...editForm, branchId: e.target.value })}
+                >
+                  <option value="">Select branch</option>
+                  {editBranchOptions.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            )}
+            <StickyActions error={editError}>
+              <Button type="button" variant="cancel" onClick={() => setEditingId(null)}>
                 Cancel
               </Button>
-              <Button disabled={rowBusy === editingDept.id} onClick={() => saveEdit(editingDept)}>
+              <Button type="submit" disabled={rowBusy === editingDept.id}>
                 {rowBusy === editingDept.id ? "Saving..." : "Save Changes"}
               </Button>
             </StickyActions>
-          </div>
+          </form>
         </Modal>
         )}
       </Card>

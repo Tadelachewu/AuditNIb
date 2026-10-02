@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -8,6 +8,8 @@ import { apiSend } from "@/lib/api-client";
 import { notify, notifications } from "@/lib/notify";
 import { Button } from "@/components/ui/Button";
 import { Input, Label } from "@/components/ui/Field";
+import { PASSWORD_MIN_LENGTH } from "@/lib/passwordValidation";
+import { USERNAME_MIN_LENGTH } from "@/lib/usernameValidation";
 import { AuthBackdrop, AUTH_PANEL_CLASS } from "@/components/auth/AuthBackdrop";
 
 export interface DemoUser {
@@ -28,13 +30,72 @@ export function LoginClient({ demoUsers, sessionEnded = false }: { demoUsers: De
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [showDemo, setShowDemo] = useState(false);
+  // A field shows "required" only after the user has left it (or tried to sign in).
+  const [touched, setTouched] = useState({ username: false, password: false });
+  // Browser autofill fills the fields without a change event (and Chrome
+  // hides an autofilled password's value until the first click), so an
+  // autofilled field counts as filled; its real value is read on submit.
+  const [autofilled, setAutofilled] = useState({ username: false, password: false });
+  const usernameRef = useRef<HTMLInputElement>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const isAutofilled = (el: HTMLInputElement | null) => {
+      if (!el) return false;
+      try {
+        return el.matches(":autofill");
+      } catch {
+        try {
+          return el.matches(":-webkit-autofill");
+        } catch {
+          return false;
+        }
+      }
+    };
+    // Autofill lands shortly after load; check for a couple of seconds.
+    let checks = 0;
+    const timer = window.setInterval(() => {
+      setAutofilled({ username: isAutofilled(usernameRef.current), password: isAutofilled(passwordRef.current) });
+      if (++checks >= 10) window.clearInterval(timer);
+    }, 200);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  // Only the minimum lengths every account has always had (usernames 3+,
+  // passwords 8+) - not the full username format or password policy, which
+  // older accounts may predate. An autofilled field counts as filled.
+  const usernameProblem = autofilled.username
+    ? null
+    : !username.trim()
+      ? "Username is required."
+      : username.trim().length < USERNAME_MIN_LENGTH
+        ? `Username must be at least ${USERNAME_MIN_LENGTH} characters.`
+        : null;
+  const passwordProblem = autofilled.password
+    ? null
+    : !password
+      ? "Password is required."
+      : password.length < PASSWORD_MIN_LENGTH
+        ? `Password must be at least ${PASSWORD_MIN_LENGTH} characters.`
+        : null;
+  const usernameMissing = !!usernameProblem;
+  const passwordMissing = !!passwordProblem;
+  const canSubmit = !usernameMissing && !passwordMissing && !loading;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    // Read the inputs themselves too, so an autofilled value is never missed.
+    const user = (username || usernameRef.current?.value || "").trim();
+    const pass = password || passwordRef.current?.value || "";
+    if (user.length < USERNAME_MIN_LENGTH || pass.length < PASSWORD_MIN_LENGTH) {
+      setTouched({ username: true, password: true });
+      notify.warning(notifications.generic.fixFields);
+      return;
+    }
     setError(null);
     setLoading(true);
     try {
-      await apiSend("/api/auth/login", "POST", { username, password });
+      await apiSend("/api/auth/login", "POST", { username: user, password: pass });
       notify.success(notifications.auth.loginSuccess);
       router.push("/dashboard");
       router.refresh();
@@ -67,33 +128,51 @@ export function LoginClient({ demoUsers, sessionEnded = false }: { demoUsers: De
             <Label htmlFor="username" brand>Username</Label>
             <Input
               id="username"
+              ref={usernameRef}
               autoFocus
               autoComplete="username"
               value={username}
               onChange={(e) => {
                 setUsername(e.target.value);
+                setAutofilled((a) => ({ ...a, username: false }));
                 setError(null);
               }}
-              aria-invalid={error ? true : undefined}
-              className={error ? "border-red-400" : undefined}
+              onBlur={() => setTouched((t) => ({ ...t, username: true }))}
+              aria-invalid={error || (touched.username && usernameMissing) ? true : undefined}
+              aria-describedby={touched.username && usernameMissing ? "username-error" : undefined}
+              className={error || (touched.username && usernameMissing) ? "border-red-400" : undefined}
               required
             />
+            {touched.username && usernameMissing && (
+              <p id="username-error" className="mt-1 text-xs text-red-600">
+                {usernameProblem}
+              </p>
+            )}
           </div>
           <div className="mb-4">
             <Label htmlFor="password" brand>Password</Label>
             <Input
               id="password"
+              ref={passwordRef}
               type="password"
               autoComplete="current-password"
               value={password}
               onChange={(e) => {
                 setPassword(e.target.value);
+                setAutofilled((a) => ({ ...a, password: false }));
                 setError(null);
               }}
-              aria-invalid={error ? true : undefined}
-              className={error ? "border-red-400" : undefined}
+              onBlur={() => setTouched((t) => ({ ...t, password: true }))}
+              aria-invalid={error || (touched.password && passwordMissing) ? true : undefined}
+              aria-describedby={touched.password && passwordMissing ? "password-error" : undefined}
+              className={error || (touched.password && passwordMissing) ? "border-red-400" : undefined}
               required
             />
+            {touched.password && passwordMissing && (
+              <p id="password-error" className="mt-1 text-xs text-red-600">
+                {passwordProblem}
+              </p>
+            )}
             <div className="mt-1.5 text-right">
               <Link
                 href="/forgot-password"
@@ -105,7 +184,7 @@ export function LoginClient({ demoUsers, sessionEnded = false }: { demoUsers: De
           </div>
 
 
-          <Button type="submit" disabled={loading} className="w-full">
+          <Button type="submit" disabled={!canSubmit} className="w-full" title={canSubmit || loading ? undefined : "Enter your username and password"}>
             {loading ? "Signing in..." : "Sign in"}
           </Button>
         </form>

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Field";
+import { LIMITS, listItemError } from "@/lib/inputRules";
 
 // Replaces the old single comma-separated text field for each of
 // Settings' configurable lists (currencies, risk levels, operation areas,
@@ -26,9 +27,16 @@ export function SettingsListEditor({
   const [open, setOpen] = useState(defaultOpen);
   const [newItem, setNewItem] = useState("");
 
+  // Same rule as the server (src/lib/inputRules.ts): letters or numbers,
+  // at most 100 characters, and not already in the list (case-insensitive).
+  const newItemProblem = newItem.trim()
+    ? (listItemError(newItem, "Value") ??
+      (items.some((i) => i.toLowerCase() === newItem.trim().toLowerCase()) ? "Value is already in the list" : null))
+    : null;
+
   function addItem() {
     const trimmed = newItem.trim();
-    if (!trimmed || items.includes(trimmed)) return;
+    if (!trimmed || newItemProblem) return;
     onChange([...items, trimmed]);
     setNewItem("");
   }
@@ -82,6 +90,9 @@ export function SettingsListEditor({
           <div className="mt-2 flex gap-2">
             <Input
               value={newItem}
+              maxLength={LIMITS.listItem.max}
+              aria-invalid={newItemProblem ? true : undefined}
+              className={newItemProblem ? "border-red-400" : undefined}
               placeholder="Add new..."
               onChange={(e) => setNewItem(e.target.value)}
               onKeyDown={(e) => {
@@ -91,10 +102,11 @@ export function SettingsListEditor({
                 }
               }}
             />
-            <Button type="button" variant="secondary" onClick={addItem} disabled={!newItem.trim()}>
+            <Button type="button" variant="secondary" onClick={addItem} disabled={!newItem.trim() || !!newItemProblem}>
               Add
             </Button>
           </div>
+          {newItemProblem && <p className="mt-1 text-xs text-red-600">{newItemProblem}.</p>}
         </div>
       )}
     </div>

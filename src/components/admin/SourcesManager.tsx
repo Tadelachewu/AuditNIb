@@ -3,14 +3,16 @@
 import { useMemo, useState } from "react";
 import type { MRT_ColumnDef } from "material-react-table";
 import { useRouter } from "next/navigation";
-import { apiSend, errorMessage } from "@/lib/api-client";
+import { apiSend } from "@/lib/api-client";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { StickyActions } from "@/components/ui/StickyActions";
-import { Input, Label } from "@/components/ui/Field";
+import { Label } from "@/components/ui/Field";
+import { INPUT_FILTERS, codeError, entityNameError, LIMITS } from "@/lib/inputRules";
+import { RuleInput } from "@/components/ui/RuleInput";
 import { Badge } from "@/components/ui/Badge";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
-import { AddDialog } from "@/components/ui/AddDialog";
+import { AddDialog, Modal } from "@/components/ui/AddDialog";
 import { RowAction, RowActions, StatusToggleAction } from "@/components/ui/RowActions";
 import type { Source } from "@/types";
 import { AdminTable } from "@/components/ui/AdminTable";
@@ -55,11 +57,13 @@ export function SourcesManager({ initialSources, permissions }: { initialSources
       close();
       router.refresh();
     } catch (err) {
-      setFormError(errorMessage(err, "Failed to create source"));
+      setFormError(notify.formError(err, notifications.source.createFailed));
     } finally {
       setSubmitting(false);
     }
   }
+
+  const editingItem = sources.find((x) => x.id === editingId) ?? null;
 
   function startEdit(s: Source) {
     setEditingId(s.id);
@@ -76,7 +80,7 @@ export function SourcesManager({ initialSources, permissions }: { initialSources
       setEditingId(null);
       router.refresh();
     } catch (err) {
-      setEditError(errorMessage(err, "Failed to save changes"));
+      setEditError(notify.formError(err, notifications.source.updateFailed));
     } finally {
       setRowBusy(null);
     }
@@ -151,15 +155,7 @@ export function SourcesManager({ initialSources, permissions }: { initialSources
       {
         accessorKey: "name",
         header: "Name",
-        Cell: ({ row }) =>
-          editingId === row.original.id ? (
-            <div>
-              <Input value={editName} onChange={(e) => setEditName(e.target.value)} className="max-w-56" autoFocus />
-              {editError && <p className="mt-1 text-xs text-red-600">{editError}</p>}
-            </div>
-          ) : (
-            <span className="font-medium text-slate-900">{row.original.name}</span>
-          ),
+        Cell: ({ row }) => <span className="font-medium text-slate-900">{row.original.name}</span>,
       },
       {
         id: "status",
@@ -180,7 +176,7 @@ export function SourcesManager({ initialSources, permissions }: { initialSources
         Cell: ({ row }) => (row.original.isDefault ? <Badge tone="gold">★ Default</Badge> : <span className="text-slate-400">—</span>),
       },
     ],
-    [editingId, editName, editError]
+    []
   );
 
   return (
@@ -193,17 +189,17 @@ export function SourcesManager({ initialSources, permissions }: { initialSources
               <form onSubmit={(e) => handleCreate(e, close)} className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3">
                 <div>
                   <Label htmlFor="code">Code</Label>
-                  <Input id="code" required value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} />
+                  <RuleInput id="code" required filter={INPUT_FILTERS.code} maxLength={LIMITS.code.max} check={(v) => codeError(v)} hint="Letters, numbers, dashes and underscores; no spaces" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} />
                 </div>
                 <div className="sm:col-span-2">
                   <Label htmlFor="name">Name</Label>
-                  <Input id="name" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+                  <RuleInput id="name" required maxLength={LIMITS.entityName.max} check={(v) => entityNameError(v)} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
                 </div>
                 <StickyActions error={formError}>
                   <Button type="button" variant="cancel" onClick={close}>
                     Cancel
                   </Button>
-                  <Button type="submit" disabled={submitting}>
+                  <Button type="submit" disabled={submitting || !!codeError(form.code) || !!entityNameError(form.name)}>
                     {submitting ? "Adding..." : "Add Source"}
                   </Button>
                 </StickyActions>
@@ -235,8 +231,8 @@ export function SourcesManager({ initialSources, permissions }: { initialSources
                   { key: "name", required: true, example: "Internal Control", help: "Name" },
                 ]}
                 toPayload={(row) =>
-                  !row.code || !row.name
-                    ? { error: "code and name are required", label: row.code || row.name || "(blank)" }
+                  codeError(row.code) || entityNameError(row.name)
+                    ? { error: (codeError(row.code) || entityNameError(row.name))!, label: row.code || row.name || "(blank)" }
                     : { payload: { code: row.code, name: row.name }, label: `${row.code} - ${row.name}` }
                 }
                 submit={(payload) => apiSend("/api/admin/sources", "POST", payload)}
@@ -244,31 +240,48 @@ export function SourcesManager({ initialSources, permissions }: { initialSources
               />
             )
           }
-          renderRowActions={(s) =>
-            editingId === s.id ? (
-              <RowActions inline>
-                <RowAction kind="cancel" onClick={() => setEditingId(null)} />
-                <RowAction kind="save" busy={rowBusy === s.id} label={rowBusy === s.id ? "Saving..." : "Save"} onClick={() => saveEdit(s)} />
-              </RowActions>
-            ) : (
-              <RowActions>
-                {canEdit && <RowAction kind="edit" onClick={() => startEdit(s)} />}
-                {canEdit && (
-                  <RowAction
-                    kind={s.isDefault ? "undefault" : "default"}
-                    busy={rowBusy === s.id}
-                    disabled={!s.isDefault && !s.active}
-                    title={!s.isDefault && !s.active ? "Activate this source first" : "Pre-fill this source on new findings"}
-                    onClick={() => makeDefault(s)}
-                  />
-                )}
-                {canToggle && <StatusToggleAction active={s.active} busy={rowBusy === s.id} onClick={() => toggleActive(s)} />}
-                {canDelete && <RowAction kind="delete" busy={rowBusy === s.id} onClick={() => deleteSource(s)} />}
-              </RowActions>
-            )
-          }
+          renderRowActions={(s) => (
+            <RowActions>
+              {canEdit && <RowAction kind="edit" onClick={() => startEdit(s)} />}
+              {canEdit && (
+                <RowAction
+                  kind={s.isDefault ? "undefault" : "default"}
+                  busy={rowBusy === s.id}
+                  disabled={!s.isDefault && !s.active}
+                  title={!s.isDefault && !s.active ? "Activate this source first" : "Pre-fill this source on new findings"}
+                  onClick={() => makeDefault(s)}
+                />
+              )}
+              {canToggle && <StatusToggleAction active={s.active} busy={rowBusy === s.id} onClick={() => toggleActive(s)} />}
+              {canDelete && <RowAction kind="delete" busy={rowBusy === s.id} onClick={() => deleteSource(s)} />}
+            </RowActions>
+          )}
         />
       </Card>
+      {editingItem && (
+        <Modal title={`Edit ${editingItem.name}`} description={editingItem.code} onClose={() => setEditingId(null)}>
+          <form
+            className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void saveEdit(editingItem);
+            }}
+          >
+            <div>
+              <Label htmlFor="edit-name">Source name</Label>
+              <RuleInput id="edit-name" maxLength={LIMITS.entityName.max} check={(v) => entityNameError(v)} value={editName} onChange={(e) => setEditName(e.target.value)} />
+            </div>
+            <StickyActions error={editError}>
+              <Button type="button" variant="cancel" onClick={() => setEditingId(null)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={rowBusy === editingItem.id || !!entityNameError(editName)}>
+                {rowBusy === editingItem.id ? "Saving..." : "Save Changes"}
+              </Button>
+            </StickyActions>
+          </form>
+        </Modal>
+      )}
       {dialog}
     </>
   );

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { inactiveOrgUnitError } from "@/lib/org";
 import { v4 as uuid } from "uuid";
 import { z } from "zod";
+import { zAmount, zCaseCount, zFindingDate, zText, zTitle } from "@/lib/inputRules";
 import { requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { findingsInScope } from "@/lib/findings-scope";
@@ -54,32 +55,32 @@ const createSchema = z.object({
   // not by this static schema. periodId/districtId/branchId/amount/
   // caseCount are NOT in that setting and stay hard-required below -
   // see REQUIRABLE_FINDING_FIELDS' own doc comment for why.
-  title: z.string().optional(),
+  title: zTitle().optional(),
   sourceId: z.string().optional(),
   departmentId: z.string().optional(),
   periodId: z.string().min(1, "Reporting period is required"),
   districtId: z.string().optional(),
   branchId: z.string().optional(),
-  findingDate: z.string().optional(),
-  operationArea: z.string().optional(),
-  irregularityType: z.string().optional(),
+  findingDate: zFindingDate().optional(),
+  operationArea: zText("Operation area", 100).optional(),
+  irregularityType: zText("Type of irregularity", 100).optional(),
   categoryId: z.string().optional(),
-  amount: z.number().nonnegative(),
-  currency: z.string().optional(),
-  caseCount: z.number().int().positive("Number of cases must be at least 1"),
-  riskLevel: z.string().optional(),
-  priority: z.string().optional(),
-  description: z.string().optional(),
-  recommendation: z.string().optional(),
-  rootCause: z.string().optional(),
-  evidenceNote: z.string().optional(),
+  amount: zAmount(),
+  currency: zText("Currency", 100).optional(),
+  caseCount: zCaseCount(),
+  riskLevel: zText("Risk level", 100).optional(),
+  priority: zText("Priority", 100).optional(),
+  description: zText("Description").optional(),
+  recommendation: zText("Recommendation").optional(),
+  rootCause: zText("Root cause").optional(),
+  evidenceNote: zText("Evidence note").optional(),
   submit: z.boolean().default(false),
   // Document_3 §12/§34: optional case-level itemization, one amount per
   // case ("Case 1: 15,000, Case 2: 10,000, Case 3: 20,000" instead of just
   // "3 cases / 45,000 total"). When provided, must have exactly caseCount
   // entries summing to amount - validated below, not just by the schema,
   // since it's a cross-field rule.
-  caseAmounts: z.array(z.number().nonnegative()).max(500).optional(),
+  caseAmounts: z.array(zAmount("Case amount")).max(500).optional(),
 });
 
 // Branch-scoped roles (Branch Internal Controller registering their own

@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { v4 as uuid } from "uuid";
 import { z } from "zod";
+import { zAmount, zText } from "@/lib/inputRules";
 import { requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { assertFindingInScope } from "@/lib/findings-scope";
-import { transitionFinding, assertPeriodWritable } from "@/lib/findings";
+import { transitionFinding } from "@/lib/findings";
 import { notifyFindingsPermissionHolders, notifyUsers, usersWithFindingsPermission } from "@/lib/notifications";
 import type { FindingStatus, RectificationEntry, FindingCase } from "@/types";
 import { withApiHandler } from "@/lib/api/handler";
@@ -27,10 +28,10 @@ const RECTIFIABLE_STATUSES = ["SENT_TO_BRANCH_MANAGER", "REVERSED", "PARTIALLY_R
 // any FindingCase rows at all, not by which fields the caller happens to
 // send.
 const rectifySchema = z.object({
-  rectifiedCases: z.number().int().min(0).optional(),
-  rectifiedAmount: z.number().min(0).optional(),
+  rectifiedCases: z.number().int().min(0).max(10_000).optional(),
+  rectifiedAmount: zAmount("Rectified amount").optional(),
   caseIds: z.array(z.string()).optional(),
-  note: z.string().optional(),
+  note: zText("Note", 500).optional(),
 });
 
 // Branch Manager's "Record corrective actions... Enter rectified case
@@ -72,12 +73,7 @@ async function handlePOST(request: Request, { params }: { params: Promise<{ id: 
     return NextResponse.json({ error: "This finding isn't awaiting rectification" }, { status: 409 });
   }
 
-  // Once a period locks, a still-outstanding finding needs the Transfer
-  // Engine (.../transfer) to carry its balance into a new period before it
-  // can be rectified further - this is the intended BRD behavior (§13),
-  // not a bug: locking is what forces that path.
-  const periodError = assertPeriodWritable(db, existing.periodId);
-  if (periodError) return NextResponse.json({ error: periodError, code: "PERIOD_LOCKED" }, { status: 409 });
+  // A locked period only blocks submission - not this action.
 
   // A finding with FindingCase rows (Document_3 §12/§34's itemization)
   // must be rectified by picking specific still-outstanding cases, not by

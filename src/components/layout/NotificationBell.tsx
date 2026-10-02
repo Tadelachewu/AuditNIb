@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { apiGet, apiSend, errorMessage } from "@/lib/api-client";
+import { apiGet, apiSend } from "@/lib/api-client";
 import { formatDateTime } from "@/lib/format";
 import { FIELD_FOCUS } from "@/components/ui/Field";
 import type { Notification } from "@/types";
@@ -99,7 +99,7 @@ export function NotificationBell() {
       notify.success(notices.finding.commentPosted);
       goToFinding(n);
     } catch (err) {
-      setCommentError(errorMessage(err, "Failed to post comment"));
+      setCommentError(notify.formError(err, notices.finding.commentFailed));
     } finally {
       setPostingComment(false);
     }
@@ -160,6 +160,7 @@ export function NotificationBell() {
                   {respondingTo === n.id && (
                     <div className="flex flex-col gap-1.5 px-3 pb-2.5">
                       <textarea
+                        maxLength={5000}
                         autoFocus
                         rows={2}
                         placeholder="Add a comment (optional)..."

@@ -1,10 +1,10 @@
 import { redirect } from "next/navigation";
 import { SESSION_ENDED_PATH } from "@/lib/session";
-import { canReopen } from "@/lib/findingReopen";
+import { canReverse } from "@/lib/findingReverse";
 import { getCurrentUser } from "@/lib/session";
 import { readDb } from "@/lib/db";
 import { assertFindingInScope } from "@/lib/findings-scope";
-import { caseAgeDays, userPerformedApprovalOrVerifyAction, hasRectificationAfterLastTransfer } from "@/lib/findings";
+import { caseAgeDays, userPerformedApprovalOrVerifyAction, hasRectificationAfterLastTransfer, hoReturnBlockedReason, assertPeriodOpenForSubmission } from "@/lib/findings";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
 import { Card } from "@/components/ui/Card";
 import { FindingDetailClient } from "@/components/findings/FindingDetailClient";
@@ -62,19 +62,23 @@ export default async function FindingDetailPage({ params }: { params: Promise<{ 
   const category = db.categories.find((c) => c.id === finding.categoryId);
   const period = db.reportingPeriods.find((p) => p.id === finding.periodId);
 
-  // Manual transfer goes either way (same rule as the transfer API): later
-  // periods first, nearest first, so the default is still the next period;
-  // then earlier periods, nearest first.
+  // Manual transfer goes either way, open or locked (same rule as the
+  // transfer API): later periods first, nearest first, so the default is
+  // still the next period; then earlier periods, nearest first.
   const isEarlier = (p: { startsAt: string }) => !!period && p.startsAt < period.startsAt;
   const otherOpenPeriods = db.reportingPeriods
-    .filter((p) => p.status === "OPEN" && p.id !== finding.periodId)
+    .filter((p) => p.id !== finding.periodId)
     .sort((a, b) => {
       const ea = isEarlier(a);
       const eb = isEarlier(b);
       if (ea !== eb) return ea ? 1 : -1;
       return ea ? b.startsAt.localeCompare(a.startsAt) : a.startsAt.localeCompare(b.startsAt);
     })
-    .map((p) => ({ id: p.id, code: p.code, earlier: isEarlier(p) }));
+    .map((p) => ({ id: p.id, code: p.code, earlier: isEarlier(p), locked: p.status === "LOCKED" }));
+
+  // A locked period blocks submission, and drafting too when its "Drafts
+  // blocked" setting is on (docs/locked-periods.md) - same rules as the API.
+  const draftingBlocked = period?.status === "LOCKED" && !period.draftsAllowedWhileLocked;
 
   const has = (action: string) => hasPermission(user.permissions, permissionKey("findings", action));
 
@@ -99,9 +103,8 @@ export default async function FindingDetailPage({ params }: { params: Promise<{ 
   //   * findings.district-return-rectification  (new, District only) → unrestricted, any RETURNABLE_STATUSES
   //   * findings.ho-return-rectification        (new, HO only)       → GATED: requires district verification first
   //
-  // The HO gate (districtVerifiedCases > 0 || districtVerifiedAmount > 0)
-  // enforces District's first-level gate before HO acts - HO steps in only
-  // after District has already engaged with the recorded rectification.
+  // The HO gate (hoReturnBlockedReason): nothing still awaiting District
+  // verification, and some District-verified rectification not yet closed.
   const hasReturnLegacy = has("return-rectification");
   const hasReturnDistrict = has("district-return-rectification");
   const hasReturnHo = has("ho-return-rectification");
@@ -129,10 +132,9 @@ export default async function FindingDetailPage({ params }: { params: Promise<{ 
   // WITHOUT also holding the legacy or district variant (those would already
   // be covered by canDistrictReturnRectification above and don't need a gate).
   const hasReturnHoOnly = hasReturnHo && !hasReturnLegacy && !hasReturnDistrict;
-  const districtHasVerified =
-    finding.districtVerifiedCases > 0 || finding.districtVerifiedAmount > 0;
+  // HO acts only on what District has fully verified - see hoReturnBlockedReason().
   const canHoReturnRectification =
-    hasReturnHoOnly && RETURNABLE_STATUSES.includes(finding.status) && districtHasVerified && returnGatesPass;
+    hasReturnHoOnly && RETURNABLE_STATUSES.includes(finding.status) && hoReturnBlockedReason(finding) === null && returnGatesPass;
   // Backward-compatible combined boolean. The UI also reads the two new
   // scoped booleans above separately for button labeling / tooltips.
   const canReturnRectification = canDistrictReturnRectification || canHoReturnRectification;
@@ -195,17 +197,22 @@ export default async function FindingDetailPage({ params }: { params: Promise<{ 
         // [id]/route.ts PATCH/DELETE and submit/route.ts). Review/rectify/
         // verify/close stay unrestricted by design - those are legitimately
         // different-actor actions.
-        canEdit: has("edit") && finding.createdBy === user.userId && ["DRAFT", "RETURNED"].includes(finding.status),
-        canDelete: has("delete") && finding.createdBy === user.userId && finding.status === "DRAFT",
+        canEdit: has("edit") && finding.createdBy === user.userId && ["DRAFT", "RETURNED"].includes(finding.status) && !draftingBlocked,
+        canDelete: has("delete") && finding.createdBy === user.userId && ["DRAFT", "RETURNED"].includes(finding.status) && !draftingBlocked,
         // Deliberately no ownership check, unlike canDelete above - see
         // the registry's own doc comment on "delete-rejected": this is a
         // reviewer housekeeping action on a terminal outcome, not the
         // registrant cleaning up their own work.
         canDeleteRejected: has("delete-rejected") && finding.status === "REJECTED",
         // Closed / partially closed -> back to a fresh Sent to Branch Manager
-        // (history kept) - src/lib/findingReopen.ts.
-        canReopen: has("reopen") && canReopen(finding),
-        canSubmit: has("submit") && finding.createdBy === user.userId && ["DRAFT", "RETURNED"].includes(finding.status),
+        // (history kept) - src/lib/findingReverse.ts.
+        canReverse: has("reopen") && canReverse(db, finding),
+        canSubmit:
+          has("submit") &&
+          finding.createdBy === user.userId &&
+          ["DRAFT", "RETURNED"].includes(finding.status) &&
+          period?.status !== "LOCKED" &&
+          assertPeriodOpenForSubmission(db, finding.periodId) === null,
         canDistrictReview: has("district-review") && finding.status === "DISTRICT_REVIEW",
         // At each review stage (District/HO/Bank), the "Return" option is
         // hidden when the reviewer is also the finding's creator — a

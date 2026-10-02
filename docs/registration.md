@@ -322,10 +322,11 @@ Clicking **Save Draft** (or plain form submit, `NewFindingForm.tsx:537-541`) cal
   (`EDITABLE_STATUSES`, `[id]/route.ts:10,105-107`), gated by `findings.edit` **and** an
   ownership check (`existing.createdBy !== session.userId`, `[id]/route.ts:101-103`).
   `DELETE /api/findings/[id]` similarly requires `findings.delete`, ownership, and
-  `status === "DRAFT"` specifically — a `RETURNED` finding cannot be deleted, only edited
-  and resubmitted (`[id]/route.ts:253-259`). Deleting a draft also cascades removal of any
-  `FindingTransition`/`FindingCase` rows tied to it (`[id]/route.ts:264-267`) — though a
-  fresh draft typically has none of either.
+  status `DRAFT` **or `RETURNED`** (a returned finding is back with its registrant, like a
+  draft). Deleting also cascades removal of its `FindingTransition`/`FindingCase` rows; the
+  audit log keeps a `DELETE` entry. A deleted `RETURNED` (or `REJECTED`) finding's
+  reference number is **never reused** - it was submitted and reviewed - while a deleted
+  never-submitted draft's number may be (`nextFindingReference()` in `src/lib/findings.ts`).
 - A draft appears in its author's own work queue via `queueStatusesForSession()`
   whenever they hold `findings.edit` or `findings.submit`
   (`src/lib/findings.ts:653-656`).

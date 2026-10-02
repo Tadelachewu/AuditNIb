@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { v4 as uuid } from "uuid";
 import { z } from "zod";
+import { zDateTime, zText } from "@/lib/inputRules";
 import { requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { appendAuditLog } from "@/lib/audit";
@@ -39,14 +40,14 @@ async function handleGET() {
 // ReportingPeriod.submissionStartsAt's own doc comment (src/types/index.ts).
 const createSchema = z
   .object({
-    startsAt: z.string().min(1, "Start date/time is required"),
-    endsAt: z.string().min(1, "End date/time is required"),
-    submissionStartsAt: z.string().min(1, "Submission window start is required"),
-    submissionEndsAt: z.string().min(1, "Submission window end is required"),
+    startsAt: zDateTime("Start date/time"),
+    endsAt: zDateTime("End date/time"),
+    submissionStartsAt: zDateTime("Submission window start"),
+    submissionEndsAt: zDateTime("Submission window end"),
     // Optional human-readable label - see ReportingPeriod.name's own doc
     // comment. Never required, never derived - purely what the admin
     // types, or blank.
-    name: z.string().optional(),
+    name: zText("Name", 100).optional(),
   })
   .refine((v) => new Date(v.endsAt).getTime() > new Date(v.startsAt).getTime(), {
     message: "End date/time must be after the start date/time",

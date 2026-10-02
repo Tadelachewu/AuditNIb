@@ -70,7 +70,7 @@ const COLUMNS: {
     name: "Transferred To Period Code",
     req: "cond",
     format: "2026-10",
-    note: "The period it moved into. Must be open, and later than Reporting Period Code.",
+    note: "The period it moved into. Must be later than Reporting Period Code (open or locked).",
   },
   { n: 23, name: "External Reference", req: "opt", format: "Your own legacy file/ledger number", note: "Purely informational - never used for matching or numbering." },
   { n: 24, name: "Root Cause", req: "config", format: "Free text", note: "Why it happened (the form's Root cause field)." },
@@ -283,7 +283,7 @@ export function ImportGuide() {
               <p className="text-xs font-semibold text-slate-800">Moved forward, still outstanding.</p>
               <ul className="list-disc space-y-1 pl-4 text-xs text-slate-600">
                 <li>
-                  <strong>Requires</strong> Transferred To Period Code - a real, open period, later than Reporting Period Code.
+                  <strong>Requires</strong> Transferred To Period Code - a real period (open or locked), later than Reporting Period Code.
                 </li>
                 <li>Rectified Cases/Amount optional (0 is fine); the full amount together is not - use CLOSED instead.</li>
                 <li>Whatever&apos;s declared rectified is also treated as already closed - not left for a Controller to re-close.</li>

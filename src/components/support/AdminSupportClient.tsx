@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { apiGet, apiSend, errorMessage } from "@/lib/api-client";
+import { apiGet, apiSend } from "@/lib/api-client";
 import { formatDateTime } from "@/lib/format";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -11,7 +11,7 @@ import type { SupportThread, SupportMessage } from "@/types";
 import { ListSkeleton } from "@/components/ui/Skeleton";
 import { Pagination } from "@/components/ui/Pagination";
 import { useClientPagination } from "@/lib/useClientPagination";
-import { notify, notifications } from "@/lib/notify";
+import { notify, notifications, presentError } from "@/lib/notify";
 
 type AdminThread = SupportThread & { userName: string; userRole: string | null };
 
@@ -46,7 +46,7 @@ export function AdminSupportClient({ canRespond }: { canRespond: boolean }) {
       const data = await apiGet<{ threads: AdminThread[] }>("/api/admin/support", { background: true });
       setThreads(data.threads);
     } catch (err) {
-      setError(errorMessage(err, "Failed to load threads"));
+      setError(presentError(err, notifications.support.loadFailed).message);
     }
   }, []);
 
@@ -56,7 +56,7 @@ export function AdminSupportClient({ canRespond }: { canRespond: boolean }) {
       if (selectedIdRef.current !== id) return;
       setMessages(data.messages);
     } catch (err) {
-      setError(errorMessage(err, "Failed to load conversation"));
+      setError(presentError(err, notifications.support.loadFailed).message);
     }
   }, []);
 
@@ -86,7 +86,7 @@ export function AdminSupportClient({ canRespond }: { canRespond: boolean }) {
       setReplyBody("");
       await Promise.all([loadThread(selectedId), loadThreads()]);
     } catch (err) {
-      setError(errorMessage(err, "Failed to send message"));
+      setError(notify.formError(err, notifications.support.sendFailed));
     } finally {
       setSendingReply(false);
     }
@@ -151,6 +151,7 @@ export function AdminSupportClient({ canRespond }: { canRespond: boolean }) {
             ) : selectedThread.status === "OPEN" ? (
               <form onSubmit={sendReply} className="flex flex-col gap-2 border-t border-slate-200 p-4">
                 <Textarea
+                  maxLength={5000}
                   rows={2}
                   placeholder="Type a reply..."
                   value={replyBody}

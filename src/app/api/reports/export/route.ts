@@ -3,6 +3,7 @@ import { requirePermission } from "@/lib/guard";
 import { readDb } from "@/lib/db";
 import { buildReportsData } from "@/lib/reportsPageData";
 import { withApiHandler } from "@/lib/api/handler";
+import { findingStatusCode } from "@/types";
 
 // The Reports page's "Download CSV": EVERY section of the page, with the
 // page's current filters - built by the same function the page renders
@@ -43,7 +44,7 @@ async function handleGET(request: Request) {
     const f = r.finding;
     const amount = data.amountOf(r);
     const outstanding = r.slice ? r.slice.eligibleAmount - r.slice.closedAmount : f.amount - f.closedAmount;
-    const status = r.slice && !r.slice.isCurrentPeriod ? `Transferred -> ${r.slice.transferredOutToCode ?? ""}` : f.status;
+    const status = r.slice && !r.slice.isCurrentPeriod ? `Transferred -> ${r.slice.transferredOutToCode ?? ""}` : findingStatusCode(f.status);
     out.push(
       line([f.reference, f.title, data.names.districtName(f.districtId), data.names.branchName(f.branchId), data.names.departmentName(f.departmentId), data.names.categoryName(f.categoryId), data.names.sourceName(f.sourceId), f.currency, amount, outstanding, f.caseCount, r.slice ? r.slice.eligibleCases : f.caseCount, status])
     );

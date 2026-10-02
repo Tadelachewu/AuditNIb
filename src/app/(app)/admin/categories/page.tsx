@@ -2,14 +2,16 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { MRT_ColumnDef } from "material-react-table";
-import { apiGet, apiSend, errorMessage } from "@/lib/api-client";
+import { apiGet, apiSend } from "@/lib/api-client";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { StickyActions } from "@/components/ui/StickyActions";
-import { Input, Label } from "@/components/ui/Field";
+import { Label } from "@/components/ui/Field";
+import { INPUT_FILTERS, codeError, entityNameError, LIMITS } from "@/lib/inputRules";
+import { RuleInput } from "@/components/ui/RuleInput";
 import { Badge } from "@/components/ui/Badge";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
-import { AddDialog } from "@/components/ui/AddDialog";
+import { AddDialog, Modal } from "@/components/ui/AddDialog";
 import { RowAction, RowActions, StatusToggleAction } from "@/components/ui/RowActions";
 import { usePermissions } from "@/lib/permissions/PermissionsContext";
 import { hasPermission } from "@/lib/permissions/registry";
@@ -57,11 +59,13 @@ export default function CategoriesPage() {
       close();
       await load();
     } catch (err) {
-      setFormError(errorMessage(err, "Failed to create category"));
+      setFormError(notify.formError(err, notifications.category.createFailed));
     } finally {
       setSubmitting(false);
     }
   }
+
+  const editingItem = categories.find((x) => x.id === editingId) ?? null;
 
   function startEdit(c: ClassifiedCategory) {
     setEditingId(c.id);
@@ -78,7 +82,7 @@ export default function CategoriesPage() {
       setEditingId(null);
       await load();
     } catch (err) {
-      setEditError(errorMessage(err, "Failed to save changes"));
+      setEditError(notify.formError(err, notifications.category.updateFailed));
     } finally {
       setRowBusy(null);
     }
@@ -160,15 +164,7 @@ export default function CategoriesPage() {
       {
         accessorKey: "name",
         header: "Name",
-        Cell: ({ row }) =>
-          editingId === row.original.id ? (
-            <div>
-              <Input value={editName} onChange={(e) => setEditName(e.target.value)} className="max-w-56" autoFocus />
-              {editError && <p className="mt-1 text-xs text-red-600">{editError}</p>}
-            </div>
-          ) : (
-            <span className="font-medium text-slate-900">{row.original.name}</span>
-          ),
+        Cell: ({ row }) => <span className="font-medium text-slate-900">{row.original.name}</span>,
       },
       {
         id: "scored",
@@ -199,7 +195,7 @@ export default function CategoriesPage() {
       },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [editingId, editName, editError, rowBusy, canEdit]
+    [rowBusy, canEdit]
   );
 
   return (
@@ -218,11 +214,11 @@ export default function CategoriesPage() {
               <form onSubmit={(e) => handleCreate(e, close)} className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-4 sm:items-end">
                 <div>
                   <Label htmlFor="code">Code</Label>
-                  <Input id="code" required value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} />
+                  <RuleInput id="code" required filter={INPUT_FILTERS.code} maxLength={LIMITS.code.max} check={(v) => codeError(v)} hint="Letters, numbers, dashes and underscores; no spaces" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} />
                 </div>
                 <div className="sm:col-span-2">
                   <Label htmlFor="name">Name</Label>
-                  <Input id="name" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+                  <RuleInput id="name" required maxLength={LIMITS.entityName.max} check={(v) => entityNameError(v)} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
                 </div>
                 <div className="flex items-center gap-2 pb-1.5">
                   <input
@@ -238,7 +234,7 @@ export default function CategoriesPage() {
                   <Button type="button" variant="cancel" onClick={close}>
                     Cancel
                   </Button>
-                  <Button type="submit" disabled={submitting}>
+                  <Button type="submit" disabled={submitting || !!codeError(form.code) || !!entityNameError(form.name)}>
                     {submitting ? "Adding..." : "Add Category"}
                   </Button>
                 </StickyActions>
@@ -266,7 +262,8 @@ export default function CategoriesPage() {
                 ]}
                 toPayload={(row) => {
                   const label = row.code ? `${row.code} - ${row.name}` : row.name || "(blank)";
-                  if (!row.code || !row.name) return { error: "code and name are required", label };
+                  const bad = codeError(row.code) || entityNameError(row.name);
+                  if (bad) return { error: bad, label };
                   const flag = (row.scored ?? "").trim().toLowerCase();
                   if (flag && !["yes", "no", "true", "false", "1", "0", "y", "n"].includes(flag)) return { error: `scored must be yes or no, not "${row.scored}"`, label };
                   return { payload: { code: row.code, name: row.name, scored: ["yes", "true", "1", "y"].includes(flag) }, label };
@@ -276,22 +273,39 @@ export default function CategoriesPage() {
               />
             )
           }
-          renderRowActions={(c) =>
-            editingId === c.id ? (
-              <RowActions inline>
-                <RowAction kind="cancel" onClick={() => setEditingId(null)} />
-                <RowAction kind="save" busy={rowBusy === c.id} label={rowBusy === c.id ? "Saving..." : "Save"} onClick={() => saveEdit(c)} />
-              </RowActions>
-            ) : (
-              <RowActions>
-                {canEdit && <RowAction kind="edit" onClick={() => startEdit(c)} />}
-                {canToggle && <StatusToggleAction active={c.active} busy={rowBusy === c.id} onClick={() => toggleActive(c)} />}
-                {canDelete && <RowAction kind="delete" busy={rowBusy === c.id} onClick={() => deleteCategory(c)} />}
-              </RowActions>
-            )
-          }
+          renderRowActions={(c) => (
+            <RowActions>
+              {canEdit && <RowAction kind="edit" onClick={() => startEdit(c)} />}
+              {canToggle && <StatusToggleAction active={c.active} busy={rowBusy === c.id} onClick={() => toggleActive(c)} />}
+              {canDelete && <RowAction kind="delete" busy={rowBusy === c.id} onClick={() => deleteCategory(c)} />}
+            </RowActions>
+          )}
         />
       </Card>
+      {editingItem && (
+        <Modal title={`Edit ${editingItem.name}`} description={editingItem.code} onClose={() => setEditingId(null)}>
+          <form
+            className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-4 sm:items-end"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void saveEdit(editingItem);
+            }}
+          >
+            <div>
+              <Label htmlFor="edit-name">Category name</Label>
+              <RuleInput id="edit-name" maxLength={LIMITS.entityName.max} check={(v) => entityNameError(v)} value={editName} onChange={(e) => setEditName(e.target.value)} />
+            </div>
+            <StickyActions error={editError}>
+              <Button type="button" variant="cancel" onClick={() => setEditingId(null)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={rowBusy === editingItem.id || !!entityNameError(editName)}>
+                {rowBusy === editingItem.id ? "Saving..." : "Save Changes"}
+              </Button>
+            </StickyActions>
+          </form>
+        </Modal>
+      )}
       {dialog}
     </div>
   );

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { v4 as uuid } from "uuid";
 import { z } from "zod";
+import { zRequiredText } from "@/lib/inputRules";
 import { requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { assertFindingInScope } from "@/lib/findings-scope";
@@ -8,7 +9,7 @@ import { notifyUsers } from "@/lib/notifications";
 import { withApiHandler } from "@/lib/api/handler";
 
 const commentSchema = z.object({
-  text: z.string().trim().min(1, "Comment cannot be empty"),
+  text: zRequiredText("Comment"),
   parentCommentId: z.string().optional().nullable(),
 });
 

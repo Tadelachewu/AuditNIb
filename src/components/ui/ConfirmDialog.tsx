@@ -2,7 +2,11 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
-import { Input, Label } from "@/components/ui/Field";
+import { Label } from "@/components/ui/Field";
+import { Modal } from "@/components/ui/AddDialog";
+import { StickyActions } from "@/components/ui/StickyActions";
+import { RuleInput } from "@/components/ui/RuleInput";
+import { LIMITS, reasonError } from "@/lib/inputRules";
 
 interface ConfirmOptions {
   title: string;
@@ -21,8 +25,8 @@ interface ConfirmState extends ConfirmOptions {
 const initialState: ConfirmState = { open: false, title: "", message: "" };
 
 /**
- * Promise-based confirmation modal for risky admin actions (deactivate,
- * activate a scoring rule, lock/unlock a period, ...). Usage:
+ * Promise-based confirmation for risky actions (deactivate, delete, lock,
+ * reject, return, transfer, reverse, ...). Usage:
  *
  *   const { confirm, dialog } = useConfirm();
  *   const result = await confirm({ title: "...", message: "...", tone: "danger" });
@@ -30,6 +34,10 @@ const initialState: ConfirmState = { open: false, title: "", message: "" };
  *
  * Render `{dialog}` once anywhere in the page. When `needsReason` is set,
  * a successful confirm resolves with the typed reason string instead of "".
+ *
+ * Uses the app's one dialog look (Modal + StickyActions footer - the same as
+ * every Add / Edit dialog). Escape or the X cancels; with no reason field,
+ * Cancel has focus, so a stray Enter never confirms a destructive action.
  */
 export function useConfirm() {
   const [state, setState] = useState<ConfirmState>(initialState);
@@ -43,7 +51,7 @@ export function useConfirm() {
   }
 
   function handleConfirm() {
-    state.resolve?.(state.needsReason ? reason : "");
+    state.resolve?.(state.needsReason ? reason.trim() : "");
     setState(initialState);
   }
 
@@ -52,33 +60,46 @@ export function useConfirm() {
     setState(initialState);
   }
 
-  const reasonTooShort = Boolean(state.needsReason) && reason.trim().length < 5;
+  const reasonProblem = state.needsReason ? reasonError(reason) : null;
 
   const dialog = state.open ? (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
-      <div className="w-full max-w-sm rounded-lg bg-white p-5 shadow-xl">
-        <h2 className="text-sm font-semibold text-slate-900">{state.title}</h2>
-        <p className="mt-2 text-sm text-slate-600">{state.message}</p>
+    // Same layout as every Add / Edit dialog (reference: "Open a New Period"):
+    // title + explanation in the header, fields in the body, actions in the footer.
+    <Modal title={state.title} description={state.message} onClose={handleCancel}>
+      <form
+        className="grid grid-cols-1 gap-3 p-4"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!reasonProblem) handleConfirm();
+        }}
+      >
         {state.needsReason && (
-          <div className="mt-3">
+          <div>
             <Label htmlFor="confirm-reason">Reason</Label>
-            <Input id="confirm-reason" autoFocus value={reason} onChange={(e) => setReason(e.target.value)} />
+            <RuleInput
+              id="confirm-reason"
+              maxLength={LIMITS.reason.max}
+              check={(v) => reasonError(v)}
+              hint={`At least ${LIMITS.reason.min} characters.`}
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+            />
           </div>
         )}
-        <div className="mt-4 flex justify-end gap-2">
-          <Button variant="cancel" onClick={handleCancel}>
+        <StickyActions>
+          <Button type="button" variant="cancel" onClick={handleCancel} data-autofocus>
             Cancel
           </Button>
           <Button
+            type="submit"
             variant={state.tone === "danger" ? "danger" : state.tone === "success" ? "success" : "primary"}
-            disabled={reasonTooShort}
-            onClick={handleConfirm}
+            disabled={!!reasonProblem}
           >
             {state.confirmLabel ?? "Confirm"}
           </Button>
-        </div>
-      </div>
-    </div>
+        </StickyActions>
+      </form>
+    </Modal>
   ) : null;
 
   return { confirm, dialog };

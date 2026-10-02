@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { apiGet, apiSend, errorMessage } from "@/lib/api-client";
-import { notify, notifications } from "@/lib/notify";
+import { apiGet, apiSend } from "@/lib/api-client";
+import { notify, notifications, presentError } from "@/lib/notify";
 import { Button } from "@/components/ui/Button";
 import { Label, Textarea } from "@/components/ui/Field";
 import type { ImportBatch } from "@/types";
@@ -25,7 +25,7 @@ export function ImportReversePanel({ batch, onDone, onCancel }: { batch: ImportB
   useEffect(() => {
     apiGet<{ impact: ReverseImpact }>(`/api/findings/import/${batch.id}/reverse`)
       .then((r) => setImpact(r.impact))
-      .catch((err) => setLoadError(errorMessage(err, "Unable to check what this import affects. Please try again.")));
+      .catch((err) => setLoadError(presentError(err, notifications.import.impactFailed).message));
   }, [batch.id]);
 
   const hasActivity = (impact?.withActivity.length ?? 0) > 0;
@@ -41,8 +41,7 @@ export function ImportReversePanel({ batch, onDone, onCancel }: { batch: ImportB
       });
       onDone();
     } catch (err) {
-      // Shown inline: the user is in the middle of this panel.
-      setError(errorMessage(err, notifications.import.reverseFailed.message));
+      setError(notify.formError(err, notifications.import.reverseFailed));
     } finally {
       setBusy(null);
     }

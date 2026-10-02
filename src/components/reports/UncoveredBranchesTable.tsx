@@ -3,7 +3,7 @@
 import { useState, useMemo } from "react";
 import type { MRT_ColumnDef, MRT_RowSelectionState } from "material-react-table";
 import { useRouter } from "next/navigation";
-import { apiSend, errorMessage } from "@/lib/api-client";
+import { apiSend } from "@/lib/api-client";
 import { Button } from "@/components/ui/Button";
 import { AdminTable } from "@/components/ui/AdminTable";
 import { ReasonPicker, resolveReason } from "@/components/reports/ReasonPicker";
@@ -76,7 +76,7 @@ export function UncoveredBranchesTable({ rows, periodId, reasons }: { rows: Row[
       setBulkCustomText("");
       router.refresh();
     } catch (err) {
-      setBulkError(errorMessage(err, "Failed to apply"));
+      setBulkError(notify.formError(err, notifications.uncoveredNote.bulkSaveFailed));
     } finally {
       setBulkBusy(false);
     }

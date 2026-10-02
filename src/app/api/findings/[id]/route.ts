@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { inactiveOrgUnitError } from "@/lib/org";
 import { z } from "zod";
+import { zAmount, zCaseCount, zFindingDate, zText, zTitle } from "@/lib/inputRules";
 import { requirePermission } from "@/lib/guard";
 import { hasPermission } from "@/lib/permissions/registry";
 import { readDb, updateDb } from "@/lib/db";
@@ -51,25 +52,25 @@ const updateSchema = z.object({
   // districtId/branchId/amount/caseCount keep `.min(1)`/their own bounds -
   // not in that setting, always required (see REQUIRABLE_FINDING_FIELDS'
   // own doc comment for why).
-  title: z.string().optional(),
+  title: zTitle().optional(),
   sourceId: z.string().optional(),
   departmentId: z.string().optional(),
   periodId: z.string().min(1).optional(),
   districtId: z.string().min(1).optional(),
   branchId: z.string().min(1).optional(),
-  findingDate: z.string().optional(),
-  operationArea: z.string().optional(),
-  irregularityType: z.string().optional(),
+  findingDate: zFindingDate().optional(),
+  operationArea: zText("Operation area", 100).optional(),
+  irregularityType: zText("Type of irregularity", 100).optional(),
   categoryId: z.string().optional(),
-  amount: z.number().nonnegative().optional(),
-  currency: z.string().optional(),
-  caseCount: z.number().int().positive().optional(),
-  riskLevel: z.string().optional(),
-  priority: z.string().optional(),
-  description: z.string().optional(),
-  recommendation: z.string().optional(),
-  rootCause: z.string().optional(),
-  evidenceNote: z.string().optional(),
+  amount: zAmount().optional(),
+  currency: zText("Currency", 100).optional(),
+  caseCount: zCaseCount().optional(),
+  riskLevel: zText("Risk level", 100).optional(),
+  priority: zText("Priority", 100).optional(),
+  description: zText("Description").optional(),
+  recommendation: zText("Recommendation").optional(),
+  rootCause: zText("Root cause").optional(),
+  evidenceNote: zText("Evidence note").optional(),
 });
 
 // Only DRAFT/RETURNED are editable (plan doc §3.3). Editing a RETURNED
@@ -110,8 +111,12 @@ async function handlePATCH(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "Only draft or returned findings can be edited" }, { status: 409 });
   }
 
-  const periodError = assertPeriodWritable(db, existing.periodId, existing.status);
-  if (periodError) return NextResponse.json({ error: periodError, code: "PERIOD_LOCKED" }, { status: 409 });
+  // Saving a draft (or a returned finding, which is back in drafting) in a
+  // LOCKED period follows that period's "Drafts allowed / blocked" setting -
+  // the same rule as registering a new draft there. Nothing else about a
+  // lock applies to editing.
+  const lockError = assertPeriodWritable(db, existing.periodId, "DRAFT");
+  if (lockError) return NextResponse.json({ error: lockError, code: "PERIOD_LOCKED" }, { status: 409 });
 
   // Same org-scope rule POST /api/findings enforces at creation: a
   // branch-scoped session can never move its own finding to a different
@@ -141,14 +146,13 @@ async function handlePATCH(request: Request, { params }: { params: Promise<{ id:
   const periodId = input.periodId ?? existing.periodId;
   const period = db.reportingPeriods.find((p) => p.id === periodId);
   if (!period) return NextResponse.json({ error: "Selected reporting period does not exist" }, { status: 400 });
-  // Re-checks the *target* period (relevant when periodId itself is being
-  // changed, not just the finding's current one already checked above at
-  // line ~90) - same assertPeriodWritable() helper, same DRAFT-while-
-  // draftable exception, so moving a still-draft finding into another
-  // locked-but-draftable period isn't blocked by a second, drifted copy of
-  // this same rule.
-  const targetPeriodError = assertPeriodWritable(db, periodId, existing.status);
-  if (targetPeriodError) return NextResponse.json({ error: targetPeriodError }, { status: 409 });
+  // Moving it into a different locked period follows the same rule as
+  // registering a new draft there (the period's "drafts allowed while
+  // locked" setting).
+  if (periodId !== existing.periodId) {
+    const targetPeriodError = assertPeriodWritable(db, periodId, "DRAFT");
+    if (targetPeriodError) return NextResponse.json({ error: targetPeriodError, code: "PERIOD_LOCKED" }, { status: 409 });
+  }
 
   // Each resolved value only gets validated against reference data when
   // it's actually non-blank - blank here means either the caller just
@@ -272,13 +276,16 @@ async function handleDELETE(_request: Request, { params }: { params: Promise<{ i
   const canDeleteDraft = hasPermission(auth.session.permissions, "findings.delete");
   const canDeleteRejected = hasPermission(auth.session.permissions, "findings.delete-rejected");
 
-  if (existing.status === "DRAFT") {
+  // A RETURNED finding is back with its registrant for correction, exactly
+  // like a draft - so the registrant can delete it the same way.
+  const isOwnDraftWork = existing.status === "DRAFT" || existing.status === "RETURNED";
+  if (isOwnDraftWork) {
     if (!canDeleteDraft) {
-      return NextResponse.json({ error: "You don't have permission to delete draft findings" }, { status: 403 });
+      return NextResponse.json({ error: "You don't have permission to delete draft or returned findings" }, { status: 403 });
     }
     // Ownership, not just org scope - see PATCH's own comment above. Only
-    // the DRAFT path requires this; deleting a REJECTED finding is a
-    // reviewer housekeeping action, not tied to who registered it.
+    // the draft / returned path requires this; deleting a REJECTED finding
+    // is a reviewer housekeeping action, not tied to who registered it.
     if (existing.createdBy !== auth.session.userId) {
       return NextResponse.json({ error: "You can only delete findings you registered yourself" }, { status: 403 });
     }
@@ -287,11 +294,16 @@ async function handleDELETE(_request: Request, { params }: { params: Promise<{ i
       return NextResponse.json({ error: "You don't have permission to delete rejected findings" }, { status: 403 });
     }
   } else {
-    return NextResponse.json({ error: "Only draft or rejected findings can be deleted" }, { status: 409 });
+    return NextResponse.json({ error: "Only draft, returned or rejected findings can be deleted" }, { status: 409 });
   }
 
-  const periodError = assertPeriodWritable(db, existing.periodId, existing.status);
-  if (periodError) return NextResponse.json({ error: periodError, code: "PERIOD_LOCKED" }, { status: 409 });
+  // Deleting a draft or returned finding in a LOCKED period follows the
+  // period's "Drafts allowed / blocked" setting; deleting a rejected finding
+  // is housekeeping and isn't affected by the lock.
+  if (isOwnDraftWork) {
+    const lockError = assertPeriodWritable(db, existing.periodId, "DRAFT");
+    if (lockError) return NextResponse.json({ error: lockError, code: "PERIOD_LOCKED" }, { status: 409 });
+  }
 
   // Its evidence/attachment records go with it (DB cascade); the stored
   // files are removed below, once the delete has actually committed - so a

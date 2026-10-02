@@ -2,14 +2,16 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { MRT_ColumnDef } from "material-react-table";
-import { apiGet, apiSend, errorMessage } from "@/lib/api-client";
+import { apiGet, apiSend } from "@/lib/api-client";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { StickyActions } from "@/components/ui/StickyActions";
-import { Input, Label } from "@/components/ui/Field";
+import { Label } from "@/components/ui/Field";
+import { INPUT_FILTERS, codeError, entityNameError, LIMITS } from "@/lib/inputRules";
+import { RuleInput } from "@/components/ui/RuleInput";
 import { StatusBadge } from "@/components/ui/Badge";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
-import { AddDialog } from "@/components/ui/AddDialog";
+import { AddDialog, Modal } from "@/components/ui/AddDialog";
 import { RowAction, RowActions, StatusToggleAction } from "@/components/ui/RowActions";
 import { AdminTable } from "@/components/ui/AdminTable";
 import { ImportCsvDialog } from "@/components/ui/ImportCsvDialog";
@@ -64,11 +66,13 @@ export default function DistrictsPage() {
       close();
       await load();
     } catch (err) {
-      setFormError(errorMessage(err, "Failed to create district"));
+      setFormError(notify.formError(err, notifications.district.createFailed));
     } finally {
       setSubmitting(false);
     }
   }
+
+  const editingItem = districts.find((x) => x.id === editingId) ?? null;
 
   function startEdit(d: District) {
     setEditingId(d.id);
@@ -85,7 +89,7 @@ export default function DistrictsPage() {
       setEditingId(null);
       await load();
     } catch (err) {
-      setEditError(errorMessage(err, "Failed to save changes"));
+      setEditError(notify.formError(err, notifications.district.updateFailed));
     } finally {
       setRowBusy(null);
     }
@@ -146,13 +150,7 @@ export default function DistrictsPage() {
         header: "Name",
         Cell: ({ row }) => {
           const d = row.original;
-          if (editingId !== d.id) return <span className="font-medium text-slate-900">{d.name}</span>;
-          return (
-            <div>
-              <Input value={editName} onChange={(e) => setEditName(e.target.value)} className="max-w-56" autoFocus />
-              {editError && <p className="mt-1 text-xs text-red-600">{editError}</p>}
-            </div>
-          );
+          return <span className="font-medium text-slate-900">{d.name}</span>;
         },
       },
       { id: "controllers", header: "District Controller(s)", accessorFn: (d) => namesOrDash(d.controllerNames) },
@@ -169,7 +167,7 @@ export default function DistrictsPage() {
         Cell: ({ row }) => <StatusBadge status={row.original.status} />,
       },
     ],
-    [editingId, editName, editError]
+    []
   );
 
   return (
@@ -185,17 +183,17 @@ export default function DistrictsPage() {
               <form onSubmit={(e) => handleCreate(e, close)} className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3">
                 <div>
                   <Label htmlFor="code">Code</Label>
-                  <Input id="code" required value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} />
+                  <RuleInput id="code" required filter={INPUT_FILTERS.code} maxLength={LIMITS.code.max} check={(v) => codeError(v)} hint="Letters, numbers, dashes and underscores; no spaces" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} />
                 </div>
                 <div className="sm:col-span-2">
                   <Label htmlFor="name">Name</Label>
-                  <Input id="name" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+                  <RuleInput id="name" required maxLength={LIMITS.entityName.max} check={(v) => entityNameError(v)} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
                 </div>
                 <StickyActions error={formError}>
                   <Button type="button" variant="cancel" onClick={close}>
                     Cancel
                   </Button>
-                  <Button type="submit" disabled={submitting}>
+                  <Button type="submit" disabled={submitting || !!codeError(form.code) || !!entityNameError(form.name)}>
                     {submitting ? "Adding..." : "Add District"}
                   </Button>
                 </StickyActions>
@@ -221,8 +219,8 @@ export default function DistrictsPage() {
                   { key: "name", required: true, example: "Addis Ababa District", help: "District name" },
                 ]}
                 toPayload={(row) =>
-                  !row.code || !row.name
-                    ? { error: "code and name are required", label: row.code || row.name || "(blank)" }
+                  codeError(row.code) || entityNameError(row.name)
+                    ? { error: (codeError(row.code) || entityNameError(row.name))!, label: row.code || row.name || "(blank)" }
                     : { payload: { code: row.code, name: row.name }, label: `${row.code} - ${row.name}` }
                 }
                 submit={(payload) => apiSend("/api/admin/districts", "POST", payload)}
@@ -230,22 +228,39 @@ export default function DistrictsPage() {
               />
             )
           }
-          renderRowActions={(d) =>
-            editingId === d.id ? (
-              <RowActions inline>
-                <RowAction kind="cancel" onClick={() => setEditingId(null)} />
-                <RowAction kind="save" busy={rowBusy === d.id} label={rowBusy === d.id ? "Saving..." : "Save"} onClick={() => saveEdit(d)} />
-              </RowActions>
-            ) : (
-              <RowActions>
-                {canEdit && <RowAction kind="edit" onClick={() => startEdit(d)} />}
-                {canToggle && <StatusToggleAction active={d.status === "ACTIVE"} busy={rowBusy === d.id} onClick={() => toggleStatus(d)} />}
-                {canDelete && <RowAction kind="delete" busy={rowBusy === d.id} onClick={() => deleteDistrict(d)} />}
-              </RowActions>
-            )
-          }
+          renderRowActions={(d) => (
+            <RowActions>
+              {canEdit && <RowAction kind="edit" onClick={() => startEdit(d)} />}
+              {canToggle && <StatusToggleAction active={d.status === "ACTIVE"} busy={rowBusy === d.id} onClick={() => toggleStatus(d)} />}
+              {canDelete && <RowAction kind="delete" busy={rowBusy === d.id} onClick={() => deleteDistrict(d)} />}
+            </RowActions>
+          )}
         />
       </Card>
+      {editingItem && (
+        <Modal title={`Edit ${editingItem.name}`} description={editingItem.code} onClose={() => setEditingId(null)}>
+          <form
+            className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void saveEdit(editingItem);
+            }}
+          >
+            <div>
+              <Label htmlFor="edit-name">District name</Label>
+              <RuleInput id="edit-name" maxLength={LIMITS.entityName.max} check={(v) => entityNameError(v)} value={editName} onChange={(e) => setEditName(e.target.value)} />
+            </div>
+            <StickyActions error={editError}>
+              <Button type="button" variant="cancel" onClick={() => setEditingId(null)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={rowBusy === editingItem.id || !!entityNameError(editName)}>
+                {rowBusy === editingItem.id ? "Saving..." : "Save Changes"}
+              </Button>
+            </StickyActions>
+          </form>
+        </Modal>
+      )}
       {dialog}
     </div>
   );

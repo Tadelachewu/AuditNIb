@@ -3,7 +3,7 @@ import { z } from "zod";
 import { readDb, updateDb } from "@/lib/db";
 import { hashPassword } from "@/lib/auth";
 import { appendAuditLog } from "@/lib/audit";
-import { validatePasswordFull } from "@/lib/passwordValidation";
+import { PASSWORD_MIN_LENGTH, validatePasswordFull } from "@/lib/passwordValidation";
 import { prisma } from "@/lib/prismaClient";
 import { isRateLimited, recordAttempt } from "@/lib/rateLimit";
 import { withApiHandler } from "@/lib/api/handler";
@@ -11,7 +11,7 @@ import { logger } from "@/lib/logger";
 
 const schema = z.object({
   token: z.string().min(1, "Reset token is required"),
-  newPassword: z.string().min(8, "New password must be at least 8 characters"),
+  newPassword: z.string().min(PASSWORD_MIN_LENGTH, `New password must be at least ${PASSWORD_MIN_LENGTH} characters`),
 });
 
 const PER_TOKEN_RATE_LIMIT = { max: 10, windowMs: 15 * 60 * 1000 };

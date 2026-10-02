@@ -2,16 +2,18 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { MRT_ColumnDef } from "material-react-table";
-import { apiGet, apiSend, errorMessage } from "@/lib/api-client";
+import { apiGet, apiSend } from "@/lib/api-client";
 import { formatDateTime } from "@/lib/format";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { StickyActions } from "@/components/ui/StickyActions";
 import { Input, Label } from "@/components/ui/Field";
+import { RuleInput } from "@/components/ui/RuleInput";
+import { LIMITS, reasonError, textError } from "@/lib/inputRules";
 import { Badge } from "@/components/ui/Badge";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { Tag } from "lucide-react";
-import { AddDialog } from "@/components/ui/AddDialog";
+import { AddDialog, Modal } from "@/components/ui/AddDialog";
 import { RowAction, RowActions } from "@/components/ui/RowActions";
 import { usePermissions } from "@/lib/permissions/PermissionsContext";
 import { hasPermission } from "@/lib/permissions/registry";
@@ -56,6 +58,11 @@ function toDatetimeLocal(iso: string): string {
   const h = String(d.getHours()).padStart(2, "0");
   const mi = String(d.getMinutes()).padStart(2, "0");
   return `${y}-${mo}-${day}T${h}:${mi}`;
+}
+
+/** Both set, and the end after the start. */
+function windowRangeValid(start: string, end: string): boolean {
+  return Boolean(start && end) && new Date(end).getTime() > new Date(start).getTime();
 }
 
 export default function ReportingPeriodsPage() {
@@ -125,7 +132,7 @@ export default function ReportingPeriodsPage() {
       setWindowTarget(null);
       await load();
     } catch (err) {
-      setWindowError(errorMessage(err, "Failed to update submission window"));
+      setWindowError(notify.formError(err, notifications.reportingPeriod.windowUpdateFailed));
     } finally {
       setWindowBusy(false);
     }
@@ -156,6 +163,8 @@ export default function ReportingPeriodsPage() {
     setRenameError(null);
   }
 
+  const renameTarget = periods.find((x) => x.id === renamingId) ?? null;
+
   async function saveRename(p: PeriodWithTransferPreview) {
     if (renameReason.trim().length < 5) {
       setRenameError("A reason of at least 5 characters is required");
@@ -169,7 +178,7 @@ export default function ReportingPeriodsPage() {
       setRenamingId(null);
       await load();
     } catch (err) {
-      setRenameError(errorMessage(err, "Failed to rename period"));
+      setRenameError(notify.formError(err, notifications.reportingPeriod.updateFailed));
     } finally {
       setRenameBusy(false);
     }
@@ -218,7 +227,7 @@ export default function ReportingPeriodsPage() {
       setPeriodEditTarget(null);
       await load();
     } catch (err) {
-      setPeriodEditError(errorMessage(err, "Failed to update period dates"));
+      setPeriodEditError(notify.formError(err, notifications.reportingPeriod.updateFailed));
     } finally {
       setPeriodEditBusy(false);
     }
@@ -260,7 +269,7 @@ export default function ReportingPeriodsPage() {
       close();
       await load();
     } catch (err) {
-      setFormError(errorMessage(err, "Failed to create reporting period"));
+      setFormError(notify.formError(err, notifications.reportingPeriod.createFailed));
     } finally {
       setSubmitting(false);
     }
@@ -359,19 +368,7 @@ export default function ReportingPeriodsPage() {
           return (
             <div className="font-medium text-slate-900">
               {p.code}
-              {renamingId === p.id ? (
-                <div className="mt-1 flex flex-col gap-1">
-                  <Input value={renameValue} onChange={(e) => setRenameValue(e.target.value)} placeholder="e.g. September 2026 Monthly Review" className="max-w-56 text-xs" />
-                  <Input value={renameReason} onChange={(e) => setRenameReason(e.target.value)} placeholder="Reason (required, 5+ chars)" className="max-w-56 text-xs" />
-                  {renameError && <p className="text-xs text-red-600">{renameError}</p>}
-                  <div className="flex gap-1.5">
-                    <RowAction kind="cancel" onClick={() => setRenamingId(null)} disabled={renameBusy} />
-                    <RowAction kind="save" busy={renameBusy} label={renameBusy ? "Saving..." : "Save"} onClick={() => saveRename(p)} />
-                  </div>
-                </div>
-              ) : (
-                p.name && <div className="mt-0.5 text-xs font-normal text-slate-500">{p.name}</div>
-              )}
+              {p.name && <div className="mt-0.5 text-xs font-normal text-slate-500">{p.name}</div>}
             </div>
           );
         },
@@ -437,7 +434,7 @@ export default function ReportingPeriodsPage() {
       },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [renamingId, renameValue, renameReason, renameError, renameBusy, canLock]
+    [canLock]
   );
 
   return (
@@ -470,6 +467,7 @@ export default function ReportingPeriodsPage() {
                   <Label htmlFor="name">Name (optional)</Label>
                   <Input
                     id="name"
+                    maxLength={100}
                     placeholder="e.g. September 2026 Monthly Review"
                     value={form.name}
                     onChange={(e) => setForm({ ...form, name: e.target.value })}
@@ -535,7 +533,7 @@ export default function ReportingPeriodsPage() {
                   onClick={() => openPeriodEditDialog(p)}
                 />
               )}
-              {canLock && renamingId !== p.id && (
+              {canLock && (
                 <RowAction kind="edit" icon={Tag} label={p.name ? "Rename" : "Add name"} onClick={() => openRename(p)} />
               )}
               {canLock && <RowAction kind={p.status === "OPEN" ? "lock" : "unlock"} busy={rowBusy === p.id} onClick={() => toggleLock(p)} />}
@@ -554,22 +552,82 @@ export default function ReportingPeriodsPage() {
       </Card>
       {dialog}
 
-      {lockTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
-          <div className="w-full max-w-sm rounded-lg bg-white p-5 shadow-xl">
-            <h2 className="text-sm font-semibold text-slate-900">
-              {isFlagEditOnly ? `Update drafts setting for ${lockTarget.code}` : `Lock ${lockTarget.code}?`}
-            </h2>
-            <p className="mt-2 text-sm text-slate-600">
-              {isFlagEditOnly
-                ? `${lockTarget.code} stays LOCKED - this only changes whether DRAFT findings can still be created/edited against it.`
-                : `Locking blocks new writes against ${lockTarget.code} bank-wide, except explicitly authorized exceptions. This can be reversed by unlocking.`}
-            </p>
-            <div className="mt-3">
-              <Label htmlFor="lock-reason">Reason</Label>
-              <Input id="lock-reason" autoFocus value={lockReasonInput} onChange={(e) => setLockReasonInput(e.target.value)} />
+      {renameTarget && (
+        <Modal
+          title={renameTarget.name ? `Rename ${renameTarget.code}` : `Add a name to ${renameTarget.code}`}
+          description="An optional label shown next to the period code. Leave it blank to remove the name."
+          onClose={() => setRenamingId(null)}
+        >
+          <form
+            className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3 sm:items-start"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void saveRename(renameTarget);
+            }}
+          >
+            <div>
+              <Label htmlFor="rename-value">Name</Label>
+              <RuleInput
+                id="rename-value"
+                maxLength={100}
+                check={(v) => textError(v, "Name", 100)}
+                placeholder="e.g. September 2026 Monthly Review"
+                value={renameValue}
+                onChange={(e) => setRenameValue(e.target.value)}
+              />
             </div>
-            <label className="mt-3 flex items-center gap-2 text-sm text-slate-700">
+            <div>
+              <Label htmlFor="rename-reason">Reason</Label>
+              <RuleInput
+                id="rename-reason"
+                maxLength={LIMITS.reason.max}
+                check={(v) => reasonError(v)}
+                hint={`At least ${LIMITS.reason.min} characters.`}
+                value={renameReason}
+                onChange={(e) => setRenameReason(e.target.value)}
+              />
+            </div>
+            <StickyActions error={renameError}>
+              <Button type="button" variant="cancel" onClick={() => setRenamingId(null)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={renameBusy || !!reasonError(renameReason) || !!textError(renameValue, "Name", 100)}>
+                {renameBusy ? "Saving..." : "Save Changes"}
+              </Button>
+            </StickyActions>
+          </form>
+        </Modal>
+      )}
+
+      {lockTarget && (
+        <Modal
+          title={isFlagEditOnly ? `Update drafts setting for ${lockTarget.code}` : `Lock ${lockTarget.code}?`}
+          description={
+            isFlagEditOnly
+              ? `${lockTarget.code} stays locked - this only changes whether findings can still be drafted against it.`
+              : `Locking blocks submitting findings against ${lockTarget.code}; drafting follows the setting below, and all other work (review, rectification, closing, transfers) continues. It can be reversed by unlocking.`
+          }
+          onClose={() => setLockTarget(null)}
+        >
+          <form
+            className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3 sm:items-start"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void confirmLock();
+            }}
+          >
+            <div>
+              <Label htmlFor="lock-reason">Reason</Label>
+              <RuleInput
+                id="lock-reason"
+                maxLength={LIMITS.reason.max}
+                check={(v) => reasonError(v)}
+                hint={`At least ${LIMITS.reason.min} characters.`}
+                value={lockReasonInput}
+                onChange={(e) => setLockReasonInput(e.target.value)}
+              />
+            </div>
+            <label className="flex items-center gap-2 text-sm text-slate-700 sm:col-span-3">
               <input
                 type="checkbox"
                 checked={lockDraftsAllowed}
@@ -581,7 +639,7 @@ export default function ReportingPeriodsPage() {
             {!isFlagEditOnly && autoTransferAllowed && lockTarget.outstandingTransferableCount > 0 && (
               <>
                 {lockTarget.transferDestinationCode ? (
-                  <label className="mt-3 flex items-start gap-2 text-sm text-slate-700">
+                  <label className="flex items-start gap-2 text-sm text-slate-700 sm:col-span-3">
                     <input
                       type="checkbox"
                       checked={lockTransferOverdue}
@@ -594,7 +652,7 @@ export default function ReportingPeriodsPage() {
                     </span>
                   </label>
                 ) : (
-                  <p className="mt-3 text-xs text-amber-700">
+                  <p className="text-xs text-amber-700 sm:col-span-3">
                     {lockTarget.outstandingTransferableCount} outstanding case
                     {lockTarget.outstandingTransferableCount === 1 ? "" : "s"} in {lockTarget.code}, but there&apos;s no open
                     period after it to transfer into - open a later period first if you want to transfer them.
@@ -602,27 +660,32 @@ export default function ReportingPeriodsPage() {
                 )}
               </>
             )}
-            <div className="mt-4 flex justify-end gap-2">
-              <Button variant="cancel" onClick={() => setLockTarget(null)}>
+            <StickyActions>
+              <Button type="button" variant="cancel" onClick={() => setLockTarget(null)}>
                 Cancel
               </Button>
-              <Button variant="danger" disabled={lockBusy || lockReasonInput.trim().length < 5} onClick={confirmLock}>
-                {lockBusy ? "Saving..." : isFlagEditOnly ? "Save" : "Lock"}
+              <Button type="submit" variant="danger" disabled={lockBusy || !!reasonError(lockReasonInput)}>
+                {lockBusy ? (isFlagEditOnly ? "Saving..." : "Locking...") : isFlagEditOnly ? "Save Changes" : "Lock Period"}
               </Button>
-            </div>
-          </div>
-        </div>
+            </StickyActions>
+          </form>
+        </Modal>
       )}
 
       {windowTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
-          <div className="w-full max-w-sm rounded-lg bg-white p-5 shadow-xl">
-            <h2 className="text-sm font-semibold text-slate-900">Edit submission window for {windowTarget.code}</h2>
-            <p className="mt-2 text-sm text-slate-600">
-              Must fall within the period&apos;s own range ({formatDateTime(windowTarget.startsAt)} —{" "}
-              {formatDateTime(windowTarget.endsAt)}). Doesn&apos;t affect lock status or draft-saving.
-            </p>
-            <div className="mt-3">
+        <Modal
+          title={`Edit submission window for ${windowTarget.code}`}
+          description={`The period runs ${formatDateTime(windowTarget.startsAt)} — ${formatDateTime(windowTarget.endsAt)}. The window decides when findings can be submitted; it doesn't affect the lock or drafting.`}
+          onClose={() => setWindowTarget(null)}
+        >
+          <form
+            className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3 sm:items-start"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void confirmWindow();
+            }}
+          >
+            <div>
               <Label htmlFor="window-starts">Submission window starts at</Label>
               <Input
                 id="window-starts"
@@ -631,41 +694,56 @@ export default function ReportingPeriodsPage() {
                 onChange={(e) => setWindowForm({ ...windowForm, submissionStartsAt: e.target.value })}
               />
             </div>
-            <div className="mt-3">
+            <div>
               <Label htmlFor="window-ends">Submission window ends at</Label>
               <Input
                 id="window-ends"
                 type="datetime-local"
+                min={windowForm.submissionStartsAt || undefined}
                 value={windowForm.submissionEndsAt}
                 onChange={(e) => setWindowForm({ ...windowForm, submissionEndsAt: e.target.value })}
               />
             </div>
-            <div className="mt-3">
+            <div>
               <Label htmlFor="window-reason">Reason</Label>
-              <Input id="window-reason" autoFocus value={windowReason} onChange={(e) => setWindowReason(e.target.value)} />
+              <RuleInput
+                id="window-reason"
+                maxLength={LIMITS.reason.max}
+                check={(v) => reasonError(v)}
+                hint={`At least ${LIMITS.reason.min} characters.`}
+                value={windowReason}
+                onChange={(e) => setWindowReason(e.target.value)}
+              />
             </div>
-            {windowError && <p className="mt-2 text-sm text-red-600">{windowError}</p>}
-            <div className="mt-4 flex justify-end gap-2">
-              <Button variant="cancel" onClick={() => setWindowTarget(null)}>
+            <StickyActions error={windowError}>
+              <Button type="button" variant="cancel" onClick={() => setWindowTarget(null)}>
                 Cancel
               </Button>
-              <Button disabled={windowBusy || windowReason.trim().length < 5} onClick={confirmWindow}>
-                {windowBusy ? "Saving..." : "Save"}
+              <Button
+                type="submit"
+                disabled={windowBusy || !!reasonError(windowReason) || !windowRangeValid(windowForm.submissionStartsAt, windowForm.submissionEndsAt)}
+              >
+                {windowBusy ? "Saving..." : "Save Changes"}
               </Button>
-            </div>
-          </div>
-        </div>
+            </StickyActions>
+          </form>
+        </Modal>
       )}
 
       {periodEditTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
-          <div className="w-full max-w-sm rounded-lg bg-white p-5 shadow-xl">
-            <h2 className="text-sm font-semibold text-slate-900">Edit {periodEditTarget.code}&apos;s date range</h2>
-            <p className="mt-2 text-sm text-slate-600">
-              Only possible because nothing references {periodEditTarget.code} yet. Changing the start date may change
-              this period&apos;s code (e.g. moving it into a different month).
-            </p>
-            <div className="mt-3">
+        <Modal
+          title={`Edit ${periodEditTarget.code}'s date range`}
+          description={`Only possible because nothing references ${periodEditTarget.code} yet. Changing the start date may change this period's code (e.g. moving it into a different month).`}
+          onClose={() => setPeriodEditTarget(null)}
+        >
+          <form
+            className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3 sm:items-start"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void confirmPeriodEdit();
+            }}
+          >
+            <div>
               <Label htmlFor="period-edit-starts">Starts at (date &amp; time)</Label>
               <Input
                 id="period-edit-starts"
@@ -674,16 +752,17 @@ export default function ReportingPeriodsPage() {
                 onChange={(e) => handlePeriodEditStartsAtChange(e.target.value)}
               />
             </div>
-            <div className="mt-3">
+            <div>
               <Label htmlFor="period-edit-ends">Ends at (date &amp; time)</Label>
               <Input
                 id="period-edit-ends"
                 type="datetime-local"
+                min={periodEditForm.startsAt || undefined}
                 value={periodEditForm.endsAt}
                 onChange={(e) => handlePeriodEditEndsAtChange(e.target.value)}
               />
             </div>
-            <div className="mt-3">
+            <div>
               <Label htmlFor="period-edit-sub-starts">Submission window starts at</Label>
               <Input
                 id="period-edit-sub-starts"
@@ -692,30 +771,45 @@ export default function ReportingPeriodsPage() {
                 onChange={(e) => setPeriodEditForm({ ...periodEditForm, submissionStartsAt: e.target.value })}
               />
             </div>
-            <div className="mt-3">
+            <div>
               <Label htmlFor="period-edit-sub-ends">Submission window ends at</Label>
               <Input
                 id="period-edit-sub-ends"
                 type="datetime-local"
+                min={periodEditForm.submissionStartsAt || undefined}
                 value={periodEditForm.submissionEndsAt}
                 onChange={(e) => setPeriodEditForm({ ...periodEditForm, submissionEndsAt: e.target.value })}
               />
             </div>
-            <div className="mt-3">
+            <div>
               <Label htmlFor="period-edit-reason">Reason</Label>
-              <Input id="period-edit-reason" autoFocus value={periodEditReason} onChange={(e) => setPeriodEditReason(e.target.value)} />
+              <RuleInput
+                id="period-edit-reason"
+                maxLength={LIMITS.reason.max}
+                check={(v) => reasonError(v)}
+                hint={`At least ${LIMITS.reason.min} characters.`}
+                value={periodEditReason}
+                onChange={(e) => setPeriodEditReason(e.target.value)}
+              />
             </div>
-            {periodEditError && <p className="mt-2 text-sm text-red-600">{periodEditError}</p>}
-            <div className="mt-4 flex justify-end gap-2">
-              <Button variant="cancel" onClick={() => setPeriodEditTarget(null)}>
+            <StickyActions error={periodEditError}>
+              <Button type="button" variant="cancel" onClick={() => setPeriodEditTarget(null)}>
                 Cancel
               </Button>
-              <Button disabled={periodEditBusy || periodEditReason.trim().length < 5} onClick={confirmPeriodEdit}>
-                {periodEditBusy ? "Saving..." : "Save"}
+              <Button
+                type="submit"
+                disabled={
+                  periodEditBusy ||
+                  !!reasonError(periodEditReason) ||
+                  !windowRangeValid(periodEditForm.startsAt, periodEditForm.endsAt) ||
+                  !windowRangeValid(periodEditForm.submissionStartsAt, periodEditForm.submissionEndsAt)
+                }
+              >
+                {periodEditBusy ? "Saving..." : "Save Changes"}
               </Button>
-            </div>
-          </div>
-        </div>
+            </StickyActions>
+          </form>
+        </Modal>
       )}
     </div>
   );

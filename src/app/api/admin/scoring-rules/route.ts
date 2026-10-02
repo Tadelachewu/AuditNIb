@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { v4 as uuid } from "uuid";
 import { z } from "zod";
+import { zEntityName } from "@/lib/inputRules";
 import { requirePermission, requireUser } from "@/lib/guard";
 import { hasPermission } from "@/lib/permissions/registry";
 import { readDb, updateDb } from "@/lib/db";
@@ -16,7 +17,7 @@ async function handleGET() {
 }
 
 const createSchema = z.object({
-  name: z.string().min(1, "Name is required"),
+  name: zEntityName(),
   effectiveFrom: z.string().min(1, "Effective date is required"),
   categories: z.array(z.string()).min(1, "Select at least one category"),
   sources: z.array(z.string()).min(1, "Select at least one source"),

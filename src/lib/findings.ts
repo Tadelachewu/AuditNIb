@@ -464,27 +464,27 @@ export function hoApproveFinding(db: Database, finding: Finding, userId: string,
 }
 
 /**
- * master.txt §13: "Locked periods prevent unauthorized reportable
- * changes." Applies to every write against an *existing* finding
- * (edit, delete, submit, district/HO review, rectify, close) - not just
- * new-finding creation, which src/app/api/findings/route.ts checks
- * separately since there's no existing finding yet to read a periodId
- * from. No "exceptional correction" override is built (master.txt §13
- * calls that out as needing to be "explicit and authorized" - left for
- * a future phase; for now a locked period is a hard stop for everyone) -
- * with one narrow, explicit exception: `editingFindingStatus` lets a
- * caller that's about to edit/delete a finding still sitting in DRAFT pass
- * that status through, and if the period's own draftsAllowedWhileLocked
- * flag is set, the block is lifted for that DRAFT write only. Submitting
- * (moving past DRAFT) never passes this param, so it's never exempted -
- * a draft can be worked on in a locked-but-draftable period, but can't
- * progress until the period is genuinely OPEN.
+ * A locked period only blocks SUBMISSION (the submit route, and create-
+ * and-submit in src/app/api/findings/route.ts). Every other action - review,
+ * bank approval, rectify, resubmit/return rectification, verify, close,
+ * transfer (in or out), reverse, edit, delete, comments, evidence - works
+ * the same in a locked period. See docs/locked-periods.md.
+ *
+ * Drafting in a locked period - registering a draft, saving changes to a
+ * draft or returned finding, deleting a draft, moving one into the period -
+ * follows the period's "Drafts allowed / blocked" setting
+ * (draftsAllowedWhileLocked): those callers pass "DRAFT" as
+ * `editingFindingStatus`.
  */
 export function assertPeriodWritable(db: Database, periodId: string, editingFindingStatus?: FindingStatus): string | null {
   const period = db.reportingPeriods.find((p) => p.id === periodId);
   if (!period) return "Reporting period not found";
   if (period.status === "LOCKED") {
-    if (editingFindingStatus === "DRAFT" && period.draftsAllowedWhileLocked) return null;
+    if (editingFindingStatus === "DRAFT") {
+      return period.draftsAllowedWhileLocked
+        ? null
+        : `${period.code} is locked and drafts are blocked for it - an administrator can allow drafts (Reporting Periods) or unlock it`;
+    }
     return `${period.code} is locked and cannot accept changes`;
   }
   return null;
@@ -570,11 +570,19 @@ export function nextFindingReference(db: Database, branch: Branch, period: Repor
   // References of findings removed by a reversed import stay reserved, so
   // a number that once existed (and is in the audit trail) is never reissued.
   // (A batch deleted outright keeps its list only in its audit entry.)
+  // Same for a deleted RETURNED / REJECTED finding - it was submitted and
+  // seen by reviewers, so its number must never come back on a new finding.
+  // (A deleted never-submitted draft's number may be reused.)
   const reversedRefs = [
     ...db.importBatches.filter((b) => b.reversedAt).flatMap((b) => b.rows.map((r) => r.reference ?? "")),
     ...db.auditLogs
       .filter((l) => l.action === "IMPORT_REVERSE_AND_DELETE" || l.action === "IMPORT_RECORD_DELETED")
       .flatMap((l) => ((l.oldValue as { references?: string[] } | null)?.references ?? [])),
+    ...db.auditLogs
+      .filter((l) => l.action === "DELETE" && l.entityType === "Finding")
+      .map((l) => l.oldValue as { status?: string; reference?: string } | null)
+      .filter((v) => v?.status === "RETURNED" || v?.status === "REJECTED")
+      .map((v) => v?.reference ?? ""),
   ];
   for (const ref of [...db.findings.map((f) => f.reference), ...reversedRefs]) {
     if (!ref.startsWith(anchor)) continue;
@@ -586,6 +594,29 @@ export function nextFindingReference(db: Database, branch: Branch, period: Repor
   const width = 5;
   const padded = String(seq).padStart(width, "0");
   return `${anchor}${padded}`;
+}
+
+/**
+ * Why Head Office (findings.ho-return-rectification alone) can't return this
+ * finding's rectification for correction yet - or null when it can. HO acts
+ * only AFTER the District Controller, on what District has verified:
+ *   - nothing may still be waiting for district verification (every case /
+ *     amount the branch recorded is district-verified) - otherwise HO would
+ *     be jumping ahead of District on that part;
+ *   - and some district-verified rectification must not be closed yet -
+ *     that is what HO is returning.
+ * Shared by return-rectification/route.ts and the finding page's button.
+ */
+export function hoReturnBlockedReason(f: Finding): string | null {
+  const awaitingDistrict = f.rectifiedCases > f.districtVerifiedCases || f.rectifiedAmount > f.districtVerifiedAmount;
+  if (awaitingDistrict) {
+    return "Head Office can't return this finding for correction while part of its rectification is still awaiting District verification. Wait for the District Controller to verify it (or return it themselves).";
+  }
+  const verifiedNotClosed = f.districtVerifiedCases > f.closedCases || f.districtVerifiedAmount > f.closedAmount;
+  if (!verifiedNotClosed) {
+    return "Head Office can return a rectification only after the District Controller has verified it - there is no District-verified rectification awaiting closure.";
+  }
+  return null;
 }
 
 // ---------------------------------------------------------------------------

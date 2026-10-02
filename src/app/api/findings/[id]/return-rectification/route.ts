@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { zReason } from "@/lib/inputRules";
 import { requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { assertFindingInScope } from "@/lib/findings-scope";
 import {
   transitionFinding,
-  assertPeriodWritable,
   userPerformedApprovalOrVerifyAction,
   hasRectificationAfterLastTransfer,
+  hoReturnBlockedReason,
 } from "@/lib/findings";
 import { usersWithFindingsPermission, notifyUsers } from "@/lib/notifications";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
@@ -26,7 +27,7 @@ import { withApiHandler } from "@/lib/api/handler";
 const RETURNABLE_STATUSES = ["PARTIALLY_RECTIFIED", "RECTIFIED", "TRANSFERRED"];
 
 const returnSchema = z.object({
-  reason: z.string().trim().min(5, "A reason of at least 5 characters is required"),
+  reason: zReason(),
 });
 
 // Post-approval return-for-correction endpoint. Now uses a split permission
@@ -38,10 +39,10 @@ const returnSchema = z.object({
 //                                            verification (including before the
 //                                            branch has recorded any rectification)
 //   findings.ho-return-rectification       → HO Controller: GATED - can return
-//                                            only AFTER District has first done
-//                                            verify-rectification (there must be
-//                                            at least some district-verified cases
-//                                            or amount already on the finding).
+//                                            only AFTER District has verified ALL
+//                                            recorded rectification (nothing still
+//                                            awaiting District) and some of it is
+//                                            not yet closed - hoReturnBlockedReason().
 //                                            This enforces District's first-level
 //                                            gate before HO acts - HO steps in
 //                                            only after District has already
@@ -90,17 +91,8 @@ async function handlePOST(request: Request, { params }: { params: Promise<{ id: 
   // rectification - District's first-level gate isn't bypassed, HO only
   // steps in after District has already engaged with it.
   if (hasHoOnly) {
-    const verifiedCases = existing.districtVerifiedCases;
-    const verifiedAmount = existing.districtVerifiedAmount;
-    if (verifiedCases <= 0 && verifiedAmount <= 0) {
-      return NextResponse.json(
-        {
-          error:
-            "Head Office cannot return this finding for correction until the District Controller has first verified the recorded rectification. Please wait for District verification.",
-        },
-        { status: 409 }
-      );
-    }
+    const blocked = hoReturnBlockedReason(existing);
+    if (blocked) return NextResponse.json({ error: blocked }, { status: 409 });
   }
 
   // Separation of duties, scoped to *this* rectification: whoever already
@@ -137,8 +129,7 @@ async function handlePOST(request: Request, { params }: { params: Promise<{ id: 
     );
   }
 
-  const periodError = assertPeriodWritable(db, existing.periodId);
-  if (periodError) return NextResponse.json({ error: periodError, code: "PERIOD_LOCKED" }, { status: 409 });
+  // A locked period only blocks submission - not this action.
 
   const updated = await updateDb((current) => {
     const f = current.findings.find((x) => x.id === id)!;

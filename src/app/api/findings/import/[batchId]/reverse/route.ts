@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { zReason } from "@/lib/inputRules";
 import { requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { isFindingInScope } from "@/lib/findings-scope";
@@ -13,7 +14,7 @@ import type { Database, ImportBatch } from "@/types";
 import type { SessionData } from "@/lib/session";
 
 const bodySchema = z.object({
-  reason: z.string().trim().min(5, "Give a reason (at least 5 characters)").max(500),
+  reason: zReason(),
   /** Also delete the import record (and its stored file) - no re-import afterwards. */
   deleteRecord: z.boolean().optional(),
 });

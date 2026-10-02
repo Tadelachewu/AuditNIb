@@ -3,7 +3,7 @@ import { requirePermission } from "@/lib/guard";
 import { readDb } from "@/lib/db";
 import { findingsInScope } from "@/lib/findings-scope";
 import { findingsResidentInPeriod, queueStatusesForSession, type FindingPeriodSlice } from "@/lib/findings";
-import type { Finding } from "@/types";
+import { findingStatusCode, type Finding } from "@/types";
 import { filterFindingsByText, sortFindings, parseFindingSort } from "@/lib/findingListQuery";
 import { matchesOperationAndIrregularity } from "@/lib/dashboardFilters";
 import { withApiHandler } from "@/lib/api/handler";
@@ -132,7 +132,7 @@ async function handleGET(request: Request) {
       sourceName(f.sourceId),
       categoryName(f.categoryId),
       f.riskLevel,
-      isHistorical ? `TRANSFERRED_OUT (${slice?.transferredOutToCode ?? ""})` : f.status,
+      isHistorical ? `TRANSFERRED_OUT (${slice?.transferredOutToCode ?? ""})` : findingStatusCode(f.status),
       amount,
       f.currency,
       f.caseCount,

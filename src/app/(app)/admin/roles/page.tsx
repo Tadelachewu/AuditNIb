@@ -1,14 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { apiGet, apiSend, errorMessage } from "@/lib/api-client";
+import { apiGet, apiSend } from "@/lib/api-client";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { StickyActions } from "@/components/ui/StickyActions";
-import { Input, Select, Label } from "@/components/ui/Field";
+import { Select, Label } from "@/components/ui/Field";
+import { INPUT_FILTERS, entityNameError, LIMITS, roleCodeError, textError } from "@/lib/inputRules";
+import { RuleInput } from "@/components/ui/RuleInput";
 import { Badge } from "@/components/ui/Badge";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
-import { AddDialog } from "@/components/ui/AddDialog";
+import { AddDialog, Modal } from "@/components/ui/AddDialog";
 import { RowAction, RowActions, StatusToggleAction } from "@/components/ui/RowActions";
 import { ListSkeleton } from "@/components/ui/Skeleton";
 import { Pagination } from "@/components/ui/Pagination";
@@ -78,11 +80,13 @@ export default function RolesPage() {
       setNewPermissions([]);
       await load();
     } catch (err) {
-      setFormError(errorMessage(err, "Failed to create role"));
+      setFormError(notify.formError(err, notifications.role.createFailed));
     } finally {
       setSubmitting(false);
     }
   }
+
+  const editingRole = roles.find((r) => r.id === expandedRoleId) ?? null;
 
   function startEditing(role: RoleDefinition) {
     setExpandedRoleId(role.id);
@@ -105,7 +109,7 @@ export default function RolesPage() {
       setExpandedRoleId(null);
       await load();
     } catch (err) {
-      setEditError(errorMessage(err, "Failed to update role"));
+      setEditError(notify.formError(err, notifications.role.updateFailed));
     } finally {
       setRowBusy(null);
     }
@@ -171,17 +175,21 @@ export default function RolesPage() {
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
                   <div>
                     <Label htmlFor="code">Code</Label>
-                    <Input
+                    <RuleInput
                       id="code"
                       required
+                      maxLength={LIMITS.code.max}
                       placeholder="REGIONAL_AUDITOR"
+                      check={(v) => roleCodeError(v)}
+                      filter={INPUT_FILTERS.roleCode}
+                      hint="UPPER_SNAKE_CASE, starting with a letter"
                       value={form.code}
                       onChange={(e) => setForm({ ...form, code: e.target.value.toUpperCase() })}
                     />
                   </div>
                   <div>
                     <Label htmlFor="name">Name</Label>
-                    <Input id="name" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+                    <RuleInput id="name" required maxLength={LIMITS.entityName.max} check={(v) => entityNameError(v)} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
                   </div>
                   <div>
                     <Label htmlFor="orgScope">Organization scope</Label>
@@ -211,8 +219,10 @@ export default function RolesPage() {
 
                 <div>
                   <Label htmlFor="description">Description</Label>
-                  <Input
+                  <RuleInput
                     id="description"
+                    maxLength={LIMITS.shortText.max}
+                    check={(v) => textError(v, "Description", LIMITS.shortText.max)}
                     value={form.description}
                     onChange={(e) => setForm({ ...form, description: e.target.value })}
                   />
@@ -250,7 +260,7 @@ export default function RolesPage() {
                   <Button type="button" variant="cancel" onClick={close}>
                     Cancel
                   </Button>
-                  <Button type="submit" disabled={submitting}>
+                  <Button type="submit" disabled={submitting || !!roleCodeError(form.code) || !!entityNameError(form.name) || !!textError(form.description, "Description", LIMITS.shortText.max)}>
                     {submitting ? "Creating..." : "Create Role"}
                   </Button>
                 </StickyActions>
@@ -264,7 +274,6 @@ export default function RolesPage() {
           {!loading &&
             pager.pageItems.map((role) => {
               const isAdminRole = role.code === "ADMIN";
-              const isExpanded = expandedRoleId === role.id;
               return (
                 <div key={role.id} className="px-4 py-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
@@ -278,12 +287,7 @@ export default function RolesPage() {
                     <div className="flex items-center gap-3">
                     <span className="text-xs text-slate-500">{role.permissions.length} permission(s)</span>
                     <RowActions>
-                      <RowAction
-                        kind="edit"
-                        disabled={isExpanded}
-                        title={isExpanded ? "Already editing - use Save Changes or Cancel below" : "Edit"}
-                        onClick={() => startEditing(role)}
-                      />
+                      <RowAction kind="edit" onClick={() => startEditing(role)} />
                       {!isAdminRole && (
                         <StatusToggleAction
                           active={role.status === "ACTIVE"}
@@ -297,73 +301,87 @@ export default function RolesPage() {
                   </div>
                   {role.description && <p className="mt-1 text-xs text-slate-500">{role.description}</p>}
 
-                  {isExpanded && (
-                    <div className="mt-3 rounded-md border border-slate-200 p-3">
-                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                        <div>
-                          <Label htmlFor={`name-${role.id}`}>Name</Label>
-                          <Input id={`name-${role.id}`} value={draftName} onChange={(e) => setDraftName(e.target.value)} />
-                        </div>
-                        <div>
-                          <Label htmlFor={`desc-${role.id}`}>Description</Label>
-                          <Input
-                            id={`desc-${role.id}`}
-                            value={draftDescription}
-                            onChange={(e) => setDraftDescription(e.target.value)}
-                          />
-                        </div>
-                      </div>
-
-                      {isAdminRole && (
-                        <p className="mt-3 text-xs text-slate-500">
-                          Narrowing the Administrator role is allowed, except for one line that can&apos;t be
-                          crossed: it must always keep &quot;Roles &amp; Permissions: Manage&quot;, or no
-                          administrator could ever open this screen again to undo a mistake.
-                        </p>
-                      )}
-                      <div className="mt-3 flex flex-col gap-2">
-                        {registry.map((page) => (
-                          <div key={page.code} className="flex flex-wrap items-center gap-3">
-                            <span className="w-44 shrink-0 text-sm font-semibold text-slate-900">{page.label}</span>
-                            {page.actions.map((a) => {
-                              const key = `${page.code}.${a.action}`;
-                              const locked = isAdminRole && key === ROLES_MANAGE_KEY;
-                              return (
-                                <label
-                                  key={key}
-                                  className="flex items-center gap-1.5 text-xs text-slate-600"
-                                >
-                                  <input
-                                    type="checkbox"
-                                    checked={draftPermissions.includes(key)}
-                                    disabled={locked}
-                                    onChange={() => togglePermission(draftPermissions, setDraftPermissions, key)}
-                                    className="h-3.5 w-3.5 rounded border-slate-300 disabled:opacity-50"
-                                  />
-                                  {a.label}
-                                </label>
-                              );
-                            })}
-                          </div>
-                        ))}
-                      </div>
-
-                      <StickyActions variant="inset" className="mt-3" error={editError}>
-                        <Button variant="cancel" onClick={() => setExpandedRoleId(null)}>
-                          Cancel
-                        </Button>
-                        <Button disabled={rowBusy === role.id} onClick={() => saveRole(role)}>
-                          {rowBusy === role.id ? "Saving..." : "Save Changes"}
-                        </Button>
-                      </StickyActions>
-                    </div>
-                  )}
                 </div>
               );
             })}
         </div>
         <Pagination page={pager.page} totalPages={pager.totalPages} total={pager.total} pageSize={pager.pageSize} onPageChange={pager.setPage} />
       </Card>
+      {editingRole && (
+        <Modal title={`Edit ${editingRole.name}`} description={editingRole.code} size="xl" onClose={() => setExpandedRoleId(null)}>
+          <form
+            className="flex flex-col gap-4 p-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void saveRole(editingRole);
+            }}
+          >
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div>
+                <Label htmlFor="edit-role-name">Name</Label>
+                <RuleInput id="edit-role-name" maxLength={LIMITS.entityName.max} check={(v) => entityNameError(v)} value={draftName} onChange={(e) => setDraftName(e.target.value)} />
+              </div>
+              <div>
+                <Label htmlFor="edit-role-desc">Description</Label>
+                <RuleInput
+                  id="edit-role-desc"
+                  maxLength={LIMITS.shortText.max}
+                  check={(v) => textError(v, "Description", LIMITS.shortText.max)}
+                  value={draftDescription}
+                  onChange={(e) => setDraftDescription(e.target.value)}
+                />
+              </div>
+            </div>
+
+            {editingRole.code === "ADMIN" && (
+              <p className="mt-3 text-xs text-slate-500">
+                Narrowing the Administrator role is allowed, except for one line that can&apos;t be
+                crossed: it must always keep &quot;Roles &amp; Permissions: Manage&quot;, or no
+                administrator could ever open this screen again to undo a mistake.
+              </p>
+            )}
+            <div className="mt-3 flex flex-col gap-2">
+              {registry.map((page) => (
+                <div key={page.code} className="flex flex-wrap items-center gap-3">
+                  <span className="w-44 shrink-0 text-sm font-semibold text-slate-900">{page.label}</span>
+                  {page.actions.map((a) => {
+                    const key = `${page.code}.${a.action}`;
+                    const locked = editingRole.code === "ADMIN" && key === ROLES_MANAGE_KEY;
+                    return (
+                      <label key={key} className="flex items-center gap-1.5 text-xs text-slate-600">
+                        <input
+                          type="checkbox"
+                          checked={draftPermissions.includes(key)}
+                          disabled={locked}
+                          onChange={() => togglePermission(draftPermissions, setDraftPermissions, key)}
+                          className="h-3.5 w-3.5 rounded border-slate-300 disabled:opacity-50"
+                        />
+                        {a.label}
+                      </label>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+
+            <StickyActions error={editError}>
+              <Button type="button" variant="cancel" onClick={() => setExpandedRoleId(null)}>
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={
+                  rowBusy === editingRole.id ||
+                  !!entityNameError(draftName) ||
+                  !!textError(draftDescription, "Description", LIMITS.shortText.max)
+                }
+              >
+                {rowBusy === editingRole.id ? "Saving..." : "Save Changes"}
+              </Button>
+            </StickyActions>
+          </form>
+        </Modal>
+      )}
       {dialog}
     </div>
   );

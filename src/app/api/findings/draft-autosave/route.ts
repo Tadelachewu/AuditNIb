@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import { requirePermission } from "@/lib/guard";
-import { redis } from "@/lib/redisClient";
+import { redis, logRedisFailure as logFailure } from "@/lib/redisClient";
 import { withApiHandler } from "@/lib/api/handler";
-import { logger } from "@/lib/logger";
 
 // One in-progress, not-yet-saved NEW finding registration per user - a
 // power failure, an accidental tab close, or a refresh mid-form shouldn't
@@ -19,8 +18,9 @@ function draftKey(userId: string): string {
 
 const TTL_SECONDS = 24 * 60 * 60;
 
+// Quiet while Redis is known to be down (redisClient.ts warns once per outage).
 function logRedisFailure(op: string, err: unknown): void {
-  logger.error({ err, event: "redis.failed", op }, "Draft autosave Redis operation failed");
+  logFailure(op, err, "Draft autosave Redis operation failed");
 }
 
 // Fails open/silent in every direction - this is a convenience feature,

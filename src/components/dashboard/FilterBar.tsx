@@ -2,7 +2,7 @@
 
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { Select, Label } from "@/components/ui/Field";
-import type { ReportingPeriod, District, Branch, Source, ClassifiedCategory, FindingStatus } from "@/types";
+import { findingStatusLabel, type ReportingPeriod, type District, type Branch, type Source, type ClassifiedCategory, type FindingStatus } from "@/types";
 import { ALL_PERIODS_VALUE, type DashboardFilters } from "@/lib/dashboardFilters";
 
 export interface FilterBarProps {
@@ -246,7 +246,7 @@ export function FilterBar({
             <option value="">All statuses</option>
             {statusOptions.map((s) => (
               <option key={s} value={s}>
-                {s.replaceAll("_", " ")}
+                {findingStatusLabel(s)}
               </option>
             ))}
           </Select>

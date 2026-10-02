@@ -2,11 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { apiGet, apiSend, errorMessage } from "@/lib/api-client";
+import { apiGet, apiSend } from "@/lib/api-client";
+import { notify, notifications, presentError } from "@/lib/notify";
 import { CollapsibleCard } from "@/components/ui/CollapsibleCard";
 import { Button } from "@/components/ui/Button";
 import { StickyActions } from "@/components/ui/StickyActions";
 import { Input, Select, Label } from "@/components/ui/Field";
+import { RuleInput } from "@/components/ui/RuleInput";
+import { emailError, hostError, LIMITS, portError } from "@/lib/inputRules";
 import { SettingsListEditor } from "@/components/admin/SettingsListEditor";
 import { EmailEventsEditor } from "@/components/admin/EmailEventsEditor";
 import { REPORT_TEMPLATES } from "@/lib/reportTemplateMeta";
@@ -22,7 +25,6 @@ export default function SettingsPage() {
   const [sources, setSources] = useState<Source[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
   const [testEmailSending, setTestEmailSending] = useState(false);
   const [testEmailResult, setTestEmailResult] = useState<{ ok: boolean; message: string } | null>(null);
   const router = useRouter();
@@ -50,7 +52,16 @@ export default function SettingsPage() {
   async function handleSave() {
     if (!settings) return;
     setError(null);
-    setSaved(false);
+    const n = settings.notification;
+    const emailProblem =
+      n.provider === "NONE"
+        ? null
+        : (emailError(n.fromAddress, "From address") ?? (n.provider === "SMTP" ? (hostError(n.smtpHost) ?? portError(n.smtpPort)) : null));
+    if (emailProblem) {
+      setError(`${emailProblem}.`);
+      notify.warning(notifications.generic.fixFields);
+      return;
+    }
     setSaving(true);
     try {
       const payload = {
@@ -72,10 +83,10 @@ export default function SettingsPage() {
       };
       const res = await apiSend<{ settings: Settings }>("/api/admin/settings", "PATCH", payload);
       setSettings({ ...res.settings, reportTemplateSources: res.settings.reportTemplateSources ?? {} });
-      setSaved(true);
+      notify.success(notifications.settings.saved);
       router.refresh();
     } catch (err) {
-      setError(errorMessage(err, "Failed to save settings"));
+      setError(notify.formError(err, notifications.settings.saveFailed));
     } finally {
       setSaving(false);
     }
@@ -88,7 +99,8 @@ export default function SettingsPage() {
       const res = await apiSend<{ ok: boolean; sentTo: string }>("/api/admin/settings/test-email", "POST", {});
       setTestEmailResult({ ok: true, message: `Sent to ${res.sentTo}.` });
     } catch (err) {
-      setTestEmailResult({ ok: false, message: errorMessage(err, "Failed to send test email") });
+      // Shown in the test panel as the result of the test (not a toast).
+      setTestEmailResult({ ok: false, message: presentError(err, notifications.settings.testEmailFailed).message });
     } finally {
       setTestEmailSending(false);
     }
@@ -174,9 +186,11 @@ export default function SettingsPage() {
           </div>
           <div>
             <Label htmlFor="fromAddress">From address</Label>
-            <Input
+            <RuleInput
               id="fromAddress"
               type="email"
+              maxLength={LIMITS.email.max}
+              check={(v) => (settings.notification.provider === "NONE" ? null : emailError(v, "From address"))}
               value={settings.notification.fromAddress}
               onChange={(e) => setSettings({ ...settings, notification: { ...settings.notification, fromAddress: e.target.value } })}
             />
@@ -185,18 +199,24 @@ export default function SettingsPage() {
             <>
               <div>
                 <Label htmlFor="smtpHost">SMTP host</Label>
-                <Input
+                <RuleInput
                   id="smtpHost"
+                  maxLength={253}
+                  check={(v) => hostError(v)}
                   value={settings.notification.smtpHost ?? ""}
                   onChange={(e) => setSettings({ ...settings, notification: { ...settings.notification, smtpHost: e.target.value } })}
                 />
               </div>
               <div>
                 <Label htmlFor="smtpPort">SMTP port</Label>
-                <Input
+                <RuleInput
                   id="smtpPort"
                   type="number"
-                  value={settings.notification.smtpPort ?? ""}
+                  min={1}
+                  max={65535}
+                  step={1}
+                  check={(v) => portError(v)}
+                  value={String(settings.notification.smtpPort ?? "")}
                   onChange={(e) =>
                     setSettings({ ...settings, notification: { ...settings.notification, smtpPort: Number(e.target.value) } })
                   }
@@ -614,7 +634,7 @@ export default function SettingsPage() {
           variant="page"
           className="mt-5"
           error={error}
-          hint={saved ? <span className="text-sm text-emerald-600">Settings saved.</span> : "Changes apply to everyone once saved."}
+          hint="Changes apply to everyone once saved."
         >
           <Button onClick={handleSave} disabled={saving}>
             {saving ? "Saving..." : "Save Settings"}

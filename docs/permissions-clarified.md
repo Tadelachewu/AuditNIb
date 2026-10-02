@@ -18,13 +18,13 @@ There are three permissions for this. **Give new roles the District or HO one; d
 | Permission | Who it's for | When it's allowed |
 |---|---|---|
 | **District: Return Rectification for Correction** (`findings.district-return-rectification`) | District Internal Controller | Any time the finding is *Partially Rectified*, *Rectified* or *Transferred*, **before or after** district verification |
-| **HO: Return Rectification for Correction (after District verification)** (`findings.ho-return-rectification`) | Head Office Internal Controller | Only **after the District Controller has verified** at least part of the rectification. HO steps in after District, never ahead of it |
+| **HO: Return Rectification for Correction (after District verification)** (`findings.ho-return-rectification`) | Head Office Internal Controller | Only when **everything the branch recorded has been verified by the District Controller** (nothing still awaiting District) **and** some of that verified rectification isn't closed yet. HO steps in after District, never ahead of it: while any case awaits District verification, only District can verify or return it |
 | **Return Rectification for Correction (Legacy)** (`findings.return-rectification`) | Older roles only | Same as the District one: no HO gate. Kept so roles created before the split keep working |
 
 Rules that apply to all three:
 - **Separation of duties:** someone who already **verified or closed** part of this finding's rectification can't also return it. A different person with the permission can.
 - **Just transferred:** a finding that was just carried into a new period can't be returned until the branch records **new** rectification there.
-- The finding's reporting period must not be locked.
+- A locked period doesn't block it ([locked-periods.md](locked-periods.md)).
 - **Effect:** status → *Rectification Returned*. The branch rectifiers are notified (and the district verifiers when HO returns it), with the reason.
 
 **Default holders:** District Controller (District), HO Controller (HO), Administrator (all three). Because the Administrator holds **Legacy**, it isn't subject to the HO gate. Remove Legacy from the Administrator if that isn't wanted.
@@ -62,19 +62,20 @@ Removes an uploaded evidence file (or an older comment attachment).
 
 ---
 
-## 4. Reopen Closed / Partially Closed Findings (`findings.reopen`)
+## 4. Reverse Closed / Partially Closed Findings (`findings.reopen`)
 
-**Reverses** a closed or partially closed finding, including a **transferred** finding part of which was closed, back to its original "sent to the branch" state with status **REVERSED**.
+**Reverses** what was closed in the period a finding is in now, and sends it back to the branch with status **Sent to Branch Manager/R**. Only that one period is reversed; previous periods are never affected.
 
-- **Where:** the finding's page → **Reopen**. A confirmation with a required reason comes first.
-- **What changes:** status → *REVERSED*; rectified, verified and closed cases and amounts → 0; rectification and closure records are removed, so they stop counting in performance, dashboards and reports; itemized cases go back to *Outstanding*; transfers are kept.
-- **REVERSED** behaves exactly like *Sent to Branch Manager*: the branch must rectify it again and it moves on through the normal workflow. The name just shows it was reversed.
-- **What's kept:** the full history plus a *Reopen* step with the reason, and an audit entry with a snapshot of everything reset.
+- **Where:** the finding's page → **Reverse**. The button only shows when something was closed in the finding's current period. A confirmation with a required reason comes first.
+- **Which period:** a finding that never moved is reversed in its own original period. A transferred finding is reversed in the period it is in now; what was closed in previous periods stays closed there, and its transfers stay.
+- **What changes (current period only):** its closures and rectification records are removed; every case it holds is outstanding again; status → *Sent to Branch Manager/R*; itemized cases not closed in a previous period go back to *Outstanding*.
+- **Sent to Branch Manager/R** behaves exactly like *Sent to Branch Manager*: the branch must rectify it again and it moves on through the normal workflow. The "/R" just shows it was reversed.
+- **What's kept:** the full history plus a *Reverse* step with the reason, and a `FINDING_REVERSED` audit entry with a snapshot of everything removed.
 - **Who is told:** the branch's rectifiers and the registrant.
-- **Conditions:** the finding is in your scope, and no period its rectifications or closures were credited to is locked.
+- **Conditions:** the finding is in your scope. Period locks don't block it.
 - **Default holder:** Administrator.
 
-Details: [reopen-findings.md](reopen-findings.md).
+Details: [reverse-findings.md](reverse-findings.md).
 
 ---
 
