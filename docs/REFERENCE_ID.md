@@ -45,19 +45,22 @@ HOADM-2026-Q4-09999
 Implemented in [nextFindingReference()](file:///c:/Users/HP/Desktop/AdonayAudit/auditapp/src/lib/findings.ts#L507-L538).
 
 1. Build `anchor = branch.code + "-" + period.code + "-"`.
-2. Scan every `f.reference` in `db.findings`.  For each one that starts with
-   `anchor`, slice off the suffix after the anchor and `parseInt(suffix, 10)`.
-3. Take `maxSeq = max(those parsed integers, or 0 if none)`.
-4. New seq = `maxSeq + 1`.
-5. Pad to 5 digits with leading `0` and return `anchor + padded`.
+2. Collect the numbers in use: every `f.reference` in `db.findings` that starts
+   with `anchor` (suffix parsed with `parseInt(suffix, 10)`), plus **reserved**
+   numbers - findings removed by a reversed import, and deleted findings that
+   were already submitted (`RETURNED` / `REJECTED`; recorded in the audit log).
+3. New seq = the **lowest number from 1 up that isn't taken**, so a gap left by
+   a deleted **draft** is filled (00001 and 00003 exist, 00002 was a deleted
+   draft -> the next finding gets 00002).
+4. Pad to 5 digits with leading `0` and return `anchor + padded`.
 
 ### Why not `COUNT() + 1`?
 
-The prior (buggy) implementation used `db.findings.filter(…).length + 1`.
-This silently re-issued old reference numbers the moment any finding in the
-same branch+period was deleted, producing a
-**Postgres `unique constraint violation` on `findings.reference`**.  The
-current MAX-based algorithm never reuses a suffix, even after deletions.
+The prior (buggy) implementation used `db.findings.filter(…).length + 1`,
+which re-issued a number **still in use** the moment any earlier finding was
+deleted (e.g. 00001, 00003 left -> count 2 -> 00003 again), producing a
+**Postgres `unique constraint violation` on `findings.reference`**. The
+lowest-free-number algorithm only ever picks a number nothing holds.
 
 ### Capacity — per `(branch, period)`
 
@@ -281,7 +284,7 @@ npx prisma generate
 
 | Scheme                            | Logical unit              | Scoped to…                | Hard ceiling (or effective)       | Is it enough?                          |
 | --------------------------------- | ------------------------- | ------------------------- | --------------------------------- | -------------------------------------- |
-| Finding reference suffix          | Integer, MAX+1            | one `(branch, period)`    | Unlimited (string) after 99 999  | Yes.  Thousands/period → ~100yrs+.     |
+| Finding reference suffix          | Integer, lowest free      | one `(branch, period)`    | Unlimited (string) after 99 999  | Yes.  Thousands/period → ~100yrs+.     |
 | Entity PK (`id`, UUID v4)         | 122 random bits           | global                    | 2^122 distinct values             | Yes.  Statistically unreachable.        |
 | Audit chain `sequence`            | BIGINT + app string      | global (chain order)      | 9.2 × 10^18 (Postgres BIGINT)     | Yes.  292k years @ 1k/sec.              |
 | FindingCase.seq                   | 1..N                      | one finding               | 500 (Zod cap) + INT storage       | Yes.  Itemization cap by design.        |

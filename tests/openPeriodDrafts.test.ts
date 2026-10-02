@@ -128,3 +128,16 @@ describe("deleting a returned finding", () => {
     expect(db.findings).toHaveLength(1);
   });
 });
+
+describe("reference numbers fill gaps", () => {
+  it("a deleted draft's number in the middle is reused by the next finding", async () => {
+    db = fixture(true);
+    const makeDraft = () => create(json("POST", { ...newDraft, submit: false }), { params: Promise.resolve({}) });
+    await makeDraft(); // 00002
+    await makeDraft(); // 00003
+    const second = db.findings.find((f) => f.reference.endsWith("-00002"))!;
+    await remove(json("DELETE"), { params: Promise.resolve({ id: second.id }) });
+    await makeDraft();
+    expect(db.findings.map((f) => f.reference).sort()).toEqual(["B001-2026-09-00001", "B001-2026-09-00002", "B001-2026-09-00003"]);
+  });
+});
