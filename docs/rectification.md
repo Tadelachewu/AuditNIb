@@ -302,6 +302,13 @@ used to verify the fix live against a disposable test finding during this projec
   `closedCases`/`closedAmount` (formal closure), **not** `rectifiedCases`/`rectifiedAmount` — a
   `RECTIFIED`-but-not-yet-`CLOSED` finding still carries its full `caseCount`/`amount` forward when
   transferred, because none of it has been formally closed yet (`workflow.md` §7.1).
+  **A transfer also resets rectification that isn't closed yet** - cases awaiting district
+  verification, verified but not closed, or returned for correction: `rectified`/`districtVerified`
+  go back to what was closed, itemized cases not covered by a closure go back to *Outstanding*, and
+  the branch rectifies every transferred case again in the new period. Closed work stays in the
+  period it was closed in; the old rectification records stay as that period's history. Logged as
+  `TRANSFER_RESET_PENDING` in the audit log, and the Transfer confirmation says how many cases are
+  reset (`transferFinding()` in `src/lib/findings.ts`; tests in `tests/reverseScenarios.test.ts`).
 - **Close** (`workflow.md` §6): bounded by `min(rectifiedCases, districtVerifiedCases) - closedCases` —
   closure can never race ahead of either the branch's own rectification or District's verification of it.
   A finding can be partially closed (leaving `Finding.status` untouched) at any point once *some* rectified

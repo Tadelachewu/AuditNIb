@@ -498,3 +498,57 @@ describe("effect on figures", () => {
     expect(f.lastReminderAt).toBeUndefined();
   });
 });
+
+// ---------- transfer resets rectification that isn't closed yet ----------
+
+describe("transfer: rectification not yet closed goes back to the branch", () => {
+  it("pending district verification + verified-not-closed: all transferred cases must be rectified again", async () => {
+    const f = addFinding(4);
+    closeCases(f, 1); // closed - stays
+    rectify(f, 1);
+    verify(f); // verified, not closed
+    rectify(f, 1); // awaiting district verification
+    expect(totals(f)).toEqual({ rectified: 3, verified: 2, closed: 1 });
+
+    expect((await api.transfer(f, "p10")).status).toBe(200);
+
+    expect(f).toMatchObject({ status: "TRANSFERRED", periodId: "p10" });
+    expect(totals(f)).toEqual({ rectified: 1, verified: 1, closed: 1 });
+    expect(f.caseCount - f.rectifiedCases).toBe(3); // = the 3 transferred cases
+    expect(slice(f, "p9")).toEqual({ cases: 1, closed: 1 });
+    expect(slice(f, "p10")).toEqual({ cases: 3, closed: 0 });
+    expect(db.auditLogs.some((l) => l.action === "TRANSFER_RESET_PENDING")).toBe(true);
+    // Nothing is waiting for district verification or closure any more.
+    expect((await api.verify(f)).status).toBe(409);
+    expect((await api.close(f)).status).toBe(409);
+    // The branch can rectify all 3 again.
+    expect((await api.rectify(f, 3)).status).toBe(200);
+  });
+
+  it("returned for correction: reset too", async () => {
+    const f = addFinding(2, "p9", "RECTIFICATION_RETURNED");
+    rectify(f, 2);
+    expect((await api.transfer(f, "p10")).status).toBe(200);
+    expect(totals(f)).toEqual({ rectified: 0, verified: 0, closed: 0 });
+    expect(f.status).toBe("TRANSFERRED");
+  });
+
+  it("itemized: cases rectified but not closed go back to Outstanding; closed ones stay Rectified", async () => {
+    const f = addFinding(3);
+    itemize(f);
+    rectify(f, 1, [`${f.id}-case1`]);
+    verify(f);
+    close(f, 1);
+    rectify(f, 1, [`${f.id}-case2`]); // not closed
+    expect((await api.transfer(f, "p10")).status).toBe(200);
+    expect(db.findingCases.map((c) => [c.seq, c.status])).toEqual([[1, "RECTIFIED"], [2, "OUTSTANDING"], [3, "OUTSTANDING"]]);
+  });
+
+  it("nothing pending: nothing reset", async () => {
+    const f = addFinding(2);
+    closeCases(f, 1);
+    expect((await api.transfer(f, "p10")).status).toBe(200);
+    expect(totals(f)).toEqual({ rectified: 1, verified: 1, closed: 1 });
+    expect(db.auditLogs.some((l) => l.action === "TRANSFER_RESET_PENDING")).toBe(false);
+  });
+});

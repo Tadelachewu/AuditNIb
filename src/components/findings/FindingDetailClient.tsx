@@ -450,7 +450,11 @@ export function FindingDetailClient({
     const period = otherOpenPeriods.find((p) => p.id === transferPeriodId);
     const result = await confirm({
       title: `Transfer to ${period?.code ?? "another period"}?`,
-      message: `Moves the outstanding ${finding.currency} ${transferOutstandingAmount.toLocaleString()} (${transferOutstandingCases} case(s)) to ${period?.earlier ? "the earlier" : "the later"} period ${period?.code ?? ""}. The finding stays open under that period.`,
+      message:
+        `Moves the outstanding ${finding.currency} ${transferOutstandingAmount.toLocaleString()} (${transferOutstandingCases} case(s)) to ${period?.earlier ? "the earlier" : "the later"} period ${period?.code ?? ""}. The finding stays open under that period.` +
+        (finding.rectifiedCases > finding.closedCases || finding.rectifiedAmount > finding.closedAmount
+          ? ` ${finding.rectifiedCases - finding.closedCases} rectified case(s) not yet closed (awaiting district verification, awaiting closure, or returned for correction) are reset: the branch rectifies them again in ${period?.code ?? "the new period"}.`
+          : ""),
       confirmLabel: "Transfer",
       tone: "danger",
       needsReason: true,

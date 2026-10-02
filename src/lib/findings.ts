@@ -74,6 +74,52 @@ export function transferFinding(
     method: opts.method ?? "MANUAL",
   });
 
+  // Anything rectified but not yet formally closed - waiting for district
+  // verification, verified but not closed, or returned for correction - is
+  // NOT carried over half-done: every transferred case goes back to the
+  // branch to rectify again in the new period. Only closed work stays (it
+  // belongs to the period it was closed in). The old rectification records
+  // stay as history of the period they were made in.
+  const pending = {
+    rectifiedCases: finding.rectifiedCases - finding.closedCases,
+    rectifiedAmount: finding.rectifiedAmount - finding.closedAmount,
+    districtVerifiedCases: finding.districtVerifiedCases - finding.closedCases,
+    districtVerifiedAmount: finding.districtVerifiedAmount - finding.closedAmount,
+  };
+  if (pending.rectifiedCases > 0 || pending.rectifiedAmount > 0 || pending.districtVerifiedCases > 0 || pending.districtVerifiedAmount > 0) {
+    finding.rectifiedCases = finding.closedCases;
+    finding.rectifiedAmount = finding.closedAmount;
+    finding.districtVerifiedCases = Math.min(finding.districtVerifiedCases, finding.closedCases);
+    finding.districtVerifiedAmount = Math.min(finding.districtVerifiedAmount, finding.closedAmount);
+    // Itemized cases: the earliest-rectified ones covered by closures stay
+    // Rectified; the rest are outstanding again.
+    const stillClosed = new Set(
+      db.findingCases
+        .filter((c) => c.findingId === finding.id && c.status === "RECTIFIED")
+        .sort((a, b) => (a.rectifiedAt ?? "").localeCompare(b.rectifiedAt ?? "") || a.seq - b.seq)
+        .slice(0, finding.closedCases)
+        .map((c) => c.id)
+    );
+    for (const c of db.findingCases) {
+      if (c.findingId !== finding.id || c.status !== "RECTIFIED" || stillClosed.has(c.id)) continue;
+      c.status = "OUTSTANDING";
+      c.rectificationId = undefined;
+      c.rectifiedAt = undefined;
+      c.rectifiedBy = undefined;
+      c.rectifiedByName = undefined;
+    }
+    appendAuditLog(db, {
+      userId: opts.userId,
+      userName: opts.userName,
+      action: "TRANSFER_RESET_PENDING",
+      entityType: "Finding",
+      entityId: finding.id,
+      oldValue: pending,
+      newValue: { rectifiedCases: finding.rectifiedCases, districtVerifiedCases: finding.districtVerifiedCases, closedCases: finding.closedCases },
+      reason: "Rectification not yet closed was reset by the transfer - the branch rectifies it again in the new period.",
+    });
+  }
+
   finding.periodId = opts.toPeriodId;
   transitionFinding(db, finding, {
     toStatus: "TRANSFERRED",
