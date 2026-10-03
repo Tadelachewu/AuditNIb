@@ -6,7 +6,7 @@ import { apiGet, apiSend } from "@/lib/api-client";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { StickyActions } from "@/components/ui/StickyActions";
-import { Label } from "@/components/ui/Field";
+import { CheckboxField, Label } from "@/components/ui/Field";
 import { INPUT_FILTERS, codeError, entityNameError, LIMITS } from "@/lib/inputRules";
 import { RuleInput } from "@/components/ui/RuleInput";
 import { Badge } from "@/components/ui/Badge";
@@ -211,7 +211,7 @@ export default function CategoriesPage() {
           action={canCreate && (
             <AddDialog title="Add Category">
               {({ close }) => (
-              <form onSubmit={(e) => handleCreate(e, close)} className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-4 sm:items-end">
+              <form onSubmit={(e) => handleCreate(e, close)} className="grid grid-cols-1 items-start gap-3 p-4 sm:grid-cols-4">
                 <div>
                   <Label htmlFor="code">Code</Label>
                   <RuleInput id="code" required filter={INPUT_FILTERS.code} maxLength={LIMITS.code.max} check={(v) => codeError(v)} hint="Letters, numbers, dashes and underscores; no spaces" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} />
@@ -220,16 +220,7 @@ export default function CategoriesPage() {
                   <Label htmlFor="name">Name</Label>
                   <RuleInput id="name" required maxLength={LIMITS.entityName.max} check={(v) => entityNameError(v)} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
                 </div>
-                <div className="flex items-center gap-2 pb-1.5">
-                  <input
-                    id="scored"
-                    type="checkbox"
-                    checked={form.scored}
-                    onChange={(e) => setForm({ ...form, scored: e.target.checked })}
-                    className="h-4 w-4 rounded border-slate-300"
-                  />
-                  <Label htmlFor="scored">Scored category</Label>
-                </div>
+                <CheckboxField id="scored" label="Scored category" checked={form.scored} onChange={(scored) => setForm({ ...form, scored })} />
                 <StickyActions error={formError}>
                   <Button type="button" variant="cancel" onClick={close}>
                     Cancel

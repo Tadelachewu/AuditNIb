@@ -41,6 +41,44 @@ export function FileInput(props: ComponentProps<"input">) {
   );
 }
 
+/**
+ * A checkbox placed in a row of form fields: an empty label line on top and a
+ * field-height box, so the checkbox lines up with the input boxes beside it
+ * (even when a neighbouring field shows a hint underneath).
+ */
+export function CheckboxField({
+  id,
+  label,
+  checked,
+  onChange,
+  disabled,
+}: {
+  id: string;
+  label: ReactNode;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div>
+      <span aria-hidden="true" className="mb-1 block text-xs">
+        &nbsp;
+      </span>
+      <label htmlFor={id} className="flex min-h-[2.125rem] cursor-pointer items-center gap-2 text-sm text-slate-700">
+        <input
+          id={id}
+          type="checkbox"
+          checked={checked}
+          disabled={disabled}
+          onChange={(e) => onChange(e.target.checked)}
+          className="h-4 w-4 shrink-0 rounded border-slate-300"
+        />
+        {label}
+      </label>
+    </div>
+  );
+}
+
 export function Label({ children, htmlFor, brand = false }: { children: ReactNode; htmlFor?: string; brand?: boolean }) {
   return (
     <label htmlFor={htmlFor} className={`mb-1 block text-xs font-medium ${brand ? "text-brand-ink" : "text-slate-600"}`}>

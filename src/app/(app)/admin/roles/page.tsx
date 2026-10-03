@@ -5,7 +5,7 @@ import { apiGet, apiSend } from "@/lib/api-client";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { StickyActions } from "@/components/ui/StickyActions";
-import { Select, Label } from "@/components/ui/Field";
+import { CheckboxField, Select, Label } from "@/components/ui/Field";
 import { INPUT_FILTERS, entityNameError, LIMITS, roleCodeError, textError } from "@/lib/inputRules";
 import { RuleInput } from "@/components/ui/RuleInput";
 import { Badge } from "@/components/ui/Badge";
@@ -172,7 +172,7 @@ export default function RolesPage() {
             <AddDialog size="xl" title="New Role">
               {({ close }) => (
               <form onSubmit={(e) => handleCreate(e, close)} className="flex flex-col gap-4 p-4">
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="grid grid-cols-1 items-start gap-3 sm:grid-cols-2 lg:grid-cols-4">
                   <div>
                     <Label htmlFor="code">Code</Label>
                     <RuleInput
@@ -204,16 +204,12 @@ export default function RolesPage() {
                     </Select>
                   </div>
                   {form.orgScope === "BRANCH" && (
-                    <div className="flex items-center gap-2 pb-1.5 pt-5">
-                      <input
-                        id="branchSingleton"
-                        type="checkbox"
-                        checked={form.branchSingleton}
-                        onChange={(e) => setForm({ ...form, branchSingleton: e.target.checked })}
-                        className="h-4 w-4 rounded border-slate-300"
-                      />
-                      <Label htmlFor="branchSingleton">At most one active user per branch</Label>
-                    </div>
+                    <CheckboxField
+                      id="branchSingleton"
+                      label="At most one active user per branch"
+                      checked={form.branchSingleton}
+                      onChange={(branchSingleton) => setForm({ ...form, branchSingleton })}
+                    />
                   )}
                 </div>
 
