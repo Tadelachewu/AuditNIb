@@ -9,7 +9,8 @@ import { getDistrictRankingAllCases, templateSourceNote } from "@/lib/reportTemp
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { PrintButton } from "@/components/reports/PrintButton";
-import { PeriodCheckboxAccordion } from "@/components/reports/PeriodCheckboxAccordion";
+import { PeriodMultiSelect } from "@/components/reports/PeriodMultiSelect";
+import { Label } from "@/components/ui/Field";
 
 export default async function DistrictRankingAllCasesPage({
   searchParams,
@@ -59,14 +60,12 @@ export default async function DistrictRankingAllCasesPage({
         </div>
       </div>
 
-      <form method="GET" className="no-print">
-        <p className="mb-2 text-xs font-medium text-slate-600">
-          Periods to include (none selected = every period, cumulative lifetime totals)
-        </p>
-        <PeriodCheckboxAccordion periods={db.reportingPeriods} selectedIds={selectedPeriodIds} />
-        <Button type="submit" className="mt-2">
-          Apply
-        </Button>
+      <form method="GET" className="no-print flex items-end gap-2">
+        <div>
+          <Label htmlFor="periodIds">Periods</Label>
+          <PeriodMultiSelect periods={db.reportingPeriods} selectedIds={selectedPeriodIds} />
+        </div>
+        <Button type="submit">View</Button>
       </form>
 
       <Card>
