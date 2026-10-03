@@ -229,3 +229,60 @@ export function TransfersGrid({ rows }: { rows: TransferRow[] }) {
     />
   );
 }
+
+export interface CategoryBreakdownRow {
+  id: string;
+  name: string;
+  total: number;
+  rectified: number;
+  outstanding: number;
+}
+
+/** Category Breakdown - the same table as the page's other sections. */
+export function CategoryBreakdownGrid({ rows }: { rows: CategoryBreakdownRow[] }) {
+  const columns = useMemo<MRT_ColumnDef<CategoryBreakdownRow>[]>(
+    () => [
+      { accessorKey: "name", header: "Category", Cell: ({ cell }) => <span className="text-slate-900">{cell.getValue<string>()}</span> },
+      { accessorKey: "total", header: "Total", filterVariant: "range", Cell: ({ cell }) => <span className="tabular-nums">{formatNumber(cell.getValue<number>())}</span> },
+      { accessorKey: "rectified", header: "Rectified", filterVariant: "range", Cell: ({ cell }) => <span className="tabular-nums">{formatNumber(cell.getValue<number>())}</span> },
+      { accessorKey: "outstanding", header: "Outstanding", filterVariant: "range", Cell: ({ cell }) => <span className="tabular-nums">{formatNumber(cell.getValue<number>())}</span> },
+    ],
+    []
+  );
+  return (
+    <AdminTable
+      columns={columns}
+      data={rows}
+      getRowId={(r) => r.id}
+      exportFileName="report-category-breakdown"
+      emptyText="No categories."
+      tableOptions={{ initialState: { density: "compact", pagination: { pageIndex: 0, pageSize: 25 } } }}
+    />
+  );
+}
+
+export interface RiskBreakdownRow {
+  risk: string;
+  count: number;
+}
+
+/** Risk Breakdown - the same table as the page's other sections. */
+export function RiskBreakdownGrid({ rows }: { rows: RiskBreakdownRow[] }) {
+  const columns = useMemo<MRT_ColumnDef<RiskBreakdownRow>[]>(
+    () => [
+      { accessorKey: "risk", header: "Risk Level", Cell: ({ cell }) => <span className="text-slate-900">{cell.getValue<string>()}</span> },
+      { accessorKey: "count", header: "Findings", filterVariant: "range", Cell: ({ cell }) => <span className="tabular-nums">{formatNumber(cell.getValue<number>())}</span> },
+    ],
+    []
+  );
+  return (
+    <AdminTable
+      columns={columns}
+      data={rows}
+      getRowId={(r) => r.risk}
+      exportFileName="report-risk-breakdown"
+      emptyText="No risk levels."
+      tableOptions={{ initialState: { density: "compact", pagination: { pageIndex: 0, pageSize: 25 } } }}
+    />
+  );
+}

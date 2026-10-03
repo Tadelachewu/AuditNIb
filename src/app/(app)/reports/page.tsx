@@ -11,7 +11,7 @@ import { TimeRangeFilter } from "@/components/reports/TimeRangeFilter";
 import { PrintButton } from "@/components/reports/PrintButton";
 import { FILTERABLE_FINDING_STATUSES } from "@/types";
 import { RankingGrid } from "@/components/dashboard/RankingGrid";
-import { ReportFindingsGrid, TransfersGrid } from "@/components/reports/ReportGrids";
+import { CategoryBreakdownGrid, ReportFindingsGrid, RiskBreakdownGrid, TransfersGrid } from "@/components/reports/ReportGrids";
 import { currentPeriod, sortPeriods } from "@/lib/periods";
 
 // master.txt §18's 14 named reports, covered as a small number of real,
@@ -121,40 +121,14 @@ export default async function ReportsPage({
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader title="Category Breakdown" description="Matching the current filters" />
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="border-b border-slate-200 text-xs text-slate-600">
-                <tr>
-                  <th className="px-4 py-2 font-medium">Category</th>
-                  <th className="px-4 py-2 font-medium">Total</th>
-                  <th className="px-4 py-2 font-medium">Rectified</th>
-                  <th className="px-4 py-2 font-medium">Outstanding</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {categoryBreakdown.map(({ category: c, total, rectified, outstanding }) => (
-                  <tr key={c.id}>
-                    <td className="px-4 py-2 text-slate-900">{c.name}</td>
-                    <td className="px-4 py-2 text-slate-700">{total}</td>
-                    <td className="px-4 py-2 text-slate-700">{rectified}</td>
-                    <td className="px-4 py-2 text-slate-700">{outstanding}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <CategoryBreakdownGrid
+            rows={categoryBreakdown.map(({ category: c, total, rectified, outstanding }) => ({ id: c.id, name: c.name, total, rectified, outstanding }))}
+          />
         </Card>
 
         <Card>
           <CardHeader title="Risk Breakdown" description="Matching the current filters" />
-          <div className="divide-y divide-slate-100">
-            {riskBreakdown.map(({ risk, count }) => (
-              <div key={risk} className="flex items-center justify-between px-4 py-2 text-sm">
-                <span className="text-slate-900">{risk}</span>
-                <span className="font-medium text-slate-700">{count}</span>
-              </div>
-            ))}
-          </div>
+          <RiskBreakdownGrid rows={riskBreakdown} />
         </Card>
       </div>
 
