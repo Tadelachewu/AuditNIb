@@ -786,7 +786,22 @@ export function queueStatusesForSession(session: SessionData, db: Database): (fi
       const verifiedAmount = Math.min(f.rectifiedAmount, f.districtVerifiedAmount);
       return f.status !== "CLOSED" && (verifiedCases > f.closedCases || verifiedAmount > f.closedAmount);
     });
+  if (has("transfer")) matchers.push((f) => needsTransfer(db, f));
   return (f) => matchers.some((matches) => matches(f));
+}
+
+/**
+ * A finding that should be carried into another period: it still has cases
+ * that aren't formally closed, and its current reporting period has ended
+ * or is locked. What puts it in the queue of anyone who can transfer (by
+ * default the HO Controller).
+ */
+export function needsTransfer(db: Database, f: Finding, now: number = Date.now()): boolean {
+  if (!AUTO_TRANSFERABLE_STATUSES.includes(f.status)) return false;
+  if (f.closedCases >= f.caseCount && f.closedAmount >= f.amount) return false;
+  const period = db.reportingPeriods.find((p) => p.id === f.periodId);
+  if (!period) return false;
+  return period.status === "LOCKED" || new Date(period.endsAt).getTime() < now;
 }
 
 export interface PerformanceScope {
