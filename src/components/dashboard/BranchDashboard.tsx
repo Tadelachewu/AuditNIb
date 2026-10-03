@@ -9,8 +9,7 @@ import {
   findingCaseTotals,
   findingCaseTotalsInPeriod,
   transferTotals,
-  isHoApproved,
-} from "@/lib/findings";
+  isHoApproved, awaitingBranchRectification } from "@/lib/findings";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
 import { sumAmountByCurrency, sumOutstandingByCurrency, sumAmountByCurrencyInPeriod, sumOutstandingByCurrencyInPeriod, addCurrency, mergeCurrencyTotals, formatCurrencyTotals, type CurrencyTotals } from "@/lib/currency";
 import { formatDateTime } from "@/lib/format";
@@ -247,10 +246,8 @@ export function BranchDashboard({
   const pendingApprovalFindings = ownFindings.filter((f) =>
     ["DISTRICT_REVIEW", "HO_REVIEW", "PENDING_BANK_APPROVAL"].includes(f.status)
   ).length;
-  // Same statuses as queueStatusesForSession()'s own "rectify" matcher.
-  const pendingRectificationFindings = db.findings
-    .filter((f) => f.branchId === branch.id)
-    .filter((f) => ["SENT_TO_BRANCH_MANAGER", "REVERSED", "PARTIALLY_RECTIFIED", "RECTIFICATION_RETURNED"].includes(f.status)).length;
+  // Same rule as the Branch Manager's queue (incl. transferred findings with cases to rectify).
+  const pendingRectificationFindings = db.findings.filter((f) => f.branchId === branch.id && awaitingBranchRectification(f)).length;
 
   const isQueued = queueStatusesForSession(user, db);
   const workQueue = db.findings

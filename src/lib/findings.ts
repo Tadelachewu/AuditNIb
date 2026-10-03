@@ -744,6 +744,18 @@ export function hasRectificationAfterLastTransfer(db: Database, finding: Finding
  * instead. Without this, an assigned approver's own bank-registered
  * findings awaiting their sign-off never showed up in any work queue.
  */
+/**
+ * Waiting for the branch to record rectification - what puts a finding in a
+ * Branch Manager's queue: sent to / reversed back to the branch, partly
+ * rectified, returned for correction, or TRANSFERRED into a new period with
+ * cases still to rectify there (a transfer sends every unclosed case back to
+ * the branch - see transferFinding()).
+ */
+export function awaitingBranchRectification(f: Finding): boolean {
+  if (["SENT_TO_BRANCH_MANAGER", "REVERSED", "PARTIALLY_RECTIFIED", "RECTIFICATION_RETURNED"].includes(f.status)) return true;
+  return f.status === "TRANSFERRED" && (f.rectifiedCases < f.caseCount || f.rectifiedAmount < f.amount);
+}
+
 export function queueStatusesForSession(session: SessionData, db: Database): (finding: Finding) => boolean {
   const has = (action: string) => hasPermission(session.permissions, permissionKey("findings", action));
   const matchers: ((f: Finding) => boolean)[] = [];
@@ -753,11 +765,7 @@ export function queueStatusesForSession(session: SessionData, db: Database): (fi
   if (session.userId && db.settings.hoApproval.approverUserIds.includes(session.userId)) {
     matchers.push((f) => f.status === "PENDING_BANK_APPROVAL");
   }
-  if (has("rectify"))
-    matchers.push(
-      (f) =>
-        f.status === "SENT_TO_BRANCH_MANAGER" || f.status === "REVERSED" || f.status === "PARTIALLY_RECTIFIED" || f.status === "RECTIFICATION_RETURNED"
-    );
+  if (has("rectify")) matchers.push(awaitingBranchRectification);
   // District's gate on a recorded rectification, before it's HO's turn -
   // "has something rectified that hasn't been district-verified yet." Either
   // permission alone still means there's a decision this session can make
