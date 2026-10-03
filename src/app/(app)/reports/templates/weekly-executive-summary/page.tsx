@@ -61,7 +61,11 @@ export default async function WeeklyExecutiveSummaryPage({
             ← Back
           </Link>
           <h1 className="mt-1 text-lg font-semibold text-slate-900">Weekly Executive Summary</h1>
-          <p className="mt-1 text-sm text-slate-600">Every classified category x district, balance carried forward this week vs. last week.</p>
+          <p className="mt-1 text-sm text-slate-600">
+            Every classified category by district, compared between two cutoff dates: what was outstanding as of the
+            earlier date, what was added and rectified (closed) in between, and what is outstanding as of the later date.
+            By default the two dates are the Sundays ending this week and last week; any two dates can be chosen.
+          </p>
           {sourceNote && <p className="mt-1 text-xs font-medium text-amber-800">{sourceNote}</p>}
         </div>
         <div className="flex shrink-0 gap-2">

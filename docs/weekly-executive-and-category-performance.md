@@ -15,6 +15,8 @@ Code: `getWeeklyExecutiveSummary()` and `getCategoryPerformanceSummary()` in `sr
 
 ## 1. Weekly Executive Summary
 
+> Full guide to this report (filters, every column, worked example, what can change past weeks): [weekly-executive-summary.md](weekly-executive-summary.md).
+
 **Purpose:** week-over-week progress of every category, district by district: what was outstanding last week, what was added, what was rectified, and what is outstanding now.
 
 ### Filters
