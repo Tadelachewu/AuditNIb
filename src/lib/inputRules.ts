@@ -25,7 +25,6 @@ export const LIMITS = {
   reason: { min: 5, max: 500 },
   listItem: { max: 100 },
   email: { max: 254 },
-  phoneDigits: { min: 9, max: 15 },
   amount: { max: 1_000_000_000_000 },
   caseCount: { max: 10_000 },
 } as const;
@@ -85,17 +84,35 @@ export function emailError(value: string | null | undefined, label = "Email addr
 }
 
 /**
- * A phone number (optional - blank is fine): digits with an optional leading
- * +, and spaces, dashes, dots or brackets as separators; 9-15 digits
- * (e.g. 0911 234 567, +251 911 234 567).
+ * A phone number (optional - blank is fine). Digits with an optional leading
+ * +, and spaces, dashes, dots or brackets as separators. Ethiopian numbers
+ * must have their exact length:
+ *   - local:         0 + 9 digits = 10 digits   (0911 234 567, 011 123 4567)
+ *   - international: +251 / 251 + 9 digits      (+251 911 234 567)
+ * A number with another country code (+ then 8-15 digits) is also accepted.
  */
 export function phoneError(value: string | null | undefined): string | null {
   const v = trimmed(value);
   if (!v) return null;
   if (!/^\+?[0-9 ()\-.]+$/.test(v)) return "Phone number may only contain digits, an optional leading +, and spaces, dashes, dots or brackets";
-  const digits = v.replace(/\D/g, "").length;
-  if (digits < LIMITS.phoneDigits.min || digits > LIMITS.phoneDigits.max) return `Enter a valid phone number (${LIMITS.phoneDigits.min}-${LIMITS.phoneDigits.max} digits)`;
-  return null;
+  const digits = v.replace(/\D/g, "");
+  const plus = v.startsWith("+");
+  const example = "e.g. 0911 234 567 or +251 911 234 567";
+  if (digits.startsWith("251")) {
+    if (digits.length !== 12) return `Enter a valid Ethiopian number: +251 followed by 9 digits (${example})`;
+    if (!/^251[1-9]/.test(digits)) return `Enter a valid Ethiopian number (${example})`;
+    return null;
+  }
+  if (plus) {
+    if (digits.length < 8 || digits.length > 15) return `Enter a valid international number: + country code and 8-15 digits in total (${example})`;
+    return null;
+  }
+  if (digits.startsWith("0")) {
+    if (digits.length !== 10) return `Enter a valid phone number: 10 digits starting with 0 (${example})`;
+    if (digits[1] === "0") return `Enter a valid phone number (${example})`;
+    return null;
+  }
+  return `Enter a valid phone number: 10 digits starting with 0, or +251 followed by 9 digits (${example})`;
 }
 
 /** A finding title (when given): 3-200 characters, containing a letter. */

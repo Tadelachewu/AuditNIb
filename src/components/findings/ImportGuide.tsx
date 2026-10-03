@@ -415,8 +415,7 @@ export function ImportGuide() {
             </li>
             <li>
               Needs the <strong>Findings › Reverse an Import</strong> permission (Re-import also needs Bulk Import). The Administrator
-              has it and can grant it to other roles. The audit log keeps every step, and removed reference numbers are never given
-              to another finding.
+              has it and can grant it to other roles. The audit log keeps every step; the removed findings&apos; reference numbers become free for new findings.
             </li>
           </ul>
         </div>

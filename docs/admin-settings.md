@@ -288,7 +288,7 @@ All six reference-data types (Districts, Branches, Sources, Departments, Uncover
 
 All six list endpoints are gated by `<page>.view`; create by `<page>.create`; the shared `PATCH` handler infers `<page>.toggle-status` vs `<page>.edit` from which fields are present in the body via `requireToggleOrEditPermission()` (`guard.ts:58-66`) — e.g. a `{active: true}`-only PATCH needs only the toggle permission, a `{name: "..."}` PATCH needs the edit permission.
 
-Scoring Rules and Scoring Adjustments (also under `/admin`, though not named in this task's org-unit list) have their own stricter immutability rules worth noting: a scoring rule version that has ever gone live (`everActivated: true`) can never again be edited or deleted, only superseded by a new version (`scoring-rules/[id]/route.ts:11-17, 79-84, 113-128`); scoring adjustments can never be deleted at all, only deactivated, to preserve the permanent record (`registry.ts:183-188`).
+**Scoring Rules** (`/admin/scoring-rules`): any version can be **edited** - including the active one, which changes every Performance % straight away (a confirmation warns first) - and any version can be **deleted except the active one** (activate another version or deactivate it first, so the system is never left without a rule). Every edit and delete is in the audit log with the full previous version (`scoring-rules/[id]/route.ts`; tests in `tests/scoringRuleEdit.test.ts`).
 
 ---
 

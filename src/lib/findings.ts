@@ -598,7 +598,7 @@ export function assertRequiredFindingFieldsPresent(
  * Design notes (see REFERENCE_ID.md for the full spec):
  *   - Takes the LOWEST free number, so a gap left by a deleted draft is
  *     filled (00001, 00003 exist -> 00002), never a number in use (the
- *     `finding.reference` UNIQUE constraint) or a reserved one (below).
+ *     `finding.reference` UNIQUE constraint). Removed findings free their number.
  *   - 5-digit zero-padded suffix: 00001 .. 99999 per branch/period combo.
  *     At an extreme 1000 findings/month per branch this covers ~8 years;
  *     at the NIB's realistic rate (~50/month) it covers ~165 years per
@@ -612,24 +612,12 @@ export function nextFindingReference(db: Database, branch: Branch, period: Repor
   const prefix = `${branch.code}-${period.code}`;
   const anchor = `${prefix}-`;
   const taken = new Set<number>();
-  // References of findings removed by a reversed import stay reserved, so
-  // a number that once existed (and is in the audit trail) is never reissued.
-  // (A batch deleted outright keeps its list only in its audit entry.)
-  // Same for a deleted RETURNED / REJECTED finding - it was submitted and
-  // seen by reviewers, so its number must never come back on a new finding.
-  // (A deleted never-submitted draft's number may be reused.)
-  const reversedRefs = [
-    ...db.importBatches.filter((b) => b.reversedAt).flatMap((b) => b.rows.map((r) => r.reference ?? "")),
-    ...db.auditLogs
-      .filter((l) => l.action === "IMPORT_REVERSE_AND_DELETE" || l.action === "IMPORT_RECORD_DELETED")
-      .flatMap((l) => ((l.oldValue as { references?: string[] } | null)?.references ?? [])),
-    ...db.auditLogs
-      .filter((l) => l.action === "DELETE" && l.entityType === "Finding")
-      .map((l) => l.oldValue as { status?: string; reference?: string } | null)
-      .filter((v) => v?.status === "RETURNED" || v?.status === "REJECTED")
-      .map((v) => v?.reference ?? ""),
-  ];
-  for (const ref of [...db.findings.map((f) => f.reference), ...reversedRefs]) {
+  // Only numbers held by existing findings are taken. A finding that's gone -
+  // deleted by hand (draft, returned, rejected) or removed by reversing an
+  // import - frees its number: the next new finding in that branch and
+  // period takes it (lowest free number, below). The audit log keeps the
+  // removed finding's number and details either way.
+  for (const ref of db.findings.map((f) => f.reference)) {
     if (!ref.startsWith(anchor)) continue;
     const suffix = ref.slice(anchor.length);
     const n = parseInt(suffix, 10);

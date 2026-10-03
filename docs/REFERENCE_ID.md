@@ -46,12 +46,12 @@ Implemented in [nextFindingReference()](file:///c:/Users/HP/Desktop/AdonayAudit/
 
 1. Build `anchor = branch.code + "-" + period.code + "-"`.
 2. Collect the numbers in use: every `f.reference` in `db.findings` that starts
-   with `anchor` (suffix parsed with `parseInt(suffix, 10)`), plus **reserved**
-   numbers - findings removed by a reversed import, and deleted findings that
-   were already submitted (`RETURNED` / `REJECTED`; recorded in the audit log).
+   with `anchor` (suffix parsed with `parseInt(suffix, 10)`). Nothing else is
+   reserved.
 3. New seq = the **lowest number from 1 up that isn't taken**, so a gap left by
-   a deleted **draft** is filled (00001 and 00003 exist, 00002 was a deleted
-   draft -> the next finding gets 00002).
+   **any removed finding** - deleted by hand (draft, returned, rejected) or removed
+   by reversing an import - is filled (00001 and 00003 exist, 00002 was removed ->
+   the next finding gets 00002).
 4. Pad to 5 digits with leading `0` and return `anchor + padded`.
 
 ### Why not `COUNT() + 1`?

@@ -9,7 +9,7 @@ import { withApiHandler } from "@/lib/api/handler";
 // Delete an import record (Import History → Delete) - only once its findings
 // are gone (reversed, or it never imported any), so this can never remove
 // findings. Removes the record and its stored original file; the audit log
-// keeps the entry, and its reference numbers stay reserved.
+// keeps the entry (including the removed findings' reference numbers).
 async function handleDELETE(_request: Request, { params }: { params: Promise<{ batchId: string }> }) {
   const auth = await requirePermission("findings.reverse-import");
   if (!auth.ok) return auth.response;

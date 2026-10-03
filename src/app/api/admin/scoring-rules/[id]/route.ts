@@ -10,13 +10,10 @@ const activateSchema = z.object({
   active: z.boolean(),
 });
 
-// Only ever applies to a version that has never gone live
-// (ScoringRule.everActivated) - once a rule has been active even once,
-// historical periods may already reconcile against it, so master.txt §22's
-// "never mutates an existing [live] version" rule (the same reasoning
-// POST .../scoring-rules relies on for versioning) extends here: a
-// still-in-draft version can be corrected freely, a version that ever
-// went live can only be superseded by a new one, never rewritten.
+// Any version can be edited, including the active one or one that was active
+// before. Performance % is always calculated live from the active rule, so
+// editing the active rule changes every period's figures straight away; the
+// audit log keeps the full before / after.
 const editSchema = z.object({
   name: zEntityName().optional(),
   effectiveFrom: z.string().min(1).optional(),
@@ -78,12 +75,6 @@ async function handlePATCH(request: Request, { params }: { params: Promise<{ id:
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid input" }, { status: 400 });
   }
-  if (existing.everActivated) {
-    return NextResponse.json(
-      { error: "This version has gone live at some point and can no longer be edited - create a new version instead" },
-      { status: 409 }
-    );
-  }
   if (parsed.data.categories) {
     const invalid = parsed.data.categories.find((cid) => !db.categories.some((c) => c.id === cid));
     if (invalid) return NextResponse.json({ error: `Unknown category "${invalid}"` }, { status: 400 });
@@ -112,8 +103,10 @@ async function handlePATCH(request: Request, { params }: { params: Promise<{ id:
   return NextResponse.json({ scoringRule: updated });
 }
 
-// Only a version that has never gone live can be deleted, for the same
-// reason it can't be edited - see editSchema's comment above.
+// Any version can be deleted except the ACTIVE one - deleting it would leave
+// the system with no scoring rule (no Performance % anywhere). Activate
+// another version (or deactivate this one) first. The audit log keeps the
+// deleted version.
 async function handleDELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requirePermission("scoring-rules.delete");
   if (!auth.ok) return auth.response;
@@ -122,9 +115,9 @@ async function handleDELETE(_request: Request, { params }: { params: Promise<{ i
   const db = await readDb();
   const existing = db.scoringRules.find((r) => r.id === id);
   if (!existing) return NextResponse.json({ error: "Scoring rule not found" }, { status: 404 });
-  if (existing.everActivated) {
+  if (existing.active) {
     return NextResponse.json(
-      { error: "This version has gone live at some point and can no longer be deleted" },
+      { error: "This is the active scoring rule - activate another version (or deactivate this one) before deleting it" },
       { status: 409 }
     );
   }

@@ -199,7 +199,7 @@ export function FindingDetailClient({
       message:
         finding.status === "DRAFT"
           ? `"${finding.reference}" will be permanently removed. This cannot be undone.`
-          : `"${finding.reference}" and its review history will be permanently removed. This cannot be undone. The audit log keeps a record, and the reference number is never reused.`,
+          : `"${finding.reference}" and its review history will be permanently removed. This cannot be undone. The audit log keeps a record; the reference number becomes free for a new finding.`,
       confirmLabel: "Delete Permanently",
       tone: "danger",
     });

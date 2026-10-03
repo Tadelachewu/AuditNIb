@@ -40,7 +40,7 @@ Undoes a whole Excel import, from **Findings → Import → Import History → R
 - **Two choices:**
   - **Reverse import:** the import stays in the history marked *Reversed* (who, when, why). It can later be **re-imported** from its stored file (Re-import also needs *Bulk Import*). Re-import runs every check again.
   - **Reverse and delete record:** the import is removed from the history as well.
-- **What's kept:** the audit log keeps the full record, including the list of removed references and which findings had later work. Removed reference numbers are **never given to another finding**.
+- **What's kept:** the audit log keeps the full record, including the list of removed references and which findings had later work. The removed findings' reference numbers become **free again** for new findings (see reference-numbers-guide.md).
 - **Scope:** every finding in the import must be within your organisational scope.
 - **Default holder:** Administrator.
 

@@ -152,6 +152,14 @@ export default function ScoringRulesPage() {
   }
 
   async function saveRuleEdit(rule: ScoringRule) {
+    if (rule.active) {
+      const ok = await confirm({
+        title: "Change the active scoring rule?",
+        message: `"v${rule.version} — ${rule.name}" is the active rule. Saving changes every Performance % in the system straight away, for all periods. The audit log keeps the previous version.`,
+        confirmLabel: "Save Changes",
+      });
+      if (ok === false) return;
+    }
     setRowBusy(rule.id);
     setEditError(null);
     try {
@@ -169,7 +177,9 @@ export default function ScoringRulesPage() {
   async function deleteRule(rule: ScoringRule) {
     const result = await confirm({
       title: "Delete this scoring rule version?",
-      message: `"v${rule.version} — ${rule.name}" has never gone live, so deleting it doesn't affect any historical figures. This cannot be undone.`,
+      message: rule.everActivated
+        ? `"v${rule.version} — ${rule.name}" was active before. It is not active now, so deleting it doesn't change any Performance % (always calculated from the active rule). The audit log keeps a copy. This cannot be undone.`
+        : `"v${rule.version} — ${rule.name}" has never gone live, so deleting it doesn't affect any figures. This cannot be undone.`,
       confirmLabel: "Delete Permanently",
       tone: "danger",
     });
@@ -335,14 +345,18 @@ export default function ScoringRulesPage() {
                     {!r.everActivated && <Badge tone="gray">Draft — never activated</Badge>}
                   </div>
                   <RowActions>
-                    {!r.everActivated && canEdit && (
-                      <RowAction kind="edit" disabled={rowBusy === r.id} onClick={() => startEditRule(r)} />
-                    )}
+                    {canEdit && <RowAction kind="edit" disabled={rowBusy === r.id} onClick={() => startEditRule(r)} />}
                     {canActivate && (
                       <StatusToggleAction active={r.active} busy={rowBusy === r.id} onClick={() => setActive(r, !r.active)} />
                     )}
-                    {!r.everActivated && canDelete && (
-                      <RowAction kind="delete" busy={rowBusy === r.id} onClick={() => deleteRule(r)} />
+                    {canDelete && (
+                      <RowAction
+                        kind="delete"
+                        busy={rowBusy === r.id}
+                        disabled={r.active}
+                        title={r.active ? "The active rule can't be deleted - activate another version (or deactivate this one) first" : "Delete"}
+                        onClick={() => deleteRule(r)}
+                      />
                     )}
                   </RowActions>
                 </div>

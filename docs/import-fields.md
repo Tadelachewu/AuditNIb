@@ -6,7 +6,7 @@
 > - **Finding date:** strict `YYYY-MM-DD` real calendar date (or an Excel date cell); **not after the last day of the row's Reporting Period** (earlier is fine), and not in the future. For TRANSFERRED this is the original period.
 > - **Inactive references** are reported as *"… is deactivated"*, separately from unknown codes. A Transferred To period must also be later than the Reporting Period.
 > - **Duplicates are the final check, by the admin-configured rule** (Settings → Similar Findings, the same rule as the Register Finding form; `src/lib/similarFindings.ts`): only after every row passes; nothing is imported until the importer reviews the evidence and chooses *Import anyway* (all rows, duplicates included and linked to what they matched) or *Cancel* (`IMPORT_DUPLICATES_FOUND`). No fields configured = no duplicate check.
-> - **Reverse an import:** Import History → Reverse (permission *Findings › Reverse an Import*) removes the batch's findings and everything recorded against them, **whatever has happened since** (impact shown first, reason required). Then *Re-import* (stored file, all checks again) or *Delete record*. References stay reserved. Code: `src/lib/importReverse.ts`.
+> - **Reverse an import:** Import History → Reverse (permission *Findings › Reverse an Import*) removes the batch's findings and everything recorded against them, **whatever has happened since** (impact shown first, reason required). Then *Re-import* (stored file, all checks again) or *Delete record*. The removed findings' reference numbers become free again (a re-import gets the same numbers back). Code: `src/lib/importReverse.ts`.
 > - **Root Cause** is an import column (the last one).
 
 

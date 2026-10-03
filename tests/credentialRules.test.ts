@@ -45,12 +45,20 @@ describe("password policy (shared by every password field and the server)", () =
 
 describe("input rules (src/lib/inputRules.ts)", async () => {
   const r = await import("@/lib/inputRules");
-  it("phone: letters can't be typed; 9-15 digits", () => {
+  it("phone: letters can't be typed; Ethiopian numbers need their exact length", () => {
     expect(r.INPUT_FILTERS.phone("vzxghgsdcvgd")).toBe("");
     expect(r.INPUT_FILTERS.phone("09a11-23b4 567")).toBe("0911-234 567");
     expect(r.INPUT_FILTERS.phone("+251+911")).toBe("+251911");
     expect(r.phoneError("hfufuf")).not.toBeNull();
-    expect(r.phoneError("12345")).toMatch(/9-15 digits/);
+    expect(r.phoneError("12345")).not.toBeNull();
+    expect(r.phoneError("094984758")).toMatch(/10 digits starting with 0/); // one digit short
+    expect(r.phoneError("09498475812")).not.toBeNull(); // one too many
+    expect(r.phoneError("0949847581")).toBeNull();
+    expect(r.phoneError("011 123 4567")).toBeNull();
+    expect(r.phoneError("+251 94984758")).toMatch(/\+251 followed by 9 digits/);
+    expect(r.phoneError("251911234567")).toBeNull();
+    expect(r.phoneError("911234567")).not.toBeNull(); // no leading 0 or +251
+    expect(r.phoneError("+44 20 7946 0958")).toBeNull(); // another country
     expect(r.phoneError("0911 234 567")).toBeNull();
     expect(r.phoneError("+251 911 234 567")).toBeNull();
     expect(r.phoneError("")).toBeNull();

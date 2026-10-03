@@ -782,7 +782,7 @@ export interface ImportBatch {
   createdAt: string;
   // Set when the batch was reversed (Import History → Reverse): every
   // finding it created was removed. The batch record itself is kept, and
-  // its references stay reserved (never reissued).
+  // its findings' reference numbers are free again for new findings.
   reversedAt?: string | null;
   reversedBy?: string | null;
   reversedByName?: string | null;

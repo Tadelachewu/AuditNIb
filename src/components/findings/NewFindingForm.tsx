@@ -247,7 +247,7 @@ const emptyForm = {
   periodId: "",
   districtId: "",
   branchId: "",
-  findingDate: new Date().toISOString().slice(0, 10),
+  findingDate: "", // set to today (local date) when the form opens - see below
   operationArea: "",
   irregularityType: "",
   categoryId: "",
@@ -323,6 +323,10 @@ export function NewFindingForm({
         }
       : {
           ...emptyForm,
+          // Today in the user's local date, worked out when the form opens -
+          // not once at load time, and not in UTC (which is still yesterday
+          // in the early hours here, or would make a late-evening date "tomorrow").
+          findingDate: localToday(),
           districtId: fixedDistrict?.id ?? "",
           branchId: fixedBranch?.id ?? "",
           // Not auto-selected like currency/riskLevel below - which

@@ -9,7 +9,7 @@ import type { Database, ImportBatch } from "@/types";
  * include real work done after the import, the UI first shows the impact
  * (importReverseImpact) and requires a reason. The batch record is kept
  * (marked Reversed) so it can be re-imported or deleted; the audit trail
- * keeps everything, and removed reference numbers are never reissued.
+ * keeps everything; the removed findings' reference numbers become free for new findings.
  */
 
 export interface ReverseImpact {

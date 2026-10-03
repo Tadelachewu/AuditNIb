@@ -13,7 +13,7 @@ The rules live in one place: `src/lib/inputRules.ts`, plus `src/lib/usernameVali
 | **Full name** (users) | 2+ letters (any script, incl. Amharic); letters, spaces, `.` `'` `-` only; no digits; max 100 | digits and other symbols |
 | **Username** | Starts with a letter; letters, numbers, `.` `_` `-`; 3–50 characters; no spaces; unique (case-insensitive) | spaces and symbols |
 | **Email** | A valid address; max 254 | — |
-| **Phone** (optional) | Digits with an optional leading `+`; spaces `-` `.` `(` `)` as separators; **9–15 digits** (e.g. `0911 234 567`, `+251 911 234 567`) | **letters** and other symbols; `+` only at the start |
+| **Phone** (optional) | Digits with an optional leading `+`; spaces `-` `.` `(` `)` as separators. Ethiopian numbers need their exact length: **10 digits starting with 0** (`0911 234 567`, `011 123 4567`) or **+251 followed by 9 digits** (`+251 911 234 567`); another country: `+` and 8–15 digits | **letters** and other symbols; `+` only at the start |
 | **Password** (set / change / reset) | 8+ characters, lowercase, uppercase, number, special character, not a common password; the server also rejects passwords from known data breaches. Live checklist under the field | — |
 | **Code** (district, branch, department, category, source, reason) | Letters, numbers, `-` `_`; no spaces; max 30 | spaces and symbols |
 | **Role code** | UPPER_SNAKE_CASE, starting with a letter; max 30 | lower case is turned into upper case; other symbols |

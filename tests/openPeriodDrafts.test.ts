@@ -108,11 +108,11 @@ describe("deleting a returned finding", () => {
     expect(db.findings).toHaveLength(0);
   });
 
-  it("its reference number is never reused (it was submitted and reviewed)", async () => {
+  it("its reference number goes to the next new finding", async () => {
     db.findings[0].status = "RETURNED";
     await remove(json("DELETE"), ctx);
     await create(json("POST", { ...newDraft, submit: false }), { params: Promise.resolve({}) });
-    expect(db.findings[0].reference).toBe("B001-2026-09-00002");
+    expect(db.findings[0].reference).toBe("B001-2026-09-00001");
   });
 
   it("a deleted never-submitted draft's number may be reused", async () => {
@@ -139,5 +139,16 @@ describe("reference numbers fill gaps", () => {
     await remove(json("DELETE"), { params: Promise.resolve({ id: second.id }) });
     await makeDraft();
     expect(db.findings.map((f) => f.reference).sort()).toEqual(["B001-2026-09-00001", "B001-2026-09-00002", "B001-2026-09-00003"]);
+  });
+});
+
+describe("a deleted rejected finding's reference number", () => {
+  it("is given to the next new finding", async () => {
+    db = fixture(true);
+    db.findings[0].status = "REJECTED";
+    vi.mocked(getCurrentUser).mockResolvedValue({ ...(await getCurrentUser()), permissions: [...(((await getCurrentUser()) as { permissions: string[] }).permissions), "findings.delete-rejected"] } as never);
+    expect((await remove(json("DELETE"), ctx)).status).toBe(200);
+    await create(json("POST", { ...newDraft, submit: false }), { params: Promise.resolve({}) });
+    expect(db.findings[0].reference).toBe("B001-2026-09-00001");
   });
 });

@@ -179,15 +179,14 @@ describe("import: reverse regardless of later work, then re-import or delete", (
     expect(batch.id).toBe(db.importBatches[0].id);
   });
 
-  it("reverse-and-delete removes the record but keeps its reference numbers reserved", async () => {
+  it("reverse-and-delete removes the record and frees its reference numbers", async () => {
     await runImport(await workbook([row()]), "f.xlsx", actor, { importDuplicates: false });
     const ref = db.findings[0].reference;
     const result = reverseImportBatch(db, db.importBatches[0], { userId: "u1", userName: "HO" }, "remove entirely", { deleteRecord: true });
     expect(db.importBatches).toHaveLength(0);
     expect(result.importFileToDelete).toBe("stored-file.xlsx.enc");
-    const next = nextFindingReference(db, db.branches[0], db.reportingPeriods[0]);
-    expect(next).not.toBe(ref);
-    expect(Number(next.slice(-5))).toBe(Number(ref.slice(-5)) + 1);
+    // The removed finding's number is free again for the next new finding.
+    expect(nextFindingReference(db, db.branches[0], db.reportingPeriods[0])).toBe(ref);
   });
 
   it("the same file can be imported again after reversal (no false duplicates)", async () => {
