@@ -182,6 +182,10 @@ export function FindingDetailClient({
   const closableCases = Math.min(finding.rectifiedCases, finding.districtVerifiedCases) - finding.closedCases;
   const closableAmount = Math.min(finding.rectifiedAmount, finding.districtVerifiedAmount) - finding.closedAmount;
   const verifiableCases = finding.rectifiedCases - finding.districtVerifiedCases;
+  // HO can both close and return (and has nothing else to do in the Verify
+  // card): show the two buttons together in the Verify & Close card.
+  const hoReturnWithClose =
+    permissions.canClose && permissions.canHoReturnRectification && !permissions.canVerifyRectification && !permissions.canDistrictReturnRectification;
   const verifiableAmount = finding.rectifiedAmount - finding.districtVerifiedAmount;
 
   function refresh() {
@@ -935,7 +939,9 @@ export function FindingDetailClient({
         </Card>
       )}
 
-      {(permissions.canVerifyRectification || permissions.canReturnRectification) && (
+      {/* HO's return sits next to Accept in the Verify & Close card below, so
+          the two decisions on the same district-verified work are side by side. */}
+      {(permissions.canVerifyRectification || permissions.canReturnRectification) && !hoReturnWithClose && (
         <Card>
           <CardHeader
             title="Verify Rectification"
@@ -982,12 +988,20 @@ export function FindingDetailClient({
         <Card>
           <CardHeader
             title="Verify & Close"
-            description={`${closableCases} case(s) / ${finding.currency} ${formatCurrency(closableAmount)} district-verified and ready to close. ${outstandingCases} case(s) / ${finding.currency} ${formatCurrency(outstandingAmount)} still unrectified and will stay open.`}
+            description={
+              `${closableCases} case(s) / ${finding.currency} ${formatCurrency(closableAmount)} district-verified and ready to close. ${outstandingCases} case(s) / ${finding.currency} ${formatCurrency(outstandingAmount)} still unrectified and will stay open.` +
+              (hoReturnWithClose ? " Accept to close it, or return it to the Branch Manager for correction." : "")
+            }
           />
-          <div className="flex gap-2 p-4">
+          <div className="flex flex-wrap gap-2 p-4">
             <Button variant="success" onClick={handleClose} disabled={busy}>
               Accept
             </Button>
+            {hoReturnWithClose && (
+              <Button variant="warning" onClick={handleReturnRectification} disabled={busy}>
+                Return for Correction (HO)
+              </Button>
+            )}
           </div>
         </Card>
       )}
