@@ -16,6 +16,8 @@ import { FilterBar } from "@/components/dashboard/FilterBar";
 import { FindingsTable, type FindingRow } from "@/components/findings/FindingsTable";
 import { FILTERABLE_FINDING_STATUSES, type Finding } from "@/types";
 import { matchesOperationAndIrregularity } from "@/lib/dashboardFilters";
+import { currentPeriod, resolvePeriodFilter, sortPeriods } from "@/lib/periods";
+import { ALL_PERIODS_VALUE } from "@/lib/dashboardFilters";
 
 export default async function FindingsPage({
   searchParams,
@@ -33,7 +35,10 @@ export default async function FindingsPage({
   const db = await readDb();
   let findings: Finding[] = findingsInScope(db, user);
 
-  const periodId = get("periodId");
+  // No period chosen -> the current period; "ALL" -> every period.
+  // My Queue shows everything waiting for you, whatever its period, unless
+  // a period is chosen explicitly.
+  const periodId = queueOnly && !get("periodId") ? "" : resolvePeriodFilter(db.reportingPeriods, get("periodId"));
   const districtId = get("districtId");
   const branchId = get("branchId");
   const sourceId = get("sourceId");
@@ -188,7 +193,8 @@ export default async function FindingsPage({
 
       <div className="mt-4">
         <FilterBar
-          periods={db.reportingPeriods}
+          periods={sortPeriods(db.reportingPeriods)}
+          defaultPeriodId={queueOnly ? ALL_PERIODS_VALUE : currentPeriod(db.reportingPeriods)?.id}
           districts={user.orgScope === "BRANCH" || user.orgScope === "DISTRICT" ? (district ? [district] : []) : db.districts}
           branches={user.orgScope === "BRANCH" ? (branch ? [branch] : []) : db.branches}
           sources={db.sources.filter((s) => s.active)}

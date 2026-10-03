@@ -17,6 +17,7 @@ import { SourcePerformanceSummary } from "@/components/dashboard/SourcePerforman
 import { CaseBasedPerformance } from "@/components/dashboard/CaseBasedPerformance";
 import { FindingsByCategoryChart } from "@/components/dashboard/FindingsByCategoryChart";
 import { DashboardGrid } from "@/components/dashboard/DashboardGrid";
+import { currentPeriod, sortPeriods } from "@/lib/periods";
 
 // master.txt §10: a concise, read-only bank-wide summary for Executive
 // Management - KPIs, top-performer rankings, and an exceptions count
@@ -46,7 +47,7 @@ export function ExecutiveDashboard({
     ? undefined
     : filters.periodId
       ? db.reportingPeriods.find((p) => p.id === filters.periodId)
-      : db.reportingPeriods.find((p) => p.status === "OPEN");
+      : currentPeriod(db.reportingPeriods);
   const hasPeriodScope = allPeriodsSelected || Boolean(openPeriod);
   // Optional Today/Week/Month/Custom filter (TimeRangeFilter) plus
   // FilterBar's district/branch/source/category/risk/status fields, by
@@ -199,7 +200,7 @@ export function ExecutiveDashboard({
       </div>
 
       <FilterBar
-        periods={db.reportingPeriods}
+        periods={sortPeriods(db.reportingPeriods)}
         districts={db.districts}
         branches={db.branches}
         sources={activeSources}
@@ -207,7 +208,7 @@ export function ExecutiveDashboard({
         riskLevels={db.settings.riskLevels}
         operationAreas={db.settings.operationAreas}
         irregularityTypes={db.settings.irregularityTypes}
-        defaultPeriodId={db.reportingPeriods.find((p) => p.status === "OPEN")?.id}
+        defaultPeriodId={currentPeriod(db.reportingPeriods)?.id}
         statusOptions={HO_APPROVED_OR_LATER_STATUSES}
         hint="Filters apply immediately. Performance % always reflects the full scoring formula, not narrowed by source/category/risk/status."
       />
@@ -405,7 +406,7 @@ export function ExecutiveDashboard({
       <Card>
         <CardHeader title="Reporting Period Status" />
         <div className="divide-y divide-slate-100">
-          {db.reportingPeriods.map((p) => (
+          {sortPeriods(db.reportingPeriods).map((p) => (
             <div key={p.id} className="flex items-center justify-between px-4 py-2 text-sm">
               <span className="font-mono text-slate-900">{p.code}</span>
               <Badge tone={p.status === "OPEN" ? "green" : "gray"}>{p.status}</Badge>

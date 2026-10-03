@@ -7,6 +7,7 @@ import { findingStatusCode, type Finding } from "@/types";
 import { filterFindingsByText, sortFindings, parseFindingSort } from "@/lib/findingListQuery";
 import { matchesOperationAndIrregularity } from "@/lib/dashboardFilters";
 import { withApiHandler } from "@/lib/api/handler";
+import { resolvePeriodFilter } from "@/lib/periods";
 
 // master.txt §18's report set, as a real text/csv export - same
 // org-scope + filter logic as GET /api/findings (src/app/api/findings/route.ts),
@@ -30,7 +31,10 @@ async function handleGET(request: Request) {
   let findings = findingsInScope(db, auth.session);
 
   const url = new URL(request.url);
-  const periodId = url.searchParams.get("periodId");
+  // Same default as the Findings page: current period unless one (or "ALL") is chosen.
+  // (My Queue: every period unless one is chosen.)
+  const periodId =
+    url.searchParams.get("queue") === "1" && !url.searchParams.get("periodId") ? "" : resolvePeriodFilter(db.reportingPeriods, url.searchParams.get("periodId"));
   const districtId = url.searchParams.get("districtId");
   const branchId = url.searchParams.get("branchId");
   const sourceId = url.searchParams.get("sourceId");

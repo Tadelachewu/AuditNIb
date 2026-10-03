@@ -30,6 +30,7 @@ import { SourcePerformanceSummary } from "@/components/dashboard/SourcePerforman
 import { CaseBasedPerformance } from "@/components/dashboard/CaseBasedPerformance";
 import { FindingsByCategoryChart } from "@/components/dashboard/FindingsByCategoryChart";
 import { DashboardGrid } from "@/components/dashboard/DashboardGrid";
+import { currentPeriod, sortPeriods } from "@/lib/periods";
 
 // master.txt §10: district-level aggregate, branch-by-branch ranking,
 // category totals, risk distribution, recent activity, work queue -
@@ -55,7 +56,7 @@ export function DistrictDashboard({
     ? undefined
     : filters.periodId
       ? db.reportingPeriods.find((p) => p.id === filters.periodId)
-      : db.reportingPeriods.find((p) => p.status === "OPEN");
+      : currentPeriod(db.reportingPeriods);
   // True whenever there's real data to show - a specific period, or "All
   // periods" explicitly chosen - see BranchDashboard.tsx's own doc comment.
   const hasPeriodScope = allPeriodsSelected || Boolean(openPeriod);
@@ -262,7 +263,7 @@ export function DistrictDashboard({
       </div>
 
       <FilterBar
-        periods={db.reportingPeriods}
+        periods={sortPeriods(db.reportingPeriods)}
         districts={[district]}
         branches={branches}
         sources={db.sources.filter((s) => s.active)}
@@ -270,7 +271,7 @@ export function DistrictDashboard({
         riskLevels={db.settings.riskLevels}
         operationAreas={db.settings.operationAreas}
         irregularityTypes={db.settings.irregularityTypes}
-        defaultPeriodId={db.reportingPeriods.find((p) => p.status === "OPEN")?.id}
+        defaultPeriodId={currentPeriod(db.reportingPeriods)?.id}
         fixedDistrict={{ id: district.id, name: district.name }}
         statusOptions={HO_APPROVED_OR_LATER_STATUSES}
         hint="Filters apply immediately. Performance % always reflects the full scoring formula, not narrowed by source/category/risk/status."

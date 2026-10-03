@@ -12,6 +12,7 @@ import { PrintButton } from "@/components/reports/PrintButton";
 import { FILTERABLE_FINDING_STATUSES } from "@/types";
 import { RankingGrid } from "@/components/dashboard/RankingGrid";
 import { ReportFindingsGrid, TransfersGrid } from "@/components/reports/ReportGrids";
+import { currentPeriod, sortPeriods } from "@/lib/periods";
 
 // master.txt §18's 14 named reports, covered as a small number of real,
 // data-backed views rather than 14 separate pages (see PHASE7.md): the
@@ -79,7 +80,8 @@ export default async function ReportsPage({
 
       <div className="no-print">
         <FilterBar
-          periods={db.reportingPeriods}
+          periods={sortPeriods(db.reportingPeriods)}
+          defaultPeriodId={currentPeriod(db.reportingPeriods)?.id}
           districts={user.orgScope === "BRANCH" || user.orgScope === "DISTRICT" ? (district ? [district] : []) : db.districts}
           branches={user.orgScope === "BRANCH" ? (branch ? [branch] : []) : db.branches}
           sources={db.sources.filter((s) => s.active)}

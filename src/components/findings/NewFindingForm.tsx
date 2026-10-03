@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/Button";
 import { StickyActions } from "@/components/ui/StickyActions";
 import { Input, Select, Label } from "@/components/ui/Field";
 import { RuleInput } from "@/components/ui/RuleInput";
+import { currentPeriod, sortPeriods } from "@/lib/periods";
 import { amountError, findingDateError, LIMITS, localToday, textError, titleError } from "@/lib/inputRules";
 import { FindingStatusBadge } from "@/components/findings/FindingStatusBadge";
 import { Info } from "lucide-react";
@@ -327,6 +328,8 @@ export function NewFindingForm({
           // not once at load time, and not in UTC (which is still yesterday
           // in the early hours here, or would make a late-evening date "tomorrow").
           findingDate: localToday(),
+          // The current reporting period (still changeable).
+          periodId: currentPeriod(periods)?.id ?? "",
           districtId: fixedDistrict?.id ?? "",
           branchId: fixedBranch?.id ?? "",
           // Not auto-selected like currency/riskLevel below - which
@@ -738,7 +741,7 @@ export function NewFindingForm({
             <Label htmlFor="periodId">Reporting period</Label>
             <Select id="periodId" required value={form.periodId} onChange={(e) => setForm({ ...form, periodId: e.target.value })}>
               <option value="">Select period</option>
-              {periods.map((p) => (
+              {sortPeriods(periods).map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.code}
                   {p.status === "LOCKED"

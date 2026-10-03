@@ -12,6 +12,7 @@ import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Select, Label } from "@/components/ui/Field";
 import { PrintButton } from "@/components/reports/PrintButton";
+import { currentPeriod, sortPeriods } from "@/lib/periods";
 
 export default async function CategoryDetailByDistrictPage({
   searchParams,
@@ -27,7 +28,7 @@ export default async function CategoryDetailByDistrictPage({
   // counts are never mistaken for the bank-wide totals.
   const sourceNote = templateSourceNote(db, "category-detail-by-district");
   const params = await searchParams;
-  const openPeriod = db.reportingPeriods.find((p) => p.status === "OPEN");
+  const openPeriod = currentPeriod(db.reportingPeriods);
   const periodId = (typeof params.periodId === "string" && params.periodId) || openPeriod?.id || db.reportingPeriods[0]?.id || "";
   // "All periods" = every period combined (each case counted once).
   const allPeriods = periodId === ALL_PERIODS_VALUE;
@@ -67,7 +68,7 @@ export default async function CategoryDetailByDistrictPage({
           <Label htmlFor="periodId">Period</Label>
           <Select id="periodId" name="periodId" defaultValue={periodId}>
             <option value={ALL_PERIODS_VALUE}>All periods</option>
-            {db.reportingPeriods.map((p) => (
+            {sortPeriods(db.reportingPeriods).map((p) => (
               <option key={p.id} value={p.id}>
                 {p.code} {p.status === "LOCKED" ? "(locked)" : ""}
               </option>

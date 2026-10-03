@@ -101,8 +101,16 @@ describe("Register Finding: the administrator's required fields", () => {
     expect(screen.queryByText("Can't save yet: Classified case is required.")).not.toBeNull();
   });
 
+  it("the current reporting period is selected by default, and periods are listed newest first", () => {
+    renderForm();
+    expect((screen.getByLabelText(/Reporting period/i) as HTMLSelectElement).value).toBe("p10"); // today is 2026-10-02
+    const codes = Array.from((screen.getByLabelText(/Reporting period/i) as HTMLSelectElement).options).map((o) => o.text).filter((t) => t.startsWith("2026"));
+    expect(codes.map((t) => t.slice(0, 7))).toEqual(["2026-10", "2026-08"]);
+  });
+
   it("no reporting period chosen: the reason is shown", () => {
     renderForm();
+    choosePeriod("");
     expect(saveDraft().disabled).toBe(true);
     expect(screen.queryByText("Can't save yet: Reporting period is required.")).not.toBeNull();
   });

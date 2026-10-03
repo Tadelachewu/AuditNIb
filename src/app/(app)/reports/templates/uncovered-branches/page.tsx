@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/Button";
 import { Select, Label } from "@/components/ui/Field";
 import { PrintButton } from "@/components/reports/PrintButton";
 import { UncoveredBranchesTable } from "@/components/reports/UncoveredBranchesTable";
+import { currentPeriod, sortPeriods } from "@/lib/periods";
 
 // The "Uncovered Branches" template - branches with zero findings this
 // period, and why (see BranchCoverageNote). Recording/editing the reason
@@ -28,7 +29,7 @@ export default async function UncoveredBranchesPage({
   // counts are never mistaken for the bank-wide totals.
   const sourceNote = templateSourceNote(db, "uncovered-branches");
   const params = await searchParams;
-  const openPeriod = db.reportingPeriods.find((p) => p.status === "OPEN");
+  const openPeriod = currentPeriod(db.reportingPeriods);
   const periodId = (typeof params.periodId === "string" && params.periodId) || openPeriod?.id || db.reportingPeriods[0]?.id || "";
   const period = db.reportingPeriods.find((p) => p.id === periodId);
   const rows = periodId ? getUncoveredBranches(db, periodId) : [];
@@ -63,7 +64,7 @@ export default async function UncoveredBranchesPage({
         <div>
           <Label htmlFor="periodId">Period</Label>
           <Select id="periodId" name="periodId" defaultValue={periodId}>
-            {db.reportingPeriods.map((p) => (
+            {sortPeriods(db.reportingPeriods).map((p) => (
               <option key={p.id} value={p.id}>
                 {p.code} {p.status === "LOCKED" ? "(locked)" : ""}
               </option>

@@ -7,6 +7,7 @@ import type { RankingRow } from "@/components/dashboard/RankingGrid";
 import type { ReportFindingRow, TransferRow } from "@/components/reports/ReportGrids";
 import type { SessionData } from "@/lib/session";
 import type { Database, Finding } from "@/types";
+import { resolvePeriodFilter } from "@/lib/periods";
 
 /**
  * Everything the Reports page shows, for the current filters - shared by
@@ -18,7 +19,8 @@ import type { Database, Finding } from "@/types";
 export function buildReportsData(db: Database, user: SessionData, get: (key: string) => string) {
   let findings: Finding[] = findingsInScope(db, user);
 
-  const periodId = get("periodId");
+  // No period chosen -> the current period; "ALL" -> every period.
+  const periodId = resolvePeriodFilter(db.reportingPeriods, get("periodId"));
   const districtId = get("districtId");
   const branchId = get("branchId");
   const sourceId = get("sourceId");

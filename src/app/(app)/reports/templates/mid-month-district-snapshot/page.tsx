@@ -10,6 +10,7 @@ import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Select, Input, Label } from "@/components/ui/Field";
 import { PrintButton } from "@/components/reports/PrintButton";
+import { currentPeriod, sortPeriods } from "@/lib/periods";
 
 export default async function MidMonthDistrictSnapshotPage({
   searchParams,
@@ -25,7 +26,7 @@ export default async function MidMonthDistrictSnapshotPage({
   // counts are never mistaken for the bank-wide totals.
   const sourceNote = templateSourceNote(db, "mid-month-district-snapshot");
   const params = await searchParams;
-  const openPeriod = db.reportingPeriods.find((p) => p.status === "OPEN");
+  const openPeriod = currentPeriod(db.reportingPeriods);
   const periodId = (typeof params.periodId === "string" && params.periodId) || openPeriod?.id || db.reportingPeriods[0]?.id || "";
   const period = db.reportingPeriods.find((p) => p.id === periodId);
   const today = new Date().toISOString().slice(0, 10);
@@ -64,7 +65,7 @@ export default async function MidMonthDistrictSnapshotPage({
         <div>
           <Label htmlFor="periodId">Period</Label>
           <Select id="periodId" name="periodId" defaultValue={periodId}>
-            {db.reportingPeriods.map((p) => (
+            {sortPeriods(db.reportingPeriods).map((p) => (
               <option key={p.id} value={p.id}>
                 {p.code} {p.status === "LOCKED" ? "(locked)" : ""}
               </option>

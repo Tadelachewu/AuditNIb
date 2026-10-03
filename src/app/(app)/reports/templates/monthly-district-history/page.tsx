@@ -11,6 +11,7 @@ import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Select, Label } from "@/components/ui/Field";
 import { PrintButton } from "@/components/reports/PrintButton";
+import { currentPeriod } from "@/lib/periods";
 
 // One reporting period at a time (a period picker, same convention as every
 // other template's Period select), or "All periods": each district summed
@@ -31,7 +32,7 @@ export default async function MonthlyDistrictHistoryPage({
   // counts are never mistaken for the bank-wide totals.
   const sourceNote = templateSourceNote(db, "monthly-district-history");
   const params = await searchParams;
-  const openPeriod = db.reportingPeriods.find((p) => p.status === "OPEN");
+  const openPeriod = currentPeriod(db.reportingPeriods);
   const periodId = (typeof params.periodId === "string" && params.periodId) || openPeriod?.id || db.reportingPeriods[0]?.id || "";
   const allPeriods = periodId === ALL_PERIODS_VALUE;
   const period = db.reportingPeriods.find((p) => p.id === periodId);

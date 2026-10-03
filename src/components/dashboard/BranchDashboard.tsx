@@ -29,6 +29,7 @@ import { CaseBasedPerformance } from "@/components/dashboard/CaseBasedPerformanc
 import { FindingsByCategoryChart } from "@/components/dashboard/FindingsByCategoryChart";
 import { SourcePerformanceSummary } from "@/components/dashboard/SourcePerformanceSummary";
 import { DashboardGrid } from "@/components/dashboard/DashboardGrid";
+import { currentPeriod, sortPeriods } from "@/lib/periods";
 
 // Per master.txt §10: "Selected month; category totals; total/rectified/
 // outstanding; Other Case summary; performance; monthly trend; risk
@@ -57,7 +58,7 @@ export function BranchDashboard({
     ? undefined
     : filters.periodId
       ? db.reportingPeriods.find((p) => p.id === filters.periodId)
-      : db.reportingPeriods.find((p) => p.status === "OPEN");
+      : currentPeriod(db.reportingPeriods);
   // True whenever there's real data to show - either a specific period was
   // resolved, or "All periods" was explicitly chosen. Only false in the
   // genuine "nothing to show" case (no period exists/selected at all) -
@@ -294,7 +295,7 @@ export function BranchDashboard({
       </div>
 
       <FilterBar
-        periods={db.reportingPeriods}
+        periods={sortPeriods(db.reportingPeriods)}
         districts={district ? [district] : []}
         branches={[branch]}
         sources={db.sources.filter((s) => s.active)}
@@ -302,7 +303,7 @@ export function BranchDashboard({
         riskLevels={db.settings.riskLevels}
         operationAreas={db.settings.operationAreas}
         irregularityTypes={db.settings.irregularityTypes}
-        defaultPeriodId={db.reportingPeriods.find((p) => p.status === "OPEN")?.id}
+        defaultPeriodId={currentPeriod(db.reportingPeriods)?.id}
         fixedDistrict={district ? { id: district.id, name: district.name } : undefined}
         fixedBranch={{ id: branch.id, name: branch.name }}
         statusOptions={HO_APPROVED_OR_LATER_STATUSES}

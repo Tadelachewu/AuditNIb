@@ -10,6 +10,7 @@ import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Select, Label } from "@/components/ui/Field";
 import { PrintButton } from "@/components/reports/PrintButton";
+import { sortPeriods } from "@/lib/periods";
 
 export default async function CategoryPerformanceSummaryPage({
   searchParams,
@@ -59,7 +60,7 @@ export default async function CategoryPerformanceSummaryPage({
           <Label htmlFor="periodId">Period</Label>
           <Select id="periodId" name="periodId" defaultValue={periodId}>
             <option value="">All periods</option>
-            {db.reportingPeriods.map((p) => (
+            {sortPeriods(db.reportingPeriods).map((p) => (
               <option key={p.id} value={p.id}>
                 {p.code} {p.status === "LOCKED" ? "(locked)" : ""}
               </option>
