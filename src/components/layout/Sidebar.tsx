@@ -64,7 +64,12 @@ export function Sidebar({ permissions, role }: { permissions: string[]; role: st
                         isActive ? "bg-brand-gold font-semibold text-on-gold" : "text-chrome-fg hover:bg-chrome-hover"
                       }`}
                     >
-                      <Icon className="h-4 w-4 shrink-0" strokeWidth={1.8} />
+                      {/* The page's own colour (src/lib/nav.ts); the selected item keeps the gold item's dark text. */}
+                      <Icon
+                        className={`h-4 w-4 shrink-0 ${isActive ? "" : "page-icon"}`}
+                        style={{ "--ql": item.color } as React.CSSProperties}
+                        strokeWidth={2}
+                      />
                       <span className="truncate sidebar-collapsed:hidden">{item.label}</span>
                     </Link>
                   );

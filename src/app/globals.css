@@ -405,10 +405,14 @@ tbody tr:hover > td,
   background-color: transparent !important;
 }
 
-/* Admin Dashboard Quick Links: each link has its own colour (--ql, set on
-   the link), used as a soft tinted background + border for its name and a
-   tinted circle for its icon, with text in a deeper shade of the same colour.
-   Mixed from one colour so every link reads well in light and dark mode. */
+/* Page icons in their page's own colour (--ql, from src/lib/nav.ts): the
+   sidebar's icons (.page-icon) and the Admin Dashboard's Quick Links. A Quick
+   Link also gets a soft tinted background + border for its name and a tinted
+   circle for its icon, with text in a deeper shade of the same colour. Mixed
+   from one colour so everything reads well in light and dark mode. */
+.page-icon {
+  color: color-mix(in srgb, var(--ql) 85%, black);
+}
 .quick-link-icon {
   background-color: color-mix(in srgb, var(--ql) 14%, transparent);
   color: color-mix(in srgb, var(--ql) 85%, black);
@@ -425,6 +429,7 @@ tbody tr:hover > td,
   color: #ffffff;
 }
 @media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .page-icon,
   :root:not([data-theme="light"]) .quick-link-icon,
   :root:not([data-theme="light"]) .quick-link-label {
     color: color-mix(in srgb, var(--ql) 55%, white);
@@ -437,6 +442,7 @@ tbody tr:hover > td,
     color: #ffffff;
   }
 }
+:root[data-theme="dark"] .page-icon,
 :root[data-theme="dark"] .quick-link-icon,
 :root[data-theme="dark"] .quick-link-label {
   color: color-mix(in srgb, var(--ql) 55%, white);

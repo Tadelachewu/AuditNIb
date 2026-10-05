@@ -8,24 +8,21 @@ import { NAV_SECTIONS } from "@/lib/nav";
 import type { SessionData } from "@/lib/session";
 import type { Database } from "@/types";
 
-// Each quick link shows the same icon the sidebar uses for that page.
-const NAV_ICON_BY_HREF = new Map(NAV_SECTIONS.flatMap((s) => s.items.map((i) => [i.href, i.icon] as const)));
+// Each quick link shows the same icon, in the same colour, that the sidebar uses for that page (src/lib/nav.ts).
+const NAV_ITEM_BY_HREF = new Map(NAV_SECTIONS.flatMap((s) => s.items.map((i) => [i.href, i] as const)));
 
-// Each link has its own colour (globals.css .quick-link-*), chosen by what
-// the page is about: people in blue / rose, the organisation in greens and
-// indigo, configuration in warm and violet tones, the audit trail in stone.
-const QUICK_LINKS: { label: string; href: string; pageCode: string; color: string }[] = [
-  { label: "Users", href: "/admin/users", pageCode: "users", color: "#2563eb" }, // blue
-  { label: "Districts", href: "/admin/districts", pageCode: "districts", color: "#0d9488" }, // teal
-  { label: "Branches", href: "/admin/branches", pageCode: "branches", color: "#059669" }, // emerald
-  { label: "Sources", href: "/admin/sources", pageCode: "sources", color: "#7c3aed" }, // violet
-  { label: "Departments", href: "/admin/departments", pageCode: "departments", color: "#4f46e5" }, // indigo
-  { label: "Classified Categories", href: "/admin/categories", pageCode: "categories", color: "#ea580c" }, // orange
-  { label: "Scoring Rules", href: "/admin/scoring-rules", pageCode: "scoring-rules", color: "#d97706" }, // amber
-  { label: "Reporting Periods", href: "/admin/reporting-periods", pageCode: "reporting-periods", color: "#0284c7" }, // sky
-  { label: "Roles & Permissions", href: "/admin/roles", pageCode: "roles", color: "#e11d48" }, // rose
-  { label: "Settings", href: "/admin/settings", pageCode: "settings", color: "#475569" }, // slate
-  { label: "Audit Log", href: "/admin/audit-log", pageCode: "audit-log", color: "#78716c" }, // stone
+const QUICK_LINKS: { label: string; href: string; pageCode: string }[] = [
+  { label: "Users", href: "/admin/users", pageCode: "users" },
+  { label: "Districts", href: "/admin/districts", pageCode: "districts" },
+  { label: "Branches", href: "/admin/branches", pageCode: "branches" },
+  { label: "Sources", href: "/admin/sources", pageCode: "sources" },
+  { label: "Departments", href: "/admin/departments", pageCode: "departments" },
+  { label: "Classified Categories", href: "/admin/categories", pageCode: "categories" },
+  { label: "Scoring Rules", href: "/admin/scoring-rules", pageCode: "scoring-rules" },
+  { label: "Reporting Periods", href: "/admin/reporting-periods", pageCode: "reporting-periods" },
+  { label: "Roles & Permissions", href: "/admin/roles", pageCode: "roles" },
+  { label: "Settings", href: "/admin/settings", pageCode: "settings" },
+  { label: "Audit Log", href: "/admin/audit-log", pageCode: "audit-log" },
 ];
 
 // The Admin's dashboard - same role this component plays for every other
@@ -106,14 +103,15 @@ export function AdminDashboard({ user, db }: { user: SessionData; db: Database }
               beside it. */}
           <div className="flex flex-col items-start gap-1.5 p-3">
             {visibleLinks.map((link) => {
-              const Icon = NAV_ICON_BY_HREF.get(link.href);
+              const navItem = NAV_ITEM_BY_HREF.get(link.href);
+              const Icon = navItem?.icon;
               return (
                 // The icon sits outside the name, in a tinted circle of the link's colour.
                 <Link
                   key={link.href}
                   href={link.href}
                   className="quick-link inline-flex items-center gap-2"
-                  style={{ "--ql": link.color } as React.CSSProperties}
+                  style={{ "--ql": navItem?.color ?? "#475569" } as React.CSSProperties}
                 >
                   <span className="quick-link-icon flex h-7 w-7 shrink-0 items-center justify-center rounded-full" aria-hidden="true">
                     {Icon && <Icon className="h-4 w-4" strokeWidth={2} />}
