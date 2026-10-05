@@ -98,7 +98,7 @@ export function RankingGridClient({
       exportFileName={exportFileName}
       onExport={url.onExport}
       emptyText={kind === "branch" ? "No branches configured yet." : "No districts configured yet."}
-      tableOptions={{ initialState: { density: "compact", showGlobalFilter: true }, ...url.tableOptions }}
+      tableOptions={url.tableOptions}
     />
   );
 }

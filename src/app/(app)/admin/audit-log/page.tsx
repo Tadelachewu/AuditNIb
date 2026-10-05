@@ -149,7 +149,6 @@ export default function AuditLogPage() {
             onColumnFiltersChange: setColumnFilters,
             onSortingChange: setSorting,
             state: { pagination, globalFilter, columnFilters, sorting, isLoading: loading && !data, showProgressBars: loading && !!data },
-            initialState: { density: "compact", showGlobalFilter: true },
             muiPaginationProps: { rowsPerPageOptions: PAGE_SIZE_OPTIONS, showFirstButton: true, showLastButton: true },
           }}
         />

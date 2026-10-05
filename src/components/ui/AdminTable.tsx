@@ -155,7 +155,10 @@ export function AdminTable<T extends MRT_RowData>({
   renderRowActions?: (row: T) => ReactNode;
   getRowId?: (row: T) => string;
   emptyText?: string;
-  /** Escape hatch for anything else (e.g. manual/server-side mode). */
+  /**
+   * Anything else (e.g. manual/server-side mode). `initialState` and `state`
+   * are merged into the shared defaults; other options replace them.
+   */
   tableOptions?: Partial<MRT_TableOptions<T>>;
   /**
    * Server-side paging (useServerList()): the server searches, filters,
@@ -173,6 +176,12 @@ export function AdminTable<T extends MRT_RowData>({
   const withFacets = server?.withFacets;
   const tableColumns = useMemo(() => (withFacets ? withFacets(columns) : columns), [withFacets, columns]);
   if (server) isLoading = server.loading;
+  // A table's own options add to the shared defaults below rather than
+  // replacing them: `initialState` and `state` are merged key by key (so
+  // e.g. a table that sets its own initial sorting keeps the shared density,
+  // search box and 25-row page); any other option simply wins.
+  const { initialState: ownInitialState, state: ownState, ...ownOptions } = { ...server?.tableOptions, ...tableOptions };
+  const mergedState = { ...server?.tableOptions?.state, ...tableOptions?.state, ...ownState };
   const table = useMaterialReactTable<T>({
     columns: tableColumns,
     data: server ? server.rows : (data ?? []),
@@ -209,8 +218,9 @@ export function AdminTable<T extends MRT_RowData>({
       showGlobalFilter: true,
       showColumnFilters: false,
       pagination: { pageIndex: 0, pageSize: 25 },
+      ...ownInitialState,
     },
-    state: { isLoading, showSkeletons: isLoading },
+    state: { isLoading, showSkeletons: isLoading, ...mergedState },
     muiPaginationProps: { rowsPerPageOptions: PAGE_SIZE_OPTIONS, showFirstButton: true, showLastButton: true },
     muiSearchTextFieldProps: { placeholder: "Search all columns", size: "small", variant: "outlined" },
     // Table body = the card's own colour (white), the same as an open Settings
@@ -250,8 +260,7 @@ export function AdminTable<T extends MRT_RowData>({
           )}
         </div>
       ) : null,
-    ...server?.tableOptions,
-    ...tableOptions,
+    ...ownOptions,
   });
   return <MaterialReactTable table={table} />;
 }

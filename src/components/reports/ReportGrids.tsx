@@ -7,9 +7,8 @@ import type { MRT_ColumnDef } from "material-react-table";
 import { AdminTable } from "@/components/ui/AdminTable";
 import { Badge } from "@/components/ui/Badge";
 import { FindingStatusBadge } from "@/components/findings/FindingStatusBadge";
-import { useUrlTableState } from "@/lib/useUrlTableState";
 import { useGridUrlState } from "@/lib/useGridUrlState";
-import type { GridPage } from "@/lib/gridPage";
+import { pagedList, type GridPage } from "@/lib/gridPage";
 import { formatCurrency, formatDateTime, formatNumber } from "@/lib/format";
 import type { FindingStatus } from "@/types";
 
@@ -54,7 +53,7 @@ export function ReportFindingsGrid({
   searchText: string;
 }) {
   const router = useRouter();
-  const url = useUrlTableState<ReportFindingRow>({ paging, sort, searchText });
+  const grid = useMemo(() => pagedList(rows, paging, sort, searchText), [rows, paging, sort, searchText]);
   const columns = useMemo<MRT_ColumnDef<ReportFindingRow>[]>(
     () => [
       {
@@ -128,17 +127,18 @@ export function ReportFindingsGrid({
     ],
     []
   );
+  // Same URL-driven paging as the Findings list; Export CSV = /api/findings/export.
+  const url = useGridUrlState(grid, columns, "findings-report", { exportFrom: "/api/findings/export" });
   return (
     <AdminTable
-      columns={columns}
+      columns={url.columns}
       data={rows}
       getRowId={(r) => r.id}
-      onExport={(scope) => url.exportFrom("/api/findings/export", scope)}
+      onExport={url.onExport}
       emptyText="No findings match these filters."
       tableOptions={{
         ...url.tableOptions,
         enableColumnFilters: false, // filtering is the FilterBar above
-        state: url.state,
         muiSearchTextFieldProps: { placeholder: "Search reference, title, branch, category...", size: "small", variant: "outlined" },
         muiTableBodyRowProps: ({ row }) => ({
           onClick: (e) => {
@@ -229,7 +229,7 @@ export function TransfersGridClient({ grid }: { grid: GridPage<TransferRow> }) {
       exportFileName="transfers"
       onExport={url.onExport}
       emptyText="No transfers recorded."
-      tableOptions={{ initialState: { density: "compact", showGlobalFilter: true }, ...url.tableOptions }}
+      tableOptions={url.tableOptions}
     />
   );
 }
@@ -262,7 +262,7 @@ export function CategoryBreakdownGridClient({ grid }: { grid: GridPage<CategoryB
       exportFileName="report-category-breakdown"
       onExport={url.onExport}
       emptyText="No categories."
-      tableOptions={{ initialState: { density: "compact" }, ...url.tableOptions }}
+      tableOptions={url.tableOptions}
     />
   );
 }
@@ -290,7 +290,7 @@ export function RiskBreakdownGridClient({ grid }: { grid: GridPage<RiskBreakdown
       exportFileName="report-risk-breakdown"
       onExport={url.onExport}
       emptyText="No risk levels."
-      tableOptions={{ initialState: { density: "compact" }, ...url.tableOptions }}
+      tableOptions={url.tableOptions}
     />
   );
 }

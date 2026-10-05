@@ -17,7 +17,9 @@ import { parseListQuery, runListQuery, type FieldValue, type ListFieldSpec } fro
  *   <id>.export                 "shown" | "all": also send the CSV of every
  *                               matching row (or every row) for download
  *
- * The client half is useGridUrlState().
+ * The client half is useGridUrlState() - also used by the Findings list and
+ * the Findings Report, whose rows the page pages itself
+ * (src/lib/findingListQuery.ts) under the plain parameter names (id "").
  */
 export interface GridPage<T> {
   id: string;
@@ -39,8 +41,12 @@ export interface GridCsvColumn<T> {
   value: (row: T) => FieldValue;
 }
 
-/** URL parameter name of one of a grid's settings. */
-export const gridParam = (id: string, name: string) => `${id}.${name}`;
+/**
+ * URL parameter name of one of a grid's settings. A grid with an empty id
+ * (the one main list of a page, e.g. Findings) uses the plain names:
+ * page, pageSize, q, sort, dir.
+ */
+export const gridParam = (id: string, name: string) => (id ? `${id}.${name}` : name === "size" ? "pageSize" : name);
 
 /**
  * One page of `rows` per the URL `params` for grid `id`.
@@ -92,4 +98,19 @@ export function gridPage<T>(
     facets: result.facets,
     csv,
   };
+}
+
+/**
+ * A GridPage for a list the page has already searched, sorted and paged
+ * itself (the Findings list and the Findings Report, under the plain URL
+ * parameters) - so its table uses the same useGridUrlState as every other
+ * server-paged grid.
+ */
+export function pagedList<T>(
+  rows: T[],
+  paging: { page: number; pageSize: number; total: number },
+  sort: { id: string; desc: boolean },
+  q: string
+): GridPage<T> {
+  return { id: "", rows, total: paging.total, page: paging.page, pageSize: paging.pageSize, sort, q, filters: [], facets: {}, csv: null };
 }

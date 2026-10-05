@@ -23,9 +23,16 @@ import { gridParam, type GridPage } from "@/lib/gridPage";
  * server for the file the same way, then downloads it.
  *
  * Returns `tableOptions` for AdminTable, `columns` (with the server's
- * dropdown-filter choices) and `onExport`.
+ * dropdown-filter choices) and `onExport`. With `exportFrom`, Export CSV
+ * downloads from that API instead, with the page's current URL parameters
+ * ("shown") or none ("all") - e.g. the Findings list's /api/findings/export.
  */
-export function useGridUrlState<T extends MRT_RowData>(grid: GridPage<T>, columns: MRT_ColumnDef<T>[], exportFileName: string) {
+export function useGridUrlState<T extends MRT_RowData>(
+  grid: GridPage<T>,
+  columns: MRT_ColumnDef<T>[],
+  exportFileName: string,
+  opts: { exportFrom?: string } = {}
+) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -57,7 +64,7 @@ export function useGridUrlState<T extends MRT_RowData>(grid: GridPage<T>, column
     const t = setTimeout(() => {
       const changes: Record<string, string | null> = {};
       for (const k of searchParams.keys()) {
-        if (k.startsWith(`${grid.id}.f.`) || k.startsWith(`${grid.id}.min.`) || k.startsWith(`${grid.id}.max.`)) changes[k] = null;
+        if (k.startsWith(key("f.")) || k.startsWith(key("min.")) || k.startsWith(key("max."))) changes[k] = null;
       }
       for (const f of columnFilters) {
         if (Array.isArray(f.value)) {
@@ -122,9 +129,21 @@ export function useGridUrlState<T extends MRT_RowData>(grid: GridPage<T>, column
     return c.filterVariant === "select" && !c.filterSelectOptions && id && grid.facets[id] ? { ...c, filterSelectOptions: grid.facets[id] } : c;
   });
 
+  function exportFromApi(endpoint: string, scope: "shown" | "all") {
+    const qs = scope === "all" ? new URLSearchParams() : new URLSearchParams(searchParams.toString());
+    qs.delete(key("page"));
+    qs.delete(key("size"));
+    const a = document.createElement("a");
+    a.href = `${endpoint}?${qs.toString()}`;
+    a.download = "";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+
   return {
     tableOptions,
     columns: withFacets,
-    onExport: (scope: "shown" | "all") => setParams({ [key("export")]: scope }),
+    onExport: (scope: "shown" | "all") => (opts.exportFrom ? exportFromApi(opts.exportFrom, scope) : setParams({ [key("export")]: scope })),
   };
 }

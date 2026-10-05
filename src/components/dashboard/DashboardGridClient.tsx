@@ -92,7 +92,6 @@ export function DashboardGridClient({
       tableOptions={{
         enableTableFooter: hasTotals,
         enableColumnFilters: false,
-        initialState: { density: "compact", showGlobalFilter: true },
         ...url.tableOptions,
       }}
     />

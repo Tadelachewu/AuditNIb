@@ -5,7 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { MRT_ColumnDef, MRT_RowSelectionState } from "material-react-table";
 import { AdminTable } from "@/components/ui/AdminTable";
-import { useUrlTableState } from "@/lib/useUrlTableState";
+import { useGridUrlState } from "@/lib/useGridUrlState";
+import { pagedList } from "@/lib/gridPage";
 import { Button } from "@/components/ui/Button";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { FindingStatusBadge } from "@/components/findings/FindingStatusBadge";
@@ -188,8 +189,7 @@ export function FindingsTable({
   const [rowSelection, setRowSelection] = useState<MRT_RowSelectionState>({});
   const [busy, setBusy] = useState(false);
   const [summary, setSummary] = useState<string | null>(null);
-  // Page / page size / sort / search live in the URL; the page applies them.
-  const url = useUrlTableState<FindingRow>({ paging, sort, searchText });
+  const grid = useMemo(() => pagedList(rows, paging, sort, searchText), [rows, paging, sort, searchText]);
 
   // A new page of data (navigation) clears the selection.
   useEffect(() => {
@@ -342,6 +342,9 @@ export function FindingsTable({
     ],
     []
   );
+  // Page / page size / sort / search live in the URL; the page applies them.
+  // Export CSV downloads every matching finding from /api/findings/export.
+  const url = useGridUrlState(grid, columns, "findings", { exportFrom: "/api/findings/export" });
 
   return (
     <div>
@@ -374,10 +377,10 @@ export function FindingsTable({
         </div>
       )}
       <AdminTable
-        columns={columns}
+        columns={url.columns}
         data={rows}
         getRowId={(f) => f.id}
-        onExport={(scope) => url.exportFrom("/api/findings/export", scope)}
+        onExport={url.onExport}
         emptyText={emptyText}
         tableOptions={{
           ...url.tableOptions,
@@ -386,7 +389,7 @@ export function FindingsTable({
           enableSelectAll: canBulkAct,
           selectAllMode: "page",
           onRowSelectionChange: setRowSelection,
-          state: { ...url.state, rowSelection },
+          state: { ...url.tableOptions.state, rowSelection },
           muiSearchTextFieldProps: { placeholder: "Search reference, title, branch, category...", size: "small", variant: "outlined" },
           muiTableBodyRowProps: ({ row }) => ({
             onClick: (e) => openFromRow(e, row.original.id),

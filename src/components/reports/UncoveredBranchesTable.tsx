@@ -122,7 +122,6 @@ export function UncoveredBranchesTable({ rows, periodId, reasons }: { rows: Row[
           selectAllMode: "all", // "select all" = every row the search/filters leave visible
           onRowSelectionChange: setRowSelection,
           state: { rowSelection },
-          initialState: { density: "compact", showGlobalFilter: true },
           muiSearchTextFieldProps: { placeholder: "Search by branch or district name...", size: "small", variant: "outlined" },
           displayColumnDefOptions: {
             "mrt-row-select": { muiTableHeadCellProps: { className: "no-print" }, muiTableBodyCellProps: { className: "no-print" } },

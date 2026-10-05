@@ -13,7 +13,7 @@ import { RuleInput } from "@/components/ui/RuleInput";
 import { LIMITS, reasonError, textError } from "@/lib/inputRules";
 import { Badge } from "@/components/ui/Badge";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
-import { Tag } from "lucide-react";
+import LocalOfferOutlinedIcon from "@mui/icons-material/LocalOfferOutlined";
 import { AddDialog, Modal } from "@/components/ui/AddDialog";
 import { RowAction, RowActions } from "@/components/ui/RowActions";
 import { usePermissions } from "@/lib/permissions/PermissionsContext";
@@ -526,7 +526,7 @@ export default function ReportingPeriodsPage() {
                 />
               )}
               {canLock && (
-                <RowAction kind="edit" icon={Tag} label={p.name ? "Rename" : "Add name"} onClick={() => openRename(p)} />
+                <RowAction kind="edit" icon={LocalOfferOutlinedIcon} label={p.name ? "Rename" : "Add name"} onClick={() => openRename(p)} />
               )}
               {canLock && <RowAction kind={p.status === "OPEN" ? "lock" : "unlock"} busy={rowBusy === p.id} onClick={() => toggleLock(p)} />}
               {canDelete && (
