@@ -404,3 +404,47 @@ tbody tr:hover > td,
 .MuiTableBody-root .MuiTableRow-root:hover > td::after {
   background-color: transparent !important;
 }
+
+/* Admin Dashboard Quick Links: each link has its own colour (--ql, set on
+   the link), used as a soft tinted background + border for its name and a
+   tinted circle for its icon, with text in a deeper shade of the same colour.
+   Mixed from one colour so every link reads well in light and dark mode. */
+.quick-link-icon {
+  background-color: color-mix(in srgb, var(--ql) 14%, transparent);
+  color: color-mix(in srgb, var(--ql) 85%, black);
+}
+.quick-link-label {
+  background-color: color-mix(in srgb, var(--ql) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ql) 30%, transparent);
+  color: color-mix(in srgb, var(--ql) 70%, black);
+  transition: background-color 150ms, border-color 150ms, color 150ms;
+}
+.quick-link:hover .quick-link-label {
+  background-color: var(--ql);
+  border-color: var(--ql);
+  color: #ffffff;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .quick-link-icon,
+  :root:not([data-theme="light"]) .quick-link-label {
+    color: color-mix(in srgb, var(--ql) 55%, white);
+  }
+  :root:not([data-theme="light"]) .quick-link-label {
+    background-color: color-mix(in srgb, var(--ql) 22%, transparent);
+    border-color: color-mix(in srgb, var(--ql) 45%, transparent);
+  }
+  :root:not([data-theme="light"]) .quick-link:hover .quick-link-label {
+    color: #ffffff;
+  }
+}
+:root[data-theme="dark"] .quick-link-icon,
+:root[data-theme="dark"] .quick-link-label {
+  color: color-mix(in srgb, var(--ql) 55%, white);
+}
+:root[data-theme="dark"] .quick-link-label {
+  background-color: color-mix(in srgb, var(--ql) 22%, transparent);
+  border-color: color-mix(in srgb, var(--ql) 45%, transparent);
+}
+:root[data-theme="dark"] .quick-link:hover .quick-link-label {
+  color: #ffffff;
+}
