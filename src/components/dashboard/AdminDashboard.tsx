@@ -113,7 +113,7 @@ export function AdminDashboard({ user, db }: { user: SessionData; db: Database }
                   className="quick-link inline-flex items-center gap-2"
                   style={{ "--ql": navItem?.color ?? "#475569" } as React.CSSProperties}
                 >
-                  <span className="quick-link-icon flex h-7 w-7 shrink-0 items-center justify-center rounded-full" aria-hidden="true">
+                  <span className="tone-tile flex h-7 w-7 shrink-0 items-center justify-center rounded-full" aria-hidden="true">
                     {Icon && <Icon className="h-4 w-4" strokeWidth={2} />}
                   </span>
                   <span className="quick-link-label rounded-md px-2.5 py-1 text-xs font-medium">{link.label}</span>

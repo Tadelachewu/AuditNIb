@@ -64,12 +64,16 @@ export function Sidebar({ permissions, role }: { permissions: string[]; role: st
                         isActive ? "bg-brand-gold font-semibold text-on-gold" : "text-chrome-fg hover:bg-chrome-hover"
                       }`}
                     >
-                      {/* The page's own colour (src/lib/nav.ts); the selected item keeps the gold item's dark text. */}
-                      <Icon
-                        className={`h-4 w-4 shrink-0 ${isActive ? "" : "page-icon"}`}
+                      {/* The icon on a tile tinted with the page's own colour (src/lib/nav.ts,
+                          globals.css .tone-tile). On the selected (gold) item the tile is a
+                          soft dark tint and the icon takes the item's dark text. */}
+                      <span
+                        className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md ${isActive ? "bg-black/10" : "tone-tile"}`}
                         style={{ "--ql": item.color } as React.CSSProperties}
-                        strokeWidth={2}
-                      />
+                        aria-hidden="true"
+                      >
+                        <Icon className="h-4 w-4" strokeWidth={2} />
+                      </span>
                       <span className="truncate sidebar-collapsed:hidden">{item.label}</span>
                     </Link>
                   );

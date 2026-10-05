@@ -13,13 +13,16 @@ import type { LucideIcon } from "lucide-react";
 // `primary` variant.
 export type StatTone = "slate" | "blue" | "emerald" | "amber" | "red" | "gold";
 
-const TONE_CLASSES: Record<StatTone, string> = {
-  slate: "bg-slate-100 text-slate-500",
-  blue: "bg-blue-50 text-blue-600",
-  emerald: "bg-emerald-50 text-emerald-600",
-  amber: "bg-amber-50 text-amber-600",
-  red: "bg-red-50 text-red-600",
-  gold: "bg-brand-gold/15 text-brand-gold-dark",
+// The colour of each tone's icon tile (globals.css .tone-tile mixes the tile
+// and the icon from it, readable in light and dark mode). Gold is the brand's
+// darker gold, so the headline metric's icon stays readable on its tile.
+const TONE_COLORS: Record<StatTone, string> = {
+  slate: "#475569",
+  blue: "#2563eb",
+  emerald: "#059669",
+  amber: "#d97706",
+  red: "#dc2626",
+  gold: "#d89d11",
 };
 
 // A card reads as its own surface against the page: on the Standard template
@@ -68,12 +71,12 @@ export function StatCard({
   icon?: { icon: LucideIcon; tone?: StatTone };
 }) {
   const Icon = icon?.icon;
-  const toneClass = TONE_CLASSES[icon?.tone ?? "slate"];
+  const toneColor = TONE_COLORS[icon?.tone ?? "slate"];
   return (
     <Card className="px-4 py-3">
       <div className="flex items-start gap-2.5">
         {Icon && (
-          <span className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md ${toneClass}`}>
+          <span className="tone-tile mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md" style={{ "--ql": toneColor } as React.CSSProperties}>
             <Icon size={15} />
           </span>
         )}

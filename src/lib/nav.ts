@@ -31,7 +31,7 @@ export interface NavItem {
   icon: LucideIcon;
   /**
    * The page's own colour (hex), used for its icon in the sidebar and on
-   * the Admin Dashboard's Quick Links (globals.css .page-icon / .quick-link),
+   * the Admin Dashboard's Quick Links (globals.css .tone-tile / .quick-link),
    * so a page keeps the same colour everywhere. Chosen by meaning: home in
    * the brand's bronze, people in blue / rose, the organisation in teal,
    * green and indigo, findings and reports in blue / violet, configuration

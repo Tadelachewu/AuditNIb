@@ -405,17 +405,19 @@ tbody tr:hover > td,
   background-color: transparent !important;
 }
 
-/* Page icons in their page's own colour (--ql, from src/lib/nav.ts): the
-   sidebar's icons (.page-icon) and the Admin Dashboard's Quick Links. A Quick
-   Link also gets a soft tinted background + border for its name and a tinted
-   circle for its icon, with text in a deeper shade of the same colour. Mixed
-   from one colour so everything reads well in light and dark mode. */
-.page-icon {
-  color: color-mix(in srgb, var(--ql) 85%, black);
-}
-.quick-link-icon {
-  background-color: color-mix(in srgb, var(--ql) 14%, transparent);
-  color: color-mix(in srgb, var(--ql) 85%, black);
+/* Icon tiles: an icon on a small tinted tile, both from one colour (--ql) -
+   the sidebar's page icons and the Admin Dashboard's Quick Links (each
+   page's colour, src/lib/nav.ts) and the dashboards' stat cards (the stat's
+   meaning colour, src/components/ui/Card.tsx). Tile = 18% of the colour
+   (28% in dark mode), icon = a deeper shade (a lighter one in dark mode):
+   at least 3.8:1 icon-on-tile in light mode and 4.5:1 in dark mode for
+   every colour used, and the tile visibly stands off a white or nearly-white
+   card / sidebar.
+   A Quick Link's name also gets a soft tinted background + border, with text
+   in a deeper shade of the same colour. */
+.tone-tile {
+  background-color: color-mix(in srgb, var(--ql) 18%, transparent);
+  color: color-mix(in srgb, var(--ql) 70%, black);
 }
 .quick-link-label {
   background-color: color-mix(in srgb, var(--ql) 12%, transparent);
@@ -423,14 +425,19 @@ tbody tr:hover > td,
   color: color-mix(in srgb, var(--ql) 70%, black);
   transition: background-color 150ms, border-color 150ms, color 150ms;
 }
+/* Hover: a deeper shade of the colour, so the white name keeps at least
+   4.5:1 contrast for every page colour (the plain colour alone is too light
+   for white text on e.g. amber or teal). */
 .quick-link:hover .quick-link-label {
-  background-color: var(--ql);
-  border-color: var(--ql);
+  background-color: color-mix(in srgb, var(--ql) 75%, black);
+  border-color: color-mix(in srgb, var(--ql) 75%, black);
   color: #ffffff;
 }
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .page-icon,
-  :root:not([data-theme="light"]) .quick-link-icon,
+  :root:not([data-theme="light"]) .tone-tile {
+    background-color: color-mix(in srgb, var(--ql) 28%, transparent);
+  }
+  :root:not([data-theme="light"]) .tone-tile,
   :root:not([data-theme="light"]) .quick-link-label {
     color: color-mix(in srgb, var(--ql) 55%, white);
   }
@@ -442,8 +449,10 @@ tbody tr:hover > td,
     color: #ffffff;
   }
 }
-:root[data-theme="dark"] .page-icon,
-:root[data-theme="dark"] .quick-link-icon,
+:root[data-theme="dark"] .tone-tile {
+  background-color: color-mix(in srgb, var(--ql) 28%, transparent);
+}
+:root[data-theme="dark"] .tone-tile,
 :root[data-theme="dark"] .quick-link-label {
   color: color-mix(in srgb, var(--ql) 55%, white);
 }
