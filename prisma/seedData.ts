@@ -4,7 +4,7 @@
 // run - see git history for that version). Ported here unchanged, as its own
 // module, once db.ts became a pure Prisma read/write layer with nothing left
 // to bootstrap a missing file for.
-import { hashPassword } from "../src/lib/auth";
+import { hashPasswordSync } from "../src/lib/auth";
 import { ALL_PERMISSION_KEYS, ALL_VIEW_PERMISSION_KEYS, permissionKey } from "../src/lib/permissions/registry";
 import type {
   Database,
@@ -472,7 +472,7 @@ export function buildSeedDatabase(): Database {
       name: "System Administrator",
       username: "admin",
       email: "admin@nib-control360.local",
-      passwordHash: hashPassword("Admin@123"),
+      passwordHash: hashPasswordSync("Admin@123"),
       role: "ADMIN",
       status: "ACTIVE",
       districtId: null,
@@ -487,7 +487,7 @@ export function buildSeedDatabase(): Database {
       name: "Selam Tesfaye",
       username: "ho.controller",
       email: "selam.tesfaye@nib-control360.local",
-      passwordHash: hashPassword("Ho@12345"),
+      passwordHash: hashPasswordSync("Ho@12345"),
       role: "HO_CONTROLLER",
       status: "ACTIVE",
       districtId: null,
@@ -502,7 +502,7 @@ export function buildSeedDatabase(): Database {
       name: "Dawit Bekele",
       username: "district.controller",
       email: "dawit.bekele@nib-control360.local",
-      passwordHash: hashPassword("District@123"),
+      passwordHash: hashPasswordSync("District@123"),
       role: "DISTRICT_CONTROLLER",
       status: "ACTIVE",
       districtId: "district-1",
@@ -517,7 +517,7 @@ export function buildSeedDatabase(): Database {
       name: "Hana Girma",
       username: "district.director",
       email: "hana.girma@nib-control360.local",
-      passwordHash: hashPassword("Director@123"),
+      passwordHash: hashPasswordSync("Director@123"),
       role: "DISTRICT_DIRECTOR",
       status: "ACTIVE",
       districtId: "district-1",
@@ -532,7 +532,7 @@ export function buildSeedDatabase(): Database {
       name: "Mekdes Alemu",
       username: "branch.controller",
       email: "mekdes.alemu@nib-control360.local",
-      passwordHash: hashPassword("Branch@123"),
+      passwordHash: hashPasswordSync("Branch@123"),
       role: "BRANCH_CONTROLLER",
       status: "ACTIVE",
       districtId: "district-1",
@@ -547,7 +547,7 @@ export function buildSeedDatabase(): Database {
       name: "Yonas Kebede",
       username: "branch.manager",
       email: "yonas.kebede@nib-control360.local",
-      passwordHash: hashPassword("Manager@123"),
+      passwordHash: hashPasswordSync("Manager@123"),
       role: "BRANCH_MANAGER",
       status: "ACTIVE",
       districtId: "district-1",
@@ -562,7 +562,7 @@ export function buildSeedDatabase(): Database {
       name: "Executive Office",
       username: "executive",
       email: "executive@nib-control360.local",
-      passwordHash: hashPassword("Executive@123"),
+      passwordHash: hashPasswordSync("Executive@123"),
       role: "EXECUTIVE_READONLY",
       status: "ACTIVE",
       districtId: null,

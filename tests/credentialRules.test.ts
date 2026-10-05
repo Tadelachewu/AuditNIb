@@ -30,9 +30,13 @@ describe("password policy (shared by every password field and the server)", () =
     expect(validatePasswordStrength(password)).toEqual({ valid: false, error });
   });
 
-  it("a password meeting every rule is valid (e.g. the seeded demo passwords)", () => {
-    expect(validatePasswordStrength("Admin@123")).toEqual({ valid: true });
+  it("a password meeting every rule is valid", () => {
+    expect(validatePasswordStrength("Kebede@2026x")).toEqual({ valid: true });
     expect(validatePasswordStrength("Temp#2026-Abebe")).toEqual({ valid: true });
+  });
+
+  it("the seeded demo passwords are refused as new passwords (security review H3)", () => {
+    expect(validatePasswordStrength("Admin@123").valid).toBe(false);
   });
 
   it("the live checklist and the server check never disagree", () => {

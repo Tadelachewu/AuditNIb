@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { readDb, updateDb } from "@/lib/db";
-import { hashPassword } from "@/lib/auth";
+import { hashPassword, verifyPassword } from "@/lib/auth";
 import { appendAuditLog } from "@/lib/audit";
 import { PASSWORD_MIN_LENGTH, validatePasswordFull } from "@/lib/passwordValidation";
 import { prisma } from "@/lib/prismaClient";
 import { isRateLimited, recordAttempt } from "@/lib/rateLimit";
 import { withApiHandler } from "@/lib/api/handler";
 import { logger } from "@/lib/logger";
+import { hashResetToken } from "@/lib/resetToken";
 
 const schema = z.object({
   token: z.string().min(1, "Reset token is required"),
@@ -43,7 +44,7 @@ async function handlePOST(request: Request) {
 
   const now = new Date();
   const resetRow = await prisma.passwordResetToken.findUnique({
-    where: { token },
+    where: { token: hashResetToken(token) },
   });
 
   if (
@@ -66,7 +67,13 @@ async function handlePOST(request: Request) {
     );
   }
 
+  // Security review L2: the new password must differ from the old one.
+  if (await verifyPassword(newPassword, user.passwordHash)) {
+    return NextResponse.json({ error: "Choose a password different from your current one." }, { status: 400 });
+  }
+
   const nextSessionVersion = (user.sessionVersion ?? 1) + 1;
+  const newHash = await hashPassword(newPassword);
 
   try {
     await prisma.$transaction([
@@ -82,7 +89,7 @@ async function handlePOST(request: Request) {
 
   await updateDb((current) => {
     const u = current.users.find((x) => x.id === user.id)!;
-    u.passwordHash = hashPassword(newPassword);
+    u.passwordHash = newHash;
     u.mustChangePassword = false;
     u.passwordExpiresAt = null;
     u.sessionVersion = nextSessionVersion;

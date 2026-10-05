@@ -27,8 +27,42 @@ import { redis, logRedisFailure as logFailure } from "@/lib/redisClient";
 
 // Quiet while Redis is known to be down (redisClient.ts warns once per outage).
 function logRedisFailure(op: string, err: unknown): void {
-  logFailure(op, err, "Rate limit Redis operation failed - failing open");
+  logFailure(op, err, "Rate limit Redis operation failed - using the in-memory fallback");
 }
+
+// In-memory fallback (security review M1): when Redis is unreachable, limits
+// and lockouts keep working from this process's own memory instead of
+// switching off ("failing open"), so sign-in never loses its brute-force
+// protection. Per server process and lost on restart - a stopgap while
+// Redis is down, not a replacement for it.
+const memory = new Map<string, { value: number; expiresAt: number }>();
+const mem = {
+  get(key: string): number {
+    const e = memory.get(key);
+    if (!e) return 0;
+    if (e.expiresAt <= Date.now()) {
+      memory.delete(key);
+      return 0;
+    }
+    return e.value;
+  },
+  ttl(key: string): number {
+    const e = memory.get(key);
+    return e && e.expiresAt > Date.now() ? e.expiresAt - Date.now() : -2;
+  },
+  incr(key: string, windowMs: number): number {
+    const value = mem.get(key) + 1;
+    const existing = memory.get(key);
+    memory.set(key, { value, expiresAt: value === 1 || !existing ? Date.now() + windowMs : existing.expiresAt });
+    return value;
+  },
+  set(key: string, ms: number): void {
+    memory.set(key, { value: 1, expiresAt: Date.now() + ms });
+  },
+  del(...keys: string[]): void {
+    for (const k of keys) memory.delete(k);
+  },
+};
 
 export interface RateLimitOptions {
   max: number;
@@ -49,7 +83,9 @@ export async function isRateLimited(key: string, opts: RateLimitOptions): Promis
     return { limited: false, retryAfterSeconds: 0 };
   } catch (err) {
     logRedisFailure("isRateLimited", err);
-    return { limited: false, retryAfterSeconds: 0 };
+    const n = mem.get(redisKey);
+    const ttlMs = mem.ttl(redisKey);
+    return n >= opts.max && ttlMs > 0 ? { limited: true, retryAfterSeconds: Math.ceil(ttlMs / 1000) } : { limited: false, retryAfterSeconds: 0 };
   }
 }
 
@@ -65,6 +101,7 @@ export async function recordAttempt(key: string, opts: RateLimitOptions): Promis
     }
   } catch (err) {
     logRedisFailure("recordAttempt", err);
+    mem.incr(redisKey, opts.windowMs);
   }
 }
 
@@ -73,6 +110,7 @@ export async function clearRateLimit(key: string): Promise<void> {
     await redis.del(`ratelimit:${key}`);
   } catch (err) {
     logRedisFailure("clearRateLimit", err);
+    mem.del(`ratelimit:${key}`);
   }
 }
 
@@ -92,7 +130,8 @@ export async function checkLockout(key: string): Promise<{ locked: boolean; retr
     return { locked: false, retryAfterSeconds: 0 };
   } catch (err) {
     logRedisFailure("checkLockout", err);
-    return { locked: false, retryAfterSeconds: 0 };
+    const ttlMs = mem.ttl(`lockout:${key}:locked`);
+    return ttlMs > 0 ? { locked: true, retryAfterSeconds: Math.ceil(ttlMs / 1000) } : { locked: false, retryAfterSeconds: 0 };
   }
 }
 
@@ -118,7 +157,12 @@ export async function recordFailureForLockout(
     return { failures, locked: false, retryAfterSeconds: 0 };
   } catch (err) {
     logRedisFailure("recordFailureForLockout", err);
-    return { failures: 0, locked: false, retryAfterSeconds: 0 };
+    const failures = mem.incr(failuresKey, opts.windowMs);
+    if (failures >= opts.maxFailures) {
+      mem.set(lockedKey, opts.lockoutMs);
+      return { failures, locked: true, retryAfterSeconds: Math.ceil(opts.lockoutMs / 1000) };
+    }
+    return { failures, locked: false, retryAfterSeconds: 0 };
   }
 }
 
@@ -127,6 +171,7 @@ export async function clearLockout(key: string): Promise<void> {
     await redis.del(`lockout:${key}:failures`, `lockout:${key}:locked`);
   } catch (err) {
     logRedisFailure("clearLockout", err);
+    mem.del(`lockout:${key}:failures`, `lockout:${key}:locked`);
   }
 }
 
@@ -153,12 +198,36 @@ export function sleep(ms: number): Promise<void> {
 // collapses onto one shared bucket, which still protects any single
 // account/IP pairing correctly, just without distinguishing LAN clients
 // from each other.
+/** What clientIp() returns when the caller's address isn't known. */
+export const UNKNOWN_IP = "direct";
+
+/**
+ * Behind TRUST_PROXY: the address your own proxy appended to X-Forwarded-For
+ * - counted from the RIGHT (security review H2). The left-most entries are
+ * whatever the client sent and can be faked to dodge per-IP limits.
+ * TRUST_PROXY_HOPS = how many proxies of yours are in front of the app
+ * (default 1, e.g. one Nginx).
+ */
 export function clientIp(request: Request): string {
   if (process.env.TRUST_PROXY === "true") {
     const forwarded = request.headers.get("x-forwarded-for");
-    if (forwarded) return forwarded.split(",")[0].trim();
+    if (forwarded) {
+      const hops = Math.max(1, Number(process.env.TRUST_PROXY_HOPS) || 1);
+      const chain = forwarded.split(",").map((x) => x.trim()).filter(Boolean);
+      const ip = chain[Math.max(0, chain.length - hops)];
+      if (ip) return ip;
+    }
     const realIp = request.headers.get("x-real-ip");
     if (realIp) return realIp;
   }
-  return "direct";
+  return UNKNOWN_IP;
+}
+
+/**
+ * Per-IP limits only make sense when the IP is known: with every caller
+ * counted as one UNKNOWN_IP, one person's mistakes would lock everyone out
+ * (security review H2). Per-account limits still apply either way.
+ */
+export function ipIsKnown(ip: string): boolean {
+  return ip !== UNKNOWN_IP;
 }

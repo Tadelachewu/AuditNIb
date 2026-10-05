@@ -14,11 +14,11 @@ export interface SessionData {
   // is decided from this, not from the role code, so custom roles route
   // sensibly too.
   orgScope?: OrgScope;
-  // Resolved from the user's RoleDefinition at login time (see
-  // src/app/api/auth/login/route.ts) and carried in the encrypted cookie so
-  // src/proxy.ts can authorize requests without a filesystem read. This
-  // means a permission change to a role only takes effect for a user's
-  // *next* login, same trade-off already made for `status` (see PHASE1.md).
+  // Resolved from the user's RoleDefinition at login, carried in the
+  // encrypted cookie so src/proxy.ts can gate pages without a database read -
+  // and refreshed from the database on every request by getCurrentUser()
+  // (with role, orgScope, districtId and branchId), so a role, permission or
+  // branch change applies on the user's next request, not their next login.
   permissions?: string[];
   districtId?: string | null;
   branchId?: string | null;
@@ -174,9 +174,22 @@ export async function getCurrentUser(): Promise<SessionData | null> {
 
   const current = await prisma.user.findUnique({
     where: { id: session.userId },
-    select: { sessionVersion: true, status: true },
+    select: {
+      sessionVersion: true,
+      status: true,
+      name: true,
+      role: true,
+      districtId: true,
+      branchId: true,
+      roleRef: { select: { name: true, orgScope: true, permissions: true, status: true } },
+    },
   });
-  if (!current || current.status !== "ACTIVE" || current.sessionVersion !== (session.sessionVersion ?? 1)) {
+  if (
+    !current ||
+    current.status !== "ACTIVE" ||
+    current.sessionVersion !== (session.sessionVersion ?? 1) ||
+    current.roleRef.status !== "ACTIVE"
+  ) {
     try {
       session.destroy();
     } catch {
@@ -207,8 +220,40 @@ export async function getCurrentUser(): Promise<SessionData | null> {
   } catch {
     // No request context (scripts/tests) - treat as normal activity.
   }
+  // Who the user is NOW, not at sign-in: an admin's change to their role,
+  // that role's permissions, or their branch / district applies from this
+  // request on (security review H1). The cookie copy is re-saved below so
+  // src/proxy.ts's page checks catch up too.
+  const fresh = {
+    name: current.name,
+    role: current.role,
+    roleName: current.roleRef.name,
+    orgScope: current.roleRef.orgScope as OrgScope,
+    permissions: current.roleRef.permissions,
+    districtId: current.districtId ?? null,
+    branchId: current.branchId ?? null,
+  };
+  const changed =
+    session.role !== fresh.role ||
+    session.roleName !== fresh.roleName ||
+    session.name !== fresh.name ||
+    session.orgScope !== fresh.orgScope ||
+    (session.districtId ?? null) !== fresh.districtId ||
+    (session.branchId ?? null) !== fresh.branchId ||
+    (session.permissions ?? []).join("|") !== fresh.permissions.join("|");
+  Object.assign(session, fresh);
+
   if (createdAtMissing) session.sessionCreatedAt = now;
-  if (background && !createdAtMissing && !lastActiveMissing) return session;
+  if (background && !createdAtMissing && !lastActiveMissing) {
+    if (changed) {
+      try {
+        await session.save();
+      } catch {
+        // Server Component render - saved on the next API call instead.
+      }
+    }
+    return session;
+  }
   session.lastActivityAt = now;
   try {
     await session.save();

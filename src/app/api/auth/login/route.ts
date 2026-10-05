@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { readDb, updateDb } from "@/lib/db";
-import { verifyPassword, DUMMY_PASSWORD_HASH } from "@/lib/auth";
+import { verifyPassword, hashPassword, needsRehash, DUMMY_PASSWORD_HASH } from "@/lib/auth";
 import { getSession } from "@/lib/session";
+import { isDemoPassword } from "@/lib/passwordValidation";
 import { appendAuditLog } from "@/lib/audit";
 import { toSafeUser } from "@/lib/sanitize";
 import {
@@ -15,6 +16,7 @@ import {
   computeBackoffMs,
   sleep,
   clientIp,
+  ipIsKnown,
 } from "@/lib/rateLimit";
 import { withApiHandler } from "@/lib/api/handler";
 
@@ -59,7 +61,12 @@ async function handlePOST(request: Request) {
   const ipKey = `login-ip:${ip}`;
   const accountKey = `login-account:${ip}:${username.toLowerCase()}`;
 
-  const [accountLockout, ipLockout] = await Promise.all([checkLockout(usernameKey), checkLockout(ipKey)]);
+  // Per-IP limits only when the caller's IP is actually known (see
+  // ipIsKnown()): otherwise every user shares one "IP" and one person's
+  // mistakes would lock everyone out. Per-account limits always apply.
+  const ipKnown = ipIsKnown(ip);
+  const none = { locked: false, limited: false, retryAfterSeconds: 0 };
+  const [accountLockout, ipLockout] = await Promise.all([checkLockout(usernameKey), ipKnown ? checkLockout(ipKey) : none]);
   if (accountLockout.locked || ipLockout.locked) {
     const retryAfterSeconds = Math.max(accountLockout.retryAfterSeconds, ipLockout.retryAfterSeconds);
     return NextResponse.json(
@@ -69,7 +76,7 @@ async function handlePOST(request: Request) {
   }
 
   const [ipRateLimit, accountRateLimit] = await Promise.all([
-    isRateLimited(ipKey, PER_IP_RATE_LIMIT),
+    ipKnown ? isRateLimited(ipKey, PER_IP_RATE_LIMIT) : none,
     isRateLimited(accountKey, PER_ACCOUNT_RATE_LIMIT),
   ]);
   if (ipRateLimit.limited || accountRateLimit.limited) {
@@ -90,12 +97,12 @@ async function handlePOST(request: Request) {
   // response time alone rather than the (intentionally identical) error
   // message. DUMMY_PASSWORD_HASH is a fixed, unrelated hash - never a real
   // account's password.
-  const passwordOk = verifyPassword(password, user?.passwordHash ?? DUMMY_PASSWORD_HASH);
+  const passwordOk = await verifyPassword(password, user?.passwordHash ?? DUMMY_PASSWORD_HASH);
   if (!user || !passwordOk) {
-    await Promise.all([recordAttempt(ipKey, PER_IP_RATE_LIMIT), recordAttempt(accountKey, PER_ACCOUNT_RATE_LIMIT)]);
+    await Promise.all([ipKnown ? recordAttempt(ipKey, PER_IP_RATE_LIMIT) : null, recordAttempt(accountKey, PER_ACCOUNT_RATE_LIMIT)]);
     const [accountFailure] = await Promise.all([
       recordFailureForLockout(usernameKey, ACCOUNT_LOCKOUT),
-      recordFailureForLockout(ipKey, IP_LOCKOUT),
+      ipKnown ? recordFailureForLockout(ipKey, IP_LOCKOUT) : null,
     ]);
     await sleep(computeBackoffMs(accountFailure.failures));
     return NextResponse.json({ error: "Invalid username or password" }, { status: 401 });
@@ -134,11 +141,15 @@ async function handlePOST(request: Request) {
   const nextSessionVersion = (user.sessionVersion ?? 1) + 1;
 
   const loginTime = new Date().toISOString();
+  // An older, weaker hash (lower bcrypt cost) is upgraded now, while the
+  // plain password is at hand - the only time it can be.
+  const upgradedHash = needsRehash(user.passwordHash) ? await hashPassword(password) : null;
   await updateDb((current) => {
     const u = current.users.find((x) => x.id === user.id);
     if (u) {
       u.lastLoginAt = loginTime;
       u.sessionVersion = nextSessionVersion;
+      if (upgradedHash) u.passwordHash = upgradedHash;
     }
     appendAuditLog(current, {
       userId: user.id,
@@ -168,7 +179,11 @@ async function handlePOST(request: Request) {
   session.permissions = role.permissions;
   session.districtId = user.districtId ?? null;
   session.branchId = user.branchId ?? null;
-  session.mustChangePassword = user.mustChangePassword ?? false;
+  // A seeded demo password (published in the docs) must be changed before
+  // anything else can be done - in production only, so local testing with
+  // the demo accounts keeps working (security review H3).
+  const demoPasswordInProduction = process.env.NODE_ENV === "production" && isDemoPassword(password);
+  session.mustChangePassword = (user.mustChangePassword ?? false) || demoPasswordInProduction;
   session.sessionVersion = nextSessionVersion;
   // Session-lifetime bookkeeping — used by getCurrentUser() to enforce the
   // idle and absolute session-expiry windows (see session.ts). Both are set

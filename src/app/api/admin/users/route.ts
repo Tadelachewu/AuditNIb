@@ -154,7 +154,7 @@ async function handlePOST(request: Request) {
     username: input.username,
     email: input.email.trim(),
     phone: input.phone?.trim() || null,
-    passwordHash: hashPassword(input.password),
+    passwordHash: await hashPassword(input.password),
     role: input.role,
     status: "ACTIVE" as const,
     districtId: assignment.districtId,

@@ -7,6 +7,7 @@ import { isRateLimited, recordAttempt } from "@/lib/rateLimit";
 import { RateLimitError, ValidationError } from "@/lib/errors";
 import { withApiHandler } from "@/lib/api/handler";
 import { listPageJson } from "@/lib/serverList";
+import { isImportBatchInScope } from "@/lib/findings-scope";
 
 // Per-user cap on import attempts (each parses a whole workbook).
 const IMPORT_UPLOAD_LIMIT = { max: 10, windowMs: 10 * 60 * 1000 };
@@ -20,7 +21,10 @@ async function handleGET(request: Request) {
   if (!auth.ok) return auth.response;
 
   const db = await readDb();
-  const batches = [...db.importBatches].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  // Only imports within the caller's scope (all of them for bank-wide users).
+  const batches = db.importBatches
+    .filter((b) => isImportBatchInScope(db, auth.session, b))
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   // ?page=... -> one page of the Import History (newest first).
   const paged = listPageJson(request, "importBatches", batches, { fields: { createdAt: (b) => b.createdAt } });
   if (paged) return NextResponse.json(paged);

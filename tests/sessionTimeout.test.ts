@@ -5,10 +5,21 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const state = vi.hoisted(() => ({
   session: {} as Record<string, unknown>,
   headers: {} as Record<string, string>,
-  user: null as null | { sessionVersion: number; status: string },
+  user: null as null | Record<string, unknown>,
   destroyed: 0,
   saved: 0,
 }));
+
+// The user's current database row (role, permissions, scope) - see TC15-17.
+function dbUser() {
+  return {
+    name: "Abebe",
+    role: "BRANCH_CONTROLLER",
+    districtId: "d1",
+    branchId: "b1",
+    roleRef: { name: "Branch Controller", orgScope: "BRANCH", permissions: ["findings.view"], status: "ACTIVE" },
+  };
+}
 
 vi.mock("iron-session", () => ({
   getIronSession: vi.fn(async () => {
@@ -27,7 +38,7 @@ vi.mock("next/headers", () => ({
   headers: vi.fn(async () => ({ get: (k: string) => state.headers[k] ?? null })),
 }));
 vi.mock("@/lib/prismaClient", () => ({
-  prisma: { user: { findUnique: vi.fn(async () => state.user) } },
+  prisma: { user: { findUnique: vi.fn(async () => (state.user ? { ...dbUser(), ...state.user } : null)) } },
 }));
 
 import { getCurrentUser, IDLE_TIMEOUT_MS, ABSOLUTE_TIMEOUT_MS, BACKGROUND_REQUEST_HEADER } from "@/lib/session";
@@ -36,7 +47,23 @@ const NOW = new Date("2026-10-05T10:00:00Z").getTime();
 const MIN = 60 * 1000;
 
 function signedIn(over: Record<string, unknown> = {}) {
-  state.session = { isLoggedIn: true, userId: "u1", sessionVersion: 3, sessionCreatedAt: NOW - 60 * MIN, lastActivityAt: NOW - 1 * MIN, ...over };
+  const u = dbUser();
+  state.session = {
+    isLoggedIn: true,
+    userId: "u1",
+    sessionVersion: 3,
+    sessionCreatedAt: NOW - 60 * MIN,
+    lastActivityAt: NOW - 1 * MIN,
+    // Same as the database row unless a test says otherwise.
+    name: u.name,
+    role: u.role,
+    roleName: u.roleRef.name,
+    orgScope: u.roleRef.orgScope,
+    permissions: u.roleRef.permissions,
+    districtId: u.districtId,
+    branchId: u.branchId,
+    ...over,
+  };
 }
 
 beforeEach(() => {
@@ -139,5 +166,23 @@ describe("session timeouts (getCurrentUser)", () => {
     expect(await getCurrentUser()).not.toBeNull();
     expect(state.session.sessionCreatedAt).toBe(NOW);
     expect(state.session.lastActivityAt).toBe(NOW);
+  });
+
+  it("TC15 a role / permission change applies on the next request (no new sign-in needed)", async () => {
+    signedIn({ role: "BRANCH_CONTROLLER", permissions: ["findings.view", "findings.close"], branchId: "b1" });
+    const user = await getCurrentUser();
+    expect(user?.permissions).toEqual(["findings.view"]); // "findings.close" was removed from the role
+  });
+
+  it("TC16 a user moved to another branch gets the new branch's scope at once", async () => {
+    signedIn({ branchId: "b1" });
+    state.user = { sessionVersion: 3, status: "ACTIVE", branchId: "b2" };
+    expect((await getCurrentUser())?.branchId).toBe("b2");
+  });
+
+  it("TC17 a user whose role was deactivated is signed out", async () => {
+    signedIn();
+    state.user = { sessionVersion: 3, status: "ACTIVE", roleRef: { ...dbUser().roleRef, status: "INACTIVE" } };
+    expect(await getCurrentUser()).toBeNull();
   });
 });

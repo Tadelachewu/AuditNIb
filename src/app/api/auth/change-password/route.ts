@@ -57,7 +57,7 @@ async function handlePOST(request: Request) {
   const existing = db.users.find((u) => u.id === auth.session.userId);
   if (!existing) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
-  if (!verifyPassword(currentPassword, existing.passwordHash)) {
+  if (!(await verifyPassword(currentPassword, existing.passwordHash))) {
     await Promise.all([recordAttempt(lockoutKey, RATE_LIMIT), recordFailureForLockout(lockoutKey, ACCOUNT_LOCKOUT)]);
     return NextResponse.json({ error: "Current password is incorrect" }, { status: 400 });
   }
@@ -80,10 +80,16 @@ async function handlePOST(request: Request) {
     return NextResponse.json({ error: strength.error }, { status: 400 });
   }
 
+  // Security review L2: a "change" to the same password isn't a change.
+  if (await verifyPassword(newPassword, existing.passwordHash)) {
+    return NextResponse.json({ error: "Choose a password different from your current one." }, { status: 400 });
+  }
+
   const nextSessionVersion = (existing.sessionVersion ?? 1) + 1;
+  const newHash = await hashPassword(newPassword);
   await updateDb((current) => {
     const u = current.users.find((x) => x.id === existing.id)!;
-    u.passwordHash = hashPassword(newPassword);
+    u.passwordHash = newHash;
     u.mustChangePassword = false;
     u.passwordExpiresAt = null;
     u.sessionVersion = nextSessionVersion;

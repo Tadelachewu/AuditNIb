@@ -5,10 +5,11 @@ import { v4 as uuid } from "uuid";
 import { readDb, updateDb } from "@/lib/db";
 import { getTransporter } from "@/lib/mail";
 import { appendAuditLog } from "@/lib/audit";
-import { clientIp, isRateLimited, recordAttempt } from "@/lib/rateLimit";
+import { clientIp, ipIsKnown, isRateLimited, recordAttempt } from "@/lib/rateLimit";
 import { prisma } from "@/lib/prismaClient";
 import { withApiHandler } from "@/lib/api/handler";
 import { logger } from "@/lib/logger";
+import { hashResetToken } from "@/lib/resetToken";
 
 const schema = z.object({
   identifier: z.string().min(1, "Enter your username or email address"),
@@ -70,7 +71,9 @@ async function handlePOST(request: Request) {
 
   const ip = clientIp(request);
   const ipKey = `forgot-password:ip:${ip}`;
-  const ipLimit = await isRateLimited(ipKey, PER_IP_RATE_LIMIT);
+  // Per-IP only when the IP is known (see ipIsKnown() in src/lib/rateLimit.ts).
+  const ipKnown = ipIsKnown(ip);
+  const ipLimit = ipKnown ? await isRateLimited(ipKey, PER_IP_RATE_LIMIT) : { limited: false, retryAfterSeconds: 0 };
   if (ipLimit.limited) {
     return NextResponse.json(
       { error: "Too many requests. Try again later." },
@@ -88,7 +91,7 @@ async function handlePOST(request: Request) {
     );
   }
 
-  await recordAttempt(ipKey, PER_IP_RATE_LIMIT);
+  if (ipKnown) await recordAttempt(ipKey, PER_IP_RATE_LIMIT);
   await recordAttempt(emailKey, PER_EMAIL_RATE_LIMIT);
 
   const db = await readDb();
@@ -153,7 +156,9 @@ async function handlePOST(request: Request) {
         data: {
           id: uuid(),
           userId: user.id,
-          token: tokenRaw,
+          // Only a SHA-256 hash is stored (security review M2): someone who can
+          // read this table (a backup, a query) can't use a live link.
+          token: hashResetToken(tokenRaw),
           expiresAt,
           issuedIp: ip,
           issuedUa: request.headers.get("user-agent") ?? null,

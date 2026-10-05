@@ -53,7 +53,10 @@ export function ProfileClient({ forced }: { forced: boolean }) {
 
   // Same policy as the server (src/lib/passwordValidation.ts).
   const confirmMismatch = confirmPassword.length > 0 && confirmPassword !== newPassword;
-  const canChangePassword = currentPassword.length > 0 && validatePasswordStrength(newPassword).valid && confirmPassword === newPassword;
+  // The new password must differ from the current one (the server refuses it too).
+  const sameAsCurrent = newPassword.length > 0 && newPassword === currentPassword;
+  const canChangePassword =
+    currentPassword.length > 0 && validatePasswordStrength(newPassword).valid && confirmPassword === newPassword && !sameAsCurrent;
 
   async function savePassword(e: React.FormEvent) {
     e.preventDefault();
@@ -125,6 +128,7 @@ export function ProfileClient({ forced }: { forced: boolean }) {
               aria-describedby="new-password-rules"
             />
             <PasswordRules password={newPassword} id="new-password-rules" />
+            {sameAsCurrent && <p className="mt-1 text-xs text-red-600">Choose a password different from your current one.</p>}
           </div>
           <div>
             <Label htmlFor="confirm-password">Confirm new password</Label>

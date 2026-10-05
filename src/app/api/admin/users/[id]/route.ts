@@ -184,14 +184,15 @@ async function handlePATCH(request: Request, { params }: { params: Promise<{ id:
     departmentId: existing.departmentId,
   };
 
+  const newHash = input.password ? await hashPassword(input.password) : null;
   const updated = await updateDb((current) => {
     const u = current.users.find((x) => x.id === id)!;
     if (input.name !== undefined) u.name = input.name;
     if (input.email !== undefined) u.email = input.email;
     if (input.phone !== undefined) u.phone = input.phone || null;
     if (input.status !== undefined) u.status = input.status;
-    if (input.password) {
-      u.passwordHash = hashPassword(input.password);
+    if (newHash) {
+      u.passwordHash = newHash;
       // Same reasoning as account creation - the admin chose this
       // password, not the user, so it's forced through /profile again,
       // and only valid for 24h (see the login route's own expiry check).

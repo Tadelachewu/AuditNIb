@@ -126,7 +126,11 @@ function isCrossOriginApiRequest(request: NextRequest): boolean {
     }
   }
 
-  return false;
+  // Neither Origin nor Referer (security review L2): every browser sends
+  // Origin on a state-changing fetch / form post, so a request without
+  // either didn't come from this app's pages - refuse it rather than wave it
+  // through. (Scripts calling the API must send an Origin header.)
+  return true;
 }
 
 export async function proxy(request: NextRequest) {

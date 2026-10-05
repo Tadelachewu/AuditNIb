@@ -17,8 +17,21 @@
 // Been Pwned's breach database - see that function's own doc comment for
 // how the k-anonymity API keeps the real password from ever leaving this
 // server.
+/**
+ * The demo accounts' passwords from prisma/seedData.ts (security review H3):
+ * published in the docs, so never acceptable as a real password, and in
+ * production a sign-in that uses one is forced to change it first (see the
+ * login route).
+ */
+export const DEMO_PASSWORDS: readonly string[] = ["Admin@123", "Ho@12345", "District@123", "Director@123", "Branch@123", "Manager@123", "Executive@123"];
+
+export function isDemoPassword(password: string): boolean {
+  return DEMO_PASSWORDS.includes(password);
+}
+
 const COMMON_PASSWORDS = new Set(
   [
+    ...DEMO_PASSWORDS,
     "password", "password1", "password123", "12345678", "123456789", "1234567890",
     "qwerty123", "qwertyuiop", "letmein", "welcome", "welcome1", "monkey123",
     "dragon123", "master123", "iloveyou", "admin123", "administrator", "changeme",

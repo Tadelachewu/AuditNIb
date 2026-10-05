@@ -4,6 +4,7 @@ import { readDb, updateDb } from "@/lib/db";
 import { appendAuditLog } from "@/lib/audit";
 import { readStoredFile, attachmentDisposition } from "@/lib/fileStorage";
 import { withApiHandler } from "@/lib/api/handler";
+import { isImportBatchInScope } from "@/lib/findings-scope";
 
 // Download the original spreadsheet behind an import batch (Import History).
 // Same permission as importing/seeing the history itself; decrypted on the
@@ -15,7 +16,8 @@ async function handleGET(_request: Request, { params }: { params: Promise<{ batc
 
   const db = await readDb();
   const batch = db.importBatches.find((b) => b.id === batchId);
-  if (!batch) return NextResponse.json({ error: "Import not found" }, { status: 404 });
+  // Outside the caller's scope reads as "not found" (no hint that it exists).
+  if (!batch || !isImportBatchInScope(db, auth.session, batch)) return NextResponse.json({ error: "Import not found" }, { status: 404 });
   if (!batch.storedFile) {
     return NextResponse.json({ error: "The original file wasn't kept for this import (imported before files were stored)" }, { status: 404 });
   }
