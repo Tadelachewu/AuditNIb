@@ -79,6 +79,30 @@ async function handlePATCH(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "branchSingleton only applies to branch-scoped roles" }, { status: 400 });
   }
 
+  // Switching "at most one active user per branch" on: refuse while any branch
+  // already has more than one active holder of this role, naming them, so
+  // the rule never starts out broken.
+  if (input.branchSingleton && !existing.branchSingleton) {
+    const byBranch = new Map<string, string[]>();
+    for (const u of db.users) {
+      if (u.role !== existing.code || u.status !== "ACTIVE" || !u.branchId) continue;
+      byBranch.set(u.branchId, [...(byBranch.get(u.branchId) ?? []), u.name]);
+    }
+    const clashes = [...byBranch.entries()].filter(([, names]) => names.length > 1);
+    if (clashes.length > 0) {
+      const list = clashes
+        .slice(0, 3)
+        .map(([branchId, names]) => `${db.branches.find((b) => b.id === branchId)?.name ?? "a branch"} (${names.join(", ")})`)
+        .join("; ");
+      return NextResponse.json(
+        {
+          error: `Can't limit ${existing.name} to one active user per branch: ${clashes.length} branch(es) already have more than one - ${list}${clashes.length > 3 ? "; ..." : ""}. Deactivate or reassign the extra users first.`,
+        },
+        { status: 409 }
+      );
+    }
+  }
+
   const before = {
     name: existing.name,
     description: existing.description,

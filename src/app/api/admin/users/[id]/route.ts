@@ -6,7 +6,7 @@ import { requireToggleOrEditPermission, requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { hashPassword } from "@/lib/auth";
 import { PASSWORD_MIN_LENGTH, validatePasswordFull } from "@/lib/passwordValidation";
-import { resolveOrgAssignment, isDepartmentExactScopeForUser, inactiveOrgUnitError } from "@/lib/org";
+import { resolveOrgAssignment, assertBranchRoleAvailable, isDepartmentExactScopeForUser, inactiveOrgUnitError } from "@/lib/org";
 import { appendAuditLog } from "@/lib/audit";
 import { toSafeUser } from "@/lib/sanitize";
 import { withApiHandler } from "@/lib/api/handler";
@@ -114,6 +114,14 @@ async function handlePATCH(request: Request, { params }: { params: Promise<{ id:
 
   let districtId = existing.districtId ?? null;
   let branchId = existing.branchId ?? null;
+
+  // Reactivating a user (status only, same role and branch) must still respect
+  // "at most one active user per branch": the branch may have a new holder of
+  // that role by now. (A role/branch change is checked below.)
+  if (!wantsOrgChange && input.status === "ACTIVE" && existing.status !== "ACTIVE" && existing.branchId) {
+    const conflict = assertBranchRoleAvailable(db, existing.branchId, existing.role, existing.id);
+    if (conflict) return NextResponse.json({ error: conflict }, { status: 409 });
+  }
 
   if (wantsOrgChange) {
     const assignment = resolveOrgAssignment(
