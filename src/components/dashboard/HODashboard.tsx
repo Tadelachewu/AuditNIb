@@ -637,7 +637,8 @@ export function HODashboard({
           ]}
           rows={categoryTotals.map(({ category: c, total, rectified, outstanding, amountCur, closedCur, outstandingCur }) => ({
             category: c.name,
-            scored: Boolean(c.scored),
+            // "Scored" = counted toward performance by the active scoring rule.
+            scored: activeScoringRule?.categories.includes(c.id) ?? false,
             total: hasPeriodScope ? total : null,
             rectified: hasPeriodScope ? rectified : null,
             outstanding: hasPeriodScope ? outstanding : null,

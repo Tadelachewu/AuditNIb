@@ -37,7 +37,7 @@ All of them share one component, `AdminTable`, so they behave the same, and ever
 | Districts | ✅ (status) | ✅ | ✅ | |
 | Branches | ✅ (district, status) | ✅ | ✅ | |
 | Departments | ✅ (level, status) | ✅ | ✅ | |
-| Classified Categories | ✅ (scored, status) | ✅ | ✅ | |
+| Classified Categories | ✅ (scored, status) | ✅ | ✅ | **Scored** (read-only) = the category is in the active Scoring Rule, so it counts toward performance. Change it by editing the rule. |
 | Sources | ✅ (default, status) | ✅ | ✅ | |
 | Uncovered Branch Reasons | ✅ (status) | ✅ | ✅ | |
 | Reporting Periods | ✅ (status) | ✅ | ❌ | Newest period first. Periods have lock rules and date windows; create them one at a time. |
@@ -75,7 +75,7 @@ All of them share one component, `AdminTable`, so they behave the same, and ever
 | Districts | `code`*, `name`* |
 | Branches | `code`*, `name`*, `district`* (the district's **code or exact name**) |
 | Departments | `code`*, `name`*, `scope`* (`BANK`, `DISTRICT` or `BRANCH`), `district` (for DISTRICT scope: code or name), `branch` (for BRANCH scope: code or name) |
-| Classified Categories | `code`*, `name`*, `scored` (`yes` / `no`, blank = no) |
+| Classified Categories | `code`*, `name`* |
 | Sources | `code`*, `name`* |
 | Uncovered Branch Reasons | `code`*, `name`* |
 

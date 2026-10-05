@@ -2,12 +2,13 @@
 
 import { useMemo, useState } from "react";
 import type { MRT_ColumnDef } from "material-react-table";
+import Link from "next/link";
 import { apiSend } from "@/lib/api-client";
 import { useServerList } from "@/lib/useServerList";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { StickyActions } from "@/components/ui/StickyActions";
-import { CheckboxField, Label } from "@/components/ui/Field";
+import { Label } from "@/components/ui/Field";
 import { INPUT_FILTERS, codeError, entityNameError, LIMITS } from "@/lib/inputRules";
 import { RuleInput } from "@/components/ui/RuleInput";
 import { Badge } from "@/components/ui/Badge";
@@ -17,14 +18,17 @@ import { RowAction, RowActions, StatusToggleAction } from "@/components/ui/RowAc
 import { usePermissions } from "@/lib/permissions/PermissionsContext";
 import { hasPermission } from "@/lib/permissions/registry";
 import type { ClassifiedCategory } from "@/types";
+
+/** A category as the list API sends it: `scored` = included in the active scoring rule. */
+type CategoryRow = ClassifiedCategory & { scored: boolean };
 import { AdminTable } from "@/components/ui/AdminTable";
 import { ImportCsvDialog } from "@/components/ui/ImportCsvDialog";
 import { notify, notifications } from "@/lib/notify";
 
 export default function CategoriesPage() {
-  const list = useServerList<ClassifiedCategory>("/api/admin/categories", { key: "categories", defaultSort: { id: "name", desc: false } });
+  const list = useServerList<CategoryRow>("/api/admin/categories", { key: "categories", defaultSort: { id: "name", desc: false } });
   const categories = list.rows;
-  const [form, setForm] = useState({ code: "", name: "", scored: false });
+  const [form, setForm] = useState({ code: "", name: "" });
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [rowBusy, setRowBusy] = useState<string | null>(null);
@@ -47,7 +51,7 @@ export default function CategoriesPage() {
     try {
       await apiSend("/api/admin/categories", "POST", form);
       notify.success(notifications.category.created);
-      setForm({ code: "", name: "", scored: false });
+      setForm({ code: "", name: "" });
       close();
       await load();
     } catch (err) {
@@ -122,30 +126,8 @@ export default function CategoriesPage() {
     }
   }
 
-  async function toggleScored(c: ClassifiedCategory) {
-    const goingScored = !c.scored;
-    const result = await confirm({
-      title: goingScored ? "Include in scoring?" : "Remove from scoring?",
-      message: goingScored
-        ? `"${c.name}" will be eligible to be included in scoring rules and can affect the live performance calculation once added to the active rule.`
-        : `"${c.name}" will no longer be eligible for scoring rules. If it's part of the active scoring rule, performance figures will change.`,
-      confirmLabel: goingScored ? "Mark as scored" : "Remove from scoring",
-      tone: goingScored ? "default" : "danger",
-    });
-    if (result === false) return;
-    setRowBusy(c.id);
-    try {
-      await apiSend(`/api/admin/categories/${c.id}`, "PATCH", { scored: goingScored });
-      notify.success(goingScored ? notifications.category.nowScored : notifications.category.notScored);
-      await load();
-    } catch (err) {
-      notify.fromError(err, notifications.category.updateFailed);
-    } finally {
-      setRowBusy(null);
-    }
-  }
 
-  const columns = useMemo<MRT_ColumnDef<ClassifiedCategory>[]>(
+  const columns = useMemo<MRT_ColumnDef<CategoryRow>[]>(
     () => [
       {
         accessorKey: "code",
@@ -159,22 +141,23 @@ export default function CategoriesPage() {
         Cell: ({ row }) => <span className="font-medium text-slate-900">{row.original.name}</span>,
       },
       {
+        // Read-only: decided by the active scoring rule, not set here.
         id: "scored",
         header: "Scored",
-        accessorFn: (c) => (c.scored ? "Scored" : "Informational"),
+        size: 120,
+        accessorFn: (c) => (c.scored ? "Scored" : "Not scored"),
         filterVariant: "select",
-        filterSelectOptions: ["Scored", "Informational"],
-        Cell: ({ row }) => {
-          const c = row.original;
-          const badge = <Badge tone={c.scored ? "blue" : "gray"}>{c.scored ? "Scored" : "Informational"}</Badge>;
-          return canEdit ? (
-            <button type="button" onClick={() => toggleScored(c)} disabled={rowBusy === c.id} title="Click to switch Scored / Informational">
-              {badge}
-            </button>
+        filterSelectOptions: ["Scored", "Not scored"],
+        Cell: ({ row }) =>
+          row.original.scored ? (
+            <span title="Counted toward performance - this category is in the active scoring rule">
+              <Badge tone="blue">Scored</Badge>
+            </span>
           ) : (
-            badge
-          );
-        },
+            <span title="Not in the active scoring rule - reported, but not counted toward performance">
+              <Badge tone="gray">Not scored</Badge>
+            </span>
+          ),
       },
       {
         id: "status",
@@ -194,8 +177,13 @@ export default function CategoriesPage() {
     <div>
       <h1 className="text-lg font-semibold text-slate-900">Classified Case Categories</h1>
       <p className="mt-1 text-sm text-slate-600">
-        Only categories marked <strong>Scored</strong> are included in the performance calculation; the rest stay
-        visible for general reporting.
+        The kinds of case a finding can be classified as. <strong>Scored</strong> categories count toward branch
+        and district performance: they are the ones included in the active scoring rule. To change which are
+        scored, edit the rule in{" "}
+        <Link href="/admin/scoring-rules" className="text-blue-800 hover:underline">
+          Scoring Rules
+        </Link>
+        .
       </p>
 
       <Card className="mt-5">
@@ -212,7 +200,6 @@ export default function CategoriesPage() {
                   <Label htmlFor="name">Name</Label>
                   <RuleInput id="name" required maxLength={LIMITS.entityName.max} check={(v) => entityNameError(v)} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
                 </div>
-                <CheckboxField id="scored" label="Scored category" checked={form.scored} onChange={(scored) => setForm({ ...form, scored })} />
                 <StickyActions error={formError}>
                   <Button type="button" variant="cancel" onClick={close}>
                     Cancel
@@ -240,15 +227,12 @@ export default function CategoriesPage() {
                 columns={[
                   { key: "code", required: true, example: "OTHER", help: "Unique category code" },
                   { key: "name", required: true, example: "Other Cases", help: "Category name" },
-                  { key: "scored", example: "yes", help: "yes = counts toward performance; no (or blank) = informational only" },
                 ]}
                 toPayload={(row) => {
                   const label = row.code ? `${row.code} - ${row.name}` : row.name || "(blank)";
                   const bad = codeError(row.code) || entityNameError(row.name);
                   if (bad) return { error: bad, label };
-                  const flag = (row.scored ?? "").trim().toLowerCase();
-                  if (flag && !["yes", "no", "true", "false", "1", "0", "y", "n"].includes(flag)) return { error: `scored must be yes or no, not "${row.scored}"`, label };
-                  return { payload: { code: row.code, name: row.name, scored: ["yes", "true", "1", "y"].includes(flag) }, label };
+                  return { payload: { code: row.code, name: row.name }, label };
                 }}
                 submit={(payload) => apiSend("/api/admin/categories", "POST", payload)}
                 onDone={load}

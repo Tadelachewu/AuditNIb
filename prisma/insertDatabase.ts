@@ -96,7 +96,7 @@ export async function insertDatabaseIntoPostgres(prisma: PrismaClient, db: Datab
       id: c.id,
       code: c.code,
       name: c.name,
-      scored: c.scored,
+      scored: false, // retired column - see categoryToData() in src/lib/db.ts
       active: c.active,
       createdAt: toDate(c.createdAt),
       updatedAt: toDate(c.updatedAt),

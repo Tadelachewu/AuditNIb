@@ -153,7 +153,6 @@ export interface ClassifiedCategory {
   id: string;
   code: string;
   name: string;
-  scored: boolean;
   active: boolean;
   createdAt: string;
   updatedAt: string;

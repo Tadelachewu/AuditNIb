@@ -14,13 +14,19 @@ async function handleGET(request: Request) {
   const db = await readDb();
   // Alphabetical by name ("Classified Case" in the FilterBar/finding form)
   // - same convention as /api/admin/branches/districts.
-  const categories = [...db.categories].sort((a, b) => a.name.localeCompare(b.name));
+  // `scored` = counted toward performance: the category is in the active
+  // scoring rule (Administration -> Scoring Rules). Worked out here, never
+  // stored, so it always matches what the performance figures actually use.
+  const scoredIds = new Set(db.scoringRules.find((r) => r.active)?.categories ?? []);
+  const categories = [...db.categories]
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((c) => ({ ...c, scored: scoredIds.has(c.id) }));
   // ?page=... -> one page of the Categories table (searched / filtered / sorted on the server).
   const paged = listPageJson(request, "categories", categories, {
     fields: {
       code: (c) => c.code,
       name: (c) => c.name,
-      scored: (c) => (c.scored ? "Scored" : "Informational"),
+      scored: (c) => (c.scored ? "Scored" : "Not scored"),
       status: (c) => (c.active ? "Active" : "Inactive"),
     },
     exact: ["scored", "status"],
@@ -33,7 +39,6 @@ async function handleGET(request: Request) {
 const createSchema = z.object({
   code: zCode(),
   name: zEntityName(),
-  scored: z.boolean().default(false),
 });
 
 async function handlePOST(request: Request) {

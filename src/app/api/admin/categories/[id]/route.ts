@@ -8,7 +8,6 @@ import { withApiHandler } from "@/lib/api/handler";
 
 const updateSchema = z.object({
   name: zEntityName().optional(),
-  scored: z.boolean().optional(),
   active: z.boolean().optional(),
 });
 
@@ -26,12 +25,11 @@ async function handlePATCH(request: Request, { params }: { params: Promise<{ id:
   const db = await readDb();
   const existing = db.categories.find((c) => c.id === id);
   if (!existing) return NextResponse.json({ error: "Category not found" }, { status: 404 });
-  const before = { name: existing.name, scored: existing.scored, active: existing.active };
+  const before = { name: existing.name, active: existing.active };
 
   const updated = await updateDb((current) => {
     const c = current.categories.find((x) => x.id === id)!;
     if (parsed.data.name !== undefined) c.name = parsed.data.name;
-    if (parsed.data.scored !== undefined) c.scored = parsed.data.scored;
     if (parsed.data.active !== undefined) c.active = parsed.data.active;
     c.updatedAt = new Date().toISOString();
     appendAuditLog(current, {
@@ -41,7 +39,7 @@ async function handlePATCH(request: Request, { params }: { params: Promise<{ id:
       entityType: "ClassifiedCategory",
       entityId: c.id,
       oldValue: before,
-      newValue: { name: c.name, scored: c.scored, active: c.active },
+      newValue: { name: c.name, active: c.active },
     });
     return c;
   });

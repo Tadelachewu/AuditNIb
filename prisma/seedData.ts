@@ -104,13 +104,13 @@ export function buildSeedDatabase(): Database {
   // ATM Long Outstanding; IT Case; Dormant Account; Zero Balance; CK Book;
   // Other Case").
   const categories: ClassifiedCategory[] = [
-    { id: "cat-1", code: "ATM_MISMATCH", name: "ATM Mismatch", scored: false, active: true, createdAt: now, updatedAt: now },
-    { id: "cat-2", code: "ATM_LONG_OS", name: "ATM Long Outstanding", scored: false, active: true, createdAt: now, updatedAt: now },
-    { id: "cat-3", code: "IT", name: "IT Case", scored: false, active: true, createdAt: now, updatedAt: now },
-    { id: "cat-4", code: "DORMANT", name: "Dormant Account", scored: false, active: true, createdAt: now, updatedAt: now },
-    { id: "cat-5", code: "ZERO_BALANCE", name: "Zero Balance", scored: false, active: true, createdAt: now, updatedAt: now },
-    { id: "cat-6", code: "CK_BOOK", name: "CK Book", scored: false, active: true, createdAt: now, updatedAt: now },
-    { id: "cat-7", code: "OTHER_CASE", name: "Other Case", scored: true, active: true, createdAt: now, updatedAt: now },
+    { id: "cat-1", code: "ATM_MISMATCH", name: "ATM Mismatch", active: true, createdAt: now, updatedAt: now },
+    { id: "cat-2", code: "ATM_LONG_OS", name: "ATM Long Outstanding", active: true, createdAt: now, updatedAt: now },
+    { id: "cat-3", code: "IT", name: "IT Case", active: true, createdAt: now, updatedAt: now },
+    { id: "cat-4", code: "DORMANT", name: "Dormant Account", active: true, createdAt: now, updatedAt: now },
+    { id: "cat-5", code: "ZERO_BALANCE", name: "Zero Balance", active: true, createdAt: now, updatedAt: now },
+    { id: "cat-6", code: "CK_BOOK", name: "CK Book", active: true, createdAt: now, updatedAt: now },
+    { id: "cat-7", code: "OTHER_CASE", name: "Other Case", active: true, createdAt: now, updatedAt: now },
   ];
 
   const scoringRules: ScoringRule[] = [

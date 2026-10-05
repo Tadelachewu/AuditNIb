@@ -192,7 +192,6 @@ function categoryFromRow(r: Prisma.ClassifiedCategoryGetPayload<object>): Classi
     id: r.id,
     code: r.code,
     name: r.name,
-    scored: r.scored,
     active: r.active,
     createdAt: iso(r.createdAt),
     updatedAt: iso(r.updatedAt),
@@ -759,7 +758,10 @@ function categoryToData(r: ClassifiedCategory) {
   return {
     code: r.code,
     name: r.name,
-    scored: r.scored,
+    // Retired column (the old "Scored category" flag): which categories count
+    // toward performance is the active scoring rule's choice. Kept in the
+    // table (NOT NULL, no default) until a migration drops it; always false.
+    scored: false,
     active: r.active,
     createdAt: toDate(r.createdAt),
     updatedAt: toDate(r.updatedAt),

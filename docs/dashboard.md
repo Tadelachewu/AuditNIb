@@ -279,7 +279,7 @@ Every operational dashboard (Branch, District, HO) has a "Category Totals" `<tab
 
 | Column | Source | Format |
 |---|---|---|
-| Category | `category.name` + a blue "Scored" `Badge` if `category.scored` | text |
+| Category | `category.name` + a blue "Scored" `Badge` if the active scoring rule includes the category | text |
 | Total Cases | `findings.reduce((sum,f) => sum + f.caseCount, 0)` | `formatNumber()` (count) |
 | Rectified Cases | `findings.reduce((sum,f) => sum + f.closedCases, 0)` — **closed-only**, never self-reported `rectifiedCases` | `formatNumber()` (count) |
 | Outstanding Cases | `total - rectified` | `formatNumber()` (count) |

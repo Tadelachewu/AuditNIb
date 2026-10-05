@@ -74,8 +74,6 @@ export const notifications = {
   department: entity("DEPARTMENT", "department"),
   category: {
     ...entity("CATEGORY", "category"),
-    nowScored: n("CATEGORY_SCORED", "Category now counts toward performance."),
-    notScored: n("CATEGORY_UNSCORED", "Category no longer counts toward performance."),
   },
   source: {
     ...entity("SOURCE", "source"),
