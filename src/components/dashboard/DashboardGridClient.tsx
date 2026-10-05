@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/Badge";
 import { formatCurrency, formatNumber } from "@/lib/format";
 import type { GridPage } from "@/lib/gridPage";
 import { useGridUrlState } from "@/lib/useGridUrlState";
+import { PerformancePct } from "@/components/dashboard/PerformanceMath";
 
 /**
  * The table half of DashboardGrid (DashboardGrid.tsx, the server half,
@@ -27,6 +28,11 @@ export interface GridColumn {
   /** For a text column: show a small badge when row[badgeWhen] is true. */
   badgeWhen?: string;
   badgeLabel?: string;
+  /**
+   * A performance % that shows its calculation when clicked: the row keys
+   * holding the closed and the eligible case counts it comes from.
+   */
+  calc?: { rectified: string; total: string };
 }
 
 function show(v: GridValue, type: GridColumn["type"]): string {
@@ -59,7 +65,16 @@ export function DashboardGridClient({
           muiTableBodyCellProps: numeric ? { align: "right" as const } : undefined,
           muiTableFooterCellProps: numeric ? { align: "right" as const } : undefined,
           meta: { exportValue: (r: Record<string, GridValue>) => (r[c.key] === null ? "" : (r[c.key] as string | number)) },
-          Cell: ({ row }) => (
+          Cell: ({ row }) =>
+            c.calc ? (
+              <PerformancePct
+                counts={
+                  typeof row.original[c.calc.total] === "number"
+                    ? { rectifiedCases: row.original[c.calc.rectified] as number, totalCases: row.original[c.calc.total] as number }
+                    : null
+                }
+              />
+            ) : (
             <span className={numeric ? "tabular-nums" : undefined}>
               {show(row.original[c.key], c.type)}
               {c.badgeWhen && row.original[c.badgeWhen] === true && (
@@ -68,7 +83,7 @@ export function DashboardGridClient({
                 </span>
               )}
             </span>
-          ),
+            ),
           Footer: () =>
             c.footer !== undefined ? (
               <span className="font-semibold">{c.footer}</span>

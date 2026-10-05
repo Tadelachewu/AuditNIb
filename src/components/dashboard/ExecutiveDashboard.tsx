@@ -1,6 +1,6 @@
 import { HO_APPROVED_OR_LATER_STATUSES, type Database } from "@/types";
 import type { SessionData } from "@/lib/session";
-import { computePerformance, findingCaseTotals, findingCaseTotalsInPeriod, transferTotals, averageCaseAgeDays, isHoApproved } from "@/lib/findings";
+import { computePerformance, computeEligibleCaseCounts, findingCaseTotals, findingCaseTotalsInPeriod, transferTotals, averageCaseAgeDays, isHoApproved } from "@/lib/findings";
 import { sumAmountByCurrency, sumOutstandingByCurrency, sumAmountByCurrencyInPeriod, sumOutstandingByCurrencyInPeriod } from "@/lib/currency";
 import { inDateRange, type DateRange } from "@/lib/dateRange";
 import { applyDashboardFilters, EMPTY_DASHBOARD_FILTERS, ALL_PERIODS_VALUE, type DashboardFilters } from "@/lib/dashboardFilters";
@@ -16,6 +16,7 @@ import { StackedBarChart } from "@/components/dashboard/charts/StackedBarChart";
 import { SourcePerformanceSummary } from "@/components/dashboard/SourcePerformanceSummary";
 import { CaseBasedPerformance } from "@/components/dashboard/CaseBasedPerformance";
 import { FindingsByCategoryChart } from "@/components/dashboard/FindingsByCategoryChart";
+import { PerformanceCalculation, PerformancePct } from "@/components/dashboard/PerformanceMath";
 import { DashboardGrid } from "@/components/dashboard/DashboardGrid";
 import { currentPeriod, sortPeriods } from "@/lib/periods";
 
@@ -67,6 +68,8 @@ export function ExecutiveDashboard({
   const bankPerformance = hasPeriodScope
     ? computePerformance(db, { periodId: allPeriodsSelected ? undefined : openPeriod?.id })
     : null;
+  // The counts behind it, for the card's "click % for detail" calculation.
+  const performanceCounts = hasPeriodScope ? computeEligibleCaseCounts(db, { periodId: allPeriodsSelected ? undefined : openPeriod?.id }) : null;
   const activeScoringRule = db.scoringRules.find((r) => r.active);
   const activeSources = db.sources.filter((s) => s.active);
   // Period-residency-aware (see findingCaseTotalsInPeriod()'s doc comment
@@ -220,7 +223,14 @@ export function ExecutiveDashboard({
           icon={ICON.performance}
           label="Bank-wide Performance"
           value={bankPerformance !== null ? `${bankPerformance.toFixed(1)}%` : "--"}
-          hint={activeScoringRule ? `v${activeScoringRule.version} formula` : "No active scoring rule"}
+          hint={activeScoringRule ? `v${activeScoringRule.version} formula - click % for detail` : "No active scoring rule"}
+          detail={
+            bankPerformance !== null && performanceCounts ? (
+              <PerformanceCalculation counts={performanceCounts} formula={activeScoringRule?.basis} />
+            ) : (
+              "No eligible cases in scope yet."
+            )
+          }
         />
         <StatCard
           icon={ICON.totalFindings}
@@ -268,12 +278,12 @@ export function ExecutiveDashboard({
             <div className="divide-y divide-slate-100">
               {topDistricts.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-500">No data yet.</p>}
               {topDistricts.map((row, i) => (
-                <div key={row.district.id} className="flex items-center justify-between px-4 py-2 text-sm">
+                <div key={row.district.id} className="flex items-start justify-between gap-3 px-4 py-2 text-sm">
                   <span className="flex items-center gap-2 text-slate-900">
                     <Badge tone={i === 0 ? "green" : "gray"}>#{i + 1}</Badge>
                     {row.district.name}
                   </span>
-                  <span className="font-medium text-slate-700">{row.performance!.toFixed(1)}%</span>
+                  <PerformancePct counts={computeEligibleCaseCounts(db, { districtId: row.district.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id })} />
                 </div>
               ))}
             </div>
@@ -284,12 +294,12 @@ export function ExecutiveDashboard({
             <div className="divide-y divide-slate-100">
               {bottomDistricts.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-500">No data yet.</p>}
               {bottomDistricts.map((row) => (
-                <div key={row.district.id} className="flex items-center justify-between px-4 py-2 text-sm">
+                <div key={row.district.id} className="flex items-start justify-between gap-3 px-4 py-2 text-sm">
                   <span className="flex items-center gap-2 text-slate-900">
                     <Badge tone="red">Rank #{districtRanking.findIndex((r) => r.district.id === row.district.id) + 1}</Badge>
                     {row.district.name}
                   </span>
-                  <span className="font-medium text-slate-700">{row.performance!.toFixed(1)}%</span>
+                  <PerformancePct counts={computeEligibleCaseCounts(db, { districtId: row.district.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id })} />
                 </div>
               ))}
             </div>
@@ -309,12 +319,12 @@ export function ExecutiveDashboard({
             <div className="divide-y divide-slate-100">
               {topBranches.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-500">No data yet.</p>}
               {topBranches.map((row, i) => (
-                <div key={row.branch.id} className="flex items-center justify-between px-4 py-2 text-sm">
+                <div key={row.branch.id} className="flex items-start justify-between gap-3 px-4 py-2 text-sm">
                   <span className="flex items-center gap-2 text-slate-900">
                     <Badge tone={i === 0 ? "green" : "gray"}>#{i + 1}</Badge>
                     {row.branch.name}
                   </span>
-                  <span className="font-medium text-slate-700">{row.performance!.toFixed(1)}%</span>
+                  <PerformancePct counts={computeEligibleCaseCounts(db, { branchId: row.branch.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id })} />
                 </div>
               ))}
             </div>
@@ -325,12 +335,12 @@ export function ExecutiveDashboard({
             <div className="divide-y divide-slate-100">
               {bottomBranches.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-500">No data yet.</p>}
               {bottomBranches.map((row) => (
-                <div key={row.branch.id} className="flex items-center justify-between px-4 py-2 text-sm">
+                <div key={row.branch.id} className="flex items-start justify-between gap-3 px-4 py-2 text-sm">
                   <span className="flex items-center gap-2 text-slate-900">
                     <Badge tone="red">Rank #{branchRanking.findIndex((r) => r.branch.id === row.branch.id) + 1}</Badge>
                     {row.branch.name}
                   </span>
-                  <span className="font-medium text-slate-700">{row.performance!.toFixed(1)}%</span>
+                  <PerformancePct counts={computeEligibleCaseCounts(db, { branchId: row.branch.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id })} />
                 </div>
               ))}
             </div>

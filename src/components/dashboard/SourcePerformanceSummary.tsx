@@ -1,6 +1,7 @@
 import type { Database, Source } from "@/types";
 import { computeEligibleCaseCounts, type PerformanceScope } from "@/lib/findings";
 import { Card, CardHeader } from "@/components/ui/Card";
+import { PerformancePct } from "@/components/dashboard/PerformanceMath";
 
 /**
  * Document_3 §9's "IC + IA Performance": per-source eligible-case
@@ -101,9 +102,14 @@ export function SourcePerformanceSummary({
               <dt className="text-slate-500">Outstanding</dt>
               <dd className="font-medium text-slate-900">{hasScope ? combinedOutstanding : "--"}</dd>
             </div>
-            <div className="flex items-center justify-between border-t border-blue-100 pt-1">
+            <div className="flex items-start justify-between border-t border-blue-100 pt-1">
               <dt className="font-medium text-slate-600">Performance %</dt>
-              <dd className="font-semibold text-blue-800">{combinedPerformance !== null ? `${combinedPerformance.toFixed(1)}%` : "--"}</dd>
+              <dd>
+                <PerformancePct
+                  counts={combinedPerformance !== null ? { rectifiedCases: combinedRectified, totalCases: combinedTotal } : null}
+                  className="font-semibold text-blue-800"
+                />
+              </dd>
             </div>
           </dl>
         </div>

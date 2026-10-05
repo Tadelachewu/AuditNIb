@@ -6,6 +6,7 @@ import type { MRT_ColumnDef } from "material-react-table";
 import { AdminTable } from "@/components/ui/AdminTable";
 import type { GridPage } from "@/lib/gridPage";
 import { useGridUrlState } from "@/lib/useGridUrlState";
+import { PerformanceCalculation } from "@/components/dashboard/PerformanceMath";
 
 /** One row of a performance ranking, computed server-side (plain, serializable). */
 export interface RankingRow {
@@ -74,12 +75,14 @@ export function RankingGridClient({
           if (r.performance === null) return <>--</>;
           return (
             <details className="group">
-              <summary className="cursor-pointer list-none text-slate-700 marker:content-none hover:underline">
+              <summary
+                className="cursor-pointer list-none tabular-nums text-slate-700 underline decoration-slate-400 decoration-dotted underline-offset-4 marker:content-none hover:decoration-solid"
+                title="Show how this % is calculated"
+              >
                 {r.performance.toFixed(1)}%
               </summary>
-              <div className="mt-1 max-w-[14rem] text-xs leading-relaxed text-slate-500">
-                    {r.rectifiedCases} of {r.totalCases} eligible case(s) closed (unless it&apos;s closed, it never counts as rectified):{" "}
-                    {r.rectifiedCases} ÷ {r.totalCases} × 100 = {r.performance.toFixed(1)}%.
+              <div className="mt-1 max-w-[16rem] text-xs leading-relaxed text-slate-500">
+                <PerformanceCalculation counts={r} />
               </div>
             </details>
           );

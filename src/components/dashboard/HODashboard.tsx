@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { HO_APPROVED_OR_LATER_STATUSES, type Database } from "@/types";
 import type { SessionData } from "@/lib/session";
-import { computePerformance, findingCaseTotals, findingCaseTotalsInPeriod, transferTotals, averageCaseAgeDays, isHoApproved } from "@/lib/findings";
+import { computePerformance, computeEligibleCaseCounts, findingCaseTotals, findingCaseTotalsInPeriod, transferTotals, averageCaseAgeDays, isHoApproved } from "@/lib/findings";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
 import { sumAmountByCurrency, sumOutstandingByCurrency, sumAmountByCurrencyInPeriod, sumOutstandingByCurrencyInPeriod, addCurrency, mergeCurrencyTotals, formatCurrencyTotals, type CurrencyTotals } from "@/lib/currency";
 import { formatDateTime } from "@/lib/format";
@@ -24,6 +24,7 @@ import { DistrictRankingTable } from "@/components/dashboard/DistrictRankingTabl
 import { SourcePerformanceSummary } from "@/components/dashboard/SourcePerformanceSummary";
 import { CaseBasedPerformance } from "@/components/dashboard/CaseBasedPerformance";
 import { FindingsByCategoryChart } from "@/components/dashboard/FindingsByCategoryChart";
+import { PerformanceCalculation, PerformancePct } from "@/components/dashboard/PerformanceMath";
 import { DashboardGrid } from "@/components/dashboard/DashboardGrid";
 import { currentPeriod, sortPeriods } from "@/lib/periods";
 
@@ -92,6 +93,8 @@ export function HODashboard({
   const bankPerformance = hasPeriodScope
     ? computePerformance(db, { periodId: allPeriodsSelected ? undefined : openPeriod?.id })
     : null;
+  // The counts behind it, for the card's "click % for detail" calculation.
+  const performanceCounts = hasPeriodScope ? computeEligibleCaseCounts(db, { periodId: allPeriodsSelected ? undefined : openPeriod?.id }) : null;
   // Period-residency-aware (see sumAmountByCurrencyInPeriod()'s doc
   // comment in src/lib/currency.ts) - a finding partially rectified here
   // and then transferred must have its amount split between this period
@@ -353,7 +356,14 @@ export function HODashboard({
           icon={ICON.performance}
           label="Bank-wide Performance"
           value={bankPerformance !== null ? `${bankPerformance.toFixed(1)}%` : "--"}
-          hint={activeScoringRule ? `v${activeScoringRule.version} formula` : "No active scoring rule"}
+          hint={activeScoringRule ? `v${activeScoringRule.version} formula - click % for detail` : "No active scoring rule"}
+          detail={
+            bankPerformance !== null && performanceCounts ? (
+              <PerformanceCalculation counts={performanceCounts} formula={activeScoringRule?.basis} />
+            ) : (
+              "No eligible cases in scope yet."
+            )
+          }
         />
         <StatCard icon={ICON.highRisk} label="High-Risk Findings" value={hasPeriodScope ? highRiskFindings : "--"} hint="Open, top risk tiers" />
         <StatCard icon={ICON.transferred} label="Transferred Findings" value={hasPeriodScope ? transferredFindings : "--"} hint="Out of this period" />
@@ -427,17 +437,13 @@ export function HODashboard({
             <div className="divide-y divide-slate-100">
               {topDistricts.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-500">No performance data yet.</p>}
               {topDistricts.map((row, i) => (
-                <Link
-                  key={row.district.id}
-                  href={`/findings?districtId=${row.district.id}`}
-                  className="flex items-center justify-between px-4 py-2.5 text-sm hover:bg-slate-50"
-                >
-                  <span className="flex items-center gap-2">
+                <div key={row.district.id} className="flex items-start justify-between gap-3 px-4 py-2.5 text-sm hover:bg-slate-50">
+                  <Link href={`/findings?districtId=${row.district.id}`} className="flex items-center gap-2">
                     <Badge tone={i === 0 ? "green" : "gray"}>#{i + 1}</Badge>
                     <span className="text-slate-900">{row.district.name}</span>
-                  </span>
-                  <span className="font-medium text-slate-700">{row.performance!.toFixed(1)}%</span>
-                </Link>
+                  </Link>
+                  <PerformancePct counts={computeEligibleCaseCounts(db, { districtId: row.district.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id })} />
+                </div>
               ))}
             </div>
           </Card>
@@ -447,17 +453,13 @@ export function HODashboard({
             <div className="divide-y divide-slate-100">
               {bottomDistricts.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-500">No performance data yet.</p>}
               {bottomDistricts.map((row) => (
-                <Link
-                  key={row.district.id}
-                  href={`/findings?districtId=${row.district.id}`}
-                  className="flex items-center justify-between px-4 py-2.5 text-sm hover:bg-slate-50"
-                >
-                  <span className="flex items-center gap-2">
+                <div key={row.district.id} className="flex items-start justify-between gap-3 px-4 py-2.5 text-sm hover:bg-slate-50">
+                  <Link href={`/findings?districtId=${row.district.id}`} className="flex items-center gap-2">
                     <Badge tone="red">Rank #{districtRanking.findIndex((r) => r.district.id === row.district.id) + 1}</Badge>
                     <span className="text-slate-900">{row.district.name}</span>
-                  </span>
-                  <span className="font-medium text-slate-700">{row.performance!.toFixed(1)}%</span>
-                </Link>
+                  </Link>
+                  <PerformancePct counts={computeEligibleCaseCounts(db, { districtId: row.district.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id })} />
+                </div>
               ))}
             </div>
           </Card>
@@ -503,17 +505,13 @@ export function HODashboard({
               <div className="divide-y divide-slate-100">
                 {topBranches.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-500">No performance data yet.</p>}
                 {topBranches.map((row, i) => (
-                  <Link
-                    key={row.branch.id}
-                    href={`/findings?branchId=${row.branch.id}`}
-                    className="flex items-center justify-between px-4 py-2.5 text-sm hover:bg-slate-50"
-                  >
-                    <span className="flex items-center gap-2">
+                  <div key={row.branch.id} className="flex items-start justify-between gap-3 px-4 py-2.5 text-sm hover:bg-slate-50">
+                    <Link href={`/findings?branchId=${row.branch.id}`} className="flex items-center gap-2">
                       <Badge tone={i === 0 ? "green" : "gray"}>#{i + 1}</Badge>
                       <span className="text-slate-900">{row.branch.name}</span>
-                    </span>
-                    <span className="font-medium text-slate-700">{row.performance!.toFixed(1)}%</span>
-                  </Link>
+                    </Link>
+                    <PerformancePct counts={computeEligibleCaseCounts(db, { branchId: row.branch.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id })} />
+                  </div>
                 ))}
               </div>
             </Card>
@@ -523,17 +521,13 @@ export function HODashboard({
               <div className="divide-y divide-slate-100">
                 {bottomBranches.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-500">No performance data yet.</p>}
                 {bottomBranches.map((row) => (
-                  <Link
-                    key={row.branch.id}
-                    href={`/findings?branchId=${row.branch.id}`}
-                    className="flex items-center justify-between px-4 py-2.5 text-sm hover:bg-slate-50"
-                  >
-                    <span className="flex items-center gap-2">
+                  <div key={row.branch.id} className="flex items-start justify-between gap-3 px-4 py-2.5 text-sm hover:bg-slate-50">
+                    <Link href={`/findings?branchId=${row.branch.id}`} className="flex items-center gap-2">
                       <Badge tone="red">Rank #{branchRanking.findIndex((r) => r.branch.id === row.branch.id) + 1}</Badge>
                       <span className="text-slate-900">{row.branch.name}</span>
-                    </span>
-                    <span className="font-medium text-slate-700">{row.performance!.toFixed(1)}%</span>
-                  </Link>
+                    </Link>
+                    <PerformancePct counts={computeEligibleCaseCounts(db, { branchId: row.branch.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id })} />
+                  </div>
                 ))}
               </div>
             </Card>

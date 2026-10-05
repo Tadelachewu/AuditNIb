@@ -3,6 +3,7 @@ import { HO_APPROVED_OR_LATER_STATUSES, type Database } from "@/types";
 import type { SessionData } from "@/lib/session";
 import {
   computePerformance,
+  computeEligibleCaseCounts,
   queueStatusesForSession,
   findingCaseTotals,
   findingCaseTotalsInPeriod,
@@ -29,6 +30,7 @@ import { DistrictRankingTable } from "@/components/dashboard/DistrictRankingTabl
 import { SourcePerformanceSummary } from "@/components/dashboard/SourcePerformanceSummary";
 import { CaseBasedPerformance } from "@/components/dashboard/CaseBasedPerformance";
 import { FindingsByCategoryChart } from "@/components/dashboard/FindingsByCategoryChart";
+import { PerformanceCalculation, PerformancePct } from "@/components/dashboard/PerformanceMath";
 import { DashboardGrid } from "@/components/dashboard/DashboardGrid";
 import { currentPeriod, sortPeriods } from "@/lib/periods";
 
@@ -134,6 +136,8 @@ export function DistrictDashboard({
   const { transferredFindings, transferredCases } = transferTotals(districtTransfers);
   const districtPerformanceScope = { districtId: district.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id };
   const performance = hasPeriodScope ? computePerformance(db, districtPerformanceScope) : null;
+  // The counts behind it, for the card's "click % for detail" calculation.
+  const performanceCounts = hasPeriodScope ? computeEligibleCaseCounts(db, districtPerformanceScope) : null;
   // Period-residency-aware (see sumAmountByCurrencyInPeriod()'s doc
   // comment in src/lib/currency.ts) - a finding partially rectified here
   // and then transferred must have its amount split between this period
@@ -302,10 +306,13 @@ export function DistrictDashboard({
           icon={ICON.performance}
           label="District Performance"
           value={performance !== null ? `${performance.toFixed(1)}%` : "--"}
-          hint={
-            activeScoringRule
-                ? `v${activeScoringRule.version} formula`
-                : "No active scoring rule"
+          hint={activeScoringRule ? `v${activeScoringRule.version} formula - click % for detail` : "No active scoring rule"}
+          detail={
+            performance !== null && performanceCounts ? (
+              <PerformanceCalculation counts={performanceCounts} formula={activeScoringRule?.basis} />
+            ) : (
+              "No eligible cases in scope yet."
+            )
           }
         />
         <StatCard icon={ICON.totalAmount} label="Total Amount" value={hasPeriodScope ? totalAmount : "--"} hint="All findings" />
@@ -343,17 +350,13 @@ export function DistrictDashboard({
             <div className="divide-y divide-slate-100">
               {topBranches.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-500">No performance data yet.</p>}
               {topBranches.map((row, i) => (
-                <Link
-                  key={row.branch.id}
-                  href={`/findings?branchId=${row.branch.id}`}
-                  className="flex items-center justify-between px-4 py-2.5 text-sm hover:bg-slate-50"
-                >
-                  <span className="flex items-center gap-2">
+                <div key={row.branch.id} className="flex items-start justify-between gap-3 px-4 py-2.5 text-sm hover:bg-slate-50">
+                  <Link href={`/findings?branchId=${row.branch.id}`} className="flex items-center gap-2">
                     <Badge tone={i === 0 ? "green" : "gray"}>#{i + 1}</Badge>
                     <span className="text-slate-900">{row.branch.name}</span>
-                  </span>
-                  <span className="font-medium text-slate-700">{row.performance!.toFixed(1)}%</span>
-                </Link>
+                  </Link>
+                  <PerformancePct counts={computeEligibleCaseCounts(db, { branchId: row.branch.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id })} />
+                </div>
               ))}
             </div>
           </Card>
@@ -363,17 +366,13 @@ export function DistrictDashboard({
             <div className="divide-y divide-slate-100">
               {bottomBranches.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-500">No performance data yet.</p>}
               {bottomBranches.map((row) => (
-                <Link
-                  key={row.branch.id}
-                  href={`/findings?branchId=${row.branch.id}`}
-                  className="flex items-center justify-between px-4 py-2.5 text-sm hover:bg-slate-50"
-                >
-                  <span className="flex items-center gap-2">
+                <div key={row.branch.id} className="flex items-start justify-between gap-3 px-4 py-2.5 text-sm hover:bg-slate-50">
+                  <Link href={`/findings?branchId=${row.branch.id}`} className="flex items-center gap-2">
                     <Badge tone="red">Rank #{branchRanking.findIndex((r) => r.branch.id === row.branch.id) + 1}</Badge>
                     <span className="text-slate-900">{row.branch.name}</span>
-                  </span>
-                  <span className="font-medium text-slate-700">{row.performance!.toFixed(1)}%</span>
-                </Link>
+                  </Link>
+                  <PerformancePct counts={computeEligibleCaseCounts(db, { branchId: row.branch.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id })} />
+                </div>
               ))}
             </div>
           </Card>

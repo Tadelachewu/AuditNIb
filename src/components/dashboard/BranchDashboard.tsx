@@ -27,6 +27,7 @@ import { FindingStatusBadge } from "@/components/findings/FindingStatusBadge";
 import { CaseBasedPerformance } from "@/components/dashboard/CaseBasedPerformance";
 import { FindingsByCategoryChart } from "@/components/dashboard/FindingsByCategoryChart";
 import { SourcePerformanceSummary } from "@/components/dashboard/SourcePerformanceSummary";
+import { PerformanceCalculation } from "@/components/dashboard/PerformanceMath";
 import { DashboardGrid } from "@/components/dashboard/DashboardGrid";
 import { currentPeriod, sortPeriods } from "@/lib/periods";
 
@@ -276,6 +277,8 @@ export function BranchDashboard({
       performance: hasPeriodScope
         ? computePerformance(db, { branchId: b.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id })
         : null,
+      // The counts behind the % (shown when the % is clicked).
+      counts: hasPeriodScope ? computeEligibleCaseCounts(db, { branchId: b.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id }) : null,
     }))
     .sort((a, b) => (b.performance ?? -1) - (a.performance ?? -1));
 
@@ -336,15 +339,7 @@ export function BranchDashboard({
           }
           detail={
             performance !== null && eligibleCounts ? (
-              <>
-                <p>
-                  <span className="font-medium text-slate-900">{eligibleCounts.rectifiedCases}</span> of{" "}
-                  <span className="font-medium text-slate-900">{eligibleCounts.totalCases}</span> eligible case(s) closed (unless it&apos;s
-                  closed, it never counts as rectified), giving {eligibleCounts.rectifiedCases} ÷ {eligibleCounts.totalCases} × 100 ={" "}
-                  {performance.toFixed(1)}%.
-                </p>
-                {activeScoringRule && <p className="mt-1 text-slate-500">Formula: {activeScoringRule.basis}</p>}
-              </>
+              <PerformanceCalculation counts={eligibleCounts} formula={activeScoringRule?.basis} />
             ) : (
               "No eligible cases in scope yet."
             )
@@ -377,13 +372,15 @@ export function BranchDashboard({
             columns={[
               { key: "rank", header: "Rank", type: "number" },
               { key: "branch", header: "Branch", badgeWhen: "mine", badgeLabel: "Your Branch" },
-              { key: "performance", header: "Performance %", type: "number" },
+              { key: "performance", header: "Performance %", type: "number", calc: { rectified: "rectifiedCases", total: "totalCases" } },
             ]}
             rows={branchRanking.map((row, i) => ({
               rank: i + 1,
               branch: row.branch.name,
               mine: row.branch.id === branch.id,
               performance: row.performance !== null ? Math.round(row.performance * 10) / 10 : null,
+              rectifiedCases: row.counts?.rectifiedCases ?? null,
+              totalCases: row.counts?.totalCases ?? null,
             }))}
           />
         </Card>
