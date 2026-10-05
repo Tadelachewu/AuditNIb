@@ -211,11 +211,11 @@ function buildCsv(slug: string, db: Database, params: URLSearchParams): string |
         const rectifiedCases = periodRows.reduce((sum, r) => sum + r.rectifiedCases, 0) + (variousRow?.rectifiedCases ?? 0);
         grandTotalCases += totalCases;
         grandRectified += rectifiedCases;
-        dataRows.push(["", "", "", "", totalCases, totalCases - rectifiedCases, rectifiedCases, pct(totalCases > 0 ? (rectifiedCases / totalCases) * 100 : null)]);
+        dataRows.push(["", "", "", "Total", totalCases, totalCases - rectifiedCases, rectifiedCases, pct(totalCases > 0 ? (rectifiedCases / totalCases) * 100 : null)]);
       }
       dataRows.push([
         "",
-        "TOTAL",
+        "Grand Total",
         "",
         "",
         grandTotalCases,

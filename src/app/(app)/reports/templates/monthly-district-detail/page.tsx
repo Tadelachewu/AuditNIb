@@ -21,8 +21,8 @@ import { PrintButton } from "@/components/reports/PrintButton";
 // category, lifetime for that district) - cross-checked directly against
 // the source Excel's raw cells: it's the literal last row of each
 // district's block there too, not repeated per month. Each district's
-// block ends with a subtotal row (periods + the one Various row), and the
-// whole table ends with one grand TOTAL row.
+// block ends with its bold "Total" row (periods + the one Various row), and the
+// whole table ends with one bolder "Grand Total" row.
 export default async function MonthlyDistrictDetailPage({
   searchParams,
 }: {
@@ -182,25 +182,28 @@ export default async function MonthlyDistrictDetailPage({
                         <td className="px-4 py-2 text-slate-700">{variousRow.performance !== null ? `${variousRow.performance.toFixed(1)}%` : "--"}</td>
                       </tr>
                     )}
-                    <tr key={`${district.id}-subtotal`} className="bg-slate-50 font-medium">
-                      <td className="px-4 py-2" colSpan={4} />
-                      <td className="px-4 py-2 text-slate-900">{formatNumber(totalCases)}</td>
-                      <td className="px-4 py-2 text-slate-900">{formatNumber(outstandingCases)}</td>
-                      <td className="px-4 py-2 text-slate-900">{formatNumber(rectifiedCases)}</td>
-                      <td className="px-4 py-2 text-slate-900">{performance !== null ? `${performance.toFixed(1)}%` : "--"}</td>
+                    {/* The district's Total (its periods + the Various row): a bold, tinted row. */}
+                    <tr key={`${district.id}-subtotal`} className="border-t-2 border-brand-gold/60 bg-brand-gold/15 font-bold text-slate-900">
+                      <td className="px-4 py-2" colSpan={3} />
+                      <td className="px-4 py-2">Total</td>
+                      <td className="px-4 py-2">{formatNumber(totalCases)}</td>
+                      <td className="px-4 py-2">{formatNumber(outstandingCases)}</td>
+                      <td className="px-4 py-2">{formatNumber(rectifiedCases)}</td>
+                      <td className="px-4 py-2">{performance !== null ? `${performance.toFixed(1)}%` : "--"}</td>
                     </tr>
                   </Fragment>
                 );
               })}
               {groups.length > 0 && (
-                <tr className="bg-slate-100 font-semibold">
-                  <td className="px-4 py-2" />
-                  <td className="px-4 py-2 text-slate-900">TOTAL</td>
-                  <td className="px-4 py-2" colSpan={2} />
-                  <td className="px-4 py-2 text-slate-900">{formatNumber(grandTotalCases)}</td>
-                  <td className="px-4 py-2 text-slate-900">{formatNumber(grandTotalCases - grandRectified)}</td>
-                  <td className="px-4 py-2 text-slate-900">{formatNumber(grandRectified)}</td>
-                  <td className="px-4 py-2 text-slate-900">{grandTotalCases > 0 ? `${((grandRectified / grandTotalCases) * 100).toFixed(1)}%` : "--"}</td>
+                // Every district together: the strongest row of the table.
+                <tr className="border-t-4 border-brand-gold-dark bg-brand-gold/40 text-base font-extrabold text-slate-900">
+                  <td className="px-4 py-2.5" />
+                  <td className="px-4 py-2.5 uppercase tracking-wide">Grand Total</td>
+                  <td className="px-4 py-2.5" colSpan={2} />
+                  <td className="px-4 py-2.5">{formatNumber(grandTotalCases)}</td>
+                  <td className="px-4 py-2.5">{formatNumber(grandTotalCases - grandRectified)}</td>
+                  <td className="px-4 py-2.5">{formatNumber(grandRectified)}</td>
+                  <td className="px-4 py-2.5">{grandTotalCases > 0 ? `${((grandRectified / grandTotalCases) * 100).toFixed(1)}%` : "--"}</td>
                 </tr>
               )}
             </tbody>
