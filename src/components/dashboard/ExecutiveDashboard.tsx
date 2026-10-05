@@ -65,6 +65,8 @@ export function ExecutiveDashboard({
     : openPeriod
       ? allFindingsInRange.filter((f) => f.periodId === openPeriod.id)
       : [];
+  // Rejected findings of the period, bank-wide (same rule as the District dashboard).
+  const rejectedFindings = periodFindings.filter((f) => f.status === "REJECTED").length;
   const bankPerformance = hasPeriodScope
     ? computePerformance(db, { periodId: allPeriodsSelected ? undefined : openPeriod?.id })
     : null;
@@ -88,10 +90,10 @@ export function ExecutiveDashboard({
   const inScopeFindingIds = new Set(allFindingsInRange.map((f) => f.id));
   const bankTransfers = hasPeriodScope
     ? db.findingTransfers.filter(
-        (t) => (allPeriodsSelected || t.fromPeriodId === openPeriod!.id) && inScopeFindingIds.has(t.findingId)
+        (t) => inScopeFindingIds.has(t.findingId)
       )
     : [];
-  const { transferredFindings, transferredCases } = transferTotals(bankTransfers);
+  const { transferredFindings, transferredCases } = transferTotals(db, bankTransfers, allPeriodsSelected ? undefined : openPeriod?.id);
   // Period-residency-aware (see sumAmountByCurrencyInPeriod()'s doc
   // comment in src/lib/currency.ts) - a finding partially rectified here
   // and then transferred must have its amount split between this period
@@ -241,6 +243,7 @@ export function ExecutiveDashboard({
         <StatCard icon={ICON.totalCases} label="Reported Cases" value={hasPeriodScope ? reportedCases : "--"} hint="Originally registered - not changed by transfers" />
         <StatCard icon={ICON.totalCases} label="Total Cases" value={hasPeriodScope ? totalCases : "--"} hint="In this period, after transfers in / out" />
         <StatCard icon={ICON.outstanding} label="Outstanding (in scope)" value={outstanding.length} hint="Approved findings not yet rectified" />
+        <StatCard icon={ICON.rejected} label="Rejected" value={hasPeriodScope ? rejectedFindings : "--"} hint="Findings, bank-wide" />
         <StatCard
           icon={ICON.totalFindings}
           label="Pending Approval"

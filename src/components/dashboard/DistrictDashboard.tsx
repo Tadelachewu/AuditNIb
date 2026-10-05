@@ -131,9 +131,9 @@ export function DistrictDashboard({
   // like every other stat on this page does.
   const districtFindingIds = new Set(districtFindingsInRange.map((f) => f.id));
   const districtTransfers = hasPeriodScope
-    ? db.findingTransfers.filter((t) => (allPeriodsSelected || t.fromPeriodId === openPeriod!.id) && districtFindingIds.has(t.findingId))
+    ? db.findingTransfers.filter((t) => districtFindingIds.has(t.findingId))
     : [];
-  const { transferredFindings, transferredCases } = transferTotals(districtTransfers);
+  const { transferredFindings, transferredCases } = transferTotals(db, districtTransfers, allPeriodsSelected ? undefined : openPeriod?.id);
   const districtPerformanceScope = { districtId: district.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id };
   const performance = hasPeriodScope ? computePerformance(db, districtPerformanceScope) : null;
   // The counts behind it, for the card's "click % for detail" calculation.

@@ -24,9 +24,15 @@ import * as T from "@/lib/reportTemplates";
     return ids && ids.length ? approved.filter((f) => ids.includes(f.sourceId)) : approved;
   };
   for (const p of periods) {
-    const icOnly = findingsResidentInPeriod(db, p.id, srcFor("category-detail-by-district"));
-    check(`${p.code} Category Detail total (its sources)`, T.getCategoryDetailByDistrict(db, p.id).totalRow.totalCases, icOnly.reduce((s, r) => s + r.slice.eligibleCases, 0));
-    check(`${p.code} Monthly Summary total (its sources)`, T.getMonthlySummaryReport(db, p.id).totalRow.totalCases, findingsResidentInPeriod(db, p.id, srcFor("monthly-summary")).reduce((s, r) => s + r.slice.eligibleCases, 0));
+    // Category Detail and Monthly Summary are never affected by transfers:
+    // each finding counts whole in the period it was originally reported in.
+    const originalIn = (f: (typeof approved)[number]) => {
+      const first = db.findingTransfers.filter((t) => t.findingId === f.id).sort((x, y) => x.createdAt.localeCompare(y.createdAt))[0];
+      return (first ? first.fromPeriodId : f.periodId) === p.id;
+    };
+    const wholeCases = (list: typeof approved) => list.filter(originalIn).reduce((s, f) => s + f.caseCount, 0);
+    check(`${p.code} Category Detail total (original period, its sources)`, T.getCategoryDetailByDistrict(db, p.id).totalRow.totalCases, wholeCases(srcFor("category-detail-by-district")));
+    check(`${p.code} Monthly Summary total (original period, its sources)`, T.getMonthlySummaryReport(db, p.id).totalRow.totalCases, wholeCases(srcFor("monthly-summary")));
     const res = findingsResidentInPeriod(db, p.id, approved);
     const cases = res.reduce((s, r) => s + r.slice.eligibleCases, 0);
     const closed = res.reduce((s, r) => s + r.slice.closedCases, 0);

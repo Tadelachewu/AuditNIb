@@ -1,4 +1,4 @@
-import { computeEligibleCaseCounts, caseAgeDays, findingsResidentInPeriod, isHoApproved } from "@/lib/findings";
+import { computeEligibleCaseCounts, caseAgeDays, findingsResidentInPeriod, isHoApproved, originalPeriodId } from "@/lib/findings";
 import { formatNumber } from "@/lib/format";
 import { addCurrency, mergeCurrencyTotals, type CurrencyTotals } from "@/lib/currency";
 import type { Database, Branch, District, ReportingPeriod, ClassifiedCategory, BranchCoverageNote, Finding, Source } from "@/types";
@@ -65,6 +65,45 @@ function scopedTotals(db: Database, periodId: string | undefined, findings: Find
     closed: resident.reduce((s, r) => s + r.slice.closedCases, 0),
     amount: resident.reduce((t, r) => addCurrency(t, r.finding.currency, r.slice.eligibleAmount), {} as CurrencyTotals),
   };
+}
+
+/**
+ * Totals that transfers never change (Category Detail by District, Monthly
+ * Summary): each finding counts in the period it was ORIGINALLY reported in,
+ * with all its cases, its full amount and everything closed on it - wherever
+ * it was transferred to or closed later. "All periods" (no periodId) counts
+ * every finding.
+ */
+function originalPeriodTotals(db: Database, periodId: string | undefined, findings: Finding[]): { cases: number; closed: number; amount: CurrencyTotals } {
+  const inPeriod = periodId ? findings.filter((f) => originalPeriodId(db, f) === periodId) : findings;
+  return {
+    cases: inPeriod.reduce((s, f) => s + f.caseCount, 0),
+    closed: inPeriod.reduce((s, f) => s + f.closedCases, 0),
+    amount: inPeriod.reduce((t, f) => addCurrency(t, f.currency, f.amount), {} as CurrencyTotals),
+  };
+}
+
+/**
+ * The official score's counts (active scoring rule's categories and sources,
+ * approved findings) by ORIGINAL period, unaffected by transfers - the
+ * Monthly Summary's Unrectified / Rectified / Rectified %.
+ */
+function originalPeriodEligibleCounts(
+  db: Database,
+  scope: { districtId: string; periodId: string | undefined; sourceIds?: string[] }
+): { totalCases: number; rectifiedCases: number } | null {
+  const rule = db.scoringRules.find((r) => r.active);
+  if (!rule) return null;
+  const candidates = db.findings.filter(
+    (f) =>
+      f.districtId === scope.districtId &&
+      rule.categories.includes(f.categoryId) &&
+      rule.sources.includes(f.sourceId) &&
+      (!scope.sourceIds || scope.sourceIds.includes(f.sourceId)) &&
+      isHoApproved(f)
+  );
+  const { cases, closed } = originalPeriodTotals(db, scope.periodId, candidates);
+  return cases > 0 ? { totalCases: cases, rectifiedCases: closed } : null;
 }
 
 /** Human-readable note of a template's configured source filter, or null when every source is included. */
@@ -140,11 +179,14 @@ export interface UncoveredBranchRow {
 }
 
 export function getUncoveredBranches(db: Database, periodId: string | undefined): UncoveredBranchRow[] {
-  // A branch that submitted a finding, part of which was rectified before
-  // the rest transferred onward, genuinely was covered this period - a raw
-  // f.periodId === periodId check would call it "uncovered" the moment
-  // that finding transfers away, which is wrong (see
-  // findingsResidentInPeriod()'s own doc comment).
+  // A branch is covered in the period its findings were ORIGINALLY reported
+  // in (originalPeriodId()): a finding carried into another period by a
+  // transfer is not the branch's own reporting there, so transfers never
+  // change this report - or the Monthly Summary's Dispatched columns, which
+  // come from it.
+  // Likewise a branch stays covered in its original period after the
+  // finding transfers away (a plain f.periodId === periodId check would
+  // wrongly call it uncovered the moment it moves).
   //
   // Excludes bank-scope-registered and bulk-imported findings from the
   // candidate pool: neither reflects the BRANCH's own live reporting
@@ -158,7 +200,7 @@ export function getUncoveredBranches(db: Database, periodId: string | undefined)
   coverageCandidates = applySourceFilter(db, "uncovered-branches", coverageCandidates);
   // No period ("All periods"): covered if the branch reported in any period.
   const coveredBranchIds = new Set(
-    (periodId ? findingsResidentInPeriod(db, periodId, coverageCandidates).map((r) => r.finding) : coverageCandidates).map((f) => f.branchId)
+    (periodId ? coverageCandidates.filter((f) => originalPeriodId(db, f) === periodId) : coverageCandidates).map((f) => f.branchId)
   );
   return activeBranches(db)
     .filter((b) => !coveredBranchIds.has(b.id))
@@ -209,11 +251,10 @@ export function getCategoryDetailByDistrict(
       // toward a district's reported totals before anyone's actually
       // approved it, same gate every dashboard "official" figure applies.
       const candidates = sourceFilteredFindings.filter((f) => f.districtId === district.id && f.categoryId === category.id && isHoApproved(f));
-      // Period-scoped (eligibleCases/closedCases), not the finding's live
-      // lifetime caseCount/rectifiedCases - a transferred finding must
-      // count toward exactly one period's total, never zero or two (see
-      // findingsResidentInPeriod()'s doc comment).
-      const { cases: total, closed: rectified } = scopedTotals(db, periodId, candidates);
+      // Never affected by transfers: each finding counts whole (all its
+      // cases, everything closed on it) in the period it was originally
+      // reported in (originalPeriodTotals()).
+      const { cases: total, closed: rectified } = originalPeriodTotals(db, periodId, candidates);
       return { category, total, rectified, outstanding: total - rectified };
     });
     const totalCases = perCategory.reduce((sum, c) => sum + c.total, 0);
@@ -297,22 +338,22 @@ export function getMonthlySummaryReport(
   totalRow: { totalOutstanding: number; officialRectified: number; totalAmount: CurrencyTotals; totalCases: number };
 } {
   const categories = activeCategories(db);
+  // Dispatch coverage = the Uncovered Branches report (by original period).
   const uncovered = getUncoveredBranches(db, periodId);
   const templateSourceIds = getTemplateSourceIds(db, "monthly-summary");
   const sourceFilteredFindings = applySourceFilter(db, "monthly-summary", db.findings);
   const rows: MonthlySummaryRow[] = reportDistricts(db).map((district) => {
-    // Period-scoped residency (see findingsResidentInPeriod()'s doc
-    // comment) - not a raw f.periodId === periodId filter, which would
-    // drop a finding's slice of this period the moment it transfers away.
+    // Never affected by transfers: every figure counts each finding whole in
+    // the period it was originally reported in (originalPeriodTotals()).
     // isHoApproved() gate on top, same as every other "official" figure.
     const districtFindings = sourceFilteredFindings.filter((f) => f.districtId === district.id && isHoApproved(f));
     const perCategory = categories.map((category) => ({
       category,
-      total: scopedTotals(db, periodId, districtFindings.filter((f) => f.categoryId === category.id)).cases,
+      total: originalPeriodTotals(db, periodId, districtFindings.filter((f) => f.categoryId === category.id)).cases,
     }));
-    const districtTotals = scopedTotals(db, periodId, districtFindings);
+    const districtTotals = originalPeriodTotals(db, periodId, districtFindings);
     const totalCases = districtTotals.cases;
-    const officialCounts = computeEligibleCaseCounts(db, { districtId: district.id, periodId, sourceIds: templateSourceIds });
+    const officialCounts = originalPeriodEligibleCounts(db, { districtId: district.id, periodId, sourceIds: templateSourceIds });
     // Same eligible/scored population Rectified already draws from - not
     // a sum across every category the way perCategory is (see this
     // function's own doc comment above).

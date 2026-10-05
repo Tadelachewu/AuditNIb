@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { inactiveOrgUnitError } from "@/lib/org";
 import { z } from "zod";
-import { zAmount, zCaseCount, zFindingDate, zText, zTitle } from "@/lib/inputRules";
+import { zAmount, zCaseCount, zFindingDate, zText, zTitle, findingDateInPeriodError } from "@/lib/inputRules";
 import { requirePermission } from "@/lib/guard";
 import { hasPermission } from "@/lib/permissions/registry";
 import { readDb, updateDb } from "@/lib/db";
@@ -146,6 +146,9 @@ async function handlePATCH(request: Request, { params }: { params: Promise<{ id:
   const periodId = input.periodId ?? existing.periodId;
   const period = db.reportingPeriods.find((p) => p.id === periodId);
   if (!period) return NextResponse.json({ error: "Selected reporting period does not exist" }, { status: 400 });
+  // The finding date (new or kept) must be within the period (new or kept) or before it.
+  const dateOutsidePeriod = findingDateInPeriodError(input.findingDate ?? existing.findingDate, period);
+  if (dateOutsidePeriod) return NextResponse.json({ error: dateOutsidePeriod }, { status: 400 });
   // Moving it into a different locked period follows the same rule as
   // registering a new draft there (the period's "drafts allowed while
   // locked" setting).

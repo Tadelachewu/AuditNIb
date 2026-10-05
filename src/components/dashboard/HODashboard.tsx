@@ -76,6 +76,8 @@ export function HODashboard({
     : openPeriod
       ? allFindingsInRange.filter((f) => f.periodId === openPeriod.id)
       : [];
+  // Rejected findings of the period, bank-wide (same rule as the District dashboard).
+  const rejectedFindings = periodFindings.filter((f) => f.status === "REJECTED").length;
   // Period-residency-aware (see findingCaseTotalsInPeriod()'s doc comment
   // in src/lib/findings.ts) - a finding partially rectified here and then
   // transferred still counts its slice toward this period instead of
@@ -284,14 +286,14 @@ export function HODashboard({
   const inScopeFindingIds = new Set(allFindingsInRange.map((f) => f.id));
   const bankTransfers = hasPeriodScope
     ? db.findingTransfers.filter(
-        (t) => (allPeriodsSelected || t.fromPeriodId === openPeriod!.id) && inScopeFindingIds.has(t.findingId)
+        (t) => inScopeFindingIds.has(t.findingId)
       )
     : [];
   // Previously this StatCard was labeled "Transferred Cases" but held this
   // distinct-finding count, not a case count - transferredCases below is
   // the real per-case sum (FindingTransfer.casesTransferred), added
   // alongside rather than in place of the finding count.
-  const { transferredFindings, transferredCases } = transferTotals(bankTransfers);
+  const { transferredFindings, transferredCases } = transferTotals(db, bankTransfers, allPeriodsSelected ? undefined : openPeriod?.id);
 
   // Two figures HO specifically needs called out on their own: "awaiting my
   // approval decision" and "district-verified, awaiting my close/accept."
@@ -352,6 +354,7 @@ export function HODashboard({
         <StatCard icon={ICON.rectified} label="Rectified Cases" value={hasPeriodScope ? rectifiedCases : "--"} hint="Closed, this period" />
         <StatCard icon={ICON.outstandingCases} label="Outstanding Cases" value={hasPeriodScope ? totalCases - rectifiedCases : "--"} hint="Total minus rectified, bank-wide" />
         <StatCard icon={ICON.outstanding} label="Outstanding" value={hasPeriodScope ? outstandingFindings : "--"} hint="Findings" />
+        <StatCard icon={ICON.rejected} label="Rejected" value={hasPeriodScope ? rejectedFindings : "--"} hint="Findings, bank-wide" />
         <StatCard
           icon={ICON.performance}
           label="Bank-wide Performance"

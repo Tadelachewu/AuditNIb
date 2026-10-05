@@ -11,7 +11,7 @@ import { StickyActions } from "@/components/ui/StickyActions";
 import { Input, Select, Label } from "@/components/ui/Field";
 import { RuleInput } from "@/components/ui/RuleInput";
 import { currentPeriod, sortPeriods } from "@/lib/periods";
-import { amountError, findingDateError, LIMITS, localToday, textError, titleError } from "@/lib/inputRules";
+import { amountError, findingDateError, findingDateInPeriodError, LIMITS, localToday, textError, titleError } from "@/lib/inputRules";
 import { FindingStatusBadge } from "@/components/findings/FindingStatusBadge";
 import { Info } from "lucide-react";
 import { notify, notifications } from "@/lib/notify";
@@ -560,8 +560,9 @@ export function NewFindingForm({
     if (n > LIMITS.caseCount.max) return `Number of cases must be at most ${LIMITS.caseCount.max}`;
     return null;
   };
-  // A real date, not in the future. (Within-the-period applies to the Excel import only.)
-  const dateProblem = (v: string) => findingDateError(v);
+  // A real date, not in the future, and on or before the end of the chosen
+  // reporting period (within the period or before it).
+  const dateProblem = (v: string) => findingDateError(v) ?? (selectedPeriod ? findingDateInPeriodError(v, selectedPeriod) : null);
   // Required fields first: always the period (and district / branch when they
   // aren't fixed by the user's scope), then whatever the administrator made
   // required in Settings (REQUIRABLE_FINDING_FIELDS) - the same list the API

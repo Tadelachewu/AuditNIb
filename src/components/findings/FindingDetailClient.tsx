@@ -1,8 +1,9 @@
 "use client";
 
 import { notify, notifications } from "@/lib/notify";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { findingsListReturnUrl } from "@/lib/findingsListReturn";
 import { useRouter } from "next/navigation";
 import { apiSend, apiUpload } from "@/lib/api-client";
 import { formatDate, formatDateTime, formatNumber, formatCurrency } from "@/lib/format";
@@ -137,6 +138,10 @@ export function FindingDetailClient({
   permissions: Permissions;
 }) {
   const router = useRouter();
+  // "← Back" returns to the Findings list as it was left (filters, search,
+  // sort, page) - read after mount, since sessionStorage is browser-only.
+  const [backHref, setBackHref] = useState("/findings");
+  useEffect(() => setBackHref(findingsListReturnUrl()), []);
   const { confirm, dialog } = useConfirm();
   const [busy, setBusy] = useState(false);
 
@@ -570,7 +575,7 @@ export function FindingDetailClient({
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <Link
-            href="/findings"
+            href={backHref}
             className="inline-flex items-center rounded-md bg-brand-gold px-3 py-1.5 text-sm font-bold text-on-gold transition-colors hover:bg-brand-gold-dark"
           >
             ← Back

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { inactiveOrgUnitError } from "@/lib/org";
 import { v4 as uuid } from "uuid";
 import { z } from "zod";
-import { zAmount, zCaseCount, zFindingDate, zText, zTitle } from "@/lib/inputRules";
+import { zAmount, zCaseCount, zFindingDate, zText, zTitle, findingDateInPeriodError } from "@/lib/inputRules";
 import { requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { findingsInScope } from "@/lib/findings-scope";
@@ -150,6 +150,9 @@ async function handlePOST(request: Request) {
   const branch = db.branches.find((b) => b.id === branchId)!;
   const period = db.reportingPeriods.find((p) => p.id === input.periodId);
   if (!period) return NextResponse.json({ error: "Selected reporting period does not exist" }, { status: 400 });
+  // The finding date must be within the period or before it (never after it ends).
+  const dateOutsidePeriod = findingDateInPeriodError(input.findingDate, period);
+  if (dateOutsidePeriod) return NextResponse.json({ error: dateOutsidePeriod }, { status: 400 });
   // A newly-created finding is always DRAFT (see below), so a LOCKED
   // period still accepts it when draftsAllowedWhileLocked is set - the
   // hard stop is for progressing past DRAFT (submit and beyond), enforced

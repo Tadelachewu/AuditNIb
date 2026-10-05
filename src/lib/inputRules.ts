@@ -164,10 +164,9 @@ export function findingDateError(value: string | null | undefined, today: string
 }
 
 /**
- * Excel import only: a row's finding date must fall within its reporting
- * period or before it (never after the period ends). Registering or editing
- * a finding doesn't apply this rule.
- * `periodEndsAt` is the period's end timestamp.
+ * A finding's date must fall within its reporting period or before it -
+ * never after the period ends (and, via findingDateError(), never in the
+ * future). Applied to registering, editing and the Excel import alike.
  */
 export function findingDateInPeriodError(findingDate: string | null | undefined, period: { code: string; endsAt: string }): string | null {
   const v = trimmed(findingDate);

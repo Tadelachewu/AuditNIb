@@ -383,23 +383,54 @@ export function findingCaseTotalsInPeriod(
 }
 
 /**
- * Same findings-vs-cases split for transfers. `casesTransferred` on each
- * FindingTransfer row is the outstanding balance actually carried forward
- * (see transferFinding() above) - summing it gives the real case count
- * moved, distinct from `transferredFindings` (how many finding records had
- * at least one transfer), which is what dashboards previously showed under
- * a "Transferred Cases" label despite counting records, not cases.
+ * "Transferred Findings / Transferred Cases" on the dashboards: what is
+ * CURRENTLY out of the period, not every transfer event ever made from it.
+ * `transfers` = the transfers to consider (already narrowed to the caller's
+ * scope); `periodId` = the period shown, or undefined for "All periods".
+ *
+ * - One period: a finding counts if it left that period and is not back in
+ *   it now; its cases / amount are what it carried on its LAST departure
+ *   from there. A finding moved Sep -> Oct -> Sep counts 0 for Sep.
+ * - All periods: a finding counts once if it is not in its original period
+ *   now, with what its latest transfer carried - a finding moved back and
+ *   forth is never counted twice.
+ *
+ * The full transfer log (Reports -> Transfers, the finding's history) still
+ * lists every move.
  */
-export function transferTotals(transfers: FindingTransfer[]): {
+export function transferTotals(
+  db: Database,
+  transfers: FindingTransfer[],
+  periodId: string | undefined
+): {
   transferredFindings: number;
   transferredCases: number;
   transferredAmount: number;
 } {
-  return {
-    transferredFindings: new Set(transfers.map((t) => t.findingId)).size,
-    transferredCases: transfers.reduce((sum, t) => sum + t.casesTransferred, 0),
-    transferredAmount: transfers.reduce((sum, t) => sum + t.amountTransferred, 0),
-  };
+  const byFinding = new Map<string, FindingTransfer[]>();
+  for (const t of transfers) byFinding.set(t.findingId, [...(byFinding.get(t.findingId) ?? []), t]);
+  const currentPeriod = new Map(db.findings.map((f) => [f.id, f.periodId]));
+
+  let transferredFindings = 0;
+  let transferredCases = 0;
+  let transferredAmount = 0;
+  for (const [findingId, list] of byFinding) {
+    const sorted = [...list].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    const nowIn = currentPeriod.get(findingId);
+    let last: FindingTransfer | undefined;
+    if (periodId) {
+      const departures = sorted.filter((t) => t.fromPeriodId === periodId);
+      if (departures.length === 0 || nowIn === periodId) continue;
+      last = departures[departures.length - 1];
+    } else {
+      if (nowIn === sorted[0].fromPeriodId) continue; // back in its original period
+      last = sorted[sorted.length - 1];
+    }
+    transferredFindings += 1;
+    transferredCases += last.casesTransferred;
+    transferredAmount += last.amountTransferred;
+  }
+  return { transferredFindings, transferredCases, transferredAmount };
 }
 
 /**
@@ -786,8 +817,12 @@ export function queueStatusesForSession(session: SessionData, db: Database): (fi
       const verifiedAmount = Math.min(f.rectifiedAmount, f.districtVerifiedAmount);
       return f.status !== "CLOSED" && (verifiedCases > f.closedCases || verifiedAmount > f.closedAmount);
     });
-  if (has("transfer")) matchers.push((f) => needsTransfer(db, f));
-  return (f) => matchers.some((matches) => matches(f));
+  // Never in the queue: rejected findings (final - nothing left to do), and
+  // "waiting to be transferred to the next period" is not a queue item of its
+  // own (transfer is done from the Reporting Periods lock / the finding page).
+  // A finding the branch must still rectify stays in the branch's queue
+  // whatever its period.
+  return (f) => f.status !== "REJECTED" && matchers.some((matches) => matches(f));
 }
 
 /**
@@ -802,6 +837,20 @@ export function needsTransfer(db: Database, f: Finding, now: number = Date.now()
   const period = db.reportingPeriods.find((p) => p.id === f.periodId);
   if (!period) return false;
   return period.status === "LOCKED" || new Date(period.endsAt).getTime() < now;
+}
+
+/**
+ * The period a finding was originally reported in: where its first transfer
+ * left from, or its current period if it never moved. Reports that must not
+ * be affected by transfers (Category Detail by District, Monthly Summary)
+ * count every finding here, whole.
+ */
+export function originalPeriodId(db: Database, f: Finding): string {
+  let first: FindingTransfer | undefined;
+  for (const t of db.findingTransfers) {
+    if (t.findingId === f.id && (!first || t.createdAt < first.createdAt)) first = t;
+  }
+  return first ? first.fromPeriodId : f.periodId;
 }
 
 export interface PerformanceScope {

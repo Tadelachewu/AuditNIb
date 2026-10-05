@@ -45,10 +45,15 @@ describe("HO Controller's queue: findings to transfer", async () => {
     expect(needsTransfer(dbP, at("aug", "CLOSED", { closedCases: 2, closedAmount: 200 }), now)).toBe(false);
     expect(needsTransfer(dbP, at("aug", "DISTRICT_REVIEW"), now)).toBe(false);
   });
-  it("shows in Show My Queue for anyone who can transfer (HO Controller)", () => {
+  it("is never a Show My Queue item, even for someone who can transfer (HO Controller)", () => {
     const ho = { userId: "ho", permissions: ["findings.transfer", "findings.close", "findings.ho-review"] } as never;
     const inQueue = queueStatusesForSession(ho, dbP);
-    expect(inQueue(at("sep"))).toBe(true);
+    expect(inQueue(at("sep"))).toBe(false);
     expect(inQueue(at("oct"))).toBe(false);
+  });
+
+  it("rejected findings are never in Show My Queue", () => {
+    const registrant = { userId: "u", permissions: ["findings.edit", "findings.submit"] } as never;
+    expect(queueStatusesForSession(registrant, dbP)(at("sep", "REJECTED"))).toBe(false);
   });
 });

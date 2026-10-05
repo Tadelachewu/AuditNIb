@@ -2,9 +2,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 
-// Register Finding: the finding date (pre-filled with today) is only checked
-// for being a real, non-future date - "within the reporting period" applies
-// to the Excel import only. A disabled Save button always says why.
+// Register Finding: the finding date (pre-filled with today) must be a real,
+// non-future date, on or before the end of the chosen reporting period. A
+// disabled Save button always says why.
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }));
 vi.mock("@/lib/api-client", () => ({ apiSend: vi.fn(async () => ({ finding: { id: "f1" } })), apiGet: vi.fn(async () => ({})) }));
@@ -45,19 +45,30 @@ function renderForm(requiredFields: Record<string, boolean> = noneRequired) {
 const saveDraft = () => screen.getByRole("button", { name: "Save Draft" }) as HTMLButtonElement;
 const choosePeriod = (id: string) => fireEvent.change(screen.getByLabelText(/Reporting period/i), { target: { value: id } });
 
-describe("Register Finding: the finding date isn't tied to the reporting period (that rule is import-only)", () => {
-  it("period 2026-08 with today's date (2026-10-02) can be saved as a draft", () => {
+describe("Register Finding: the finding date must be within the reporting period or before it", () => {
+  it("period 2026-08 with today's date (2026-10-02, after August) is refused, with the reason shown", () => {
     renderForm();
     choosePeriod("p8");
     fireEvent.change(screen.getByLabelText("Amount involved"), { target: { value: "500" } });
-    expect(saveDraft().disabled).toBe(false);
-    expect(screen.queryByText(/after reporting period/)).toBeNull();
+    expect(saveDraft().disabled).toBe(true);
+    expect(screen.getAllByText(/after reporting period 2026-08/).length).toBeGreaterThan(0);
+  });
+
+  it("period 2026-08 with a date in or before August can be saved as a draft", () => {
+    renderForm();
+    choosePeriod("p8");
+    fireEvent.change(screen.getByLabelText("Amount involved"), { target: { value: "500" } });
+    for (const date of ["2026-08-31", "2026-07-15"]) {
+      fireEvent.change(screen.getByLabelText(/Finding date/), { target: { value: date } });
+      expect(saveDraft().disabled).toBe(false);
+    }
   });
 
   it("2026-08's submission window has closed: a clear notice says a draft is possible but not submitting, with the window dates", () => {
     renderForm();
     choosePeriod("p8");
     fireEvent.change(screen.getByLabelText("Amount involved"), { target: { value: "500" } });
+    fireEvent.change(screen.getByLabelText(/Finding date/), { target: { value: "2026-08-20" } });
     // Under the period field and next to the buttons.
     expect(screen.getAllByText("2026-08 isn't accepting submissions today - you can save a draft, but not submit.")).toHaveLength(2);
     expect(screen.queryByText(/Its submission window is .*2026.* – .*2026/)).not.toBeNull();

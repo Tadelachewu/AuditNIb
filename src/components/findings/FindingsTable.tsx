@@ -7,6 +7,7 @@ import type { MRT_ColumnDef, MRT_RowSelectionState } from "material-react-table"
 import { AdminTable } from "@/components/ui/AdminTable";
 import { useGridUrlState } from "@/lib/useGridUrlState";
 import { pagedList } from "@/lib/gridPage";
+import { rememberFindingsListUrl } from "@/lib/findingsListReturn";
 import { Button } from "@/components/ui/Button";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { FindingStatusBadge } from "@/components/findings/FindingStatusBadge";
@@ -192,6 +193,12 @@ export function FindingsTable({
   const grid = useMemo(() => pagedList(rows, paging, sort, searchText), [rows, paging, sort, searchText]);
 
   // A new page of data (navigation) clears the selection.
+  // Remember this list's full address (filters, search, sort, page), so a
+  // finding's "← Back" returns here exactly as it was.
+  useEffect(() => {
+    rememberFindingsListUrl(window.location.pathname + window.location.search);
+  });
+
   useEffect(() => {
     setRowSelection({});
   }, [rows]);

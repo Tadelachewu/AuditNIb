@@ -220,10 +220,10 @@ export function BranchDashboard({
   const inScopeFindingIds = new Set(branchAllFindings.map((f) => f.id));
   const branchTransfers = hasPeriodScope
     ? db.findingTransfers.filter(
-        (t) => (allPeriodsSelected || t.fromPeriodId === openPeriod!.id) && inScopeFindingIds.has(t.findingId)
+        (t) => inScopeFindingIds.has(t.findingId)
       )
     : [];
-  const { transferredFindings, transferredCases } = transferTotals(branchTransfers);
+  const { transferredFindings, transferredCases } = transferTotals(db, branchTransfers, allPeriodsSelected ? undefined : openPeriod?.id);
 
   // The person who registers findings (findings.create - Branch Controller)
   // needs to see their OWN draft/in-flight-approval backlog - scoped to
