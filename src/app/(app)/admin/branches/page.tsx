@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { MRT_ColumnDef } from "material-react-table";
 import { apiGet, apiSend } from "@/lib/api-client";
+import { useServerList } from "@/lib/useServerList";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { StickyActions } from "@/components/ui/StickyActions";
@@ -23,9 +24,9 @@ import { notify, notifications } from "@/lib/notify";
 type BranchRow = Branch & { managerName: string | null; subManagerName: string | null; controllerName: string | null };
 
 export default function BranchesPage() {
-  const [branches, setBranches] = useState<BranchRow[]>([]);
+  const list = useServerList<BranchRow>("/api/admin/branches", { key: "branches", defaultSort: { id: "name", desc: false } });
+  const branches = list.rows;
   const [districts, setDistricts] = useState<District[]>([]);
-  const [loading, setLoading] = useState(true);
   const [form, setForm] = useState({ code: "", name: "", districtId: "" });
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -40,22 +41,12 @@ export default function BranchesPage() {
   const canToggle = hasPermission(permissions, "branches.toggle-status");
   const canDelete = hasPermission(permissions, "branches.delete");
 
-  async function load() {
-    setLoading(true);
-    const [b, d] = await Promise.all([
-      // The whole list (no ?page=) - the table searches, filters, sorts
-      // and pages it client-side, so every branch is always searchable.
-      apiGet<{ branches: BranchRow[] }>("/api/admin/branches"),
-      apiGet<{ districts: District[] }>("/api/admin/districts"),
-    ]);
-    setBranches(b.branches);
-    setDistricts(d.districts);
-    setLoading(false);
-  }
-
+  // The table is server-paged (one page at a time, searched / filtered /
+  // sorted on the server); the district pickers need the whole district list.
   useEffect(() => {
-    load();
+    void apiGet<{ districts: District[] }>("/api/admin/districts").then((d) => setDistricts(d.districts));
   }, []);
+  const load = list.reload;
 
   function districtName(id: string) {
     return districts.find((d) => d.id === id)?.name ?? "—";
@@ -202,11 +193,11 @@ export default function BranchesPage() {
       </p>
 
       <Card className="mt-5">
-        <CardHeader title="All Branches" description={`${branches.length} total`}
+        <CardHeader title="All Branches" description={`${list.total} total`}
           action={canCreate && (
             <AddDialog title="Add Branch">
               {({ close }) => (
-              <form onSubmit={(e) => handleCreate(e, close)} className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3">
+              <form onSubmit={(e) => handleCreate(e, close)} className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2">
                 <div>
                   <Label htmlFor="code">Code</Label>
                   <RuleInput id="code" required filter={INPUT_FILTERS.code} maxLength={LIMITS.code.max} check={(v) => codeError(v)} hint="Letters, numbers, dashes and underscores; no spaces" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} />
@@ -246,8 +237,7 @@ export default function BranchesPage() {
         />
         <AdminTable
           columns={columns}
-          data={branches}
-          isLoading={loading}
+          server={list}
           getRowId={(b) => b.id}
           exportFileName="branches"
           emptyText="No branches yet."
@@ -288,7 +278,7 @@ export default function BranchesPage() {
       {editingItem && (
         <Modal title={`Edit ${editingItem.name}`} description={editingItem.code} onClose={() => setEditingId(null)}>
           <form
-            className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3"
+            className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2"
             onSubmit={(e) => {
               e.preventDefault();
               void saveEdit(editingItem);

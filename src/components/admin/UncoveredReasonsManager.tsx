@@ -2,8 +2,8 @@
 
 import { useMemo, useState } from "react";
 import type { MRT_ColumnDef } from "material-react-table";
-import { useRouter } from "next/navigation";
 import { apiSend } from "@/lib/api-client";
+import { useServerList } from "@/lib/useServerList";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { StickyActions } from "@/components/ui/StickyActions";
@@ -19,13 +19,11 @@ import { AdminTable } from "@/components/ui/AdminTable";
 import { ImportCsvDialog } from "@/components/ui/ImportCsvDialog";
 import { notify, notifications } from "@/lib/notify";
 
-// Same convention as SourcesManager: the list is a prop refreshed via
-// router.refresh() after every mutation, not a duplicated client copy -
-// only genuinely ephemeral UI state (the add-form draft, which row is mid-
-// edit, per-row busy flags) lives here.
-export function UncoveredReasonsManager({ initialReasons }: { initialReasons: UncoveredReason[] }) {
-  const reasons = initialReasons;
-  const router = useRouter();
+// Same convention as SourcesManager: a server-paged table (useServerList),
+// fetched again with list.reload() after every change.
+export function UncoveredReasonsManager() {
+  const list = useServerList<UncoveredReason>("/api/admin/uncovered-reasons", { key: "uncoveredReasons", defaultSort: { id: "name", desc: false } });
+  const reasons = list.rows;
   const [form, setForm] = useState({ code: "", name: "" });
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -44,7 +42,7 @@ export function UncoveredReasonsManager({ initialReasons }: { initialReasons: Un
       notify.success(notifications.uncoveredReason.created);
       setForm({ code: "", name: "" });
       close();
-      router.refresh();
+      list.reload();
     } catch (err) {
       setFormError(notify.formError(err, notifications.uncoveredReason.createFailed));
     } finally {
@@ -67,7 +65,7 @@ export function UncoveredReasonsManager({ initialReasons }: { initialReasons: Un
       await apiSend(`/api/admin/uncovered-reasons/${r.id}`, "PATCH", { name: editName });
       notify.success(notifications.uncoveredReason.updated);
       setEditingId(null);
-      router.refresh();
+      list.reload();
     } catch (err) {
       setEditError(notify.formError(err, notifications.uncoveredReason.updateFailed));
     } finally {
@@ -87,7 +85,7 @@ export function UncoveredReasonsManager({ initialReasons }: { initialReasons: Un
     try {
       await apiSend(`/api/admin/uncovered-reasons/${r.id}`, "DELETE");
       notify.success(notifications.uncoveredReason.deleted);
-      router.refresh();
+      list.reload();
     } catch (err) {
       notify.fromError(err, notifications.uncoveredReason.deleteFailed);
     } finally {
@@ -109,7 +107,7 @@ export function UncoveredReasonsManager({ initialReasons }: { initialReasons: Un
     try {
       await apiSend(`/api/admin/uncovered-reasons/${r.id}`, "PATCH", { active: !r.active });
       notify.success(r.active ? notifications.uncoveredReason.deactivated : notifications.uncoveredReason.activated);
-      router.refresh();
+      list.reload();
     } catch (err) {
       notify.fromError(err, notifications.uncoveredReason.statusFailed);
     } finally {
@@ -146,16 +144,16 @@ export function UncoveredReasonsManager({ initialReasons }: { initialReasons: Un
   return (
     <>
       <Card className="mt-5">
-        <CardHeader title="All Reasons" description={`${reasons.length} total - reporters can always type their own via "Other" instead`}
+        <CardHeader title="All Reasons" description={`${list.total} total - reporters can always type their own via "Other" instead`}
           action={(
             <AddDialog title="Add Reason">
               {({ close }) => (
-              <form onSubmit={(e) => handleCreate(e, close)} className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3">
+              <form onSubmit={(e) => handleCreate(e, close)} className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2">
                 <div>
                   <Label htmlFor="code">Code</Label>
                   <RuleInput id="code" required filter={INPUT_FILTERS.code} maxLength={LIMITS.code.max} check={(v) => codeError(v)} hint="Letters, numbers, dashes and underscores; no spaces" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} />
                 </div>
-                <div className="sm:col-span-2">
+                <div>
                   <Label htmlFor="name">Name</Label>
                   <RuleInput id="name" required maxLength={LIMITS.entityName.max} check={(v) => entityNameError(v)} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
                 </div>
@@ -174,7 +172,7 @@ export function UncoveredReasonsManager({ initialReasons }: { initialReasons: Un
         />
         <AdminTable
           columns={columns}
-          data={reasons}
+          server={list}
           getRowId={(r) => r.id}
           exportFileName="uncovered-branch-reasons"
           emptyText="No reasons yet."
@@ -192,7 +190,7 @@ export function UncoveredReasonsManager({ initialReasons }: { initialReasons: Un
                     : { payload: { code: row.code, name: row.name }, label: `${row.code} - ${row.name}` }
                 }
                 submit={(payload) => apiSend("/api/admin/uncovered-reasons", "POST", payload)}
-                onDone={() => router.refresh()}
+                onDone={() => list.reload()}
               />
           }
           renderRowActions={(r) => (
@@ -207,7 +205,7 @@ export function UncoveredReasonsManager({ initialReasons }: { initialReasons: Un
       {editingItem && (
         <Modal title={`Edit ${editingItem.name}`} description={editingItem.code} onClose={() => setEditingId(null)}>
           <form
-            className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3"
+            className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2"
             onSubmit={(e) => {
               e.preventDefault();
               void saveEdit(editingItem);

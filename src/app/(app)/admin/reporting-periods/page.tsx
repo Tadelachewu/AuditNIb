@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type { MRT_ColumnDef } from "material-react-table";
-import { apiGet, apiSend } from "@/lib/api-client";
+import { apiSend } from "@/lib/api-client";
+import { useServerList } from "@/lib/useServerList";
 import { formatDateTime } from "@/lib/format";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -66,9 +67,13 @@ function windowRangeValid(start: string, end: string): boolean {
 }
 
 export default function ReportingPeriodsPage() {
-  const [periods, setPeriods] = useState<PeriodWithTransferPreview[]>([]);
-  const [autoTransferAllowed, setAutoTransferAllowed] = useState(false);
-  const [loading, setLoading] = useState(true);
+  // Server-paged, newest period first.
+  const list = useServerList<PeriodWithTransferPreview>("/api/admin/reporting-periods", {
+    key: "reportingPeriods",
+    defaultSort: { id: "code", desc: true },
+  });
+  const periods = list.rows;
+  const autoTransferAllowed = list.meta.autoTransferOnLock === true;
   const now = new Date();
   // submissionStartsAt/submissionEndsAt default to exactly the period's
   // own range - most admins never touch them. handleStartsAtChange/
@@ -244,19 +249,7 @@ export default function ReportingPeriodsPage() {
   const [lockTransferOverdue, setLockTransferOverdue] = useState(false);
   const [lockBusy, setLockBusy] = useState(false);
 
-  async function load() {
-    setLoading(true);
-    const res = await apiGet<{ reportingPeriods: PeriodWithTransferPreview[]; autoTransferOnLock: boolean }>(
-      "/api/admin/reporting-periods"
-    );
-    setPeriods(res.reportingPeriods);
-    setAutoTransferAllowed(res.autoTransferOnLock);
-    setLoading(false);
-  }
-
-  useEffect(() => {
-    load();
-  }, []);
+  const load = list.reload;
 
   async function handleCreate(e: React.FormEvent, close: () => void) {
     e.preventDefault();
@@ -446,7 +439,7 @@ export default function ReportingPeriodsPage() {
       </p>
 
       <Card className="mt-5">
-        <CardHeader title="All Periods" description={`${periods.length} total`}
+        <CardHeader title="All Periods" description={`${list.total} total`}
           action={canCreate && (
             <AddDialog
               title="Open a New Period"
@@ -454,7 +447,7 @@ export default function ReportingPeriodsPage() {
             >
               {({ close }) => (
               <>
-              <form onSubmit={(e) => handleCreate(e, close)} className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3 sm:items-end">
+              <form onSubmit={(e) => handleCreate(e, close)} className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 sm:items-end">
                 <div>
                   <Label htmlFor="startsAt">Starts at (date &amp; time)</Label>
                   <Input id="startsAt" type="datetime-local" value={form.startsAt} onChange={(e) => handleStartsAtChange(e.target.value)} />
@@ -513,8 +506,7 @@ export default function ReportingPeriodsPage() {
         />
         <AdminTable
           columns={columns}
-          data={periods}
-          isLoading={loading}
+          server={list}
           getRowId={(p) => p.id}
           exportFileName="reporting-periods"
           emptyText="No reporting periods yet."
@@ -559,7 +551,7 @@ export default function ReportingPeriodsPage() {
           onClose={() => setRenamingId(null)}
         >
           <form
-            className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3 sm:items-start"
+            className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 sm:items-start"
             onSubmit={(e) => {
               e.preventDefault();
               void saveRename(renameTarget);
@@ -610,7 +602,7 @@ export default function ReportingPeriodsPage() {
           onClose={() => setLockTarget(null)}
         >
           <form
-            className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3 sm:items-start"
+            className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 sm:items-start"
             onSubmit={(e) => {
               e.preventDefault();
               void confirmLock();
@@ -627,7 +619,7 @@ export default function ReportingPeriodsPage() {
                 onChange={(e) => setLockReasonInput(e.target.value)}
               />
             </div>
-            <label className="flex items-center gap-2 text-sm text-slate-700 sm:col-span-3">
+            <label className="flex items-center gap-2 text-sm text-slate-700 sm:col-span-2">
               <input
                 type="checkbox"
                 checked={lockDraftsAllowed}
@@ -639,7 +631,7 @@ export default function ReportingPeriodsPage() {
             {!isFlagEditOnly && autoTransferAllowed && lockTarget.outstandingTransferableCount > 0 && (
               <>
                 {lockTarget.transferDestinationCode ? (
-                  <label className="flex items-start gap-2 text-sm text-slate-700 sm:col-span-3">
+                  <label className="flex items-start gap-2 text-sm text-slate-700 sm:col-span-2">
                     <input
                       type="checkbox"
                       checked={lockTransferOverdue}
@@ -652,7 +644,7 @@ export default function ReportingPeriodsPage() {
                     </span>
                   </label>
                 ) : (
-                  <p className="text-xs text-amber-700 sm:col-span-3">
+                  <p className="text-xs text-amber-700 sm:col-span-2">
                     {lockTarget.outstandingTransferableCount} outstanding case
                     {lockTarget.outstandingTransferableCount === 1 ? "" : "s"} in {lockTarget.code}, but there&apos;s no open
                     period after it to transfer into - open a later period first if you want to transfer them.
@@ -679,7 +671,7 @@ export default function ReportingPeriodsPage() {
           onClose={() => setWindowTarget(null)}
         >
           <form
-            className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3 sm:items-start"
+            className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 sm:items-start"
             onSubmit={(e) => {
               e.preventDefault();
               void confirmWindow();
@@ -737,7 +729,7 @@ export default function ReportingPeriodsPage() {
           onClose={() => setPeriodEditTarget(null)}
         >
           <form
-            className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3 sm:items-start"
+            className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 sm:items-start"
             onSubmit={(e) => {
               e.preventDefault();
               void confirmPeriodEdit();

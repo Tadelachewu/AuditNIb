@@ -6,17 +6,16 @@ import { requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { appendAuditLog } from "@/lib/audit";
 import { findBranchManager, findBranchController, findBranchSubManager } from "@/lib/org";
-import { paginate, parsePage } from "@/lib/pagination";
 import { withApiHandler } from "@/lib/api/handler";
+import { listPageJson } from "@/lib/serverList";
 
-// A large bank can have hundreds of branches - paginated the same way
-// Users/Audit Log are. `page` is optional: other callers (e.g. the Users
-// page's own branch-picker dropdowns) still want the full list, so
-// omitting it returns everything unpaginated, same as before.
+// A large bank can have hundreds of branches - the Branches table asks for
+// one page at a time (?page=..., searched / filtered / sorted on the server,
+// src/lib/serverList.ts). Without `page`, other callers (e.g. the branch
+// pickers on the Users page) still get the full list, as before.
 async function handleGET(request: Request) {
   const auth = await requirePermission("branches.view");
   if (!auth.ok) return auth.response;
-  const { searchParams } = new URL(request.url);
   const db = await readDb();
 
   const branches = [...db.branches]
@@ -28,11 +27,21 @@ async function handleGET(request: Request) {
       controllerName: findBranchController(db, b.id)?.name ?? null,
     }));
 
-  const pageParam = searchParams.get("page");
-  if (!pageParam) return NextResponse.json({ branches });
-
-  const result = paginate(branches, parsePage(pageParam), 25);
-  return NextResponse.json({ branches: result.items, total: result.total, page: result.page, pageSize: result.pageSize, totalPages: result.totalPages });
+  const districtName = (id: string) => db.districts.find((d) => d.id === id)?.name ?? "—";
+  const paged = listPageJson(request, "branches", branches, {
+    fields: {
+      code: (b) => b.code,
+      name: (b) => b.name,
+      district: (b) => districtName(b.districtId),
+      manager: (b) => b.managerName ?? "",
+      subManager: (b) => b.subManagerName ?? "—",
+      controller: (b) => b.controllerName ?? "",
+      status: (b) => b.status,
+    },
+    exact: ["district", "status"],
+  });
+  if (paged) return NextResponse.json(paged);
+  return NextResponse.json({ branches });
 }
 
 const createSchema = z.object({

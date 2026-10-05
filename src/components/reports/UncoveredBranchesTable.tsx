@@ -114,6 +114,8 @@ export function UncoveredBranchesTable({ rows, periodId, reasons }: { rows: Row[
         getRowId={(r) => r.branch.id}
         exportFileName="uncovered-branches"
         emptyText="Every active branch submitted at least one finding this period."
+        // Each row is already its own reason form - no detail panel to open.
+        renderDetail={false}
         tableOptions={{
           enablePagination: false,
           enableRowSelection: true,

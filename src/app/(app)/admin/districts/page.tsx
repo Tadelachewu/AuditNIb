@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type { MRT_ColumnDef } from "material-react-table";
-import { apiGet, apiSend } from "@/lib/api-client";
+import { apiSend } from "@/lib/api-client";
+import { useServerList } from "@/lib/useServerList";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { StickyActions } from "@/components/ui/StickyActions";
@@ -28,8 +29,8 @@ function namesOrDash(names: string[] | undefined) {
 }
 
 export default function DistrictsPage() {
-  const [districts, setDistricts] = useState<DistrictRow[]>([]);
-  const [loading, setLoading] = useState(true);
+  const list = useServerList<DistrictRow>("/api/admin/districts", { key: "districts", defaultSort: { id: "name", desc: false } });
+  const districts = list.rows;
   const [form, setForm] = useState({ code: "", name: "" });
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -44,16 +45,7 @@ export default function DistrictsPage() {
   const canToggle = hasPermission(permissions, "districts.toggle-status");
   const canDelete = hasPermission(permissions, "districts.delete");
 
-  async function load() {
-    setLoading(true);
-    const res = await apiGet<{ districts: DistrictRow[] }>("/api/admin/districts");
-    setDistricts(res.districts);
-    setLoading(false);
-  }
-
-  useEffect(() => {
-    load();
-  }, []);
+  const load = list.reload;
 
   async function handleCreate(e: React.FormEvent, close: () => void) {
     e.preventDefault();
@@ -176,16 +168,16 @@ export default function DistrictsPage() {
       <p className="mt-1 text-sm text-slate-600">Bank-wide, config-driven — no hard-coded district count.</p>
 
       <Card className="mt-5">
-        <CardHeader title="All Districts" description={`${districts.length} total`}
+        <CardHeader title="All Districts" description={`${list.total} total`}
           action={canCreate && (
             <AddDialog title="Add District">
               {({ close }) => (
-              <form onSubmit={(e) => handleCreate(e, close)} className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3">
+              <form onSubmit={(e) => handleCreate(e, close)} className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2">
                 <div>
                   <Label htmlFor="code">Code</Label>
                   <RuleInput id="code" required filter={INPUT_FILTERS.code} maxLength={LIMITS.code.max} check={(v) => codeError(v)} hint="Letters, numbers, dashes and underscores; no spaces" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} />
                 </div>
-                <div className="sm:col-span-2">
+                <div>
                   <Label htmlFor="name">Name</Label>
                   <RuleInput id="name" required maxLength={LIMITS.entityName.max} check={(v) => entityNameError(v)} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
                 </div>
@@ -204,8 +196,7 @@ export default function DistrictsPage() {
         />
         <AdminTable
           columns={columns}
-          data={districts}
-          isLoading={loading}
+          server={list}
           getRowId={(d) => d.id}
           exportFileName="districts"
           emptyText="No districts yet."
@@ -240,7 +231,7 @@ export default function DistrictsPage() {
       {editingItem && (
         <Modal title={`Edit ${editingItem.name}`} description={editingItem.code} onClose={() => setEditingId(null)}>
           <form
-            className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3"
+            className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2"
             onSubmit={(e) => {
               e.preventDefault();
               void saveEdit(editingItem);

@@ -1,13 +1,15 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
 import ListItemText from "@mui/material/ListItemText";
 import {
   MaterialReactTable,
+  MRT_TableBodyCellValue,
   useMaterialReactTable,
   type MRT_ColumnDef,
+  type MRT_Row,
   type MRT_RowData,
   type MRT_TableInstance,
   type MRT_TableOptions,
@@ -15,6 +17,7 @@ import {
 import { ChevronDown, Download } from "lucide-react";
 import { toCsv, downloadCsv, datedFileName, type CsvColumn } from "@/lib/csv";
 import { ALL_ROWS } from "@/lib/pagination";
+import type { ServerList } from "@/lib/useServerList";
 
 /** Rows-per-page menu of every table: 10 / 25 / 50 / 100 / All. */
 export const PAGE_SIZE_OPTIONS = [...[10, 25, 50, 100].map((n) => ({ label: String(n), value: n })), { label: "All", value: ALL_ROWS }];
@@ -32,8 +35,10 @@ export type ExportScope = "shown" | "all";
  *   columns, density, full screen, 25/page pagination (pinned to the
  *   bottom of the screen while scrolling), skeleton rows while loading,
  *   the row "Actions" menu in the last column, an "All" rows-per-page
- *   choice, and an Export CSV menu: the rows shown (search + filters +
- *   sort applied, all pages) or the full table.
+ *   choice, an Export CSV menu: the rows shown (search + filters +
+ *   sort applied, all pages) or the full table - and master-detail: each
+ *   row's expand arrow opens its detail panel (by default every column of
+ *   the row, hidden ones included, two per line).
  *
  * Columns: `accessorFn`/`accessorKey` should return the plain value used
  * for sorting, filtering and export; `Cell` can render anything richer.
@@ -61,6 +66,29 @@ function exportRows<T extends MRT_RowData>(table: MRT_TableInstance<T>, fileBase
   });
   const rows = scope === "all" ? table.getCoreRowModel().rows : table.getPrePaginationRowModel().rows;
   downloadCsv(datedFileName(scope === "all" ? `${fileBase}-all` : fileBase), toCsv(rows, csvColumns));
+}
+
+/**
+ * The default detail panel of a row: every data column (also the ones
+ * hidden with "Show/Hide columns"), label and value, at most two per line -
+ * the whole record without scrolling the table sideways.
+ */
+function RowDetail<T extends MRT_RowData>({ row, table }: { row: MRT_Row<T>; table: MRT_TableInstance<T> }) {
+  const cells = row.getAllCells().filter((c) => !c.column.id.startsWith("mrt-"));
+  return (
+    <dl className="grid grid-cols-1 gap-x-6 gap-y-3 px-2 py-3 text-sm sm:grid-cols-2">
+      {cells.map((cell) => (
+        <div key={cell.id} className="min-w-0">
+          <dt className="text-xs font-medium text-slate-500">
+            {typeof cell.column.columnDef.header === "string" ? cell.column.columnDef.header : cell.column.id}
+          </dt>
+          <dd className="mt-0.5 break-words text-slate-900">
+            <MRT_TableBodyCellValue cell={cell} table={table} />
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
 }
 
 /** The toolbar's Export CSV button and its "rows shown / full table" menu. */
@@ -111,9 +139,12 @@ export function AdminTable<T extends MRT_RowData>({
   getRowId,
   emptyText = "No records yet.",
   tableOptions,
+  server,
+  renderDetail,
 }: {
   columns: MRT_ColumnDef<T>[];
-  data: T[];
+  /** The rows (client-side tables); not needed with `server`. */
+  data?: T[];
   isLoading?: boolean;
   /** Enables "Export CSV" (client-side, of the current filtered + sorted rows). */
   exportFileName?: string;
@@ -126,14 +157,34 @@ export function AdminTable<T extends MRT_RowData>({
   emptyText?: string;
   /** Escape hatch for anything else (e.g. manual/server-side mode). */
   tableOptions?: Partial<MRT_TableOptions<T>>;
+  /**
+   * Server-side paging (useServerList()): the server searches, filters,
+   * sorts and pages; the table shows one page and Export CSV asks the
+   * server for every matching row.
+   */
+  server?: ServerList<T>;
+  /**
+   * Master-detail: what a row's expand arrow opens. Default: every column of
+   * the row (RowDetail). `false` = no detail panel (e.g. rows that are
+   * already editable forms).
+   */
+  renderDetail?: ((row: T) => ReactNode) | false;
 }) {
+  const withFacets = server?.withFacets;
+  const tableColumns = useMemo(() => (withFacets ? withFacets(columns) : columns), [withFacets, columns]);
+  if (server) isLoading = server.loading;
   const table = useMaterialReactTable<T>({
-    columns,
-    data,
+    columns: tableColumns,
+    data: server ? server.rows : (data ?? []),
     getRowId,
     enableRowActions: Boolean(renderRowActions),
     positionActionsColumn: "last",
     renderRowActions: renderRowActions ? ({ row }) => renderRowActions(row.original) : undefined,
+    renderDetailPanel:
+      renderDetail === false
+        ? undefined
+        : ({ row, table: t }) => (renderDetail ? renderDetail(row.original) : <RowDetail row={row} table={t} />),
+    positionExpandColumn: "first",
     displayColumnDefOptions: {
       "mrt-row-actions": {
         header: "",
@@ -186,10 +237,20 @@ export function AdminTable<T extends MRT_RowData>({
         <div className="flex flex-wrap items-center gap-2">
           {toolbarActions}
           {(exportFileName || onExport) && (
-            <ExportMenu table={t} onPick={(scope) => (onExport ? onExport(scope) : exportRows(t, exportFileName!, scope))} />
+            <ExportMenu
+              table={t}
+              onPick={(scope) =>
+                onExport
+                  ? onExport(scope)
+                  : server
+                    ? void server.exportCsv(scope, columns, exportFileName!)
+                    : exportRows(t, exportFileName!, scope)
+              }
+            />
           )}
         </div>
       ) : null,
+    ...server?.tableOptions,
     ...tableOptions,
   });
   return <MaterialReactTable table={table} />;

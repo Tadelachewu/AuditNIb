@@ -7,8 +7,9 @@ import { readDb, updateDb } from "@/lib/db";
 import { appendAuditLog } from "@/lib/audit";
 import { findDistrictControllers, findDistrictDirectors } from "@/lib/org";
 import { withApiHandler } from "@/lib/api/handler";
+import { listPageJson } from "@/lib/serverList";
 
-async function handleGET() {
+async function handleGET(request: Request) {
   const auth = await requirePermission("districts.view");
   if (!auth.ok) return auth.response;
   const db = await readDb();
@@ -24,6 +25,19 @@ async function handleGET() {
     controllerNames: findDistrictControllers(db, d.id).map((u) => u.name),
     directorNames: findDistrictDirectors(db, d.id).map((u) => u.name),
   }));
+
+  // ?page=... -> one page of the Districts table (searched / filtered / sorted on the server).
+  const paged = listPageJson(request, "districts", districts, {
+    fields: {
+      code: (d) => d.code,
+      name: (d) => d.name,
+      controllers: (d) => d.controllerNames.join(", ") || "--",
+      directors: (d) => d.directorNames.join(", ") || "--",
+      status: (d) => d.status,
+    },
+    exact: ["status"],
+  });
+  if (paged) return NextResponse.json(paged);
 
   return NextResponse.json({ districts });
 }

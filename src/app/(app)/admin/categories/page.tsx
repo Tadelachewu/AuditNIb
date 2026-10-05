@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type { MRT_ColumnDef } from "material-react-table";
-import { apiGet, apiSend } from "@/lib/api-client";
+import { apiSend } from "@/lib/api-client";
+import { useServerList } from "@/lib/useServerList";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { StickyActions } from "@/components/ui/StickyActions";
@@ -21,8 +22,8 @@ import { ImportCsvDialog } from "@/components/ui/ImportCsvDialog";
 import { notify, notifications } from "@/lib/notify";
 
 export default function CategoriesPage() {
-  const [categories, setCategories] = useState<ClassifiedCategory[]>([]);
-  const [loading, setLoading] = useState(true);
+  const list = useServerList<ClassifiedCategory>("/api/admin/categories", { key: "categories", defaultSort: { id: "name", desc: false } });
+  const categories = list.rows;
   const [form, setForm] = useState({ code: "", name: "", scored: false });
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -37,16 +38,7 @@ export default function CategoriesPage() {
   const canToggle = hasPermission(permissions, "categories.toggle-status");
   const canDelete = hasPermission(permissions, "categories.delete");
 
-  async function load() {
-    setLoading(true);
-    const res = await apiGet<{ categories: ClassifiedCategory[] }>("/api/admin/categories");
-    setCategories(res.categories);
-    setLoading(false);
-  }
-
-  useEffect(() => {
-    load();
-  }, []);
+  const load = list.reload;
 
   async function handleCreate(e: React.FormEvent, close: () => void) {
     e.preventDefault();
@@ -207,16 +199,16 @@ export default function CategoriesPage() {
       </p>
 
       <Card className="mt-5">
-        <CardHeader title="All Categories" description={`${categories.length} total`}
+        <CardHeader title="All Categories" description={`${list.total} total`}
           action={canCreate && (
             <AddDialog title="Add Category">
               {({ close }) => (
-              <form onSubmit={(e) => handleCreate(e, close)} className="grid grid-cols-1 items-start gap-3 p-4 sm:grid-cols-4">
+              <form onSubmit={(e) => handleCreate(e, close)} className="grid grid-cols-1 items-start gap-3 p-4 sm:grid-cols-2">
                 <div>
                   <Label htmlFor="code">Code</Label>
                   <RuleInput id="code" required filter={INPUT_FILTERS.code} maxLength={LIMITS.code.max} check={(v) => codeError(v)} hint="Letters, numbers, dashes and underscores; no spaces" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} />
                 </div>
-                <div className="sm:col-span-2">
+                <div>
                   <Label htmlFor="name">Name</Label>
                   <RuleInput id="name" required maxLength={LIMITS.entityName.max} check={(v) => entityNameError(v)} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
                 </div>
@@ -236,8 +228,7 @@ export default function CategoriesPage() {
         />
         <AdminTable
           columns={columns}
-          data={categories}
-          isLoading={loading}
+          server={list}
           getRowId={(c) => c.id}
           exportFileName="classified-categories"
           emptyText="No categories yet."
@@ -276,7 +267,7 @@ export default function CategoriesPage() {
       {editingItem && (
         <Modal title={`Edit ${editingItem.name}`} description={editingItem.code} onClose={() => setEditingId(null)}>
           <form
-            className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-4 sm:items-end"
+            className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 sm:items-end"
             onSubmit={(e) => {
               e.preventDefault();
               void saveEdit(editingItem);

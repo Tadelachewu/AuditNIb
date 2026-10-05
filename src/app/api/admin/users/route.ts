@@ -9,8 +9,8 @@ import { PASSWORD_MIN_LENGTH, validatePasswordFull } from "@/lib/passwordValidat
 import { resolveOrgAssignment, isDepartmentExactScopeForUser, inactiveOrgUnitError } from "@/lib/org";
 import { appendAuditLog } from "@/lib/audit";
 import { toSafeUser } from "@/lib/sanitize";
-import { paginate, parsePage } from "@/lib/pagination";
 import { withApiHandler } from "@/lib/api/handler";
+import { listPageJson } from "@/lib/serverList";
 
 // A real bank deployment can have hundreds of users (several per branch,
 // across every branch bank-wide) - paginated the same way Branches/Audit
@@ -36,16 +36,32 @@ async function handleGET(request: Request) {
     return NextResponse.json({ users: filtered.map(toSafeUser), total: filtered.length, page: 1, pageSize: filtered.length, totalPages: 1 });
   }
 
-  // The Users admin table searches, filters, sorts and pages client-side
-  // (Material React Table), so it asks for everyone at once. Same
-  // permission, same sanitized shape (no password hashes).
+  // ?all=1 -> everyone at once (same permission, same sanitized shape - no password hashes).
   if (searchParams.get("all") === "1") {
     const all = sorted.map(toSafeUser);
     return NextResponse.json({ users: all, total: all.length, page: 1, pageSize: all.length, totalPages: 1 });
   }
 
-  const result = paginate(sorted.map(toSafeUser), parsePage(searchParams.get("page") ?? undefined), 25);
-  return NextResponse.json({ users: result.items, total: result.total, page: result.page, pageSize: result.pageSize, totalPages: result.totalPages });
+  // The Users table: one page, searched / filtered / sorted on the server
+  // (src/lib/serverList.ts) by the same values the table's columns show.
+  const name = <T extends { id: string; name: string }>(list: T[], id?: string | null) => (id ? (list.find((x) => x.id === id)?.name ?? "—") : "—");
+  const paged = listPageJson(request, "users", sorted.map(toSafeUser), {
+    fields: {
+      name: (u) => u.name,
+      username: (u) => u.username,
+      email: (u) => u.email || "—",
+      phone: (u) => u.phone || "—",
+      role: (u) => db.roles.find((r) => r.code === u.role)?.name ?? u.role,
+      orgUnit: (u) => (u.branchId ? name(db.branches, u.branchId) : u.districtId ? name(db.districts, u.districtId) : "Bank-wide"),
+      department: (u) => name(db.departments, u.departmentId),
+      status: (u) => u.status,
+      lastLogin: (u) => u.lastLoginAt ?? "",
+    },
+    exact: ["role", "orgUnit", "department", "status"],
+  });
+  if (paged) return NextResponse.json(paged);
+  const all = sorted.map(toSafeUser);
+  return NextResponse.json({ users: all, total: all.length, page: 1, pageSize: all.length, totalPages: 1 });
 }
 
 const createUserSchema = z.object({

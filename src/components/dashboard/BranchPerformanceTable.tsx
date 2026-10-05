@@ -166,6 +166,7 @@ export function BranchPerformanceTable({
         />
       </div>
       <RankingGrid
+        id="branchPerf"
         kind="branch"
         hasScope={hasScope}
         exportFileName="branch-performance"

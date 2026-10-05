@@ -445,6 +445,7 @@ export function DistrictDashboard({
       <Card>
         <CardHeader title="Category Totals" description="Every active classified case category for this district, current period" />
         <DashboardGrid
+          id="categoryTotals"
           exportFileName="district-category-totals"
           columns={[
             { key: "category", header: "Category", badgeWhen: "scored", badgeLabel: "Scored" },

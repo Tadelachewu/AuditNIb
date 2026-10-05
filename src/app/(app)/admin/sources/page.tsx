@@ -1,16 +1,12 @@
 import { redirect } from "next/navigation";
 import { SESSION_ENDED_PATH } from "@/lib/session";
 import { getCurrentUser } from "@/lib/session";
-import { readDb } from "@/lib/db";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
 import { SourcesManager } from "@/components/admin/SourcesManager";
 
-// Server Component: the initial list is fetched here (readDb(), same as
-// every other server-rendered page) instead of the old pattern of a
-// "use client" page firing useEffect+apiGet on mount - no loading flash,
-// no client-side waterfall. SourcesManager only owns the form/dialog/
-// editing UI state; the list itself is a prop, refreshed via
-// router.refresh() after a mutation rather than a duplicated client copy.
+// Server Component: checks access and passes the permissions down. The
+// table itself is server-paged - SourcesManager asks /api/admin/sources for
+// one page at a time (useServerList).
 export default async function SourcesPage() {
   const user = await getCurrentUser();
   if (!user) redirect(SESSION_ENDED_PATH);
@@ -18,7 +14,6 @@ export default async function SourcesPage() {
   // same defense-in-depth convention src/app/(app)/findings/page.tsx uses.
   if (!hasPermission(user.permissions, permissionKey("sources", "view"))) redirect("/dashboard");
 
-  const db = await readDb();
   const permissions = {
     canCreate: hasPermission(user.permissions, permissionKey("sources", "create")),
     canEdit: hasPermission(user.permissions, permissionKey("sources", "edit")),
@@ -30,7 +25,7 @@ export default async function SourcesPage() {
     <div>
       <h1 className="text-lg font-semibold text-slate-900">Finding Sources</h1>
       <p className="mt-1 text-sm text-slate-600">Internal Control, Internal Audit, and future configurable sources.</p>
-      <SourcesManager initialSources={db.sources} permissions={permissions} />
+      <SourcesManager permissions={permissions} />
     </div>
   );
 }

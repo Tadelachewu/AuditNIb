@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { MRT_ColumnDef } from "material-react-table";
 import { apiGet, apiSend } from "@/lib/api-client";
+import { useServerList } from "@/lib/useServerList";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { StickyActions } from "@/components/ui/StickyActions";
@@ -24,10 +25,10 @@ const emptyForm = { code: "", name: "", orgScope: "BANK" as OrgScope, districtId
 const emptyEditForm = { name: "", orgScope: "BANK" as OrgScope, districtId: "", branchId: "" };
 
 export default function DepartmentsPage() {
-  const [departments, setDepartments] = useState<Department[]>([]);
+  const list = useServerList<Department>("/api/admin/departments", { key: "departments", defaultSort: { id: "name", desc: false } });
+  const departments = list.rows;
   const [districts, setDistricts] = useState<District[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
-  const [loading, setLoading] = useState(true);
   const [form, setForm] = useState(emptyForm);
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -42,22 +43,17 @@ export default function DepartmentsPage() {
   const canToggle = hasPermission(permissions, "departments.toggle-status");
   const canDelete = hasPermission(permissions, "departments.delete");
 
-  async function load() {
-    setLoading(true);
-    const [d, dist, br] = await Promise.all([
-      apiGet<{ departments: Department[] }>("/api/admin/departments"),
+  // The district / branch pickers (and the Scope column's names) need the whole lists.
+  useEffect(() => {
+    void Promise.all([
       apiGet<{ districts: District[] }>("/api/admin/districts"),
       apiGet<{ branches: Branch[] }>("/api/admin/branches"),
-    ]);
-    setDepartments(d.departments);
-    setDistricts(dist.districts);
-    setBranches(br.branches);
-    setLoading(false);
-  }
-
-  useEffect(() => {
-    load();
+    ]).then(([dist, br]) => {
+      setDistricts(dist.districts);
+      setBranches(br.branches);
+    });
   }, []);
+  const load = list.reload;
 
   const isDistrictScoped = form.orgScope === "DISTRICT";
   const isBranchScoped = form.orgScope === "BRANCH";
@@ -234,11 +230,11 @@ export default function DepartmentsPage() {
       </p>
 
       <Card className="mt-5">
-        <CardHeader title="All Departments" description={`${departments.length} total`}
+        <CardHeader title="All Departments" description={`${list.total} total`}
           action={canCreate && (
             <AddDialog title="Add Department">
               {({ close }) => (
-              <form onSubmit={(e) => handleCreate(e, close)} className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4">
+              <form onSubmit={(e) => handleCreate(e, close)} className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2">
                 <div>
                   <Label htmlFor="code">Code</Label>
                   <RuleInput id="code" required filter={INPUT_FILTERS.code} maxLength={LIMITS.code.max} check={(v) => codeError(v)} hint="Letters, numbers, dashes and underscores; no spaces" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} />
@@ -305,8 +301,7 @@ export default function DepartmentsPage() {
         />
         <AdminTable
           columns={columns}
-          data={departments}
-          isLoading={loading}
+          server={list}
           getRowId={(d) => d.id}
           exportFileName="departments"
           emptyText="No departments yet."
@@ -368,7 +363,7 @@ export default function DepartmentsPage() {
         {editingDept && (
         <Modal title={`Edit ${editingDept.name}`} description={editingDept.code} onClose={() => setEditingId(null)}>
           <form
-            className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4"
+            className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2"
             onSubmit={(e) => {
               e.preventDefault();
               void saveEdit(editingDept);

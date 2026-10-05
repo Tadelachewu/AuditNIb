@@ -7,12 +7,23 @@ import { hasPermission } from "@/lib/permissions/registry";
 import { readDb, updateDb } from "@/lib/db";
 import { appendAuditLog } from "@/lib/audit";
 import { withApiHandler } from "@/lib/api/handler";
+import { listPageJson } from "@/lib/serverList";
 
-async function handleGET() {
+async function handleGET(request: Request) {
   const auth = await requirePermission("scoring-rules.view");
   if (!auth.ok) return auth.response;
   const db = await readDb();
   const rules = [...db.scoringRules].sort((a, b) => b.version - a.version);
+  // ?page=... -> one page of the Rule History (newest version first), plus
+  // the live rule and the highest version, which the page needs whatever page it shows.
+  const paged = listPageJson(request, "scoringRules", rules, { fields: { name: (r) => r.name, version: (r) => r.version } });
+  if (paged) {
+    return NextResponse.json({
+      ...paged,
+      activeRule: rules.find((r) => r.active) ?? null,
+      maxVersion: rules.reduce((max, r) => Math.max(max, r.version), 0),
+    });
+  }
   return NextResponse.json({ scoringRules: rules });
 }
 

@@ -6,6 +6,7 @@ import { runImport } from "@/lib/importRun";
 import { isRateLimited, recordAttempt } from "@/lib/rateLimit";
 import { RateLimitError, ValidationError } from "@/lib/errors";
 import { withApiHandler } from "@/lib/api/handler";
+import { listPageJson } from "@/lib/serverList";
 
 // Per-user cap on import attempts (each parses a whole workbook).
 const IMPORT_UPLOAD_LIMIT = { max: 10, windowMs: 10 * 60 * 1000 };
@@ -13,13 +14,16 @@ const IMPORT_UPLOAD_LIMIT = { max: 10, windowMs: 10 * 60 * 1000 };
 // master.txt §22's import history - every past run, kept permanently
 // ("document any transformation") rather than only the response of the
 // request that created it.
-async function handleGET() {
+async function handleGET(request: Request) {
   // Reverse-only holders need the history too, to find the batch to reverse.
   const auth = await requirePermission("findings.import", "findings.reverse-import");
   if (!auth.ok) return auth.response;
 
   const db = await readDb();
   const batches = [...db.importBatches].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  // ?page=... -> one page of the Import History (newest first).
+  const paged = listPageJson(request, "importBatches", batches, { fields: { createdAt: (b) => b.createdAt } });
+  if (paged) return NextResponse.json(paged);
   return NextResponse.json({ importBatches: batches });
 }
 

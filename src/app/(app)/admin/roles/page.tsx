@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { apiGet, apiSend } from "@/lib/api-client";
+import { useState } from "react";
+import { apiSend } from "@/lib/api-client";
+import { useServerPager } from "@/lib/useServerList";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { StickyActions } from "@/components/ui/StickyActions";
@@ -14,7 +15,6 @@ import { AddDialog, Modal } from "@/components/ui/AddDialog";
 import { RowAction, RowActions, StatusToggleAction } from "@/components/ui/RowActions";
 import { ListSkeleton } from "@/components/ui/Skeleton";
 import { Pagination } from "@/components/ui/Pagination";
-import { useClientPagination } from "@/lib/useClientPagination";
 import type { RoleDefinition, OrgScope } from "@/types";
 import { permissionKey, type PageDefinition } from "@/lib/permissions/registry";
 import { notify, notifications } from "@/lib/notify";
@@ -36,9 +36,11 @@ const emptyForm = {
 };
 
 export default function RolesPage() {
-  const [roles, setRoles] = useState<RoleDefinition[]>([]);
-  const [registry, setRegistry] = useState<PageDefinition[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Server-paged: one page of roles at a time; the permission registry comes with it.
+  const pager = useServerPager<RoleDefinition>("/api/admin/roles", "roles");
+  const roles = pager.pageItems;
+  const registry = (pager.meta.registry as PageDefinition[] | undefined) ?? [];
+  const loading = pager.loading;
   const [form, setForm] = useState(emptyForm);
   const [newPermissions, setNewPermissions] = useState<string[]>([]);
   const [formError, setFormError] = useState<string | null>(null);
@@ -50,19 +52,7 @@ export default function RolesPage() {
   const [editError, setEditError] = useState<string | null>(null);
   const [rowBusy, setRowBusy] = useState<string | null>(null);
   const { confirm, dialog } = useConfirm();
-  const pager = useClientPagination(roles);
-
-  async function load() {
-    setLoading(true);
-    const res = await apiGet<{ roles: RoleDefinition[]; registry: PageDefinition[] }>("/api/admin/roles");
-    setRoles(res.roles);
-    setRegistry(res.registry);
-    setLoading(false);
-  }
-
-  useEffect(() => {
-    load();
-  }, []);
+  const load = pager.reload;
 
   function togglePermission(list: string[], setList: (v: string[]) => void, key: string) {
     setList(list.includes(key) ? list.filter((k) => k !== key) : [...list, key]);
@@ -167,12 +157,12 @@ export default function RolesPage() {
       </p>
 
       <Card className="mt-5">
-        <CardHeader title="All Roles" description={`${roles.length} total`}
+        <CardHeader title="All Roles" description={`${pager.total} total`}
           action={(
             <AddDialog size="xl" title="New Role">
               {({ close }) => (
               <form onSubmit={(e) => handleCreate(e, close)} className="flex flex-col gap-4 p-4">
-                <div className="grid grid-cols-1 items-start gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="grid grid-cols-1 items-start gap-3 sm:grid-cols-2">
                   <div>
                     <Label htmlFor="code">Code</Label>
                     <RuleInput
@@ -312,7 +302,7 @@ export default function RolesPage() {
               void saveRole(editingRole);
             }}
           >
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
                 <Label htmlFor="edit-role-name">Name</Label>
                 <RuleInput id="edit-role-name" maxLength={LIMITS.entityName.max} check={(v) => entityNameError(v)} value={draftName} onChange={(e) => setDraftName(e.target.value)} />

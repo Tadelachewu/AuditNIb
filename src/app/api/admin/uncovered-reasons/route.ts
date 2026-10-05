@@ -6,14 +6,26 @@ import { requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { appendAuditLog } from "@/lib/audit";
 import { withApiHandler } from "@/lib/api/handler";
+import { listPageJson } from "@/lib/serverList";
 
-async function handleGET() {
+async function handleGET(request: Request) {
   const auth = await requirePermission("uncovered-reasons.view");
   if (!auth.ok) return auth.response;
   const db = await readDb();
   // Alphabetical by name - same convention as /api/admin/branches/districts,
   // and ReasonPicker.tsx's own picklist reads from here.
   const uncoveredReasons = [...db.uncoveredReasons].sort((a, b) => a.name.localeCompare(b.name));
+  // ?page=... -> one page of the Uncovered Reasons table (searched / filtered / sorted on the server).
+  const paged = listPageJson(request, "uncoveredReasons", uncoveredReasons, {
+    fields: {
+      code: (r) => r.code,
+      name: (r) => r.name,
+      status: (r) => (r.active ? "Active" : "Inactive"),
+    },
+    exact: ["status"],
+  });
+  if (paged) return NextResponse.json(paged);
+
   return NextResponse.json({ uncoveredReasons });
 }
 

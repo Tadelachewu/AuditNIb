@@ -2,8 +2,8 @@
 
 import { useMemo, useState } from "react";
 import type { MRT_ColumnDef } from "material-react-table";
-import { useRouter } from "next/navigation";
 import { apiSend } from "@/lib/api-client";
+import { useServerList } from "@/lib/useServerList";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { StickyActions } from "@/components/ui/StickyActions";
@@ -19,13 +19,8 @@ import { AdminTable } from "@/components/ui/AdminTable";
 import { ImportCsvDialog } from "@/components/ui/ImportCsvDialog";
 import { notify, notifications } from "@/lib/notify";
 
-// The list itself is never copied into local state - `sources` is read
-// straight from the prop the Server Component parent passes in, so a
-// post-mutation router.refresh() (which re-runs that Server Component and
-// hands down a fresh prop) is the one and only source of truth, instead
-// of an apiGet()-triggered local reload racing a separately-tracked copy.
-// Everything that *is* local state here is genuinely ephemeral UI: the
-// add-form draft, which row is mid-edit, and per-row busy flags.
+// The table is server-paged (useServerList): the server searches, filters,
+// sorts and pages the list; after every change list.reload() fetches the page again.
 interface SourcesPermissions {
   canCreate: boolean;
   canEdit: boolean;
@@ -33,10 +28,10 @@ interface SourcesPermissions {
   canDelete: boolean;
 }
 
-export function SourcesManager({ initialSources, permissions }: { initialSources: Source[]; permissions: SourcesPermissions }) {
-  const sources = initialSources;
+export function SourcesManager({ permissions }: { permissions: SourcesPermissions }) {
+  const list = useServerList<Source>("/api/admin/sources", { key: "sources", defaultSort: { id: "name", desc: false } });
+  const sources = list.rows;
   const { canCreate, canEdit, canToggle, canDelete } = permissions;
-  const router = useRouter();
   const [form, setForm] = useState({ code: "", name: "" });
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -55,7 +50,7 @@ export function SourcesManager({ initialSources, permissions }: { initialSources
       notify.success(notifications.source.created);
       setForm({ code: "", name: "" });
       close();
-      router.refresh();
+      list.reload();
     } catch (err) {
       setFormError(notify.formError(err, notifications.source.createFailed));
     } finally {
@@ -78,7 +73,7 @@ export function SourcesManager({ initialSources, permissions }: { initialSources
       await apiSend(`/api/admin/sources/${s.id}`, "PATCH", { name: editName });
       notify.success(notifications.source.updated);
       setEditingId(null);
-      router.refresh();
+      list.reload();
     } catch (err) {
       setEditError(notify.formError(err, notifications.source.updateFailed));
     } finally {
@@ -98,7 +93,7 @@ export function SourcesManager({ initialSources, permissions }: { initialSources
     try {
       await apiSend(`/api/admin/sources/${s.id}`, "DELETE");
       notify.success(notifications.source.deleted);
-      router.refresh();
+      list.reload();
     } catch (err) {
       notify.fromError(err, notifications.source.deleteFailed);
     } finally {
@@ -120,7 +115,7 @@ export function SourcesManager({ initialSources, permissions }: { initialSources
     try {
       await apiSend(`/api/admin/sources/${s.id}`, "PATCH", { active: !s.active });
       notify.success(s.active ? notifications.source.deactivated : notifications.source.activated);
-      router.refresh();
+      list.reload();
     } catch (err) {
       notify.fromError(err, notifications.source.statusFailed);
     } finally {
@@ -136,7 +131,7 @@ export function SourcesManager({ initialSources, permissions }: { initialSources
     try {
       await apiSend(`/api/admin/sources/${s.id}`, "PATCH", { isDefault: !s.isDefault });
       notify.success(s.isDefault ? notifications.source.defaultCleared : notifications.source.defaultSet);
-      router.refresh();
+      list.reload();
     } catch (err) {
       notify.fromError(err, notifications.source.defaultFailed);
     } finally {
@@ -182,16 +177,16 @@ export function SourcesManager({ initialSources, permissions }: { initialSources
   return (
     <>
       <Card className="mt-5">
-        <CardHeader title="All Sources" description={`${sources.length} total`}
+        <CardHeader title="All Sources" description={`${list.total} total`}
           action={canCreate && (
             <AddDialog title="Add Source">
               {({ close }) => (
-              <form onSubmit={(e) => handleCreate(e, close)} className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3">
+              <form onSubmit={(e) => handleCreate(e, close)} className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2">
                 <div>
                   <Label htmlFor="code">Code</Label>
                   <RuleInput id="code" required filter={INPUT_FILTERS.code} maxLength={LIMITS.code.max} check={(v) => codeError(v)} hint="Letters, numbers, dashes and underscores; no spaces" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} />
                 </div>
-                <div className="sm:col-span-2">
+                <div>
                   <Label htmlFor="name">Name</Label>
                   <RuleInput id="name" required maxLength={LIMITS.entityName.max} check={(v) => entityNameError(v)} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
                 </div>
@@ -210,7 +205,7 @@ export function SourcesManager({ initialSources, permissions }: { initialSources
         />
         <AdminTable
           columns={columns}
-          data={sources}
+          server={list}
           getRowId={(s) => s.id}
           exportFileName="finding-sources"
           emptyText="No sources yet."
@@ -236,7 +231,7 @@ export function SourcesManager({ initialSources, permissions }: { initialSources
                     : { payload: { code: row.code, name: row.name }, label: `${row.code} - ${row.name}` }
                 }
                 submit={(payload) => apiSend("/api/admin/sources", "POST", payload)}
-                onDone={() => router.refresh()}
+                onDone={() => list.reload()}
               />
             )
           }
@@ -261,7 +256,7 @@ export function SourcesManager({ initialSources, permissions }: { initialSources
       {editingItem && (
         <Modal title={`Edit ${editingItem.name}`} description={editingItem.code} onClose={() => setEditingId(null)}>
           <form
-            className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3"
+            className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2"
             onSubmit={(e) => {
               e.preventDefault();
               void saveEdit(editingItem);

@@ -7,8 +7,9 @@ import { readDb, updateDb } from "@/lib/db";
 import { appendAuditLog } from "@/lib/audit";
 import { PAGE_REGISTRY, isValidPermissionKey } from "@/lib/permissions/registry";
 import { withApiHandler } from "@/lib/api/handler";
+import { listPageJson } from "@/lib/serverList";
 
-async function handleGET() {
+async function handleGET(request: Request) {
   const auth = await requirePermission("roles.view");
   if (!auth.ok) return auth.response;
   const db = await readDb();
@@ -21,6 +22,9 @@ async function handleGET() {
   const roles = [...db.roles].sort((a, b) => a.name.localeCompare(b.name));
   // The registry travels with the list so the UI can render the full
   // page x action matrix without a second round trip.
+  // ?page=... -> one page of the Roles list (the Users page's role picker asks for all of them).
+  const paged = listPageJson(request, "roles", roles, { fields: { name: (r) => r.name, code: (r) => r.code } });
+  if (paged) return NextResponse.json({ ...paged, registry: PAGE_REGISTRY });
   return NextResponse.json({ roles, registry: PAGE_REGISTRY });
 }
 

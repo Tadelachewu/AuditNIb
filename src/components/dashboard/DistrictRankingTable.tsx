@@ -60,6 +60,7 @@ export function DistrictRankingTable({
     <Card>
       <CardHeader title={title} description={description} />
       <RankingGrid
+        id="districtRanking"
         kind="district"
         hasScope={hasScope}
         exportFileName="district-ranking"

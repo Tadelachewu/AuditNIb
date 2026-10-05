@@ -5,6 +5,7 @@ import { readDb } from "@/lib/db";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
 import { parseDateRange } from "@/lib/dateRange";
 import { parseDashboardFilters } from "@/lib/dashboardFilters";
+import { setGridParams } from "@/lib/gridParams";
 import { Card } from "@/components/ui/Card";
 import { BranchDashboard } from "@/components/dashboard/BranchDashboard";
 import { DistrictDashboard } from "@/components/dashboard/DistrictDashboard";
@@ -37,6 +38,8 @@ export default async function DashboardPage({
   if (!user) redirect(SESSION_ENDED_PATH);
   const db = await readDb();
   const params = await searchParams;
+  // The dashboards' tables are paged on the server, each per its own URL parameters (src/lib/gridPage.ts).
+  setGridParams(params);
   const dateRange = parseDateRange(params);
   const filters = parseDashboardFilters(params);
 

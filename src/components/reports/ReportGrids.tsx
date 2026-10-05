@@ -8,6 +8,8 @@ import { AdminTable } from "@/components/ui/AdminTable";
 import { Badge } from "@/components/ui/Badge";
 import { FindingStatusBadge } from "@/components/findings/FindingStatusBadge";
 import { useUrlTableState } from "@/lib/useUrlTableState";
+import { useGridUrlState } from "@/lib/useGridUrlState";
+import type { GridPage } from "@/lib/gridPage";
 import { formatCurrency, formatDateTime, formatNumber } from "@/lib/format";
 import type { FindingStatus } from "@/types";
 
@@ -169,8 +171,8 @@ export interface TransferRow {
   reason: string;
 }
 
-/** Transfers - every transfer in scope, searched / filtered / sorted client-side. */
-export function TransfersGrid({ rows }: { rows: TransferRow[] }) {
+/** Transfers - one server page of every transfer in scope (paged by TransfersGrid, ReportSectionGrids.tsx). */
+export function TransfersGridClient({ grid }: { grid: GridPage<TransferRow> }) {
   const columns = useMemo<MRT_ColumnDef<TransferRow>[]>(
     () => [
       {
@@ -218,14 +220,16 @@ export function TransfersGrid({ rows }: { rows: TransferRow[] }) {
     ],
     []
   );
+  const url = useGridUrlState(grid, columns, "transfers");
   return (
     <AdminTable
-      columns={columns}
-      data={rows}
+      columns={url.columns}
+      data={grid.rows}
       getRowId={(t) => t.id}
       exportFileName="transfers"
+      onExport={url.onExport}
       emptyText="No transfers recorded."
-      tableOptions={{ initialState: { density: "compact", showGlobalFilter: true, pagination: { pageIndex: 0, pageSize: 25 }, sorting: [{ id: "createdAt", desc: true }] } }}
+      tableOptions={{ initialState: { density: "compact", showGlobalFilter: true }, ...url.tableOptions }}
     />
   );
 }
@@ -238,8 +242,8 @@ export interface CategoryBreakdownRow {
   outstanding: number;
 }
 
-/** Category Breakdown - the same table as the page's other sections. */
-export function CategoryBreakdownGrid({ rows }: { rows: CategoryBreakdownRow[] }) {
+/** Category Breakdown - the same table as the page's other sections (one server page). */
+export function CategoryBreakdownGridClient({ grid }: { grid: GridPage<CategoryBreakdownRow> }) {
   const columns = useMemo<MRT_ColumnDef<CategoryBreakdownRow>[]>(
     () => [
       { accessorKey: "name", header: "Category", Cell: ({ cell }) => <span className="text-slate-900">{cell.getValue<string>()}</span> },
@@ -249,14 +253,16 @@ export function CategoryBreakdownGrid({ rows }: { rows: CategoryBreakdownRow[] }
     ],
     []
   );
+  const url = useGridUrlState(grid, columns, "report-category-breakdown");
   return (
     <AdminTable
-      columns={columns}
-      data={rows}
+      columns={url.columns}
+      data={grid.rows}
       getRowId={(r) => r.id}
       exportFileName="report-category-breakdown"
+      onExport={url.onExport}
       emptyText="No categories."
-      tableOptions={{ initialState: { density: "compact", pagination: { pageIndex: 0, pageSize: 25 } } }}
+      tableOptions={{ initialState: { density: "compact" }, ...url.tableOptions }}
     />
   );
 }
@@ -266,8 +272,8 @@ export interface RiskBreakdownRow {
   count: number;
 }
 
-/** Risk Breakdown - the same table as the page's other sections. */
-export function RiskBreakdownGrid({ rows }: { rows: RiskBreakdownRow[] }) {
+/** Risk Breakdown - the same table as the page's other sections (one server page). */
+export function RiskBreakdownGridClient({ grid }: { grid: GridPage<RiskBreakdownRow> }) {
   const columns = useMemo<MRT_ColumnDef<RiskBreakdownRow>[]>(
     () => [
       { accessorKey: "risk", header: "Risk Level", Cell: ({ cell }) => <span className="text-slate-900">{cell.getValue<string>()}</span> },
@@ -275,14 +281,16 @@ export function RiskBreakdownGrid({ rows }: { rows: RiskBreakdownRow[] }) {
     ],
     []
   );
+  const url = useGridUrlState(grid, columns, "report-risk-breakdown");
   return (
     <AdminTable
-      columns={columns}
-      data={rows}
+      columns={url.columns}
+      data={grid.rows}
       getRowId={(r) => r.risk}
       exportFileName="report-risk-breakdown"
+      onExport={url.onExport}
       emptyText="No risk levels."
-      tableOptions={{ initialState: { density: "compact", pagination: { pageIndex: 0, pageSize: 25 } } }}
+      tableOptions={{ initialState: { density: "compact" }, ...url.tableOptions }}
     />
   );
 }

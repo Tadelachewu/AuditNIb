@@ -11,8 +11,10 @@ import { TimeRangeFilter } from "@/components/reports/TimeRangeFilter";
 import { PrintButton } from "@/components/reports/PrintButton";
 import { FILTERABLE_FINDING_STATUSES } from "@/types";
 import { RankingGrid } from "@/components/dashboard/RankingGrid";
-import { CategoryBreakdownGrid, ReportFindingsGrid, RiskBreakdownGrid, TransfersGrid } from "@/components/reports/ReportGrids";
+import { ReportFindingsGrid } from "@/components/reports/ReportGrids";
+import { CategoryBreakdownGrid, RiskBreakdownGrid, TransfersGrid } from "@/components/reports/ReportSectionGrids";
 import { currentPeriod, sortPeriods } from "@/lib/periods";
+import { setGridParams } from "@/lib/gridParams";
 
 // master.txt §18's 14 named reports, covered as a small number of real,
 // data-backed views rather than 14 separate pages (see PHASE7.md): the
@@ -33,6 +35,8 @@ export default async function ReportsPage({
   if (!hasPermission(user.permissions, permissionKey("reports", "view"))) redirect("/dashboard");
 
   const params = await searchParams;
+  // The section tables are paged on the server, each per its own URL parameters (src/lib/gridPage.ts).
+  setGridParams(params);
   const get = (key: string) => (typeof params[key] === "string" ? (params[key] as string) : "");
 
   const db = await readDb();
@@ -109,12 +113,12 @@ export default async function ReportsPage({
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader title="Branch Performance" description={periodId ? "Filtered period" : "All periods"} />
-          <RankingGrid kind="branch" hasScope rows={branchPerformance} exportFileName="report-branch-performance" />
+          <RankingGrid id="branchPerf" kind="branch" hasScope rows={branchPerformance} exportFileName="report-branch-performance" />
         </Card>
 
         <Card>
           <CardHeader title="District Performance" description={periodId ? "Filtered period" : "All periods"} />
-          <RankingGrid kind="district" hasScope rows={districtPerformance} exportFileName="report-district-performance" />
+          <RankingGrid id="districtPerf" kind="district" hasScope rows={districtPerformance} exportFileName="report-district-performance" />
         </Card>
       </div>
 

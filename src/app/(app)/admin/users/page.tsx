@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { MRT_ColumnDef } from "material-react-table";
 import { apiGet, apiSend, ApiError } from "@/lib/api-client";
+import { useServerList } from "@/lib/useServerList";
 import { formatDateTime } from "@/lib/format";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -28,13 +29,14 @@ const emptyForm = { name: "", username: "", email: "", phone: "", password: "", 
 const emptyEditForm = { name: "", email: "", phone: "", role: "", districtId: "", branchId: "", departmentId: "", password: "" };
 
 export default function UsersPage() {
-  const [users, setUsers] = useState<SafeUser[]>([]);
+  // Server-paged: the server searches, filters, sorts and pages the users.
+  const list = useServerList<SafeUser>("/api/admin/users", { key: "users", defaultSort: { id: "name", desc: false } });
+  const users = list.rows;
   const [districts, setDistricts] = useState<District[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [roles, setRoles] = useState<RoleDefinition[]>([]);
   const [rolesError, setRolesError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
   const [form, setForm] = useState(emptyForm);
   // Same rules as the server (src/lib/usernameValidation.ts, src/lib/passwordValidation.ts).
   const [usernameTouched, setUsernameTouched] = useState(false);
@@ -53,15 +55,12 @@ export default function UsersPage() {
   const canToggle = hasPermission(permissions, "users.toggle-status");
   const canDelete = hasPermission(permissions, "users.delete");
 
-  async function loadAll() {
-    setLoading(true);
-    const [u, d, b] = await Promise.all([
-      // Everyone at once - the table searches, filters and pages client-side.
-      apiGet<{ users: SafeUser[] }>("/api/admin/users?all=1"),
+  // The pickers' lists (districts, branches, departments, roles) - loaded once.
+  async function loadLookups() {
+    const [d, b] = await Promise.all([
       apiGet<{ districts: District[] }>("/api/admin/districts"),
       apiGet<{ branches: Branch[] }>("/api/admin/branches"),
     ]);
-    setUsers(u.users);
     setDistricts(d.districts);
     setBranches(b.branches);
 
@@ -91,13 +90,12 @@ export default function UsersPage() {
           : "Failed to load roles."
       );
     }
-
-    setLoading(false);
   }
 
   useEffect(() => {
-    loadAll();
+    void loadLookups();
   }, []);
+  const loadAll = list.reload;
 
   const activeRoles = useMemo(() => roles.filter((r) => r.status === "ACTIVE"), [roles]);
   const selectedRole = useMemo(() => roles.find((r) => r.code === form.role), [roles, form.role]);
@@ -320,11 +318,11 @@ export default function UsersPage() {
       {rolesError && <p className="mt-2 text-sm text-amber-700">{rolesError}</p>}
 
       <Card className="mt-5">
-        <CardHeader title="All Users" description={`${users.length} total`}
+        <CardHeader title="All Users" description={`${list.total} total`}
           action={canCreate && (
             <AddDialog size="xl" title="Add User">
               {({ close }) => (
-              <form onSubmit={(e) => handleCreate(e, close)} className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 lg:grid-cols-3">
+              <form onSubmit={(e) => handleCreate(e, close)} className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2">
                 <div>
                   <Label htmlFor="name">Full name</Label>
                   <RuleInput id="name" required maxLength={LIMITS.personName.max} check={(v) => personNameError(v)} filter={INPUT_FILTERS.personName} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
@@ -474,8 +472,7 @@ export default function UsersPage() {
         />
         <AdminTable
           columns={columns}
-          data={users}
-          isLoading={loading}
+          server={list}
           getRowId={(u) => u.id}
           exportFileName="users"
           emptyText="No users yet."
@@ -559,7 +556,7 @@ export default function UsersPage() {
         {editingUser && (
         <Modal title={`Edit ${editingUser.name}`} description={editingUser.username} size="xl" onClose={() => setEditingId(null)}>
           <form
-            className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4"
+            className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2"
             onSubmit={(e) => {
               e.preventDefault();
               void saveEdit(editingUser);

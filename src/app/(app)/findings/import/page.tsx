@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { Download } from "lucide-react";
-import { apiGet, ApiError, apiUpload, apiSend } from "@/lib/api-client";
+import { ApiError, apiUpload, apiSend } from "@/lib/api-client";
 import { notify, notifications } from "@/lib/notify";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { ImportDuplicatesReview, type DuplicatesFound } from "@/components/findings/ImportDuplicatesReview";
@@ -19,7 +19,7 @@ import { ImportGuide } from "@/components/findings/ImportGuide";
 import type { ImportBatch, ImportBatchRow } from "@/types";
 import { ListSkeleton } from "@/components/ui/Skeleton";
 import { Pagination } from "@/components/ui/Pagination";
-import { useClientPagination } from "@/lib/useClientPagination";
+import { useServerPager } from "@/lib/useServerList";
 
 const OUTCOME_TONE: Record<string, "green" | "amber" | "red"> = {
   imported: "green",
@@ -73,9 +73,12 @@ function BatchRowsTable({ rows }: { rows: DisplayRow[] }) {
 }
 
 export default function ImportFindingsPage() {
-  const [history, setHistory] = useState<ImportBatch[]>([]);
-  const pager = useClientPagination(history);
-  const [loading, setLoading] = useState(true);
+  // Server-paged history, newest first. A user without findings.import /
+  // findings.reverse-import gets a 403 here and simply sees no history - the
+  // upload form below explains the permission requirement.
+  const pager = useServerPager<ImportBatch>("/api/findings/import", "importBatches");
+  const history = pager.pageItems;
+  const loading = pager.loading;
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -158,22 +161,7 @@ export default function ImportFindingsPage() {
     }
   }
 
-  async function load() {
-    setLoading(true);
-    try {
-      const res = await apiGet<{ importBatches: ImportBatch[] }>("/api/findings/import");
-      setHistory(res.importBatches);
-    } catch {
-      // A user with findings.view but not findings.import will 403 here -
-      // the upload form below still explains the permission requirement.
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    load();
-  }, []);
+  const load = pager.reload;
 
   function handleFileChange(picked: File | null) {
     setError(null);
@@ -307,7 +295,7 @@ export default function ImportFindingsPage() {
       )}
 
       <Card>
-        <CardHeader title="Import History" description={`${history.length} run(s)`} />
+        <CardHeader title="Import History" description={`${pager.total} run(s)`} />
         <div className="divide-y divide-slate-100">
           {loading && <ListSkeleton rows={4} />}
           {!loading && history.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-500">No imports yet.</p>}

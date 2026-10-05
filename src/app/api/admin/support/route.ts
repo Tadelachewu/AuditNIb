@@ -2,12 +2,13 @@ import { NextResponse } from "next/server";
 import { requirePermission } from "@/lib/guard";
 import { readDb } from "@/lib/db";
 import { withApiHandler } from "@/lib/api/handler";
+import { listPageJson } from "@/lib/serverList";
 
 // The admin inbox - every user's threads, not just the caller's own (see
 // GET /api/support for that). Gated by support.view OR support.respond -
 // a respond-only role must still be able to list threads to find one to
 // act on; posting a reply (see [id]/messages/route.ts) stays respond-only.
-async function handleGET() {
+async function handleGET(request: Request) {
   const auth = await requirePermission("support.view", "support.respond");
   if (!auth.ok) return auth.response;
 
@@ -26,6 +27,9 @@ async function handleGET() {
     };
   });
 
+  // ?page=... -> one page of the inbox (most recently active first).
+  const paged = listPageJson(request, "threads", enriched, { fields: { updatedAt: (t) => t.updatedAt } });
+  if (paged) return NextResponse.json(paged);
   return NextResponse.json({ threads: enriched });
 }
 

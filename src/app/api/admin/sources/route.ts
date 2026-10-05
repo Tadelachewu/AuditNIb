@@ -6,14 +6,27 @@ import { requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { appendAuditLog } from "@/lib/audit";
 import { withApiHandler } from "@/lib/api/handler";
+import { listPageJson } from "@/lib/serverList";
 
-async function handleGET() {
+async function handleGET(request: Request) {
   const auth = await requirePermission("sources.view");
   if (!auth.ok) return auth.response;
   const db = await readDb();
   // Alphabetical by name - same convention as /api/admin/branches/districts,
   // and every picker across the app that lists sources reads from here.
   const sources = [...db.sources].sort((a, b) => a.name.localeCompare(b.name));
+  // ?page=... -> one page of the Finding Sources table (searched / filtered / sorted on the server).
+  const paged = listPageJson(request, "sources", sources, {
+    fields: {
+      code: (s) => s.code,
+      name: (s) => s.name,
+      status: (s) => (s.active ? "Active" : "Inactive"),
+      default: (s) => (s.isDefault ? "Default" : ""),
+    },
+    exact: ["status", "default"],
+  });
+  if (paged) return NextResponse.json(paged);
+
   return NextResponse.json({ sources });
 }
 

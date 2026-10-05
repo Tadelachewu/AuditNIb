@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/Badge";
 import type { SupportThread, SupportMessage } from "@/types";
 import { ListSkeleton } from "@/components/ui/Skeleton";
 import { Pagination } from "@/components/ui/Pagination";
-import { useClientPagination } from "@/lib/useClientPagination";
+import { DEFAULT_PAGE_SIZE } from "@/lib/pagination";
 import { notify, notifications, presentError } from "@/lib/notify";
 
 type AdminThread = SupportThread & { userName: string; userRole: string | null };
@@ -28,7 +28,10 @@ function StatusBadge({ thread }: { thread: SupportThread }) {
  */
 export function AdminSupportClient({ canRespond }: { canRespond: boolean }) {
   const [threads, setThreads] = useState<AdminThread[] | null>(null);
-  const pager = useClientPagination(threads ?? []);
+  // Server-paged, most recently active first: only the current page is fetched (and re-polled).
+  const [page, setPage] = useState(1);
+  const [paging, setPaging] = useState({ total: 0, totalPages: 1 });
+  const pager = { page, setPage, pageItems: threads ?? [], total: paging.total, totalPages: paging.totalPages, pageSize: DEFAULT_PAGE_SIZE };
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [messages, setMessages] = useState<SupportMessage[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -43,12 +46,17 @@ export function AdminSupportClient({ canRespond }: { canRespond: boolean }) {
 
   const loadThreads = useCallback(async () => {
     try {
-      const data = await apiGet<{ threads: AdminThread[] }>("/api/admin/support", { background: true });
+      const data = await apiGet<{ threads: AdminThread[]; total: number; totalPages: number; page: number }>(
+        `/api/admin/support?page=${page}&pageSize=${DEFAULT_PAGE_SIZE}`,
+        { background: true }
+      );
       setThreads(data.threads);
+      setPaging({ total: data.total, totalPages: data.totalPages });
+      if (data.page !== page) setPage(data.page);
     } catch (err) {
       setError(presentError(err, notifications.support.loadFailed).message);
     }
-  }, []);
+  }, [page]);
 
   const loadThread = useCallback(async (id: string) => {
     try {

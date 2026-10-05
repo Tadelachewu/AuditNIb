@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/Badge";
 import type { SupportThread, SupportMessage } from "@/types";
 import { ListSkeleton } from "@/components/ui/Skeleton";
 import { Pagination } from "@/components/ui/Pagination";
-import { useClientPagination } from "@/lib/useClientPagination";
+import { DEFAULT_PAGE_SIZE } from "@/lib/pagination";
 import { notify, notifications, presentError } from "@/lib/notify";
 
 function StatusBadge({ thread }: { thread: SupportThread }) {
@@ -27,7 +27,10 @@ function StatusBadge({ thread }: { thread: SupportThread }) {
  */
 export function SupportClient() {
   const [threads, setThreads] = useState<SupportThread[] | null>(null);
-  const pager = useClientPagination(threads ?? []);
+  // Server-paged, most recently active first: only the current page is fetched (and re-polled).
+  const [page, setPage] = useState(1);
+  const [paging, setPaging] = useState({ total: 0, totalPages: 1 });
+  const pager = { page, setPage, pageItems: threads ?? [], total: paging.total, totalPages: paging.totalPages, pageSize: DEFAULT_PAGE_SIZE };
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [messages, setMessages] = useState<SupportMessage[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -48,12 +51,17 @@ export function SupportClient() {
 
   const loadThreads = useCallback(async () => {
     try {
-      const data = await apiGet<{ threads: SupportThread[] }>("/api/support", { background: true });
+      const data = await apiGet<{ threads: SupportThread[]; total: number; totalPages: number; page: number }>(
+        `/api/support?page=${page}&pageSize=${DEFAULT_PAGE_SIZE}`,
+        { background: true }
+      );
       setThreads(data.threads);
+      setPaging({ total: data.total, totalPages: data.totalPages });
+      if (data.page !== page) setPage(data.page);
     } catch (err) {
       setError(presentError(err, notifications.support.loadFailed).message);
     }
-  }, []);
+  }, [page]);
 
   const loadThread = useCallback(async (id: string) => {
     try {

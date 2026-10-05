@@ -7,8 +7,9 @@ import { readDb, updateDb } from "@/lib/db";
 import { appendAuditLog } from "@/lib/audit";
 import { outstandingTransferPreview } from "@/lib/findings";
 import { withApiHandler } from "@/lib/api/handler";
+import { listPageJson } from "@/lib/serverList";
 
-async function handleGET() {
+async function handleGET(request: Request) {
   const auth = await requirePermission("reporting-periods.view");
   if (!auth.ok) return auth.response;
   const db = await readDb();
@@ -28,6 +29,21 @@ async function handleGET() {
     const findingCount = db.findings.filter((f) => f.periodId === p.id).length;
     return { ...p, outstandingTransferableCount: preview.count, transferDestinationCode: preview.destinationCode, findingCount };
   });
+  // ?page=... -> one page of the Reporting Periods table (searched / filtered / sorted on the server).
+  const paged = listPageJson(request, "reportingPeriods", periods, {
+    fields: {
+      code: (p) => p.code,
+      name: (p) => p.name ?? "",
+      range: (p) => p.startsAt,
+      status: (p) => p.status,
+      findingCount: (p) => p.findingCount,
+      lastChange: (p) => p.lockReason ?? "",
+    },
+    search: ["code", "name", "status", "lastChange"],
+    exact: ["status"],
+  });
+  if (paged) return NextResponse.json({ ...paged, autoTransferOnLock: db.settings.autoTransferOnLock });
+
   return NextResponse.json({ reportingPeriods: periods, autoTransferOnLock: db.settings.autoTransferOnLock });
 }
 

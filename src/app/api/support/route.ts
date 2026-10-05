@@ -6,10 +6,11 @@ import { requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { notifyUsers, usersWithSupportRespondPermission } from "@/lib/notifications";
 import { withApiHandler } from "@/lib/api/handler";
+import { listPageJson } from "@/lib/serverList";
 
 // support.create is the requester side of Support - see registry.ts's own
 // doc comment on the "support" page for the full three-action split.
-async function handleGET() {
+async function handleGET(request: Request) {
   const auth = await requirePermission("support.create");
   if (!auth.ok) return auth.response;
 
@@ -18,6 +19,9 @@ async function handleGET() {
     .filter((t) => t.userId === auth.session.userId)
     .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
 
+  // ?page=... -> one page of the inbox (most recently active first).
+  const paged = listPageJson(request, "threads", threads, { fields: { updatedAt: (t) => t.updatedAt } });
+  if (paged) return NextResponse.json(paged);
   return NextResponse.json({ threads });
 }
 

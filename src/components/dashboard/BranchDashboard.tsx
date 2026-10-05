@@ -371,6 +371,7 @@ export function BranchDashboard({
             description={district ? `Every branch in ${district.name}, performance this period` : "Peer branches, performance this period"}
           />
           <DashboardGrid
+            id="branchRanking"
             exportFileName="branch-ranking"
             emptyText="No peer branches in this district yet."
             columns={[
@@ -418,6 +419,7 @@ export function BranchDashboard({
       <Card>
         <CardHeader title="Category Totals" description="Every active classified case category for this branch, current period" />
         <DashboardGrid
+          id="categoryTotals"
           exportFileName="branch-category-totals"
           columns={[
             { key: "category", header: "Category", badgeWhen: "scored", badgeLabel: "Scored" },

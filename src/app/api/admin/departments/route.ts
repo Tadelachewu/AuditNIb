@@ -7,14 +7,32 @@ import { readDb, updateDb } from "@/lib/db";
 import { appendAuditLog } from "@/lib/audit";
 import { resolveOrgScope } from "@/lib/org";
 import { withApiHandler } from "@/lib/api/handler";
+import { listPageJson } from "@/lib/serverList";
 
-async function handleGET() {
+async function handleGET(request: Request) {
   const auth = await requirePermission("departments.view");
   if (!auth.ok) return auth.response;
   const db = await readDb();
   // Alphabetical by name - same convention as /api/admin/branches/districts,
   // and every picker across the app that lists departments reads from here.
   const departments = [...db.departments].sort((a, b) => a.name.localeCompare(b.name));
+
+  // ?page=... -> one page of the Departments table (searched / filtered / sorted on the server).
+  const districtName = (id?: string | null) => db.districts.find((d) => d.id === id)?.name ?? "—";
+  const branchName = (id?: string | null) => db.branches.find((b) => b.id === id)?.name ?? "—";
+  const paged = listPageJson(request, "departments", departments, {
+    fields: {
+      code: (d) => d.code,
+      name: (d) => d.name,
+      scope: (d) =>
+        d.orgScope === "BANK" ? "Bank-wide" : d.orgScope === "BRANCH" ? `Branch: ${branchName(d.branchId)}` : `District: ${districtName(d.districtId)}`,
+      level: (d) => d.orgScope,
+      status: (d) => (d.active ? "Active" : "Inactive"),
+    },
+    exact: ["level", "status"],
+  });
+  if (paged) return NextResponse.json(paged);
+
   return NextResponse.json({ departments });
 }
 

@@ -6,14 +6,27 @@ import { requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { appendAuditLog } from "@/lib/audit";
 import { withApiHandler } from "@/lib/api/handler";
+import { listPageJson } from "@/lib/serverList";
 
-async function handleGET() {
+async function handleGET(request: Request) {
   const auth = await requirePermission("categories.view");
   if (!auth.ok) return auth.response;
   const db = await readDb();
   // Alphabetical by name ("Classified Case" in the FilterBar/finding form)
   // - same convention as /api/admin/branches/districts.
   const categories = [...db.categories].sort((a, b) => a.name.localeCompare(b.name));
+  // ?page=... -> one page of the Categories table (searched / filtered / sorted on the server).
+  const paged = listPageJson(request, "categories", categories, {
+    fields: {
+      code: (c) => c.code,
+      name: (c) => c.name,
+      scored: (c) => (c.scored ? "Scored" : "Informational"),
+      status: (c) => (c.active ? "Active" : "Inactive"),
+    },
+    exact: ["scored", "status"],
+  });
+  if (paged) return NextResponse.json(paged);
+
   return NextResponse.json({ categories });
 }
 

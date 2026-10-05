@@ -602,6 +602,7 @@ export function HODashboard({
           </div>
         </div>
         <DashboardGrid
+          id="sources"
           exportFileName="source-comparison"
           columns={[
             { key: "source", header: "Source" },
@@ -629,6 +630,7 @@ export function HODashboard({
       <Card>
         <CardHeader title="Category Totals" description="Every active classified case category, bank-wide, current period" />
         <DashboardGrid
+          id="categoryTotals"
           exportFileName="bank-category-totals"
           columns={[
             { key: "category", header: "Category", badgeWhen: "scored", badgeLabel: "Scored" },

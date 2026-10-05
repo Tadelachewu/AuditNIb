@@ -372,6 +372,7 @@ export function ExecutiveDashboard({
           />
         </div>
         <DashboardGrid
+          id="sources"
           exportFileName="source-comparison"
           columns={[
             { key: "source", header: "Source" },

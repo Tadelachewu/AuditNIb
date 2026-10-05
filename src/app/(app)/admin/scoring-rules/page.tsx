@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { apiGet, apiSend } from "@/lib/api-client";
+import { useServerPager } from "@/lib/useServerList";
 import { formatDate } from "@/lib/format";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -15,7 +16,6 @@ import { AddDialog, Modal } from "@/components/ui/AddDialog";
 import { RowAction, RowActions, StatusToggleAction } from "@/components/ui/RowActions";
 import { ListSkeleton } from "@/components/ui/Skeleton";
 import { Pagination } from "@/components/ui/Pagination";
-import { useClientPagination } from "@/lib/useClientPagination";
 import { usePermissions } from "@/lib/permissions/PermissionsContext";
 import { hasPermission } from "@/lib/permissions/registry";
 import type { ScoringRule, ClassifiedCategory, Source } from "@/types";
@@ -44,10 +44,8 @@ function generateBasisText(categoryNames: string[]): string {
 }
 
 export default function ScoringRulesPage() {
-  const [rules, setRules] = useState<ScoringRule[]>([]);
   const [categories, setCategories] = useState<ClassifiedCategory[]>([]);
   const [sources, setSources] = useState<Source[]>([]);
-  const [loading, setLoading] = useState(true);
   const [form, setForm] = useState(emptyForm);
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -66,23 +64,23 @@ export default function ScoringRulesPage() {
   const canEdit = hasPermission(permissions, "scoring-rules.edit");
   const canDelete = hasPermission(permissions, "scoring-rules.delete");
   const canActivate = hasPermission(permissions, "scoring-rules.activate");
-  const pager = useClientPagination(rules);
+  // Server-paged rule history (newest version first).
+  const pager = useServerPager<ScoringRule>("/api/admin/scoring-rules", "scoringRules");
+  const rules = pager.pageItems;
+  const loading = pager.loading;
+  const activeRule = (pager.meta.activeRule as ScoringRule | null | undefined) ?? null;
+  const maxVersion = (pager.meta.maxVersion as number | undefined) ?? 0;
+  const load = pager.reload;
 
-  async function load() {
-    setLoading(true);
-    const [r, c, s] = await Promise.all([
-      apiGet<{ scoringRules: ScoringRule[] }>("/api/admin/scoring-rules"),
+  // The category / source pickers need the whole lists.
+  useEffect(() => {
+    void Promise.all([
       apiGet<{ categories: ClassifiedCategory[] }>("/api/admin/categories"),
       apiGet<{ sources: Source[] }>("/api/admin/sources"),
-    ]);
-    setRules(r.scoringRules);
-    setCategories(c.categories);
-    setSources(s.sources);
-    setLoading(false);
-  }
-
-  useEffect(() => {
-    load();
+    ]).then(([c, s]) => {
+      setCategories(c.categories);
+      setSources(s.sources);
+    });
   }, []);
 
   function toggleMulti(field: "categories" | "sources", id: string) {
@@ -105,11 +103,11 @@ export default function ScoringRulesPage() {
     setFormError(null);
 
     if (form.activateNow) {
-      const currentlyActive = rules.find((r) => r.active);
+      const currentlyActive = activeRule;
       const result = await confirm({
         title: "Activate this rule immediately?",
         message: currentlyActive
-          ? `This creates v${rules.reduce((max, r) => Math.max(max, r.version), 0) + 1} and makes it the live scoring rule, replacing "v${currentlyActive.version} — ${currentlyActive.name}". Performance figures calculated from this point on will use the new rule.`
+          ? `This creates v${maxVersion + 1} and makes it the live scoring rule, replacing "v${currentlyActive.version} — ${currentlyActive.name}". Performance figures calculated from this point on will use the new rule.`
           : "This creates the rule and makes it the live scoring rule immediately.",
         confirmLabel: "Create & Activate",
         tone: "danger",
@@ -229,7 +227,7 @@ export default function ScoringRulesPage() {
       </p>
 
       <Card className="mt-5">
-        <CardHeader title="Rule History" description={`${rules.length} version(s)`}
+        <CardHeader title="Rule History" description={`${pager.total} version(s)`}
           action={canCreate && (
             <AddDialog title="New Scoring Rule Version">
               {({ close }) => (
