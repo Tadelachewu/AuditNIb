@@ -50,3 +50,6 @@ next-env.d.ts
 # hand-edited, and would otherwise be a huge generated-code diff per schema
 # change
 /src/generated/prisma/
+
+# Scheduler logs (scheduler/README.md)
+/scheduler/logs/

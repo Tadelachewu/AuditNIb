@@ -1,0 +1,38 @@
+# NIB Control360 - automatic transfer at period end (docs/auto-transfer.md).
+# 1. Create the secret (same value as the app's AUTO_TRANSFER_CRON_SECRET):
+#      kubectl create secret generic nib-auto-transfer --from-literal=secret=<the secret>
+# 2. Change the URL below to your app's Service name and port.
+# 3. kubectl apply -f scheduler/kubernetes/auto-transfer-cronjob.yaml
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: nib-auto-transfer
+spec:
+  schedule: "*/5 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: call
+              image: curlimages/curl:8.10.1
+              env:
+                - name: SECRET
+                  valueFrom:
+                    secretKeyRef:
+                      name: nib-auto-transfer
+                      key: secret
+              args:
+                - "-fsS"
+                - "-m"
+                - "60"
+                - "-X"
+                - "POST"
+                - "http://nib-control360:9005/api/system/auto-transfer"
+                - "-H"
+                - "x-auto-transfer-secret: $(SECRET)"

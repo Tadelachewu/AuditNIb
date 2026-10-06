@@ -240,6 +240,8 @@ written (outstanding cases/amount at that moment, snapshotted `originalCaseCount
 original registration. No new `Finding` row is ever created — this is a
 continuation, never a duplicate.
 
+> **Superseded 2026-10-06:** see [auto-transfer.md](auto-transfer.md) - findings move automatically when a period **ends**; locking no longer transfers. The paragraph below describes the old behaviour.
+
 **Configurable Automatic Transfer** (`Settings.autoTransferOnLock`): the
 bank-wide "is this allowed at all" switch — when enabled, the Lock dialog
 on Reporting Periods shows the locking user a preview (outstanding case

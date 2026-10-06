@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { checkRectificationReminders, REMINDER_SCAN_COOLDOWN_MS } from "@/lib/notifications";
 import { withApiHandler } from "@/lib/api/handler";
+import { runAutoTransferIfDue } from "@/lib/autoTransfer";
 
 // A notification is always scoped to its own recipientUserId, checked
 // directly here rather than gated through the page-permission system -
@@ -17,6 +18,10 @@ import { withApiHandler } from "@/lib/api/handler";
 async function handleGET() {
   const auth = await requireUser();
   if (!auth.ok) return auth.response;
+
+  // Automatic transfer at period end runs lazily from this poll too
+  // (throttled per server; it never throws - src/lib/autoTransfer).
+  await runAutoTransferIfDue();
 
   const peek = await readDb();
   const settings = peek.settings.rectificationReminders;

@@ -21,13 +21,9 @@ import { hasPermission } from "@/lib/permissions/registry";
 import type { ReportingPeriod } from "@/types";
 import { AdminTable } from "@/components/ui/AdminTable";
 import { notify, notifications } from "@/lib/notify";
+import { useAutoTransferStatus } from "@/components/admin/useAutoTransferStatus";
 
-// The GET route annotates each period with a live transfer preview (see
-// outstandingTransferPreview() in src/lib/findings.ts) so the Lock dialog
-// can ask an informed question instead of a blind checkbox.
 type PeriodWithTransferPreview = ReportingPeriod & {
-  outstandingTransferableCount: number;
-  transferDestinationCode: string | null;
   // Lets "Edit Period" (its own date range) disable itself once anything
   // references it - see the PATCH route's own comment for why that's the
   // line drawn (reference numbers/dedupe keys/every period-scoped stat
@@ -73,7 +69,8 @@ export default function ReportingPeriodsPage() {
     defaultSort: { id: "code", desc: true },
   });
   const periods = list.rows;
-  const autoTransferAllowed = list.meta.autoTransferOnLock === true;
+  // Each period's automatic-transfer status (src/lib/autoTransfer) - its own API.
+  const autoTransfer = useAutoTransferStatus(list.rows);
   const now = new Date();
   // submissionStartsAt/submissionEndsAt default to exactly the period's
   // own range - most admins never touch them. handleStartsAtChange/
@@ -246,7 +243,6 @@ export default function ReportingPeriodsPage() {
   const [lockTarget, setLockTarget] = useState<PeriodWithTransferPreview | null>(null);
   const [lockReasonInput, setLockReasonInput] = useState("");
   const [lockDraftsAllowed, setLockDraftsAllowed] = useState(true);
-  const [lockTransferOverdue, setLockTransferOverdue] = useState(false);
   const [lockBusy, setLockBusy] = useState(false);
 
   const load = list.reload;
@@ -270,11 +266,6 @@ export default function ReportingPeriodsPage() {
 
   function openLockDialog(p: PeriodWithTransferPreview) {
     setLockDraftsAllowed(p.draftsAllowedWhileLocked);
-    // Default to "yes, transfer" only when locking (not a flag-only edit
-    // on an already-LOCKED period), the Admin allows it at all, and
-    // there's actually something to transfer into somewhere - otherwise
-    // there's nothing meaningful to default to yes on.
-    setLockTransferOverdue(p.status === "OPEN" && autoTransferAllowed && p.outstandingTransferableCount > 0 && p.transferDestinationCode !== null);
     setLockReasonInput("");
     setLockTarget(p);
   }
@@ -336,7 +327,7 @@ export default function ReportingPeriodsPage() {
     setLockBusy(true);
     try {
       await apiSend(`/api/admin/reporting-periods/${lockTarget.id}`, "PATCH", {
-        ...(isFlagEditOnly ? {} : { status: "LOCKED", transferOverdueCases: lockTransferOverdue }),
+        ...(isFlagEditOnly ? {} : { status: "LOCKED" }),
         reason: lockReasonInput,
         draftsAllowedWhileLocked: lockDraftsAllowed,
       });
@@ -420,14 +411,22 @@ export default function ReportingPeriodsPage() {
       },
       { accessorKey: "findingCount", header: "Findings", size: 90 },
       {
+        // Automatic transfer at period end (src/lib/autoTransfer): done / pending / waiting.
+        id: "autoTransfer",
+        header: "Auto-transfer",
+        enableSorting: false,
+        enableColumnFilter: false,
+        accessorFn: (p) => autoTransfer.statusFor(p.id).text,
+        Cell: ({ row }) => autoTransfer.statusFor(row.original.id).cell,
+      },
+      {
         id: "lastChange",
         header: "Last Change",
         accessorFn: (p) => (p.lockReason ? `${p.lockReason} · ${formatDateTime(p.updatedAt)}` : ""),
         Cell: ({ cell }) => <span className="text-xs text-slate-500">{cell.getValue<string>() || "—"}</span>,
       },
     ],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [canLock]
+    [canLock, autoTransfer]
   );
 
   return (
@@ -628,29 +627,11 @@ export default function ReportingPeriodsPage() {
               />
               Allow findings to still be drafted while locked
             </label>
-            {!isFlagEditOnly && autoTransferAllowed && lockTarget.outstandingTransferableCount > 0 && (
-              <>
-                {lockTarget.transferDestinationCode ? (
-                  <label className="flex items-start gap-2 text-sm text-slate-700 sm:col-span-2">
-                    <input
-                      type="checkbox"
-                      checked={lockTransferOverdue}
-                      onChange={(e) => setLockTransferOverdue(e.target.checked)}
-                      className="mt-0.5 h-4 w-4 rounded border-slate-300"
-                    />
-                    <span>
-                      Transfer {lockTarget.outstandingTransferableCount} outstanding case
-                      {lockTarget.outstandingTransferableCount === 1 ? "" : "s"} to {lockTarget.transferDestinationCode}?
-                    </span>
-                  </label>
-                ) : (
-                  <p className="text-xs text-amber-700 sm:col-span-2">
-                    {lockTarget.outstandingTransferableCount} outstanding case
-                    {lockTarget.outstandingTransferableCount === 1 ? "" : "s"} in {lockTarget.code}, but there&apos;s no open
-                    period after it to transfer into - open a later period first if you want to transfer them.
-                  </p>
-                )}
-              </>
+            {!isFlagEditOnly && (
+              <p className="text-xs text-slate-500 sm:col-span-2">
+                Locking only blocks submission. Outstanding findings are carried into the next period automatically when this
+                period ends (Settings → Automatic Transfer).
+              </p>
             )}
             <StickyActions>
               <Button type="button" variant="cancel" onClick={() => setLockTarget(null)}>

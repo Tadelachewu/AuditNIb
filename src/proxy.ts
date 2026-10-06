@@ -152,7 +152,10 @@ export async function proxy(request: NextRequest) {
       if (contentLength > MAX_API_BODY_BYTES) {
         return proxyError(413, "PAYLOAD_TOO_LARGE", "The request is too large.", requestId);
       }
-      if (isCrossOriginApiRequest(request)) {
+      // /api/system/* is called by a server scheduler (cron, Windows Task
+      // Scheduler...), not a browser: no session cookie to forge, and every
+      // such route checks its own secret - so no Origin header is required.
+      if (!pathname.startsWith("/api/system/") && isCrossOriginApiRequest(request)) {
         return proxyError(403, "CROSS_ORIGIN_REJECTED", "Cross-origin request rejected.", requestId);
       }
     }

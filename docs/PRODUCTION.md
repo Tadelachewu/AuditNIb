@@ -7,7 +7,7 @@ A step-by-step runbook for running this app **safely** on a server with real ban
 > 2. `APP_ENV=production`.
 > 3. **HTTPS only**, through a reverse proxy. The app itself listens on `127.0.0.1` only.
 > 4. **Fresh secrets** generated on the production server, never copied from a developer's `.env`.
-> 5. `npx prisma migrate deploy` for database changes. **Never** `migrate dev` or `migrate reset`.
+> 5. `npx prisma migrate deploy` for database changes. **Never** `migrate dev` or `migrate reset`. The migration history was restarted on 2026-10-06 (`0_init` baseline); an existing database adopts it once as described in [database-migrations.md](database-migrations.md) §4.
 > 6. Back up the **database**, the **storage folder**, and the **file encryption key**.
 
 ---

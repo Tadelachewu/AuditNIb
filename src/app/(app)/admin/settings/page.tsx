@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { apiGet, apiSend } from "@/lib/api-client";
 import { notify, notifications, presentError } from "@/lib/notify";
 import { CollapsibleCard } from "@/components/ui/CollapsibleCard";
+import { AutoTransferSettings } from "@/components/admin/AutoTransferSettings";
 import { Button } from "@/components/ui/Button";
 import { StickyActions } from "@/components/ui/StickyActions";
 import { Input, Select, Label } from "@/components/ui/Field";
@@ -78,7 +79,6 @@ export default function SettingsPage() {
         priorityLevels: settings.priorityLevels,
         irregularityTypes: settings.irregularityTypes,
         notification: settings.notification,
-        autoTransferOnLock: settings.autoTransferOnLock,
         rankingVisibility: settings.rankingVisibility,
         rectificationReminders: settings.rectificationReminders,
         performanceThresholds: settings.performanceThresholds,
@@ -264,33 +264,9 @@ export default function SettingsPage() {
         />
       </CollapsibleCard>
 
-      <CollapsibleCard disabled={!canEdit}
-        title="Case Transfer"
-        description="Allow transferring outstanding findings when a period locks."
-      >
-        <div className="p-4">
-          <label className="flex items-start gap-2 text-sm text-slate-700">
-            <input
-              type="checkbox"
-              checked={settings.autoTransferOnLock}
-              onChange={(e) => setSettings({ ...settings, autoTransferOnLock: e.target.checked })}
-              className="mt-0.5 h-4 w-4 rounded border-slate-300"
-            />
-            <span>
-              Allow transferring outstanding findings when their period locks
-              <br />
-              <span className="text-xs text-slate-500">
-                When enabled, the Lock dialog on Reporting Periods asks the locking user whether to transfer this
-                period&apos;s still-outstanding findings into the next open period - it&apos;s never silent or
-                automatic. If they say yes, every still-outstanding finding moves, tagged &quot;Automatic&quot; in
-                its transfer history (referring to the bulk-sweep mechanism, not that it ran unasked). A finding
-                already transferred manually before the lock is skipped. Leave this off to hide that prompt
-                entirely - findings still outstanding when a period locks then just stay put until someone
-                transfers them manually.
-              </span>
-            </span>
-          </label>
-        </div>
+      {/* Its own section and Save (src/lib/autoTransfer), outside the main settings form. */}
+      <CollapsibleCard title="Automatic Transfer" description="Carry outstanding findings into the next period when a period ends.">
+        <AutoTransferSettings canEdit={canEdit} />
       </CollapsibleCard>
 
       <CollapsibleCard disabled={!canEdit}

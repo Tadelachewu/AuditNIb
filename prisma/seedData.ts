@@ -212,7 +212,6 @@ export function buildSeedDatabase(): Database {
       "Access Control Violation",
     ],
     notification: { provider: "NONE", fromAddress: "" },
-    autoTransferOnLock: false,
     rankingVisibility: { branches: true, districts: true },
     performanceThresholds: { topPercent: 80, bottomPercent: 50 },
     // Left off by default (see the field's own doc comment), but with a

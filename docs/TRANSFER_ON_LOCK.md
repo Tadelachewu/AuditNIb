@@ -1,3 +1,5 @@
+> **Superseded (2026-10-06):** locking a period no longer transfers anything. Outstanding findings are carried over automatically when a period **ends**; see [auto-transfer.md](auto-transfer.md). Manual transfer is unchanged. The rest of this document describes the old lock-time behaviour and is kept for history.
+
 # Transfer on Lock — Operational & Implementation Rules
 
 This document is the single source of truth for how NIB Control360 handles

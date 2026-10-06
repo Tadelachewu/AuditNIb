@@ -165,76 +165,8 @@ export function transferFinding(
 // on the same "sweep everything not-closed" reasoning; the return itself
 // (and its reason) travels with the finding across the transfer just like
 // any other in-flight state does.
-const AUTO_TRANSFERABLE_STATUSES = ["SENT_TO_BRANCH_MANAGER", "REVERSED", "PARTIALLY_RECTIFIED", "RECTIFIED", "RECTIFICATION_RETURNED", "TRANSFERRED"];
-
-// Shared by outstandingTransferPreview() and autoTransferOnLock() so the
-// count a locking user is shown in the confirmation prompt can never drift
-// from what actually gets transferred a moment later.
-function findAutoTransferDestination(db: Database, lockedPeriod: ReportingPeriod): ReportingPeriod | undefined {
-  return db.reportingPeriods
-    .filter((p) => p.status === "OPEN" && (p.year > lockedPeriod.year || (p.year === lockedPeriod.year && p.month > lockedPeriod.month)))
-    .sort((a, b) => a.year - b.year || a.month - b.month)[0];
-}
-function outstandingTransferableFindings(db: Database, period: ReportingPeriod) {
-  return db.findings.filter((f) => f.periodId === period.id && AUTO_TRANSFERABLE_STATUSES.includes(f.status));
-}
-
-/**
- * What the Lock dialog shows the locking user *before* they decide whether
- * to transfer - how many outstanding cases are sitting in this period and
- * which period they'd land in, so "ask his permission" (see
- * autoTransferOnLock()'s doc comment) is a real, informed choice rather
- * than a blind checkbox.
- */
-export function outstandingTransferPreview(
-  db: Database,
-  period: ReportingPeriod
-): { count: number; destinationCode: string | null } {
-  const destination = findAutoTransferDestination(db, period);
-  return { count: outstandingTransferableFindings(db, period).length, destinationCode: destination?.code ?? null };
-}
-
-/**
- * The Admin-configurable half of "Configurable Automatic Transfer":
- * Settings.autoTransferOnLock is the bank-wide "is this allowed at all"
- * switch (see /admin/settings' Case Transfer card), but locking a period
- * no longer transfers silently just because that switch is on - the
- * locking user is asked at lock time (the reporting-periods PATCH route's
- * `transferOverdueCases` flag, surfaced as a checkbox in the Lock dialog)
- * and this only runs when they said yes. When it does run, it sweeps
- * every still-outstanding finding in the period into the next OPEN period
- * (earliest year/month after the one being locked), tagged
- * `method: "AUTOMATIC"` in its FindingTransfer row - "automatic" meaning
- * the bulk-sweep mechanism, as opposed to a one-off manual Transfer,  not
- * that it ran without anyone asking. A finding already transferred
- * manually earlier that period is naturally excluded - it's no longer in
- * `db.findings.filter(f => f.periodId === period.id)` by the time this
- * runs, since transferring moves `periodId` immediately. Called from
- * inside the same updateDb() transaction that sets the period LOCKED, by
- * the reporting-periods PATCH route.
- */
-export function autoTransferOnLock(
-  db: Database,
-  lockedPeriod: ReportingPeriod,
-  opts: { userId: string; userName: string }
-): { transferredCount: number; skippedNoDestination: boolean } {
-  if (!db.settings.autoTransferOnLock) return { transferredCount: 0, skippedNoDestination: false };
-
-  const destination = findAutoTransferDestination(db, lockedPeriod);
-  if (!destination) return { transferredCount: 0, skippedNoDestination: true };
-
-  const outstanding = outstandingTransferableFindings(db, lockedPeriod);
-  for (const f of outstanding) {
-    transferFinding(db, f, {
-      toPeriodId: destination.id,
-      reason: `Automatic transfer - ${lockedPeriod.code} locked with this finding still outstanding, transfer confirmed by the locking user.`,
-      userId: opts.userId,
-      userName: opts.userName,
-      method: "AUTOMATIC",
-    });
-  }
-  return { transferredCount: outstanding.length, skippedNoDestination: false };
-}
+/** Statuses a finding can be carried to another period from - every one short of CLOSED once it's with the branch (also used by the automatic transfer, src/lib/autoTransfer). */
+export const AUTO_TRANSFERABLE_STATUSES: FindingStatus[] = ["SENT_TO_BRANCH_MANAGER", "REVERSED", "PARTIALLY_RECTIFIED", "RECTIFIED", "RECTIFICATION_RETURNED", "TRANSFERRED"];
 
 /**
  * The reporting period immediately before the given one (by year/month),

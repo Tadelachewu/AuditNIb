@@ -232,7 +232,7 @@ The Users admin page and both create/edit API routes drive district/branch/depar
 - **Flag-only touch-ups** on an already-LOCKED period (toggling `draftsAllowedWhileLocked` without a full unlock/relock cycle) (`route.ts:9-20`).
 - **Editing the submission window** independently of lock status.
 - **Editing the period's own `startsAt`/`endsAt`** — only permitted while the period has **zero** findings referencing it, since reference-number sequences, dedupe keys, and every period-scoped stat are already keyed off the current dates (`route.ts:94-117`).
-- **Optional automatic transfer**: on a genuine `OPEN → LOCKED` transition, if the locking admin explicitly opts in (`transferOverdueCases: true`, only offered when `Settings.autoTransferOnLock` is enabled), `autoTransferOnLock()` sweeps that period's still-outstanding findings forward into the next `OPEN` period (`route.ts:172-194`, `src/lib/findings.ts:116`).
+- **Automatic transfer (superseded 2026-10-06):** locking no longer transfers; outstanding findings move when a period **ends** ([auto-transfer.md](auto-transfer.md)). Previously: on a genuine `OPEN → LOCKED` transition, if the locking admin explicitly opts in (`transferOverdueCases: true`, only offered when `Settings.autoTransferOnLock` is enabled), `autoTransferOnLock()` sweeps that period's still-outstanding findings forward into the next `OPEN` period (`route.ts:172-194`, `src/lib/findings.ts:116`).
 - Both `LOCK` and `UNLOCK` transitions notify every user holding `findings.district-review` or `findings.rectify` (`route.ts:196-213`).
 
 **Locking is fully reversible** — `PATCH` with `status: "OPEN"` on a `LOCKED` period unlocks it, subject to the same `reason` requirement (`route.ts:14, 126-131`).
@@ -328,7 +328,7 @@ This is one of the most heavily-gated features in the codebase, not an under-pro
 `GET/PATCH /api/admin/settings` (`src/app/api/admin/settings/route.ts`) manage one `Settings` object covering (schema at `settings/route.ts:14-102`):
 - **Dropdown lists**: `currencies`, `riskLevels`, `operationAreas`, `priorityLevels`, `irregularityTypes` (each must stay non-empty).
 - **Notification delivery**: `notification.provider` ∈ `NONE | SMTP | GRAPH`, plus `fromAddress`/`smtpHost`/`smtpPort`. A companion endpoint, `POST /api/admin/settings/test-email` (requires `settings.edit`), sends a real test email to the calling admin's own address via `getTransporter()` — it fails with a clear 400 if the caller has no email or if no transporter is configured, and logs raw SMTP errors server-side only (never echoing internals like hostnames/auth failures to the client) (`settings/test-email/route.ts:12-52`).
-- **`autoTransferOnLock`**: whether the period-lock dialog offers the "transfer outstanding findings forward" option (§4.2).
+- **Automatic Transfer** (its own section and Save, replacing the old `autoTransferOnLock`): on/off, excluded operation areas, delay - see [auto-transfer.md](auto-transfer.md).
 - **`rankingVisibility`**: whether branch/district rankings are shown.
 - **`rectificationReminders`**: enabled + threshold-days.
 - **`performanceThresholds`**: top/bottom percentile cutoffs.

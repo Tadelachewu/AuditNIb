@@ -482,7 +482,6 @@ function settingsFromRow(r: Prisma.SettingsGetPayload<object>): Settings {
     priorityLevels: r.priorityLevels,
     irregularityTypes: r.irregularityTypes,
     notification: r.notification as unknown as Settings["notification"],
-    autoTransferOnLock: r.autoTransferOnLock,
     rankingVisibility: r.rankingVisibility as unknown as Settings["rankingVisibility"],
     performanceThresholds: r.performanceThresholds as unknown as Settings["performanceThresholds"],
     hoApproval: r.hoApproval as unknown as Settings["hoApproval"],
@@ -1033,7 +1032,7 @@ function supportMessageToData(r: SupportMessage) {
   };
 }
 
-async function persistChanges(before: Database, after: Database): Promise<void> {
+async function persistChanges(before: Database, after: Database, alsoWrite?: (tx: Prisma.TransactionClient) => Promise<void>): Promise<void> {
   await prisma.$transaction(
     async (tx) => {
       // Reference/org data first (nothing meaningful depends on ordering
@@ -1082,7 +1081,6 @@ async function persistChanges(before: Database, after: Database): Promise<void> 
           priorityLevels: s.priorityLevels,
           irregularityTypes: s.irregularityTypes,
           notification: s.notification as object,
-          autoTransferOnLock: s.autoTransferOnLock,
           rankingVisibility: s.rankingVisibility as object,
           performanceThresholds: s.performanceThresholds as object,
           hoApproval: s.hoApproval as object,
@@ -1097,6 +1095,11 @@ async function persistChanges(before: Database, after: Database): Promise<void> 
         };
         await tx.settings.upsert({ where: { id: SETTINGS_ID }, create: { id: SETTINGS_ID, ...data }, update: data });
       }
+
+      // A caller's own writes outside the Database model (e.g. the
+      // automatic transfer's run record), committed or rolled back together
+      // with everything above.
+      if (alsoWrite) await alsoWrite(tx);
     },
     // Historical-import and bulk-registration routes touch many rows in
     // one call; Prisma's interactive-transaction default timeout (5s) is
@@ -1105,11 +1108,18 @@ async function persistChanges(before: Database, after: Database): Promise<void> 
   );
 }
 
-/** Read-modify-write helper to avoid repeating the read/mutate/write dance. */
-export async function updateDb<T>(mutator: (db: Database) => T): Promise<T> {
+/**
+ * Read-modify-write helper to avoid repeating the read/mutate/write dance.
+ * `opts.alsoWrite` adds the caller's own writes (tables outside the Database
+ * model) to the same transaction, given the mutator's result - all or nothing.
+ */
+export async function updateDb<T>(
+  mutator: (db: Database) => T,
+  opts: { alsoWrite?: (tx: Prisma.TransactionClient, result: T) => Promise<void> } = {}
+): Promise<T> {
   const before = await readDb();
   const after: Database = JSON.parse(JSON.stringify(before));
   const result = mutator(after);
-  await persistChanges(before, after);
+  await persistChanges(before, after, opts.alsoWrite ? (tx) => opts.alsoWrite!(tx, result) : undefined);
   return result;
 }

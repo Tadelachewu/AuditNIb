@@ -413,7 +413,6 @@ export async function insertDatabaseIntoPostgres(prisma: PrismaClient, db: Datab
       priorityLevels: db.settings.priorityLevels,
       irregularityTypes: db.settings.irregularityTypes,
       notification: db.settings.notification as object,
-      autoTransferOnLock: db.settings.autoTransferOnLock,
       rankingVisibility: db.settings.rankingVisibility as object,
       performanceThresholds: db.settings.performanceThresholds as object,
       hoApproval: db.settings.hoApproval as object,

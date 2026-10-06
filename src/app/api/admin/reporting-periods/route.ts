@@ -5,7 +5,6 @@ import { zDateTime, zText } from "@/lib/inputRules";
 import { requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { appendAuditLog } from "@/lib/audit";
-import { outstandingTransferPreview } from "@/lib/findings";
 import { withApiHandler } from "@/lib/api/handler";
 import { listPageJson } from "@/lib/serverList";
 
@@ -13,21 +12,14 @@ async function handleGET(request: Request) {
   const auth = await requirePermission("reporting-periods.view");
   if (!auth.ok) return auth.response;
   const db = await readDb();
-  // outstandingTransferableCount/transferDestinationCode let the Lock
-  // dialog ask an informed "transfer N outstanding cases to <period>?"
-  // question (see autoTransferOnLock()'s doc comment) without a second
-  // round-trip - this route already requires only reporting-periods.view,
-  // which everyone who can reach the Lock button already holds, unlike
-  // settings.view.
   const periods = [...db.reportingPeriods].sort((a, b) => b.code.localeCompare(a.code)).map((p) => {
-    const preview = outstandingTransferPreview(db, p);
     // Lets the admin UI disable "Edit Period" (its own date range) once
     // anything references it - editing startsAt/endsAt is only safe while
     // a period is genuinely empty (see the PATCH route's own comment for
     // why: reference numbers, dedupe keys, and every period-scoped stat
     // already keyed off the old dates would silently go stale otherwise).
     const findingCount = db.findings.filter((f) => f.periodId === p.id).length;
-    return { ...p, outstandingTransferableCount: preview.count, transferDestinationCode: preview.destinationCode, findingCount };
+    return { ...p, findingCount };
   });
   // ?page=... -> one page of the Reporting Periods table (searched / filtered / sorted on the server).
   const paged = listPageJson(request, "reportingPeriods", periods, {
@@ -42,9 +34,9 @@ async function handleGET(request: Request) {
     search: ["code", "name", "status", "lastChange"],
     exact: ["status"],
   });
-  if (paged) return NextResponse.json({ ...paged, autoTransferOnLock: db.settings.autoTransferOnLock });
+  if (paged) return NextResponse.json(paged);
 
-  return NextResponse.json({ reportingPeriods: periods, autoTransferOnLock: db.settings.autoTransferOnLock });
+  return NextResponse.json({ reportingPeriods: periods });
 }
 
 // year/month are derived from `startsAt` (the reporting window's own

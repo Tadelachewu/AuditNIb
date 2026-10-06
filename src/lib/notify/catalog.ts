@@ -126,6 +126,11 @@ export const notifications = {
     saveFailed: n("SETTINGS_SAVE_FAILED", "Unable to save the settings. Please try again."),
     testEmailFailed: n("SETTINGS_TEST_EMAIL_FAILED", "Unable to send the test email. Please try again."),
   },
+  autoTransfer: {
+    saved: n("AUTO_TRANSFER_SAVED", "Automatic transfer settings saved successfully."),
+    saveFailed: n("AUTO_TRANSFER_SAVE_FAILED", "Unable to save the automatic transfer settings. Please try again."),
+    loadFailed: n("AUTO_TRANSFER_LOAD_FAILED", "Unable to load the automatic transfer settings. Please try again."),
+  },
   auth: {
     loginSuccess: n("AUTH_LOGIN_SUCCESS", "Signed in successfully."),
     logoutSuccess: n("AUTH_LOGOUT_SUCCESS", "Signed out successfully."),

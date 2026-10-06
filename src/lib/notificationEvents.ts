@@ -36,6 +36,7 @@ export const NOTIFICATION_EVENT_GROUPS = [
     group: "Transfers & periods",
     events: [
       { type: "TRANSFERRED", label: "Transferred", hint: "A finding was moved to another reporting period" },
+      { type: "AUTO_TRANSFERRED", label: "Automatic transfer", hint: "A period ended and its outstanding findings were carried into the next period automatically" },
       { type: "PERIOD_LOCKED", label: "Period locked", hint: "A reporting period was locked" },
       { type: "PERIOD_UNLOCKED", label: "Period unlocked", hint: "A reporting period was unlocked" },
     ],

@@ -5,7 +5,6 @@ import { requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { appendAuditLog } from "@/lib/audit";
 import { notifyUsers, usersWithFindingsPermission } from "@/lib/notifications";
-import { autoTransferOnLock } from "@/lib/findings";
 import { withApiHandler } from "@/lib/api/handler";
 
 const updateSchema = z
@@ -20,11 +19,6 @@ const updateSchema = z
     // call that doesn't want to touch it can omit it and leave whatever
     // value the period already has.
     draftsAllowedWhileLocked: z.boolean().optional(),
-    // The locking user's explicit, per-lock answer to "transfer this
-    // period's outstanding cases to the next open period?" - see
-    // autoTransferOnLock()'s doc comment. Only meaningful on a genuine
-    // OPEN->LOCKED transition; ignored otherwise (unlock, flag-only edit).
-    transferOverdueCases: z.boolean().optional(),
     // Changing the submission window (see ReportingPeriod.submissionStartsAt's
     // own doc comment) is independent of lock/unlock and independent of
     // startsAt/endsAt below - both provided together or neither. It's no
@@ -86,7 +80,7 @@ async function handlePATCH(request: Request, { params }: { params: Promise<{ id:
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid input" }, { status: 400 });
   }
-  const { status, reason, draftsAllowedWhileLocked, transferOverdueCases, submissionStartsAt, submissionEndsAt, startsAt, endsAt, name } =
+  const { status, reason, draftsAllowedWhileLocked, submissionStartsAt, submissionEndsAt, startsAt, endsAt, name } =
     parsed.data;
 
   const db = await readDb();
@@ -183,29 +177,8 @@ async function handlePATCH(request: Request, { params }: { params: Promise<{ id:
       reason,
     });
 
-    // Configurable Automatic Transfer: only ever runs on a genuine LOCKED
-    // transition (never a flag-only touch-up), only when the locking user
-    // explicitly said yes to the Lock dialog's transfer prompt (which
-    // itself only appears when the Admin has the feature enabled in
-    // Settings), and only sweeps findings still genuinely in this period -
-    // anything already manually transferred out is naturally excluded
-    // (see autoTransferOnLock()'s own doc comment).
-    if (isStatusChange && status === "LOCKED" && transferOverdueCases) {
-      const { transferredCount } = autoTransferOnLock(current, p, {
-        userId: auth.session.userId!,
-        userName: auth.session.name!,
-      });
-      if (transferredCount > 0) {
-        appendAuditLog(current, {
-          userId: auth.session.userId!,
-          userName: auth.session.name!,
-          action: "AUTO_TRANSFER",
-          entityType: "ReportingPeriod",
-          entityId: p.id,
-          newValue: { transferredCount },
-        });
-      }
-    }
+    // Locking no longer transfers anything: outstanding findings are carried
+    // over automatically when the period ENDS (src/lib/autoTransfer).
 
     // master.txt §12: "period events" is one of the listed notification
     // triggers - district and HO controllers bank-wide need to know a

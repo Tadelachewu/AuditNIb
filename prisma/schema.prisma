@@ -452,7 +452,6 @@ model Settings {
   priorityLevels               String[] @map("priority_levels")
   irregularityTypes            String[] @map("irregularity_types")
   notification                 Json
-  autoTransferOnLock           Boolean  @map("auto_transfer_on_lock")
   rankingVisibility            Json     @map("ranking_visibility")
   performanceThresholds        Json     @map("performance_thresholds")
   hoApproval                   Json     @map("ho_approval")
@@ -551,4 +550,32 @@ enum ImportOutcome {
 enum SupportThreadStatus {
   OPEN
   RESOLVED
+}
+
+/// Automatic transfer at period end (src/lib/autoTransfer): its own settings, one row.
+model AutoTransferConfig {
+  id                     String   @id @default("singleton")
+  enabled                Boolean  @default(true)
+  excludedOperationAreas String[] @default([]) @map("excluded_operation_areas")
+  delayHours             Int      @default(0) @map("delay_hours")
+  updatedAt              DateTime @default(now()) @map("updated_at")
+  updatedBy              String?  @map("updated_by")
+
+  @@map("auto_transfer_config")
+}
+
+/// Automatic transfer at period end: one row per reporting period it handled
+/// (status DONE | WAITING_NO_NEXT | SKIPPED_AT_RELEASE). Deliberately no
+/// foreign key - the module stays independent of the period table.
+model AutoTransferRun {
+  periodId        String   @id @map("period_id")
+  status          String
+  toPeriodId      String?  @map("to_period_id")
+  movedCount      Int      @default(0) @map("moved_count")
+  keptCount       Int      @default(0) @map("kept_count")
+  movedReferences String[] @default([]) @map("moved_references")
+  keptReferences  String[] @default([]) @map("kept_references")
+  ranAt           DateTime @map("ran_at")
+
+  @@map("auto_transfer_runs")
 }

@@ -353,12 +353,7 @@ export interface Settings {
   priorityLevels: string[];
   irregularityTypes: string[];
   notification: NotificationSettings;
-  // When true, locking a reporting period automatically transfers every
-  // still-outstanding finding in it to the next OPEN period (earliest
-  // year/month after the one being locked) - see lockPeriod() in
-  // src/lib/findings.ts. A finding already transferred manually before
-  // the lock is naturally skipped (it's no longer in that period).
-  autoTransferOnLock: boolean;
+  // (Automatic transfer has its own settings: src/lib/autoTransfer.)
   // Independent per organizational level: when false, ranking/comparison
   // widgets (District Ranking, Branch Comparison, Top-Performing
   // Branches/Districts) are hidden from every dashboard regardless of who's

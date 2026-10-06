@@ -21,9 +21,12 @@ function routeFiles(dir: string): string[] {
 describe("every API route checks who is calling (review L2)", () => {
   // Public on purpose: they ARE the sign-in flow.
   const PUBLIC = new Set(["auth/forgot-password", "auth/logout", "auth/reset-password", "auth/session-ended", "auth/login"]);
+  // Not a user session but a shared secret (AUTO_TRANSFER_CRON_SECRET), checked in the route; 404 when unset.
+  const SECRET_PROTECTED: Record<string, RegExp> = { "system/auto-transfer": /AUTO_TRANSFER_CRON_SECRET[\s\S]*timingSafeEqual/ };
   const root = join(process.cwd(), "src/app/api");
   it.each(routeFiles(root).map((f) => [relative(root, f).replace(/\\/g, "/").replace(/\/route\.ts$/, ""), f]))("%s", (name, file) => {
     if (PUBLIC.has(name)) return;
+    if (SECRET_PROTECTED[name]) return expect(readFileSync(file, "utf8")).toMatch(SECRET_PROTECTED[name]);
     expect(readFileSync(file, "utf8")).toMatch(/requirePermission|requireUser|getCurrentUser|requireToggleOrEditPermission/);
   });
 });

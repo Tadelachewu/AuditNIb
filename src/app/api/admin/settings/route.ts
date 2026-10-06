@@ -38,7 +38,6 @@ const updateSchema = z.object({
       if (!n.smtpPort) ctx.addIssue({ code: "custom", path: ["smtpPort"], message: "SMTP port is required" });
     }
   }),
-  autoTransferOnLock: z.boolean(),
   rankingVisibility: z.object({
     branches: z.boolean(),
     districts: z.boolean(),
