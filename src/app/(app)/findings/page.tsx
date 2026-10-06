@@ -79,6 +79,10 @@ export default async function FindingsPage({
     ? findingsResidentInPeriod(db, periodId, findings)
     : findings.map((f) => ({ finding: f, slice: null }));
 
+  // current=1 (from a dashboard chart click): only findings currently in the
+  // period - the same set the dashboard counted, not ones that moved on.
+  if (periodId && get("current") === "1") resident = resident.filter((r) => r.slice === null || r.slice.isCurrentPeriod);
+
   const isQueued = queueStatusesForSession(user, db);
   if (queueOnly) resident = resident.filter((r) => (r.slice === null || r.slice.isCurrentPeriod) && isQueued(r.finding));
 

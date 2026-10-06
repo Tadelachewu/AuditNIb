@@ -13,7 +13,7 @@ import {
 import { sumAmountByCurrency, sumOutstandingByCurrency, sumAmountByCurrencyInPeriod, sumOutstandingByCurrencyInPeriod, addCurrency, mergeCurrencyTotals, formatCurrencyTotals, type CurrencyTotals } from "@/lib/currency";
 import { formatDateTime } from "@/lib/format";
 import { inDateRange, type DateRange } from "@/lib/dateRange";
-import { applyDashboardFilters, EMPTY_DASHBOARD_FILTERS, ALL_PERIODS_VALUE, type DashboardFilters } from "@/lib/dashboardFilters";
+import { applyDashboardFilters, dashboardFindingsHref, EMPTY_DASHBOARD_FILTERS, ALL_PERIODS_VALUE, type DashboardFilters } from "@/lib/dashboardFilters";
 import { Card, CardHeader, StatCard } from "@/components/ui/Card";
 import { DASHBOARD_ICONS as ICON } from "@/lib/dashboardIcons";
 import { Badge } from "@/components/ui/Badge";
@@ -91,6 +91,10 @@ export function DistrictDashboard({
     : openPeriod
       ? districtFindingsInRange.filter((f) => f.periodId === openPeriod.id)
       : [];
+  // Chart clicks open the Findings list with this dashboard's period and filters
+  // (the charts count periodFindings - the same period the rest of the page shows).
+  const chartHref = (extra: Record<string, string>) =>
+    dashboardFindingsHref(filters, dateRange, allPeriodsSelected ? ALL_PERIODS_VALUE : (openPeriod?.id ?? ""), extra);
   const requiringReviewFindings = periodFindings.filter((f) => f.status === "DISTRICT_REVIEW").length;
   // "Approved" = passed district review and hasn't been rejected/returned
   // since - i.e. currently sitting at or past HO_REVIEW. Deliberately a
@@ -474,8 +478,8 @@ export function DistrictDashboard({
       <MonthlyTrend db={db} scope={{ districtId: district.id, branchId: filters.branchId || undefined }} />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <FindingStatusDistribution findings={districtFindingsInRange} />
-        <RiskDistribution findings={districtFindingsInRange} riskLevels={db.settings.riskLevels} />
+        <FindingStatusDistribution findings={periodFindings} hrefFor={chartHref} />
+        <RiskDistribution findings={periodFindings} riskLevels={db.settings.riskLevels} hrefFor={chartHref} />
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">

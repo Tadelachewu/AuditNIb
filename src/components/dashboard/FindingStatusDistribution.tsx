@@ -25,13 +25,20 @@ const STAGE_BUCKETS: { key: string; label: string; statuses: Finding["status"][]
   { key: "rejected", label: "Rejected", statuses: ["REJECTED"] },
 ];
 
-export function FindingStatusDistribution({ findings }: { findings: Finding[] }) {
+export function FindingStatusDistribution({
+  findings,
+  hrefFor,
+}: {
+  findings: Finding[];
+  /** The Findings list address for a segment (the dashboard's filters + these values). */
+  hrefFor: (extra: Record<string, string>) => string;
+}) {
   const segments = STAGE_BUCKETS.map((bucket, i) => ({
     key: bucket.key,
     label: bucket.label,
     value: findings.filter((f) => (bucket.statuses as string[]).includes(f.status)).length,
     color: categoricalColor(i),
-    href: `/findings?status=${bucket.statuses.map(encodeURIComponent).join(",")}`,
+    href: hrefFor({ status: bucket.statuses.join(",") }),
   }));
 
   return (

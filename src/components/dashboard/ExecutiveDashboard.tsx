@@ -3,7 +3,7 @@ import type { SessionData } from "@/lib/session";
 import { computePerformance, computeEligibleCaseCounts, findingCaseTotals, findingCaseTotalsInPeriod, transferTotals, averageCaseAgeDays, isHoApproved } from "@/lib/findings";
 import { sumAmountByCurrency, sumOutstandingByCurrency, sumAmountByCurrencyInPeriod, sumOutstandingByCurrencyInPeriod } from "@/lib/currency";
 import { inDateRange, type DateRange } from "@/lib/dateRange";
-import { applyDashboardFilters, EMPTY_DASHBOARD_FILTERS, ALL_PERIODS_VALUE, type DashboardFilters } from "@/lib/dashboardFilters";
+import { applyDashboardFilters, dashboardFindingsHref, EMPTY_DASHBOARD_FILTERS, ALL_PERIODS_VALUE, type DashboardFilters } from "@/lib/dashboardFilters";
 import { Card, CardHeader, StatCard } from "@/components/ui/Card";
 import { DASHBOARD_ICONS as ICON } from "@/lib/dashboardIcons";
 import { Badge } from "@/components/ui/Badge";
@@ -65,6 +65,10 @@ export function ExecutiveDashboard({
     : openPeriod
       ? allFindingsInRange.filter((f) => f.periodId === openPeriod.id)
       : [];
+  // Chart clicks open the Findings list with this dashboard's period and filters
+  // (the charts count periodFindings - the same period the rest of the page shows).
+  const chartHref = (extra: Record<string, string>) =>
+    dashboardFindingsHref(filters, dateRange, allPeriodsSelected ? ALL_PERIODS_VALUE : (openPeriod?.id ?? ""), extra);
   // Rejected findings of the period, bank-wide (same rule as the District dashboard).
   const rejectedFindings = periodFindings.filter((f) => f.status === "REJECTED").length;
   const bankPerformance = hasPeriodScope
@@ -413,8 +417,8 @@ export function ExecutiveDashboard({
       <MonthlyTrend db={db} scope={{ districtId: filters.districtId || undefined, branchId: filters.branchId || undefined }} />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <FindingStatusDistribution findings={allFindingsInRange} />
-        <RiskDistribution findings={allFindingsInRange} riskLevels={db.settings.riskLevels} />
+        <FindingStatusDistribution findings={periodFindings} hrefFor={chartHref} />
+        <RiskDistribution findings={periodFindings} riskLevels={db.settings.riskLevels} hrefFor={chartHref} />
       </div>
 
       <Card>

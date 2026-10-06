@@ -244,6 +244,10 @@ export function FilterBar({
           <Label htmlFor="f-status">Status</Label>
           <Select id="f-status" value={filters.status} onChange={(e) => update({ status: e.target.value })}>
             <option value="">All statuses</option>
+            {/* Several statuses at once (a dashboard chart segment): shown as one choice. */}
+            {filters.status.includes(",") && (
+              <option value={filters.status}>{filters.status.split(",").map((s) => findingStatusLabel(s)).join(" / ")}</option>
+            )}
             {statusOptions.map((s) => (
               <option key={s} value={s}>
                 {findingStatusLabel(s)}

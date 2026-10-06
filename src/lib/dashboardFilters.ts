@@ -105,3 +105,37 @@ export function applyDashboardFilters(findings: Finding[], filters: DashboardFil
       matchesOperationAndIrregularity(f, filters)
   );
 }
+
+/**
+ * The Findings list address for a dashboard chart click: the dashboard's own
+ * filters carried over (district, branch, source, category, risk, status,
+ * operation area, irregularity type, date range), its period (the selected
+ * one, "ALL", or the current period it defaulted to), `current=1` (only
+ * findings currently in that period - the same set the dashboard counts),
+ * then the clicked segment's own values in `extra`, which win.
+ */
+export function dashboardFindingsHref(
+  filters: DashboardFilters,
+  dateRange: { from?: string; to?: string },
+  periodId: string,
+  extra: Record<string, string> = {}
+): string {
+  const qs = new URLSearchParams();
+  const set = (k: string, v: string | undefined) => {
+    if (v) qs.set(k, v);
+  };
+  set("periodId", periodId);
+  set("districtId", filters.districtId);
+  set("branchId", filters.branchId);
+  set("sourceId", filters.sourceId);
+  set("categoryId", filters.categoryId);
+  set("risk", filters.risk);
+  set("status", filters.status);
+  set("operationArea", filters.operationArea);
+  set("irregularityType", filters.irregularityType);
+  set("dateFrom", dateRange.from);
+  set("dateTo", dateRange.to);
+  if (periodId && periodId !== ALL_PERIODS_VALUE) qs.set("current", "1");
+  for (const [k, v] of Object.entries(extra)) set(k, v);
+  return `/findings?${qs.toString()}`;
+}

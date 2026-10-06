@@ -30,15 +30,28 @@ const FALLBACK_COLOR = "#898781";
  * HO_REVIEW hasn't cleared approval yet and shouldn't count here before it
  * does, even though its risk level is already known.
  */
-export function RiskDistribution({ findings, riskLevels }: { findings: Finding[]; riskLevels: string[] }) {
-  const open = findings.filter((f) => isHoApproved(f) && !["RECTIFIED", "CLOSED", "REJECTED"].includes(f.status));
+// The open, approved statuses this chart counts - also sent with the click,
+// so the Findings list shows exactly the findings in the segment.
+const OPEN_STATUSES: Finding["status"][] = ["SENT_TO_BRANCH_MANAGER", "REVERSED", "PARTIALLY_RECTIFIED", "RECTIFICATION_RETURNED", "TRANSFERRED"];
+
+export function RiskDistribution({
+  findings,
+  riskLevels,
+  hrefFor,
+}: {
+  findings: Finding[];
+  riskLevels: string[];
+  /** The Findings list address for a segment (the dashboard's filters + these values). */
+  hrefFor: (extra: Record<string, string>) => string;
+}) {
+  const open = findings.filter((f) => isHoApproved(f) && OPEN_STATUSES.includes(f.status));
 
   const segments = riskLevels.map((level) => ({
     key: level,
     label: level,
     value: open.filter((f) => f.riskLevel === level).length,
     color: STATUS_COLORS[level.trim().toLowerCase()] ?? FALLBACK_COLOR,
-    href: `/findings?risk=${encodeURIComponent(level)}`,
+    href: hrefFor({ risk: level, status: OPEN_STATUSES.join(",") }),
   }));
 
   return (
