@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import { apiSend, apiUpload } from "@/lib/api-client";
 import { formatDate, formatDateTime, formatNumber, formatCurrency } from "@/lib/format";
 import { Card, CardHeader } from "@/components/ui/Card";
+import { CollapsibleCard } from "@/components/ui/CollapsibleCard";
 import { Button } from "@/components/ui/Button";
 import { Input, Label, FileInput, FIELD_FOCUS } from "@/components/ui/Field";
 import { Badge } from "@/components/ui/Badge";
@@ -1317,93 +1318,6 @@ export function FindingDetailClient({
         </Card>
       )}
 
-      {transfers.length > 0 && (
-        <Card>
-          <CardHeader
-            title={`Transfer History (${transfers.length} hop${transfers.length === 1 ? "" : "s"})`}
-            description="Full §15 Transfer Data record per transfer hop (Original/Outstanding, From/To Period, Transfer Date, By, Reason, Case Age)."
-          />
-          <div className="flex flex-col gap-3 divide-y divide-slate-100 p-4">
-            {transfers.map((t) => {
-              const fromPeriod = lookups.periodLookup.get(t.fromPeriodId);
-              const toPeriod = lookups.periodLookup.get(t.toPeriodId);
-              return (
-                <div key={t.id} className="flex flex-col gap-2 pt-3 first:pt-0">
-                  <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge tone={t.method === "AUTOMATIC" ? "blue" : "gray"}>
-                        {t.method === "AUTOMATIC" ? "Auto Transfer" : "Manual Transfer"}
-                      </Badge>
-                      <span className="text-slate-500">
-                        Period:{" "}
-                        <span className="font-medium text-slate-800">{fromPeriod?.code ?? t.fromPeriodId}</span>{" "}
-                        <span aria-hidden>→</span>{" "}
-                        <span className="font-medium text-slate-900">{toPeriod?.code ?? t.toPeriodId}</span>
-                      </span>
-                    </div>
-                    <span className="text-xs text-slate-500">{formatDateTime(t.createdAt)}</span>
-                  </div>
-
-                  {/* §15 Transfer Data — 12 field rows, 2-column layout on wide screens. */}
-                  <dl className="grid grid-cols-1 gap-x-4 gap-y-1 rounded-md bg-slate-50 p-3 text-xs sm:grid-cols-2 sm:text-sm">
-                    <div className="flex justify-between gap-2">
-                      <dt className="text-slate-500">Original Finding ID</dt>
-                      <dd className="font-mono text-slate-800">{t.findingId}</dd>
-                    </div>
-                    <div className="flex justify-between gap-2">
-                      <dt className="text-slate-500">Case Age at Transfer</dt>
-                      <dd className="font-medium text-slate-800">
-                        {t.caseAgeAtTransferDays} day{t.caseAgeAtTransferDays === 1 ? "" : "s"}
-                      </dd>
-                    </div>
-                    <div className="flex justify-between gap-2">
-                      <dt className="text-slate-500">Previous Reporting Month</dt>
-                      <dd className="font-medium text-slate-800">{fromPeriod?.code ?? t.fromPeriodId}</dd>
-                    </div>
-                    <div className="flex justify-between gap-2">
-                      <dt className="text-slate-500">New Reporting Month</dt>
-                      <dd className="font-medium text-slate-800">{toPeriod?.code ?? t.toPeriodId}</dd>
-                    </div>
-                    <div className="flex justify-between gap-2">
-                      <dt className="text-slate-500">Original Amount</dt>
-                      <dd className="font-medium text-slate-800">
-                        {finding.currency} {formatCurrency(t.originalAmount)}
-                      </dd>
-                    </div>
-                    <div className="flex justify-between gap-2">
-                      <dt className="text-slate-500">Outstanding Amount</dt>
-                      <dd className="font-medium text-amber-700">
-                        {finding.currency} {formatCurrency(t.amountTransferred)}
-                      </dd>
-                    </div>
-                    <div className="flex justify-between gap-2">
-                      <dt className="text-slate-500">Original Case Count</dt>
-                      <dd className="font-medium text-slate-800">{formatNumber(t.originalCaseCount)}</dd>
-                    </div>
-                    <div className="flex justify-between gap-2">
-                      <dt className="text-slate-500">Outstanding Case Count</dt>
-                      <dd className="font-medium text-amber-700">{formatNumber(t.casesTransferred)}</dd>
-                    </div>
-                    <div className="flex justify-between gap-2">
-                      <dt className="text-slate-500">Transfer Date</dt>
-                      <dd className="font-medium text-slate-800">{t.createdAt.slice(0, 10)}</dd>
-                    </div>
-                    <div className="flex justify-between gap-2">
-                      <dt className="text-slate-500">Transferred By</dt>
-                      <dd className="font-medium text-slate-800">{t.createdByName}</dd>
-                    </div>
-                    <div className="flex justify-between gap-2 sm:col-span-2">
-                      <dt className="text-slate-500">Transfer Reason</dt>
-                      <dd className="text-slate-800">{t.reason}</dd>
-                    </div>
-                  </dl>
-                </div>
-              );
-            })}
-          </div>
-        </Card>
-      )}
-
       {rectifications.length > 0 && (
         <Card>
           <CardHeader title="Rectification Ledger" />
@@ -1439,55 +1353,143 @@ export function FindingDetailClient({
         </Card>
       )}
 
-      <Card>
-        <CardHeader title="Transition History" />
-        <div className="divide-y divide-slate-100">
-          {transitions.map((t) => {
-            // Return/reject events (sent back for correction, or rejected
-            // outright) get their reason behind a "View Reason" button
-            // instead of shown inline - these are exactly the events
-            // someone reviewing this finding's history most needs to
-            // actually read (why was this bounced back?), so they're
-            // called out rather than blending into the same gray inline
-            // text every other transition's reason uses. Colored to match
-            // FindingStatusBadge's own severity convention (amber for a
-            // recoverable return, red for the one truly terminal REJECTED).
-            const isReturnEvent = ["RETURNED", "REJECTED", "RECTIFICATION_RETURNED"].includes(t.toStatus);
-            const header = (
-              <span className="text-slate-600">
-                <span className="font-medium text-slate-900">{t.userName}</span> {t.action.replaceAll("_", " ").toLowerCase()}{" "}
-                <span className="text-slate-500">
-                  ({findingStatusLabel(t.fromStatus)} → {findingStatusLabel(t.toStatus)})
-                </span>
-                {t.reason && !isReturnEvent && <span className="text-slate-500"> — {t.reason}</span>}
-              </span>
-            );
-            if (isReturnEvent && t.reason) {
-              const buttonTone = t.toStatus === "REJECTED" ? "bg-[#b91c1c] hover:bg-[#991b1b]" : "bg-[#d97706] hover:bg-[#b45309]";
-              return (
-                <details key={t.id} className="group px-4 py-2 text-sm">
-                  <summary className="flex cursor-pointer list-none items-center justify-between gap-3 marker:content-none">
-                    {header}
-                    <span className="flex shrink-0 items-center gap-2">
-                      <span className={`rounded-md px-2.5 py-1 text-xs font-bold text-on-dark transition-colors ${buttonTone}`}>
-                        View Reason
-                      </span>
+      {/* Transfer History (left) and Transition History (right) side by side,
+          stacked on narrow screens; Transition History alone takes the full width. */}
+      <div className={`grid grid-cols-1 items-start gap-5 ${transfers.length > 0 ? "xl:grid-cols-2" : ""}`}>
+        {transfers.length > 0 && (
+          <CollapsibleCard
+            title={`Transfer History (${transfers.length} hop${transfers.length === 1 ? "" : "s"})`}
+            description="Full §15 Transfer Data record per transfer hop (Original/Outstanding, From/To Period, Transfer Date, By, Reason, Case Age)."
+          >
+            <div className="flex flex-col gap-3 divide-y divide-slate-100 p-4">
+              {transfers.map((t) => {
+                const fromPeriod = lookups.periodLookup.get(t.fromPeriodId);
+                const toPeriod = lookups.periodLookup.get(t.toPeriodId);
+                return (
+                  <div key={t.id} className="flex flex-col gap-2 pt-3 first:pt-0">
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge tone={t.method === "AUTOMATIC" ? "blue" : "gray"}>
+                          {t.method === "AUTOMATIC" ? "Auto Transfer" : "Manual Transfer"}
+                        </Badge>
+                        <span className="text-slate-500">
+                          Period:{" "}
+                          <span className="font-medium text-slate-800">{fromPeriod?.code ?? t.fromPeriodId}</span>{" "}
+                          <span aria-hidden>→</span>{" "}
+                          <span className="font-medium text-slate-900">{toPeriod?.code ?? t.toPeriodId}</span>
+                        </span>
+                      </div>
                       <span className="text-xs text-slate-500">{formatDateTime(t.createdAt)}</span>
-                    </span>
-                  </summary>
-                  <p className="mt-1.5 border-t border-slate-100 pt-1.5 text-sm text-slate-600">{t.reason}</p>
-                </details>
+                    </div>
+
+                    {/* §15 Transfer Data — 12 field rows, 2-column layout on wide screens. */}
+                    <dl className="grid grid-cols-1 gap-x-4 gap-y-1 rounded-md bg-slate-50 p-3 text-xs sm:grid-cols-2 sm:text-sm">
+                      <div className="flex justify-between gap-2">
+                        <dt className="text-slate-500">Original Finding ID</dt>
+                        <dd className="font-mono text-slate-800">{t.findingId}</dd>
+                      </div>
+                      <div className="flex justify-between gap-2">
+                        <dt className="text-slate-500">Case Age at Transfer</dt>
+                        <dd className="font-medium text-slate-800">
+                          {t.caseAgeAtTransferDays} day{t.caseAgeAtTransferDays === 1 ? "" : "s"}
+                        </dd>
+                      </div>
+                      <div className="flex justify-between gap-2">
+                        <dt className="text-slate-500">Previous Reporting Month</dt>
+                        <dd className="font-medium text-slate-800">{fromPeriod?.code ?? t.fromPeriodId}</dd>
+                      </div>
+                      <div className="flex justify-between gap-2">
+                        <dt className="text-slate-500">New Reporting Month</dt>
+                        <dd className="font-medium text-slate-800">{toPeriod?.code ?? t.toPeriodId}</dd>
+                      </div>
+                      <div className="flex justify-between gap-2">
+                        <dt className="text-slate-500">Original Amount</dt>
+                        <dd className="font-medium text-slate-800">
+                          {finding.currency} {formatCurrency(t.originalAmount)}
+                        </dd>
+                      </div>
+                      <div className="flex justify-between gap-2">
+                        <dt className="text-slate-500">Outstanding Amount</dt>
+                        <dd className="font-medium text-amber-700">
+                          {finding.currency} {formatCurrency(t.amountTransferred)}
+                        </dd>
+                      </div>
+                      <div className="flex justify-between gap-2">
+                        <dt className="text-slate-500">Original Case Count</dt>
+                        <dd className="font-medium text-slate-800">{formatNumber(t.originalCaseCount)}</dd>
+                      </div>
+                      <div className="flex justify-between gap-2">
+                        <dt className="text-slate-500">Outstanding Case Count</dt>
+                        <dd className="font-medium text-amber-700">{formatNumber(t.casesTransferred)}</dd>
+                      </div>
+                      <div className="flex justify-between gap-2">
+                        <dt className="text-slate-500">Transfer Date</dt>
+                        <dd className="font-medium text-slate-800">{t.createdAt.slice(0, 10)}</dd>
+                      </div>
+                      <div className="flex justify-between gap-2">
+                        <dt className="text-slate-500">Transferred By</dt>
+                        <dd className="font-medium text-slate-800">{t.createdByName}</dd>
+                      </div>
+                      <div className="flex justify-between gap-2 sm:col-span-2">
+                        <dt className="text-slate-500">Transfer Reason</dt>
+                        <dd className="text-slate-800">{t.reason}</dd>
+                      </div>
+                    </dl>
+                  </div>
+                );
+              })}
+            </div>
+          </CollapsibleCard>
+        )}
+        <CollapsibleCard title="Transition History" description={`${transitions.length} step(s)`}>
+          <div className="divide-y divide-slate-100">
+            {transitions.map((t) => {
+              // Return/reject events (sent back for correction, or rejected
+              // outright) get their reason behind a "View Reason" button
+              // instead of shown inline - these are exactly the events
+              // someone reviewing this finding's history most needs to
+              // actually read (why was this bounced back?), so they're
+              // called out rather than blending into the same gray inline
+              // text every other transition's reason uses. Colored to match
+              // FindingStatusBadge's own severity convention (amber for a
+              // recoverable return, red for the one truly terminal REJECTED).
+              const isReturnEvent = ["RETURNED", "REJECTED", "RECTIFICATION_RETURNED"].includes(t.toStatus);
+              const header = (
+                <span className="text-slate-600">
+                  <span className="font-medium text-slate-900">{t.userName}</span> {t.action.replaceAll("_", " ").toLowerCase()}{" "}
+                  <span className="text-slate-500">
+                    ({findingStatusLabel(t.fromStatus)} → {findingStatusLabel(t.toStatus)})
+                  </span>
+                  {t.reason && !isReturnEvent && <span className="text-slate-500"> — {t.reason}</span>}
+                </span>
               );
-            }
-            return (
-              <div key={t.id} className="flex items-center justify-between px-4 py-2 text-sm">
-                {header}
-                <span className="text-xs text-slate-500">{formatDateTime(t.createdAt)}</span>
-              </div>
-            );
-          })}
-        </div>
-      </Card>
+              if (isReturnEvent && t.reason) {
+                const buttonTone = t.toStatus === "REJECTED" ? "bg-[#b91c1c] hover:bg-[#991b1b]" : "bg-[#d97706] hover:bg-[#b45309]";
+                return (
+                  <details key={t.id} className="group px-4 py-2 text-sm">
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 marker:content-none">
+                      {header}
+                      <span className="flex shrink-0 items-center gap-2">
+                        <span className={`rounded-md px-2.5 py-1 text-xs font-bold text-on-dark transition-colors ${buttonTone}`}>
+                          View Reason
+                        </span>
+                        <span className="text-xs text-slate-500">{formatDateTime(t.createdAt)}</span>
+                      </span>
+                    </summary>
+                    <p className="mt-1.5 border-t border-slate-100 pt-1.5 text-sm text-slate-600">{t.reason}</p>
+                  </details>
+                );
+              }
+              return (
+                <div key={t.id} className="flex items-center justify-between px-4 py-2 text-sm">
+                  {header}
+                  <span className="text-xs text-slate-500">{formatDateTime(t.createdAt)}</span>
+                </div>
+              );
+            })}
+          </div>
+        </CollapsibleCard>
+      </div>
       {dialog}
     </div>
   );

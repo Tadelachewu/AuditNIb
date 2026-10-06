@@ -50,8 +50,10 @@ export function transferFinding(
     // while still going through this exact same real transfer mechanism.
     action?: string;
   }
-): void {
+): { backToOriginal: boolean } {
   const fromPeriodId = finding.periodId;
+  // Where the finding was first reported (before this transfer is recorded).
+  const originalPeriod = originalPeriodId(db, finding);
   const outstandingCases = finding.caseCount - finding.closedCases;
   const outstandingAmount = finding.amount - finding.closedAmount;
 
@@ -121,13 +123,25 @@ export function transferFinding(
   }
 
   finding.periodId = opts.toPeriodId;
+  // Back in the period it was first reported in: it isn't "transferred" any
+  // more, so it gets the status it would have had if it had never left.
+  // Worked out from what is true now - only closed work survives a transfer
+  // (anything else was reset above) - never restored from before it left,
+  // which could describe rectification that no longer exists:
+  //   nothing closed   -> Sent to Branch Manager
+  //   some closed      -> Partially Rectified
+  // (a fully closed finding can't be transferred). Any other destination
+  // -> Transferred.
+  const backToOriginal = opts.toPeriodId === originalPeriod;
+  const somethingClosed = finding.closedCases > 0 || finding.closedAmount > 0;
   transitionFinding(db, finding, {
-    toStatus: "TRANSFERRED",
+    toStatus: !backToOriginal ? "TRANSFERRED" : somethingClosed ? "PARTIALLY_RECTIFIED" : "SENT_TO_BRANCH_MANAGER",
     action: opts.action ?? "TRANSFER",
     userId: opts.userId,
     userName: opts.userName,
     reason: opts.reason,
   });
+  return { backToOriginal };
 }
 
 // TRANSFERABLE_STATUSES lives on the manual transfer route, this module,

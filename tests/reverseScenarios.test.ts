@@ -552,3 +552,73 @@ describe("transfer: rectification not yet closed goes back to the branch", () =>
     expect(db.auditLogs.some((l) => l.action === "TRANSFER_RESET_PENDING")).toBe(false);
   });
 });
+
+// ---------- back to the original period ----------
+// A finding transferred back to the period it was first reported in isn't
+// "Transferred" any more: its status is worked out from what is true now.
+describe("transfer back to the original period resets the status", () => {
+  beforeEach(() => {
+    db = fixture();
+  });
+
+  it("nothing closed: 10 -> 11 -> back to 10 = Sent to Branch Manager, all cases outstanding", () => {
+    const f = addFinding(3, "p10");
+    transfer(f, "p11");
+    expect(f.status).toBe("TRANSFERRED");
+    transfer(f, "p10");
+    expect(f).toMatchObject({ status: "SENT_TO_BRANCH_MANAGER", periodId: "p10", closedCases: 0 });
+  });
+
+  it("part closed in the original period: 1 of 3 closed, 10 -> 11 -> back = Partially Rectified", () => {
+    const f = addFinding(3, "p10");
+    closeCases(f, 1);
+    f.status = "PARTIALLY_RECTIFIED";
+    transfer(f, "p11");
+    expect(f.status).toBe("TRANSFERRED");
+    transfer(f, "p10");
+    expect(f).toMatchObject({ status: "PARTIALLY_RECTIFIED", closedCases: 1, rectifiedCases: 1 });
+  });
+
+  it("part closed while away (in 11), then back = Partially Rectified; the closure stays in 11", () => {
+    const f = addFinding(3, "p10");
+    transfer(f, "p11");
+    closeCases(f, 1);
+    transfer(f, "p10");
+    expect(f.status).toBe("PARTIALLY_RECTIFIED");
+    expect(slice(f, "p11").closed).toBe(1);
+  });
+
+  it("rectified but not closed when it left: that work was reset, so back = Sent to Branch Manager (not Rectified)", () => {
+    const f = addFinding(3, "p10");
+    rectify(f, 3);
+    verify(f);
+    f.status = "RECTIFIED";
+    transfer(f, "p11");
+    transfer(f, "p10");
+    expect(f).toMatchObject({ status: "SENT_TO_BRANCH_MANAGER", rectifiedCases: 0, districtVerifiedCases: 0 });
+  });
+
+  it("multi-hop return 10 -> 11 -> 9 -> 10 also resets", () => {
+    const f = addFinding(3, "p10");
+    transfer(f, "p11");
+    transfer(f, "p9");
+    expect(f.status).toBe("TRANSFERRED");
+    transfer(f, "p10");
+    expect(f.status).toBe("SENT_TO_BRANCH_MANAGER");
+  });
+
+  it("back to a period it visited but that isn't its original stays Transferred (10 -> 11 -> 9 -> 11)", () => {
+    const f = addFinding(3, "p10");
+    transfer(f, "p11");
+    transfer(f, "p9");
+    transfer(f, "p11");
+    expect(f.status).toBe("TRANSFERRED");
+  });
+
+  it("the history records the move back as a transfer, with the new status", () => {
+    const f = addFinding(3, "p10");
+    transfer(f, "p11");
+    transfer(f, "p10");
+    expect(db.findingTransitions[0]).toMatchObject({ action: "TRANSFER", fromStatus: "TRANSFERRED", toStatus: "SENT_TO_BRANCH_MANAGER" });
+  });
+});

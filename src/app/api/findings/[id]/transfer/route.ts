@@ -60,21 +60,25 @@ async function handlePOST(request: Request, { params }: { params: Promise<{ id: 
   const updated = await updateDb((current) => {
     const f = current.findings.find((x) => x.id === id)!;
 
-    transferFinding(current, f, {
+    const { backToOriginal } = transferFinding(current, f, {
       toPeriodId: input.toPeriodId,
       reason: input.reason,
       userId: auth.session.userId!,
       userName: auth.session.name!,
     });
 
+    // Back in its original period, the branch has it to rectify again - tell them too.
     const recipients = new Set([
       f.createdBy,
       ...usersWithFindingsPermission(current, "transfer", { districtId: f.districtId }),
+      ...(backToOriginal ? usersWithFindingsPermission(current, "rectify", { branchId: f.branchId }) : []),
     ]);
     notifyUsers(current, [...recipients], {
       type: "TRANSFERRED",
-      title: `${f.reference} transferred to ${destination.code}`,
-      message: `${auth.session.name} moved the outstanding balance to ${destination.code}: ${input.reason}`,
+      title: backToOriginal ? `${f.reference} moved back to its original period ${destination.code}` : `${f.reference} transferred to ${destination.code}`,
+      message: backToOriginal
+        ? `${auth.session.name} moved it back to ${destination.code}, the period it was reported in - status: ${f.status === "PARTIALLY_RECTIFIED" ? "Partially Rectified" : "Sent to Branch Manager"}: ${input.reason}`
+        : `${auth.session.name} moved the outstanding balance to ${destination.code}: ${input.reason}`,
       entityType: "Finding",
       entityId: f.id,
     });

@@ -81,7 +81,24 @@ An active branch is **covered** in a period when one of its own findings was **o
 - **Weekly Executive Summary** works from dates, not periods, so transfers never affected it.
 - **Transferred Findings** (template) is the register of every transfer hop; it's meant to show transfers.
 
-## 6. Manual test cases
+## 6. A finding moved back to its original period
+
+A transfer normally sets the status to **Transferred**. A transfer **back to the period the finding was first reported in** doesn't: the finding isn't transferred any more, so it gets the status it would have had if it had never left. It's worked out from what is true now, since only **closed** work survives a transfer (rectified-but-not-closed work is reset and goes back to the branch):
+
+| On return to the original period | Status |
+|---|---|
+| Nothing closed | **Sent to Branch Manager** |
+| Some cases closed (in any period) | **Partially Rectified** |
+
+- It isn't restored from before it left: e.g. a finding that was *Rectified* (awaiting closure) when it left lost that rectification in the transfer, so it comes back as *Sent to Branch Manager*.
+- Multi-hop returns count too (10 → 11 → 9 → 10). A move to a period it visited that **isn't** its original (10 → 11 → 9 → 11) stays **Transferred**.
+- A previously reversed finding comes back as plain *Sent to Branch Manager* (the "/R" reverse is already in its history).
+- The history still records the move as a transfer, with the new status; the branch's rectifiers are notified along with the usual recipients.
+- Automatic transfer on lock only moves forward, so it never lands back in the original period.
+
+Code: `transferFinding()` in `src/lib/findings.ts`; tests in `tests/reverseScenarios.test.ts` ("transfer back to the original period").
+
+## 7. Manual test cases
 
 | # | Steps | Expected |
 |---|---|---|
@@ -93,8 +110,11 @@ An active branch is **covered** in a period when one of its own findings was **o
 | T6 | Reverse a closed finding | Its original period's Rectified drops |
 | T7 | Compare Monthly Summary (Sep) Not dispatched with Uncovered Branches (Sep) for a district | Same number |
 | T8 | Choose **All periods** | Totals = the sum of every period's totals |
+| T9 | 3 cases in 10, nothing closed: transfer 10 → 11, then back to 10 | Status **Sent to Branch Manager**; the branch can rectify all 3 |
+| T10 | 3 cases in 10, close 1, transfer 10 → 11, then back to 10 | Status **Partially Rectified**; 1 closed, 2 to rectify |
+| T11 | Transfer 10 → 11 → 9 → 11 | Status stays **Transferred** |
 
-## 7. Technical reference
+## 8. Technical reference
 
 | | |
 |---|---|
