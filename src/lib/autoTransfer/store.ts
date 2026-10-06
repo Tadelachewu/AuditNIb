@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prismaClient";
 import type { Prisma } from "@/generated/prisma/client";
 import { logger } from "@/lib/logger";
-import { DEFAULT_AUTO_TRANSFER_CONFIG, type AutoTransferConfig, type AutoTransferRun, type AutoTransferRunStatus } from "./types";
+import { DEFAULT_AUTO_TRANSFER_CONFIG, type AutoTransferConfig, type AutoTransferRun, type AutoTransferRunStatus, type AutoTransferTrigger } from "./types";
 
 /**
  * Storage of the automatic transfer - its own two tables, nothing else.
@@ -86,6 +86,7 @@ export const prismaAutoTransferStore: AutoTransferStore = {
         movedReferences: r.movedReferences,
         keptReferences: r.keptReferences,
         ranAt: r.ranAt.toISOString(),
+        triggeredBy: (r.triggeredBy as AutoTransferTrigger | null) ?? null,
       }));
     } catch (err) {
       if (isMissingTable(err)) {
@@ -108,6 +109,7 @@ export const prismaAutoTransferStore: AutoTransferStore = {
           movedReferences: r.movedReferences,
           keptReferences: r.keptReferences,
           ranAt: new Date(r.ranAt),
+          triggeredBy: r.triggeredBy,
         };
         await client.autoTransferRun.upsert({ where: { periodId: r.periodId }, create: { periodId: r.periodId, ...data }, update: data });
       }

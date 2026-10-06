@@ -83,7 +83,7 @@ describe("rules", () => {
   it("due periods: ended, not handled, oldest first; none when switched off", () => {
     const now = Date.UTC(2026, 10, 2); // 2 Nov: Sep and Oct have ended
     expect(dueSweeps(db.reportingPeriods, [], config(), now).map((p) => p.id)).toEqual(["sep", "oct"]);
-    const handled: AutoTransferRun[] = [{ periodId: "sep", status: "DONE", toPeriodId: "oct", movedCount: 0, keptCount: 0, movedReferences: [], keptReferences: [], ranAt: "" }];
+    const handled: AutoTransferRun[] = [{ periodId: "sep", status: "DONE", toPeriodId: "oct", movedCount: 0, keptCount: 0, movedReferences: [], keptReferences: [], ranAt: "", triggeredBy: null }];
     expect(dueSweeps(db.reportingPeriods, handled, config(), now).map((p) => p.id)).toEqual(["oct"]);
     expect(dueSweeps(db.reportingPeriods, [], config({ enabled: false }), now)).toEqual([]);
     expect(dueSweeps(db.reportingPeriods, [], config(), SEP_END - 1)).toEqual([]);
@@ -206,6 +206,18 @@ describe("service", () => {
     expect(db.findingTransfers).toHaveLength(1);
   });
 
+  it("records what started it: the in-app check by default, the scheduler when it calls", async () => {
+    finding("sep");
+    const store = fakeStore(config());
+    const res = await runAutoTransferIfDue({ now: SEP_END + H, force: true, trigger: "scheduler", deps: deps(store) });
+    expect(res.runs[0].triggeredBy).toBe("scheduler");
+    expect(db.auditLogs.find((l) => l.action === "PERIOD_AUTO_TRANSFER")?.reason).toContain("the scheduler");
+    db.reportingPeriods.push(period("dec", 2026, 12));
+    finding("nov");
+    const inApp = await runAutoTransferIfDue({ now: Date.UTC(2026, 11, 2), force: true, deps: deps(store) });
+    expect(inApp.runs.map((r) => r.triggeredBy)).toEqual(["in-app", "in-app"]);
+  });
+
   it("does nothing before the period ends, when off, or when not installed", async () => {
     const f = finding("sep");
     expect((await runAutoTransferIfDue({ now: SEP_END - H, force: true, deps: deps(fakeStore(config())) })).ran).toBe(false);
@@ -223,7 +235,7 @@ describe("service", () => {
 
   it("periods already handled at install are never swept", async () => {
     const f = finding("sep");
-    const store = fakeStore(config(), [{ periodId: "sep", status: "SKIPPED_AT_RELEASE", toPeriodId: null, movedCount: 0, keptCount: 0, movedReferences: [], keptReferences: [], ranAt: "" }]);
+    const store = fakeStore(config(), [{ periodId: "sep", status: "SKIPPED_AT_RELEASE", toPeriodId: null, movedCount: 0, keptCount: 0, movedReferences: [], keptReferences: [], ranAt: "", triggeredBy: null }]);
     await runAutoTransferIfDue({ now: SEP_END + H, force: true, deps: deps(store) });
     expect(f.periodId).toBe("sep");
   });

@@ -46,7 +46,7 @@ describe("scheduler endpoint", () => {
     const res = await call(SECRET);
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ran: true, runs: [] });
-    expect(runAutoTransferIfDue).toHaveBeenCalledWith({ force: true });
+    expect(runAutoTransferIfDue).toHaveBeenCalledWith({ force: true, trigger: "scheduler" });
   });
 
   it("blocks an address after 10 wrong secrets (429), even with the right one", async () => {

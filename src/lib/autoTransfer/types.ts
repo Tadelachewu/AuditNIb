@@ -35,6 +35,9 @@ export const DEFAULT_AUTO_TRANSFER_CONFIG: AutoTransferConfig = {
  */
 export type AutoTransferRunStatus = "DONE" | "WAITING_NO_NEXT" | "SKIPPED_AT_RELEASE";
 
+/** What started a sweep: a scheduler calling /api/system/auto-transfer, or the check made while people use the app. */
+export type AutoTransferTrigger = "scheduler" | "in-app";
+
 export interface AutoTransferRun {
   periodId: string;
   status: AutoTransferRunStatus;
@@ -44,6 +47,8 @@ export interface AutoTransferRun {
   movedReferences: string[];
   keptReferences: string[];
   ranAt: string;
+  /** null = recorded before triggers were tracked (or at install). */
+  triggeredBy: AutoTransferTrigger | null;
 }
 
 /** A period counts as handled (never swept again) once its run is DONE or SKIPPED_AT_RELEASE. */

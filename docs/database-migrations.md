@@ -10,6 +10,7 @@ How the database schema is versioned, what was done on 2026-10-06 to restart the
 |---|---|
 | `0_init` | **Baseline**: the whole database as it was on 2026-10-06, before Automatic Transfer. Marked as already applied on the existing database; on a brand-new database it creates every table |
 | `20261006120000_auto_transfer_at_period_end` | Automatic transfer at period end: adds `auto_transfer_config` and `auto_transfer_runs`, marks periods that had already ended as handled, removes `settings.auto_transfer_on_lock` ([auto-transfer.md](auto-transfer.md)) |
+| `20261006213000_auto_transfer_run_trigger` | Records what started each sweep (`triggered_by`: scheduler / in-app) |
 
 Every new schema change is added on top of these as a new folder. **Keep this folder in git**; never delete it.
 

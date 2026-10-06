@@ -38,7 +38,7 @@ It has its own **Save** button, separate from the rest of the Settings page. Vie
 
 - **Reporting Periods → Auto-transfer column:**
   - *Runs after 31/10/2026, 23:59:00*: pending.
-  - **Done** · 12 moved, 3 kept: hover for the date and destination.
+  - **Done** · 12 moved, 3 kept · **by scheduler** / **by in-app check**: what started the sweep; hover for the date and destination.
   - **Waiting: no next period**.
   - **Before install**: the period had already ended when this feature was installed; it is never swept.
   - **Off**: the switch is off.
@@ -49,7 +49,7 @@ It has its own **Save** button, separate from the rest of the Settings page. Vie
   - the transfer-permission holders get one summary per period;
   - each affected branch's rectifiers get one message ("N findings carried into 2026-11");
   - never one notification per finding.
-- **Audit log:** one `PERIOD_AUTO_TRANSFER` entry per period, listing the moved and kept references and the exclusions in force.
+- **Audit log:** one `PERIOD_AUTO_TRANSFER` entry per period, listing the moved and kept references, the exclusions in force and **what started it** (`triggeredBy`: `scheduler` or `in-app`).
 
 ## 4. When it actually runs
 
@@ -82,6 +82,8 @@ Header: x-auto-transfer-secret: <AUTO_TRANSFER_CRON_SECRET>
 | `404` | `AUTO_TRANSFER_CRON_SECRET` isn't set: the endpoint is off |
 | `429` | 10 wrong secrets in 15 minutes from that address: blocked for 15 minutes |
 
+`GET` on the same URL, with the same header, is a **read-only status check** (it never moves anything): installed / on, periods due now, the next due period and time, periods waiting for a next period, and the last sweep with what started it. The `check` scripts in `scheduler/` use it.
+
 - **No `Origin` header and no sign-in are needed.** `/api/system/*` is exempt from the browser cross-site check; the secret protects it.
 - **Call it every 5 minutes.** Calling more often is harmless, and several servers or schedulers are fine (see the lock above).
 
@@ -103,8 +105,10 @@ The app ships the scheduler files in **`scheduler/`** (see [scheduler/README.md]
 
 | Folder | Files |
 |---|---|
-| `scheduler/windows/` | `auto-transfer.ps1` (the call), `install-task.ps1`, `uninstall-task.ps1` |
-| `scheduler/linux/` | `auto-transfer.sh` (the call), `install-cron.sh`, `install-systemd.sh` |
+| `scheduler/windows/` | `auto-transfer.ps1` (the call), `install-task.ps1`, `uninstall-task.ps1`, `check.ps1` (readiness) |
+| `scheduler/linux/` | `auto-transfer.sh` (the call), `install-cron.sh`, `install-systemd.sh`, `check.sh` (readiness) |
+
+**Is it ready?** `powershell -ExecutionPolicy Bypass -File scheduler\windows\check.ps1` (Windows) or `sh scheduler/linux/check.sh`. Read-only; ends with READY or NOT READY and the reason.
 | `scheduler/kubernetes/` | `auto-transfer-cronjob.yaml` |
 
 ### 4.4 Windows: Task Scheduler

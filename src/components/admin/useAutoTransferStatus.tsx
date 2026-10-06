@@ -55,7 +55,14 @@ export function useAutoTransferStatus(rows: { id: string; code: string }[]) {
         const to = run.toPeriodId
           ? (codeOf.get(run.toPeriodId) ?? "next period")
           : "next period";
-        const text = `Done ${formatDateTime(run.ranAt)} - ${run.movedCount} moved to ${to}${run.keptCount ? `, ${run.keptCount} kept (excluded)` : ""}`;
+        // Who started it: the scheduler, or the check made while people use the app.
+        const by =
+          run.triggeredBy === "scheduler"
+            ? "by scheduler"
+            : run.triggeredBy === "in-app"
+              ? "by in-app check"
+              : "";
+        const text = `Done ${formatDateTime(run.ranAt)}${by ? ` ${by}` : ""} - ${run.movedCount} moved to ${to}${run.keptCount ? `, ${run.keptCount} kept (excluded)` : ""}`;
         return {
           text,
           cell: (
@@ -64,6 +71,7 @@ export function useAutoTransferStatus(rows: { id: string; code: string }[]) {
               <span className="text-xs text-slate-500">
                 {run.movedCount} moved
                 {run.keptCount ? `, ${run.keptCount} kept` : ""}
+                {by ? ` · ${by}` : ""}
               </span>
             </span>
           ),

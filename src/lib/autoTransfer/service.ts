@@ -8,7 +8,7 @@ import { formatDateTime } from "@/lib/format";
 import type { Database, ReportingPeriod } from "@/types";
 import { dueSweeps, planSweep, sweepDueAt } from "./rules";
 import { prismaAutoTransferStore, type AutoTransferStore } from "./store";
-import { SYSTEM_ACTOR, type AutoTransferConfig, type AutoTransferRun } from "./types";
+import { SYSTEM_ACTOR, type AutoTransferConfig, type AutoTransferRun, type AutoTransferTrigger } from "./types";
 
 /**
  * Runs the automatic transfer when a period's sweep is due. The app has no
@@ -40,7 +40,8 @@ export function sweepPeriods(
   periodIds: string[],
   config: AutoTransferConfig,
   now: number,
-  previousRuns: ReadonlyMap<string, AutoTransferRun> = new Map()
+  previousRuns: ReadonlyMap<string, AutoTransferRun> = new Map(),
+  trigger: AutoTransferTrigger = "in-app"
 ): SweepResult {
   const runs: AutoTransferRun[] = [];
   const ranAt = new Date(now).toISOString();
@@ -64,7 +65,7 @@ export function sweepPeriods(
           entityId: period.id,
         });
       }
-      runs.push({ periodId: period.id, status: "WAITING_NO_NEXT", toPeriodId: null, movedCount: 0, keptCount: kept.length, movedReferences: [], keptReferences: kept.map((f) => f.reference), ranAt });
+      runs.push({ periodId: period.id, status: "WAITING_NO_NEXT", toPeriodId: null, movedCount: 0, keptCount: kept.length, movedReferences: [], keptReferences: kept.map((f) => f.reference), ranAt, triggeredBy: trigger });
       continue;
     }
 
@@ -88,6 +89,7 @@ export function sweepPeriods(
       movedReferences: toMove.map((f) => f.reference),
       keptReferences: kept.map((f) => f.reference),
       ranAt,
+      triggeredBy: trigger,
     };
     runs.push(run);
 
@@ -97,8 +99,8 @@ export function sweepPeriods(
       action: "PERIOD_AUTO_TRANSFER",
       entityType: "ReportingPeriod",
       entityId: period.id,
-      newValue: { from: period.code, to: destination.code, moved: run.movedReferences, kept: run.keptReferences, excludedOperationAreas: config.excludedOperationAreas },
-      reason: `Automatic transfer at the end of ${period.code}`,
+      newValue: { from: period.code, to: destination.code, moved: run.movedReferences, kept: run.keptReferences, excludedOperationAreas: config.excludedOperationAreas, triggeredBy: trigger },
+      reason: `Automatic transfer at the end of ${period.code} (started by ${trigger === "scheduler" ? "the scheduler" : "the in-app check"})`,
     });
 
     if (toMove.length > 0 || kept.length > 0) {
@@ -172,8 +174,9 @@ let lastCheckAt = 0;
  * next call.
  */
 export async function runAutoTransferIfDue(
-  opts: { now?: number; force?: boolean; deps?: Partial<AutoTransferDeps> } = {}
+  opts: { now?: number; force?: boolean; trigger?: AutoTransferTrigger; deps?: Partial<AutoTransferDeps> } = {}
 ): Promise<{ ran: boolean; runs: AutoTransferRun[] }> {
+  const trigger = opts.trigger ?? "in-app";
   const now = opts.now ?? Date.now();
   if (!opts.force && now - lastCheckAt < CHECK_INTERVAL_MS) return { ran: false, runs: [] };
   lastCheckAt = now;
@@ -197,10 +200,10 @@ export async function runAutoTransferIfDue(
       // The moved findings and the "period done" record commit together: a
       // failure rolls back both, so a period is never moved without being
       // recorded (which could sweep it twice) or recorded without moving.
-      const { runs } = await deps.updateDb((db) => sweepPeriods(db, stillDue, config, now, previousByPeriod), {
+      const { runs } = await deps.updateDb((db) => sweepPeriods(db, stillDue, config, now, previousByPeriod, trigger), {
         alsoWrite: (tx, result) => deps.store.saveRuns(result.runs, tx),
       });
-      logger.info({ event: "auto_transfer.ran", runs: runs.map((r) => ({ periodId: r.periodId, status: r.status, moved: r.movedCount, kept: r.keptCount })) }, "Automatic transfer ran");
+      logger.info({ event: "auto_transfer.ran", trigger, runs: runs.map((r) => ({ periodId: r.periodId, status: r.status, moved: r.movedCount, kept: r.keptCount })) }, "Automatic transfer ran");
       return { ran: true, runs };
     } finally {
       await deps.lock.release();

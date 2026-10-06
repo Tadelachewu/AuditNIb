@@ -576,6 +576,8 @@ model AutoTransferRun {
   movedReferences String[] @default([]) @map("moved_references")
   keptReferences  String[] @default([]) @map("kept_references")
   ranAt           DateTime @map("ran_at")
+  /// What started the sweep: "scheduler" (POST /api/system/auto-transfer) or "in-app" (the check made while people use the app). Null for older rows.
+  triggeredBy     String?  @map("triggered_by")
 
   @@map("auto_transfer_runs")
 }

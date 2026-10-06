@@ -7,6 +7,26 @@ The scripts:
 - call `http://localhost:<PORT>/api/system/auto-transfer`;
 - log to `scheduler/logs/auto-transfer.log` (last 2,000 lines; not in git).
 
+## Is it ready? (read-only check)
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scheduler\windows\check.ps1     # Windows
+```
+```sh
+sh scheduler/linux/check.sh                                              # Linux / macOS
+```
+
+It never moves anything. It checks:
+- the secret in `.env`;
+- that the app answers and accepts it;
+- that Automatic Transfer is installed and **on**;
+- what is due now, and when the next period becomes due;
+- the last sweep, and whether it was started **by the scheduler or by the in-app check**;
+- the scheduled task / cron entry (installed, last result, next run);
+- the last log lines.
+
+It ends with **READY** or **NOT READY** and the reason.
+
 ## First, once
 
 1. `.env` must have `AUTO_TRANSFER_CRON_SECRET=<32+ random characters>`, and the app must have been restarted after setting it.
@@ -19,6 +39,7 @@ The scripts:
 | `windows/auto-transfer.ps1` | The call (what the task runs) |
 | `windows/install-task.ps1` | Creates the task **NIB Control360 Auto Transfer**: every 5 minutes, as SYSTEM, whether or not anyone is signed in |
 | `windows/uninstall-task.ps1` | Removes the task |
+| `windows/check.ps1` | Read-only readiness check |
 
 From the app folder:
 
@@ -44,6 +65,7 @@ You can also see the task in the **Task Scheduler** window (Task Scheduler Libra
 |---|---|
 | `linux/auto-transfer.sh` | The call |
 | `linux/install-cron.sh` | Adds a crontab entry for the current user, every 5 minutes; `--remove` takes it out |
+| `linux/check.sh` | Read-only readiness check |
 
 ```sh
 sh scheduler/linux/auto-transfer.sh; tail -n 5 scheduler/logs/auto-transfer.log   # test once
