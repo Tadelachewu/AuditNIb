@@ -277,7 +277,7 @@ export function DistrictDashboard({
         irregularityTypes={db.settings.irregularityTypes}
         defaultPeriodId={currentPeriod(db.reportingPeriods)?.id}
         fixedDistrict={{ id: district.id, name: district.name }}
-        statusOptions={HO_APPROVED_OR_LATER_STATUSES}
+        statusOptions={[...HO_APPROVED_OR_LATER_STATUSES, "REJECTED"]}
         hint="Filters apply immediately. Performance % always reflects the full scoring formula, not narrowed by source/category/risk/status."
       />
 

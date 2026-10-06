@@ -804,7 +804,11 @@ export function awaitingBranchRectification(f: Finding): boolean {
 export function queueStatusesForSession(session: SessionData, db: Database): (finding: Finding) => boolean {
   const has = (action: string) => hasPermission(session.permissions, permissionKey("findings", action));
   const matchers: ((f: Finding) => boolean)[] = [];
-  if (has("edit") || has("submit")) matchers.push((f) => f.status === "DRAFT" || f.status === "RETURNED");
+  // Drafts and findings returned for correction are their REGISTRANT's work:
+  // only your own, even if your role could edit or submit other people's
+  // (e.g. HO doesn't get a branch controller's returned finding).
+  if (has("edit") || has("submit"))
+    matchers.push((f) => (f.status === "DRAFT" || f.status === "RETURNED") && f.createdBy === session.userId);
   if (has("district-review")) matchers.push((f) => f.status === "DISTRICT_REVIEW");
   if (has("ho-review")) matchers.push((f) => f.status === "HO_REVIEW");
   if (session.userId && db.settings.hoApproval.approverUserIds.includes(session.userId)) {

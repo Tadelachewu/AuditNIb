@@ -52,6 +52,15 @@ describe("HO Controller's queue: findings to transfer", async () => {
     expect(inQueue(at("oct"))).toBe(false);
   });
 
+  it("drafts and returned findings: only the registrant's own, never someone else's (e.g. HO)", () => {
+    const ho = { userId: "ho", permissions: ["findings.edit", "findings.submit", "findings.ho-review"] } as never;
+    const inQueue = queueStatusesForSession(ho, dbP);
+    expect(inQueue(at("sep", "RETURNED", { createdBy: "branch-controller" }))).toBe(false);
+    expect(inQueue(at("sep", "DRAFT", { createdBy: "branch-controller" }))).toBe(false);
+    expect(inQueue(at("sep", "RETURNED", { createdBy: "ho" }))).toBe(true);
+    expect(inQueue(at("sep", "DRAFT", { createdBy: "ho" }))).toBe(true);
+  });
+
   it("rejected findings are never in Show My Queue", () => {
     const registrant = { userId: "u", permissions: ["findings.edit", "findings.submit"] } as never;
     expect(queueStatusesForSession(registrant, dbP)(at("sep", "REJECTED"))).toBe(false);

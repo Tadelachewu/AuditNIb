@@ -214,7 +214,7 @@ export function ExecutiveDashboard({
         operationAreas={db.settings.operationAreas}
         irregularityTypes={db.settings.irregularityTypes}
         defaultPeriodId={currentPeriod(db.reportingPeriods)?.id}
-        statusOptions={HO_APPROVED_OR_LATER_STATUSES}
+        statusOptions={[...HO_APPROVED_OR_LATER_STATUSES, "REJECTED"]}
         hint="Filters apply immediately. Performance % always reflects the full scoring formula, not narrowed by source/category/risk/status."
       />
 
