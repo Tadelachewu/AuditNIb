@@ -13,7 +13,24 @@ export const FIELD_FOCUS =
 const fieldClass = `w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm text-slate-900 ${FIELD_FOCUS}`;
 
 export function Input(props: ComponentProps<"input">) {
-  return <input {...props} className={`${fieldClass} ${props.className ?? ""}`} />;
+  return (
+    <input
+      {...props}
+      // Number fields: the mouse wheel must never change the value (scrolling
+      // the page over a focused field used to bump it up or down). Leaving the
+      // field on wheel lets the page scroll on; typing and the up / down
+      // arrows still work.
+      onWheel={
+        props.type === "number"
+          ? (e) => {
+              e.currentTarget.blur();
+              props.onWheel?.(e);
+            }
+          : props.onWheel
+      }
+      className={`${fieldClass} ${props.className ?? ""}`}
+    />
+  );
 }
 
 export function Select(props: SelectHTMLAttributes<HTMLSelectElement>) {

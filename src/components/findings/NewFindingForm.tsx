@@ -254,7 +254,7 @@ const emptyForm = {
   categoryId: "",
   amount: "",
   currency: "",
-  caseCount: "1",
+  caseCount: "", // empty: the registrant types the number (no assumed 1)
   riskLevel: "",
   priority: "",
   description: "",

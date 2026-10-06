@@ -50,6 +50,7 @@ describe("Register Finding: the finding date must be within the reporting period
     renderForm();
     choosePeriod("p8");
     fireEvent.change(screen.getByLabelText("Amount involved"), { target: { value: "500" } });
+    fireEvent.change(screen.getByLabelText("Number of cases"), { target: { value: "1" } });
     expect(saveDraft().disabled).toBe(true);
     expect(screen.getAllByText(/after reporting period 2026-08/).length).toBeGreaterThan(0);
   });
@@ -58,6 +59,7 @@ describe("Register Finding: the finding date must be within the reporting period
     renderForm();
     choosePeriod("p8");
     fireEvent.change(screen.getByLabelText("Amount involved"), { target: { value: "500" } });
+    fireEvent.change(screen.getByLabelText("Number of cases"), { target: { value: "1" } });
     for (const date of ["2026-08-31", "2026-07-15"]) {
       fireEvent.change(screen.getByLabelText(/Finding date/), { target: { value: date } });
       expect(saveDraft().disabled).toBe(false);
@@ -68,6 +70,7 @@ describe("Register Finding: the finding date must be within the reporting period
     renderForm();
     choosePeriod("p8");
     fireEvent.change(screen.getByLabelText("Amount involved"), { target: { value: "500" } });
+    fireEvent.change(screen.getByLabelText("Number of cases"), { target: { value: "1" } });
     fireEvent.change(screen.getByLabelText(/Finding date/), { target: { value: "2026-08-20" } });
     // Under the period field and next to the buttons.
     expect(screen.getAllByText("2026-08 isn't accepting submissions today - you can save a draft, but not submit.")).toHaveLength(2);
@@ -87,6 +90,7 @@ describe("Register Finding: the finding date must be within the reporting period
     renderForm();
     choosePeriod("p10");
     fireEvent.change(screen.getByLabelText("Amount involved"), { target: { value: "500" } });
+    fireEvent.change(screen.getByLabelText("Number of cases"), { target: { value: "1" } });
     fireEvent.change(screen.getByLabelText(/Finding date/), { target: { value: "2026-10-05" } });
     expect(saveDraft().disabled).toBe(true);
     expect(screen.getAllByText(/can't be in the future/).length).toBeGreaterThan(0);
@@ -97,7 +101,9 @@ describe("Register Finding: the finding date must be within the reporting period
     choosePeriod("p10");
     expect(saveDraft().disabled).toBe(true);
     expect(screen.queryByText(/Can't save yet: Amount involved is required/)).not.toBeNull();
+    fireEvent.change(screen.getByLabelText("Number of cases"), { target: { value: "1" } });
     fireEvent.change(screen.getByLabelText("Amount involved"), { target: { value: "500" } });
+    fireEvent.change(screen.getByLabelText("Number of cases"), { target: { value: "1" } });
     expect(saveDraft().disabled).toBe(false);
   });
 });
@@ -107,6 +113,7 @@ describe("Register Finding: the administrator's required fields", () => {
     renderForm({ ...noneRequired, categoryId: true });
     choosePeriod("p10");
     fireEvent.change(screen.getByLabelText("Amount involved"), { target: { value: "500" } });
+    fireEvent.change(screen.getByLabelText("Number of cases"), { target: { value: "1" } });
     expect(saveDraft().disabled).toBe(true);
     expect((screen.getByRole("button", { name: "Save & Submit" }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.queryByText("Can't save yet: Classified case is required.")).not.toBeNull();
@@ -124,5 +131,25 @@ describe("Register Finding: the administrator's required fields", () => {
     choosePeriod("");
     expect(saveDraft().disabled).toBe(true);
     expect(screen.queryByText("Can't save yet: Reporting period is required.")).not.toBeNull();
+  });
+
+  it("Number of cases starts empty (no assumed 1) and is required", () => {
+    renderForm();
+    choosePeriod("p10");
+    fireEvent.change(screen.getByLabelText("Amount involved"), { target: { value: "500" } });
+    expect((screen.getByLabelText("Number of cases") as HTMLInputElement).value).toBe("");
+    expect(saveDraft().disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText("Number of cases"), { target: { value: "3" } });
+    expect(saveDraft().disabled).toBe(false);
+  });
+
+  it("the mouse wheel never changes a number field", () => {
+    renderForm();
+    const input = screen.getByLabelText("Number of cases") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "3" } });
+    input.focus();
+    fireEvent.wheel(input, { deltaY: -100 });
+    expect(document.activeElement).not.toBe(input); // focus leaves, so the browser can't step it
+    expect(input.value).toBe("3");
   });
 });
