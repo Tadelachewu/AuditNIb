@@ -341,11 +341,14 @@ export function NewFindingForm({
           // default"), at most one at a time. Registrant can still change
           // it - this only saves the common case a re-pick every time.
           sourceId: sources.find((s) => s.isDefault)?.id ?? "",
-          currency: currencies[0] ?? "",
-          riskLevel: riskLevels[0] ?? "",
-          operationArea: operationAreas[0] ?? "",
-          priority: priorityLevels[0] ?? "",
-          irregularityType: irregularityTypes[0] ?? "",
+          currency: "", // picked by the registrant, like the fields below
+          // Currency, risk level, operation area, priority and type of
+          // irregularity start empty (like Classified case): the registrant picks each
+          // one, nothing is assumed.
+          riskLevel: "",
+          operationArea: "",
+          priority: "",
+          irregularityType: "",
         }
   );
   const [error, setError] = useState<string | null>(null);
