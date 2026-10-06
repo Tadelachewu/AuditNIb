@@ -61,10 +61,12 @@ export interface BulkPermissions {
   canReturnRectification: boolean;
   canClose: boolean;
   canSubmit: boolean;
+  /** findings.delete-rejected - permanently delete REJECTED findings (housekeeping). */
+  canDeleteRejected: boolean;
   currentUserId: string;
 }
 
-type BulkActionKind = "submit" | "approve" | "reject" | "return-review" | "verify" | "return-rectification" | "close";
+type BulkActionKind = "submit" | "approve" | "reject" | "return-review" | "verify" | "return-rectification" | "close" | "delete-rejected";
 
 const REVIEW_STATUSES: FindingStatus[] = ["DISTRICT_REVIEW", "HO_REVIEW", "PENDING_BANK_APPROVAL"];
 const RECTIFICATION_STATUSES: FindingStatus[] = ["PARTIALLY_RECTIFIED", "RECTIFIED", "TRANSFERRED"];
@@ -117,10 +119,14 @@ function eligibleFor(kind: BulkActionKind, rows: FindingRow[], perms: BulkPermis
       return actionable.filter((f) => perms.canReturnRectification && RECTIFICATION_STATUSES.includes(f.status));
     case "close":
       return actionable.filter((f) => perms.canClose && isClosable(f));
+    case "delete-rejected":
+      return actionable.filter((f) => perms.canDeleteRejected && f.status === "REJECTED");
   }
 }
 
-function requestFor(kind: BulkActionKind, f: FindingRow, reason: string): { url: string; body?: unknown } {
+function requestFor(kind: BulkActionKind, f: FindingRow, reason: string): { url: string; body?: unknown; method?: "POST" | "DELETE" } {
+  // Same route (and rules) as deleting one rejected finding from its page.
+  if (kind === "delete-rejected") return { url: `/api/findings/${f.id}`, method: "DELETE" };
   if (kind === "submit") return { url: `/api/findings/${f.id}/submit` };
   if (kind === "approve" || kind === "reject" || kind === "return-review") {
     const stage = reviewStageFor(f.status)!;
@@ -140,6 +146,7 @@ const ACTION_LABELS: Record<BulkActionKind, string> = {
   verify: "Verify",
   "return-rectification": "Return for Correction",
   close: "Accept",
+  "delete-rejected": "Delete",
 };
 
 const ACTION_VARIANTS: Record<BulkActionKind, "primary" | "danger" | "success"> = {
@@ -150,6 +157,7 @@ const ACTION_VARIANTS: Record<BulkActionKind, "primary" | "danger" | "success"> 
   verify: "primary",
   "return-rectification": "primary",
   close: "success",
+  "delete-rejected": "danger",
 };
 
 /**
@@ -227,10 +235,11 @@ export function FindingsTable({
     permissions.canBankApprove ||
     permissions.canVerifyRectification ||
     permissions.canReturnRectification ||
-    permissions.canClose;
+    permissions.canClose ||
+    permissions.canDeleteRejected;
 
   const selectedRows = rows.filter((f) => rowSelection[f.id]);
-  const actionKinds: BulkActionKind[] = (["submit", "approve", "return-review", "reject", "verify", "return-rectification", "close"] as const).filter(
+  const actionKinds: BulkActionKind[] = (["submit", "approve", "return-review", "reject", "verify", "return-rectification", "close", "delete-rejected"] as const).filter(
     (kind) => eligibleFor(kind, selectedRows, permissions).length > 0
   );
 
@@ -244,11 +253,14 @@ export function FindingsTable({
     const result = await confirm({
       title: `${label} ${eligible.length} finding(s)?`,
       message:
-        skipped > 0
+        (kind === "delete-rejected"
+          ? `This permanently removes ${eligible.length} rejected finding(s), with their history, cases and evidence files. It can't be undone; the audit log keeps a record. `
+          : "") +
+        (skipped > 0
           ? `${skipped} of your ${selectedRows.length} selected finding(s) are not eligible for "${label}" and will be skipped.`
-          : `This applies "${label}" to all ${eligible.length} selected finding(s).`,
+          : `This applies "${label}" to all ${eligible.length} selected finding(s).`),
       confirmLabel: label,
-      tone: kind === "reject" ? "danger" : kind === "close" ? "success" : "default",
+      tone: kind === "reject" || kind === "delete-rejected" ? "danger" : kind === "close" ? "success" : "default",
       needsReason,
     });
     if (result === false) return;
@@ -259,9 +271,9 @@ export function FindingsTable({
     let succeeded = 0;
     const failures: string[] = [];
     for (const f of eligible) {
-      const { url, body } = requestFor(kind, f, reason);
+      const { url, body, method } = requestFor(kind, f, reason);
       try {
-        await apiSend(url, "POST", body);
+        await apiSend(url, method ?? "POST", body);
         succeeded++;
       } catch (err) {
         failures.push(`${f.reference}: ${presentError(err).message}`);

@@ -1,6 +1,6 @@
 import { Fragment } from "react";
 import { SESSION_ENDED_PATH } from "@/lib/session";
-import Link from "next/link";
+import { StickyBack } from "@/components/ui/StickyBack";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 import { readDb } from "@/lib/db";
@@ -82,16 +82,11 @@ export default async function MonthlyDistrictDetailPage({
   return (
     <div className="flex flex-col gap-5">
       <style>{`@media print { nav, header, .no-print { display: none !important; } main { padding: 0 !important; } }`}</style>
+      <StickyBack href="/reports/templates" />
 
       <div className="no-print flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 flex-1">
-          <Link
-            href="/reports/templates"
-            className="inline-flex items-center rounded-md bg-brand-gold px-3 py-1.5 text-sm font-bold text-on-gold transition-colors hover:bg-brand-gold-dark"
-          >
-            ← Back
-          </Link>
-          <h1 className="mt-1 text-lg font-semibold text-slate-900">Monthly District Detail</h1>
+          <h1 className="text-lg font-semibold text-slate-900">Monthly District Detail</h1>
           <p className="mt-1 text-sm text-slate-600">
             District-by-district history: Other Cases per period, then one closing &quot;Various internal Audit report&quot; row per district, subtotal, and grand total.
           </p>

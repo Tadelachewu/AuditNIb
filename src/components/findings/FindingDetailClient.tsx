@@ -2,7 +2,7 @@
 
 import { notify, notifications } from "@/lib/notify";
 import { useEffect, useState } from "react";
-import Link from "next/link";
+import { StickyBack } from "@/components/ui/StickyBack";
 import { findingsListReturnUrl } from "@/lib/findingsListReturn";
 import { useRouter } from "next/navigation";
 import { apiSend, apiUpload } from "@/lib/api-client";
@@ -573,15 +573,10 @@ export function FindingDetailClient({
 
   return (
     <div className="flex flex-col gap-5">
+      <StickyBack href={backHref} />
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <Link
-            href={backHref}
-            className="inline-flex items-center rounded-md bg-brand-gold px-3 py-1.5 text-sm font-bold text-on-gold transition-colors hover:bg-brand-gold-dark"
-          >
-            ← Back
-          </Link>
-          <h1 className="mt-1 text-lg font-semibold text-slate-900">{finding.title}</h1>
+          <h1 className="text-lg font-semibold text-slate-900">{finding.title}</h1>
           <p className="mt-1 text-sm text-slate-600">
             <span className="font-mono text-xs text-slate-500">{finding.reference}</span> · {lookups.branchName} ·{" "}
             {lookups.districtName} · {lookups.periodCode}

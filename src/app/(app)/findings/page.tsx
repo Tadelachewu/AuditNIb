@@ -135,6 +135,7 @@ export default async function FindingsPage({
     canVerifyRectification: hasPermission(user.permissions, permissionKey("findings", "verify-rectification")),
     canReturnRectification: hasPermission(user.permissions, permissionKey("findings", "return-rectification")),
     canClose: hasPermission(user.permissions, permissionKey("findings", "close")),
+    canDeleteRejected: hasPermission(user.permissions, permissionKey("findings", "delete-rejected")),
   };
 
   const rows: FindingRow[] = pageResident.map(({ finding: f, slice }) => ({
