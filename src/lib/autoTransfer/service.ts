@@ -214,6 +214,41 @@ export async function runAutoTransferIfDue(
   }
 }
 
+/**
+ * A period's dates changed (Reporting Periods -> Edit). If it was already
+ * handled but now ends LATER than now, it is re-armed - its run is forgotten
+ * - so it is swept again when it really ends. Called after the period is
+ * saved; never throws (a failure is logged and the period keeps its record).
+ */
+export async function rearmIfRescheduled(
+  period: Pick<ReportingPeriod, "id" | "code" | "endsAt" | "submissionEndsAt">,
+  opts: { now?: number; store?: AutoTransferStore } = {}
+): Promise<boolean> {
+  const store = opts.store ?? prismaAutoTransferStore;
+  try {
+    const config = await store.getConfig();
+    if (!config) return false;
+    const run = (await store.listRuns()).find((r) => r.periodId === period.id);
+    if (!run || sweepDueAt(period, config) <= (opts.now ?? Date.now())) return false;
+    await store.deleteRuns([period.id]);
+    logger.info({ event: "auto_transfer.rearmed", periodId: period.id, period: period.code, previousStatus: run.status }, "Period rescheduled to end later - automatic transfer re-armed");
+    return true;
+  } catch (err) {
+    logger.error({ err, event: "auto_transfer.rearm_failed", periodId: period.id }, "Could not re-arm the automatic transfer for a rescheduled period");
+    return false;
+  }
+}
+
+/**
+ * Dev Reset (all registered data wiped): forget every run, inside the reset's
+ * own transaction (`tx` from updateDb's alsoWrite), so each period is
+ * handled afresh when it ends. Periods that have already ended are swept on
+ * the next check - with nothing in them, they're simply marked Done.
+ */
+export function forgetAllRuns(tx: unknown, store: AutoTransferStore = prismaAutoTransferStore): Promise<void> {
+  return store.deleteRuns("all", tx);
+}
+
 /** Test hook: forget the per-server throttle. */
 export function resetAutoTransferThrottle(): void {
   lastCheckAt = 0;

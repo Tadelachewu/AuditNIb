@@ -6,6 +6,7 @@ import { readDb, updateDb } from "@/lib/db";
 import { appendAuditLog } from "@/lib/audit";
 import { notifyUsers, usersWithFindingsPermission } from "@/lib/notifications";
 import { withApiHandler } from "@/lib/api/handler";
+import { prismaAutoTransferStore, rearmIfRescheduled } from "@/lib/autoTransfer";
 
 const updateSchema = z
   .object({
@@ -202,6 +203,10 @@ async function handlePATCH(request: Request, { params }: { params: Promise<{ id:
     return p;
   });
 
+  // Automatic transfer: a period already swept but now ending later than now
+  // is re-armed, so it's swept again when it really ends.
+  if (startsAt !== undefined || submissionStartsAt !== undefined) await rearmIfRescheduled(updated);
+
   return NextResponse.json({ reportingPeriod: updated });
 }
 
@@ -268,7 +273,9 @@ async function handleDELETE(_request: Request, { params }: { params: Promise<{ i
       entityId: id,
       oldValue: existing,
     });
-  });
+  },
+  // Its automatic-transfer record goes with it (same transaction).
+  { alsoWrite: (tx) => prismaAutoTransferStore.deleteRuns([id], tx) });
 
   return NextResponse.json({ ok: true });
 }

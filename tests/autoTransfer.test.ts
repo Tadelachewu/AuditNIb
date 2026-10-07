@@ -12,7 +12,9 @@ import { notifyUsers } from "@/lib/notifications";
 import {
   DEFAULT_AUTO_TRANSFER_CONFIG,
   dueSweeps,
+  forgetAllRuns,
   isExcluded,
+  rearmIfRescheduled,
   nextPeriod,
   resetAutoTransferThrottle,
   runAutoTransferIfDue,
@@ -166,12 +168,17 @@ describe("sweep", () => {
 });
 
 describe("service", () => {
-  function fakeStore(cfg: AutoTransferConfig | null, runs: AutoTransferRun[] = []): AutoTransferStore & { saved: AutoTransferRun[] } {
+  function fakeStore(cfg: AutoTransferConfig | null, initialRuns: AutoTransferRun[] = []): AutoTransferStore & { saved: AutoTransferRun[] } {
+    let runs = [...initialRuns];
     const store = {
       saved: [] as AutoTransferRun[],
       getConfig: async () => cfg,
       saveConfig: async () => cfg!,
       listRuns: async () => [...runs, ...store.saved],
+      deleteRuns: async (ids: string[] | "all") => {
+        runs = ids === "all" ? [] : runs.filter((r) => !ids.includes(r.periodId));
+        store.saved = ids === "all" ? [] : store.saved.filter((r) => !ids.includes(r.periodId));
+      },
       saveRuns: async (r: AutoTransferRun[], tx?: unknown) => {
         if (tx !== "tx") throw new Error("runs must be saved inside the sweep's transaction");
         store.saved.push(...r);
@@ -265,5 +272,28 @@ describe("service", () => {
     expect(res.ran).toBe(false);
     expect(db.findings[0].periodId).toBe("sep");
     expect(db.findingTransfers).toHaveLength(0);
+  });
+
+  it("re-arms a swept period whose end is moved later than now, but not one still ended", async () => {
+    const done: AutoTransferRun = { periodId: "sep", status: "DONE", toPeriodId: "oct", movedCount: 0, keptCount: 0, movedReferences: [], keptReferences: [], ranAt: "", triggeredBy: "in-app" };
+    const store = fakeStore(config(), [done]);
+    const sep = db.reportingPeriods[0];
+    // Still ended (end moved, but to a time already past): keeps its record.
+    expect(await rearmIfRescheduled({ ...sep, endsAt: new Date(SEP_END + H).toISOString(), submissionEndsAt: new Date(SEP_END + H).toISOString() }, { now: SEP_END + 2 * H, store })).toBe(false);
+    // Ends later than now: re-armed, then swept again when it ends.
+    const later = { ...sep, endsAt: new Date(SEP_END + 5 * H).toISOString(), submissionEndsAt: new Date(SEP_END + 5 * H).toISOString() };
+    expect(await rearmIfRescheduled(later, { now: SEP_END + 2 * H, store })).toBe(true);
+    expect(await store.listRuns()).toEqual([]);
+    db.reportingPeriods[0] = later as ReportingPeriod;
+    const f = finding("sep");
+    const res = await runAutoTransferIfDue({ now: SEP_END + 6 * H, force: true, deps: deps(store) });
+    expect(res.ran).toBe(true);
+    expect(db.findings.find((x) => x.id === f.id)?.periodId).toBe("oct");
+  });
+
+  it("Dev Reset forgets every run, so periods are handled afresh", async () => {
+    const store = fakeStore(config(), [{ periodId: "sep", status: "DONE", toPeriodId: "oct", movedCount: 1, keptCount: 0, movedReferences: [], keptReferences: [], ranAt: "", triggeredBy: null }]);
+    await forgetAllRuns("tx", store);
+    expect(await store.listRuns()).toEqual([]);
   });
 });

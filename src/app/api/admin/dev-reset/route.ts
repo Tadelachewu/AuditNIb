@@ -4,6 +4,7 @@ import { readDb, updateDb } from "@/lib/db";
 import { appendAuditLog } from "@/lib/audit";
 import { isDevResetEnabled, resetRegisteredData } from "@/lib/devResetRegisteredData";
 import { withApiHandler } from "@/lib/api/handler";
+import { forgetAllRuns } from "@/lib/autoTransfer";
 
 // DEV-ONLY - see devResetRegisteredData.ts's own doc comment for the full
 // picture (scope, isolation, how to remove this feature entirely). 404s
@@ -74,7 +75,10 @@ async function handlePOST(request: Request) {
       newValue: result,
     });
     return result;
-  });
+  },
+  // Automatic transfer: forget which periods were already swept (same
+  // transaction), so a reset system is swept afresh.
+  { alsoWrite: (tx) => forgetAllRuns(tx) });
 
   return NextResponse.json({ summary });
 }

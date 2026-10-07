@@ -5,4 +5,4 @@
 export * from "./types";
 export { dueSweeps, isExcluded, nextPeriod, planSweep, sweepDueAt } from "./rules";
 export { prismaAutoTransferStore, type AutoTransferStore } from "./store";
-export { runAutoTransferIfDue, sweepPeriods, CHECK_INTERVAL_MS, resetAutoTransferThrottle, type AutoTransferDeps } from "./service";
+export { runAutoTransferIfDue, sweepPeriods, rearmIfRescheduled, forgetAllRuns, CHECK_INTERVAL_MS, resetAutoTransferThrottle, type AutoTransferDeps } from "./service";

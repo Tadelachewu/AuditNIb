@@ -14,6 +14,8 @@ How the database schema is versioned, what was done on 2026-10-06 to restart the
 
 Every new schema change is added on top of these as a new folder. **Keep this folder in git**; never delete it.
 
+> **2026-10-06:** the folder was still **untracked** (never committed), and the `migration.sql` files of `0_init` and the auto-transfer migration were deleted from disk. They were regenerated from the schema in commits `6c80075` (before Automatic Transfer) and `dc10f8c` (after it), plus the data lines, and `migrate status` reports the database up to date. **Commit `prisma/migrations/` now** so this can't happen again.
+
 ## 2. What happened, and why the history was restarted
 
 - The original migration files (24 of them, `20260910145739_init` … `20261003090000_remove_ui_template`) were deleted from the repository, but the database still listed them as applied in its `_prisma_migrations` table.

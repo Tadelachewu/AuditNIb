@@ -19,6 +19,8 @@ export interface AutoTransferStore {
    * without it the store opens its own.
    */
   saveRuns(runs: AutoTransferRun[], tx?: unknown): Promise<void>;
+  /** Forgets runs ("all", or these periods) so those periods become due again. `tx` as in saveRuns. */
+  deleteRuns(periodIds: string[] | "all", tx?: unknown): Promise<void>;
 }
 
 const SINGLETON = "singleton";
@@ -116,5 +118,16 @@ export const prismaAutoTransferStore: AutoTransferStore = {
     };
     if (tx) await write(tx as Prisma.TransactionClient);
     else await prisma.$transaction((client) => write(client));
+  },
+
+  async deleteRuns(periodIds, tx) {
+    const client = (tx as Prisma.TransactionClient | undefined) ?? prisma;
+    try {
+      if (periodIds === "all") await client.autoTransferRun.deleteMany({});
+      else if (periodIds.length > 0) await client.autoTransferRun.deleteMany({ where: { periodId: { in: periodIds } } });
+    } catch (err) {
+      if (isMissingTable(err)) return warnMissingOnce(); // not installed: nothing to forget
+      throw err;
+    }
   },
 };

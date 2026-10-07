@@ -16,7 +16,10 @@ Replaces the old "transfer outstanding cases when locking a period" option (see 
 | **What stays** | Drafts and findings in review, returned or rejected findings, closed findings, and findings whose **operation area is excluded** |
 | **Where to** | The **next period** by calendar (Oct → Nov, Dec → Jan), one step, even if that period is locked (a lock only blocks submission) |
 | **How** | The same transfer as a manual one: unclosed rectification goes back to the branch, closed work stays with the period, history and audit are recorded. Method **Automatic**, by **System (automatic transfer)** |
-| **How often** | Once per period. A finding moved back into an already-handled period later is not swept again; it appears in **Needs transfer** for a manual decision |
+| **How often** | Once per period. A finding moved back into an already-handled period later is not swept again; it needs a manual transfer |
+| **Rescheduled period** | If a period that was already handled is edited to end (or its submission window to end) **later than now**, it is **re-armed** and swept again when it really ends. Moving the end to a time that has already passed changes nothing |
+| **Dev Reset** | Wipes the record of which periods were swept (with the findings), so every period is handled afresh. Periods that have already ended are swept at the next check, and with nothing in them are simply marked Done |
+| **Deleting a period** | Its record is deleted with it |
 
 ### No next period yet
 Nothing moves. The period shows **Waiting: no next period**, the transfer-permission holders are told once, and the transfer happens automatically as soon as the next period is created.
