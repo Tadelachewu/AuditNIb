@@ -32,32 +32,121 @@ It ends with **READY** or **NOT READY** and the reason.
 1. `.env` must have `AUTO_TRANSFER_CRON_SECRET=<32+ random characters>`, and the app must have been restarted after setting it.
 2. Run the script once by hand (below). The log should say `nothing due` or `ran: …`.
 
-## Windows: Task Scheduler
+Windows: follow the numbered steps in the next section.
+
+## Windows: Task Scheduler (background run)
+
+The task **NIB Control360 Auto Transfer** runs every 5 minutes as **SYSTEM**, in the background (no window), whether or not anyone is signed in, on AC power or battery. Each run only calls the app's endpoint, so **the app itself must be running** for anything to transfer.
 
 | File | Purpose |
 |---|---|
 | `windows/auto-transfer.ps1` | The call (what the task runs) |
-| `windows/install-task.ps1` | Creates the task **NIB Control360 Auto Transfer**: every 5 minutes, as SYSTEM, whether or not anyone is signed in |
+| `windows/install-task.ps1` | Creates or updates the task |
 | `windows/uninstall-task.ps1` | Removes the task |
 | `windows/check.ps1` | Read-only readiness check |
 
-From the app folder:
+The examples use `C:\Users\Admin\Desktop\AuditNIb` as the app folder; use yours.
 
-```powershell
-# 1. Test once
-powershell -ExecutionPolicy Bypass -File scheduler\windows\auto-transfer.ps1
-Get-Content scheduler\logs\auto-transfer.log -Tail 5
+### Step 1: Set the secret (once)
 
-# 2. Install (in an ADMINISTRATOR PowerShell)
-powershell -ExecutionPolicy Bypass -File scheduler\windows\install-task.ps1
+In the app folder's `.env`, add a random value of **at least 16 characters** (32+ recommended):
 
-# Run now / check / remove
-Start-ScheduledTask -TaskName "NIB Control360 Auto Transfer"
-Get-ScheduledTaskInfo -TaskName "NIB Control360 Auto Transfer"     # LastTaskResult 0 = OK
-powershell -ExecutionPolicy Bypass -File scheduler\windows\uninstall-task.ps1
+```
+AUTO_TRANSFER_CRON_SECRET=put-a-long-random-value-here
 ```
 
-You can also see the task in the **Task Scheduler** window (Task Scheduler Library).
+To generate one in PowerShell:
+
+```powershell
+-join ((48..57)+(65..90)+(97..122) | Get-Random -Count 40 | % {[char]$_})
+```
+
+If the app doesn't run on port `9005`, also set `PORT=<port>` in `.env`. The task reads both values from `.env` / `.env.local`.
+
+### Step 2: Restart the app
+
+The app reads the secret only when it starts:
+
+```powershell
+npm run build
+npm start          # or restart your Windows service / pm2
+```
+
+Without a restart the endpoint answers **404** (secret not set).
+
+### Step 3: Switch the feature on
+
+In the app: **Settings → Automatic Transfer** → tick *Transfer outstanding findings automatically…* → **Save automatic transfer**. Optionally exclude operation areas or set a delay.
+
+### Step 4: Test one run by hand (normal PowerShell)
+
+```powershell
+cd C:\Users\Admin\Desktop\AuditNIb
+powershell -ExecutionPolicy Bypass -File scheduler\windows\auto-transfer.ps1
+Get-Content scheduler\logs\auto-transfer.log -Tail 5
+```
+
+The log should say `nothing due` or `ran: …`. A 403 / 404 / connection error means steps 1–2 aren't done (see the table at the end).
+
+### Step 5: Install the background task (ADMINISTRATOR PowerShell)
+
+Start menu → right-click **Windows PowerShell** → **Run as administrator**:
+
+```powershell
+cd C:\Users\Admin\Desktop\AuditNIb
+powershell -ExecutionPolicy Bypass -File scheduler\windows\install-task.ps1
+```
+
+→ `Installed 'NIB Control360 Auto Transfer': runs every 5 minutes.`
+
+### Step 6: Start it now and verify (same administrator window)
+
+```powershell
+Start-ScheduledTask -TaskName "NIB Control360 Auto Transfer"
+powershell -ExecutionPolicy Bypass -File scheduler\windows\check.ps1
+```
+
+`check.ps1` changes nothing and must end with **READY: the scheduler will run the automatic transfer.** It checks:
+- the secret is set;
+- the app answers with that secret;
+- the feature is on;
+- what's due;
+- the task exists, is enabled and is allowed on battery;
+- the last result is `0`.
+
+Run it as administrator: in a normal window an installed task can look missing.
+
+### Day-to-day
+
+| Need | How |
+|---|---|
+| See what it did | `Get-Content scheduler\logs\auto-transfer.log -Tail 20` |
+| Was a sweep done by the scheduler? | Settings → Automatic Transfer shows the last run and who triggered it (*scheduler* or *app*); `check.ps1` shows it too |
+| Run immediately | `Start-ScheduledTask -TaskName "NIB Control360 Auto Transfer"` |
+| Last result | `Get-ScheduledTaskInfo -TaskName "NIB Control360 Auto Transfer"` (LastTaskResult `0` = OK) |
+| See it in the GUI | **Task Scheduler** → Task Scheduler Library → *NIB Control360 Auto Transfer* |
+| Remove | `powershell -ExecutionPolicy Bypass -File scheduler\windows\uninstall-task.ps1` (administrator) |
+
+### Good to know
+
+- **Start the app on boot** (Windows service via NSSM, pm2, etc.). The task can't transfer anything while the app is stopped.
+- **App or PC off at period end:** the first run after the app is back catches up. Each period is swept **once**, never twice.
+- **Changed the secret or port:** restart the app. The task re-reads `.env` on every run, so it doesn't need reinstalling.
+- **Moved the app folder:** run `install-task.ps1` again from the new folder. The task stores the script's path.
+
+### Troubleshooting
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| Log: **404** | The running app has no `AUTO_TRANSFER_CRON_SECRET` | Set it in `.env`, restart the app |
+| Log: **403** | The task's secret differs from the running app's | Restart the app after editing `.env` |
+| Log: **429** | Too many wrong secrets | Fix the secret, wait 15 minutes |
+| Log: connection refused / not reachable | App not running, or wrong `PORT` | Start the app; set `PORT` in `.env` |
+| `check.ps1`: *Not installed / switched OFF* | Feature off or its migration not applied | Settings → Automatic Transfer → on; `npx prisma migrate deploy` |
+| `check.ps1`: *Task not found* | Not installed, or a non-administrator window | Run step 5 / the check as administrator |
+| `check.ps1`: *only starts on AC power* | Task installed by an older script | Run `install-task.ps1` again (administrator) |
+| Task never ran (result `0x41303` or `267011`) | Not triggered yet, or blocked on battery | Wait 5 minutes or `Start-ScheduledTask`; reinstall if it's the battery case |
+| `running scripts is disabled on this system` | Execution policy | Always call through `powershell -ExecutionPolicy Bypass -File …` as shown |
 
 ## Linux / macOS: cron
 
