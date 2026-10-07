@@ -550,9 +550,14 @@ export interface Finding {
   operationArea: string;
   irregularityType: string;
   categoryId: string;
+  /** CURRENT amount: original + approved adjustments (docs/revolving-findings.md). */
   amount: number;
   currency: string;
+  /** CURRENT case count: original + approved adjustments. */
   caseCount: number;
+  /** As originally registered - frozen once approved; never changed by adjustments. */
+  registeredCaseCount: number;
+  registeredAmount: number;
   riskLevel: string;
   priority: string;
   description: string;
@@ -867,6 +872,8 @@ export interface Database {
   rectifications: RectificationEntry[];
   findingTransfers: FindingTransfer[];
   findingClosures: FindingClosure[];
+  /** Revolving findings: adjustments of outstanding cases / amount (src/lib/adjustments). */
+  findingAdjustments: FindingAdjustment[];
   importBatches: ImportBatch[];
   findingCases: FindingCase[];
   // Every permission key that has ever been auto-reconciled onto the
@@ -952,3 +959,7 @@ export interface SupportMessage {
   body: string;
   createdAt: string;
 }
+
+// Revolving findings (src/lib/adjustments) - part of the Database model.
+import type { FindingAdjustment } from "@/lib/adjustments/types";
+export type { FindingAdjustment };

@@ -601,6 +601,7 @@ export function buildSeedDatabase(): Database {
     rectifications: [],
     findingTransfers: [],
     findingClosures: [],
+    findingAdjustments: [],
     importBatches: [],
     findingCases: [],
     // A fresh seed's ADMIN role is already ALL_PERMISSION_KEYS, so every

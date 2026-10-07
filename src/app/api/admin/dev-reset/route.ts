@@ -41,6 +41,7 @@ async function handleGET() {
       rectifications: db.rectifications.length,
       findingTransfers: db.findingTransfers.length,
       findingClosures: db.findingClosures.length,
+      findingAdjustments: (db.findingAdjustments ?? []).length,
       findingCases: db.findingCases.length,
       importBatches: db.importBatches.length,
       branchCoverageNotes: db.branchCoverageNotes.length,

@@ -90,6 +90,7 @@ export function resetRegisteredData(db: Database): DevResetSummary {
     rectifications: db.rectifications.length,
     findingTransfers: db.findingTransfers.length,
     findingClosures: db.findingClosures.length,
+    findingAdjustments: (db.findingAdjustments ?? []).length,
     findingCases: db.findingCases.length,
     importBatches: db.importBatches.length,
     branchCoverageNotes: db.branchCoverageNotes.length,
@@ -114,6 +115,7 @@ export function resetRegisteredData(db: Database): DevResetSummary {
   db.rectifications = [];
   db.findingTransfers = [];
   db.findingClosures = [];
+  db.findingAdjustments = [];
   db.findingCases = [];
   db.importBatches = [];
   db.branchCoverageNotes = [];

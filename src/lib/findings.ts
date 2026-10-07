@@ -7,6 +7,7 @@ import type {
   Database,
   Finding,
   FindingStatus,
+  FindingAdjustment,
   FindingTransfer,
   Branch,
   ReportingPeriod,
@@ -301,6 +302,68 @@ export function findingCaseTotals(findings: Finding[]): {
  * The closed *case* in 10/2026 still counts in that period's rectifiedCases
  * (and Performance %) - that case genuinely was closed there.
  */
+// ---------------------------------------------------------------------------
+// Revolving findings (docs/revolving-findings.md): a finding's case count and
+// amount are its CURRENT figures - the original registration plus approved
+// adjustments. These helpers give the original figures and where each
+// approved adjustment counts.
+
+/** The case count / amount as originally registered (older records without the field: the current figures). */
+export function registeredCasesOf(f: Pick<Finding, "caseCount" | "registeredCaseCount">): number {
+  return typeof f.registeredCaseCount === "number" ? f.registeredCaseCount : f.caseCount;
+}
+export function registeredAmountOf(f: Pick<Finding, "amount" | "registeredAmount">): number {
+  return typeof f.registeredAmount === "number" ? f.registeredAmount : f.amount;
+}
+
+/** A finding's approved adjustments, oldest approval first. */
+export function approvedAdjustmentsOf(db: Pick<Database, "findingAdjustments">, findingId: string): FindingAdjustment[] {
+  return (db.findingAdjustments ?? [])
+    .filter((a) => a.findingId === findingId && a.status === "APPROVED" && a.approvedAt)
+    .sort((a, b) => (a.approvedAt ?? "").localeCompare(b.approvedAt ?? ""));
+}
+
+/**
+ * Cases / amount a finding REPORTED in a period: its original figures if it
+ * was registered there, plus adjustments submitted there (rule R16).
+ */
+export function reportedInPeriod(db: Database, f: Finding, periodId: string): { cases: number; amount: number } {
+  const original = originPeriodId(db, f) === periodId;
+  let cases = original ? registeredCasesOf(f) : 0;
+  let amount = original ? registeredAmountOf(f) : 0;
+  for (const a of approvedAdjustmentsOf(db, f.id)) {
+    if (a.periodId !== periodId) continue;
+    cases += a.addedCases;
+    amount += a.amountChange;
+  }
+  return { cases, amount };
+}
+
+/**
+ * For reports that ignore transfers (by ORIGINAL period): a finding's share
+ * of one period - its original cases / amount if it was registered there,
+ * plus approved adjustments submitted there. Closed cases are allocated to
+ * the original cases first, then to adjustments in approval order, so no
+ * period shows more closed than cases.
+ */
+export function originalPeriodShare(db: Database, f: Finding, periodId: string): { cases: number; closed: number; amount: number } {
+  const portions = [
+    { periodId: originPeriodId(db, f), cases: registeredCasesOf(f), amount: registeredAmountOf(f) },
+    ...approvedAdjustmentsOf(db, f.id).map((a) => ({ periodId: a.periodId, cases: a.addedCases, amount: a.amountChange })),
+  ];
+  let remainingClosed = f.closedCases;
+  const share = { cases: 0, closed: 0, amount: 0 };
+  for (const portion of portions) {
+    const closed = Math.min(Math.max(remainingClosed, 0), portion.cases);
+    remainingClosed -= closed;
+    if (portion.periodId !== periodId) continue;
+    share.cases += portion.cases;
+    share.closed += closed;
+    share.amount += portion.amount;
+  }
+  return share;
+}
+
 /** The period a finding was originally registered in (before any transfer). */
 export function originPeriodId(db: Database, finding: Finding): string {
   const first = db.findingTransfers
@@ -319,10 +382,11 @@ export function findingCaseTotalsInPeriod(
   return {
     totalFindings: resident.length,
     totalCases: resident.reduce((sum, r) => sum + r.slice.eligibleCases, 0),
-    // "Reported Cases": the full case count of findings originally
-    // registered in this period - never changed by transfers in or out
-    // (Total Cases is this period's share after transfers).
-    reportedCases: approved.filter((f) => originPeriodId(db, f) === periodId).reduce((sum, f) => sum + f.caseCount, 0),
+    // "Reported Cases": cases REPORTED in this period - the original case
+    // count of findings registered here plus cases added by adjustments
+    // submitted here - never changed by transfers in or out (Total Cases is
+    // this period's share after transfers).
+    reportedCases: approved.reduce((sum, f) => sum + reportedInPeriod(db, f, periodId).cases, 0),
     rectifiedFindings: resident.filter((r) => r.slice.isCurrentPeriod && r.finding.status === "CLOSED").length,
     rectifiedCases: resident.reduce((sum, r) => sum + r.slice.closedCases, 0),
   };
@@ -767,6 +831,25 @@ export function queueStatusesForSession(session: SessionData, db: Database): (fi
       const verifiedAmount = Math.min(f.rectifiedAmount, f.districtVerifiedAmount);
       return f.status !== "CLOSED" && (verifiedCases > f.closedCases || verifiedAmount > f.closedAmount);
     });
+  // Revolving findings (docs/revolving-findings.md): an adjustment awaiting
+  // this user's review step (never their own - separation of duties), or
+  // their own adjustment returned for correction.
+  const stepOf = new Map<string, FindingAdjustment>();
+  for (const a of db.findingAdjustments ?? []) {
+    if (["DISTRICT_REVIEW", "HO_REVIEW", "PENDING_BANK_APPROVAL", "RETURNED"].includes(a.status)) stepOf.set(a.findingId, a);
+  }
+  if (stepOf.size > 0) {
+    const bankApprover = Boolean(session.userId && db.settings.hoApproval.approverUserIds.includes(session.userId));
+    matchers.push((f) => {
+      const a = stepOf.get(f.id);
+      if (!a) return false;
+      if (a.status === "RETURNED") return a.requestedBy === session.userId;
+      if (a.requestedBy === session.userId) return false;
+      if (a.status === "DISTRICT_REVIEW") return has("district-review");
+      if (a.status === "HO_REVIEW") return has("ho-review");
+      return bankApprover && has("bank-approval");
+    });
+  }
   // Never in the queue: rejected findings (final - nothing left to do), and
   // "waiting to be transferred to the next period" is not a queue item of its
   // own (transfer is done from the Reporting Periods lock / the finding page).
@@ -846,6 +929,12 @@ function findingResidencyInPeriod(
   if (transfers.length === 0) {
     return finding.periodId === periodId ? { eligibleCases: finding.caseCount, eligibleAmount: finding.amount, exitTransfer: null } : null;
   }
+  // Approved adjustments join the stay the finding was in when each was
+  // approved (that's where the branch must work the added cases), so a
+  // period never closes more than it holds; totals over all periods = the
+  // current case count (docs/revolving-findings.md §4).
+  const adjustments = approvedAdjustmentsOf(db, finding.id);
+  const stayOf = (at: string) => transfers.filter((t) => new Date(t.createdAt).getTime() <= new Date(at).getTime()).length;
   // The finding's stays, in order: the origin (arrived with the full
   // caseCount/amount), then one per transfer (arrived with what that hop
   // carried). Each stay is credited what arrived minus what the NEXT
@@ -858,9 +947,14 @@ function findingResidencyInPeriod(
   // finding's caseCount. exitTransfer is the transfer that ended this
   // period's LAST stay (null = the finding is still here).
   const stays = [
-    { periodId: transfers[0].fromPeriodId, cases: finding.caseCount, amount: finding.amount },
+    { periodId: transfers[0].fromPeriodId, cases: registeredCasesOf(finding), amount: registeredAmountOf(finding) },
     ...transfers.map((t) => ({ periodId: t.toPeriodId, cases: t.casesTransferred, amount: t.amountTransferred })),
   ];
+  for (const a of adjustments) {
+    const stay = stays[stayOf(a.approvedAt!)];
+    stay.cases += a.addedCases;
+    stay.amount += a.amountChange;
+  }
   let eligibleCases = 0;
   let eligibleAmount = 0;
   let lastStay = -1;

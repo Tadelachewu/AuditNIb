@@ -239,6 +239,9 @@ async function handlePOST(request: Request) {
     amount: input.amount,
     currency: input.currency ?? "",
     caseCount: input.caseCount,
+    // The original figures (frozen once approved; adjustments change only the current ones).
+    registeredCaseCount: input.caseCount,
+    registeredAmount: input.amount,
     riskLevel: input.riskLevel ?? "",
     priority: input.priority ?? "",
     description: input.description ?? "",

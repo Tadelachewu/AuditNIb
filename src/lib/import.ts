@@ -551,6 +551,8 @@ export function validateImportRow(
     amount,
     currency,
     caseCount,
+    registeredCaseCount: caseCount,
+    registeredAmount: amount,
     riskLevel,
     priority,
     description: (row.description ?? "").trim(),

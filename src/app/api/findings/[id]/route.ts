@@ -234,6 +234,9 @@ async function handlePATCH(request: Request, { params }: { params: Promise<{ id:
   const updated = await updateDb((current) => {
     const f = current.findings.find((x) => x.id === id)!;
     Object.assign(f, input, { districtId, branchId, periodId, sourceId, departmentId, categoryId });
+    // Still a draft / returned registration: its original figures follow the edit.
+    f.registeredCaseCount = f.caseCount;
+    f.registeredAmount = f.amount;
     if (referenceNeedsRegeneration) {
       // Re-derived from the *other* findings already in `current` at this
       // point (this record's old reference isn't in that count, since

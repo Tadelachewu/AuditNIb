@@ -19,6 +19,7 @@ import type {
   FindingCase,
   FindingTransfer,
   FindingClosure,
+  FindingAdjustment,
   ImportBatch,
   Evidence,
   Comment,
@@ -257,6 +258,8 @@ function findingFromRow(r: Prisma.FindingGetPayload<object>): Finding {
     amount: r.amount,
     currency: r.currency,
     caseCount: r.caseCount,
+    registeredCaseCount: r.registeredCaseCount,
+    registeredAmount: r.registeredAmount,
     riskLevel: r.riskLevel,
     priority: r.priority,
     description: r.description,
@@ -354,6 +357,29 @@ function closureFromRow(r: Prisma.FindingClosureGetPayload<object>): FindingClos
     submittedBy: r.submittedBy,
     submittedByName: r.submittedByName,
     createdAt: iso(r.createdAt),
+  };
+}
+
+function adjustmentFromRow(r: Prisma.FindingAdjustmentGetPayload<object>): FindingAdjustment {
+  return {
+    id: r.id,
+    findingId: r.findingId,
+    periodId: r.periodId,
+    status: r.status as FindingAdjustment["status"],
+    addedCases: r.addedCases,
+    amountChange: r.amountChange,
+    newCaseAmounts: r.newCaseAmounts,
+    caseAmountChanges: (r.caseAmountChanges ?? []) as unknown as FindingAdjustment["caseAmountChanges"],
+    reason: r.reason,
+    requestedBy: r.requestedBy,
+    requestedByName: r.requestedByName,
+    requesterScope: r.requesterScope as FindingAdjustment["requesterScope"],
+    submittedAt: r.submittedAt ? iso(r.submittedAt) : null,
+    approvedAt: r.approvedAt ? iso(r.approvedAt) : null,
+    decisions: (r.decisions ?? []) as unknown as FindingAdjustment["decisions"],
+    applied: (r.applied ?? null) as unknown as FindingAdjustment["applied"],
+    createdAt: iso(r.createdAt),
+    updatedAt: iso(r.updatedAt),
   };
 }
 
@@ -550,6 +576,7 @@ export async function readDb(): Promise<Database> {
     findingCases,
     findingTransfers,
     findingClosures,
+    findingAdjustments,
     importBatches,
     evidence,
     comments,
@@ -576,6 +603,7 @@ export async function readDb(): Promise<Database> {
     prisma.findingCase.findMany(),
     prisma.findingTransfer.findMany(),
     prisma.findingClosure.findMany(),
+    prisma.findingAdjustment.findMany(),
     prisma.importBatch.findMany(),
     prisma.evidence.findMany(),
     prisma.comment.findMany(),
@@ -610,6 +638,7 @@ export async function readDb(): Promise<Database> {
     findingCases: findingCases.map(findingCaseFromRow),
     findingTransfers: findingTransfers.map(transferFromRow),
     findingClosures: findingClosures.map(closureFromRow),
+    findingAdjustments: findingAdjustments.map(adjustmentFromRow),
     importBatches: importBatches.map(importBatchFromRow),
     evidence: evidence.map(evidenceFromRow),
     comments: comments.map(commentFromRow),
@@ -828,6 +857,8 @@ function findingToData(r: Finding) {
     amount: r.amount,
     currency: r.currency,
     caseCount: r.caseCount,
+    registeredCaseCount: r.registeredCaseCount,
+    registeredAmount: r.registeredAmount,
     riskLevel: r.riskLevel,
     priority: r.priority,
     description: r.description,
@@ -908,6 +939,28 @@ function transferToData(r: FindingTransfer) {
     createdByName: r.createdByName,
     createdAt: toDate(r.createdAt),
     method: r.method,
+  };
+}
+
+function adjustmentToData(r: FindingAdjustment) {
+  return {
+    findingId: r.findingId,
+    periodId: r.periodId,
+    status: r.status,
+    addedCases: r.addedCases,
+    amountChange: r.amountChange,
+    newCaseAmounts: r.newCaseAmounts,
+    caseAmountChanges: r.caseAmountChanges as unknown as object,
+    reason: r.reason,
+    requestedBy: r.requestedBy,
+    requestedByName: r.requestedByName,
+    requesterScope: r.requesterScope,
+    submittedAt: r.submittedAt ? toDate(r.submittedAt) : null,
+    approvedAt: r.approvedAt ? toDate(r.approvedAt) : null,
+    decisions: r.decisions as unknown as object,
+    applied: (r.applied ?? Prisma.DbNull) as unknown as object,
+    createdAt: toDate(r.createdAt),
+    updatedAt: toDate(r.updatedAt),
   };
 }
 
@@ -1055,6 +1108,7 @@ async function persistChanges(before: Database, after: Database, alsoWrite?: (tx
       await syncCollection(tx.findingCase, before.findingCases, after.findingCases, findingCaseToData);
       await syncCollection(tx.findingTransfer, before.findingTransfers, after.findingTransfers, transferToData);
       await syncCollection(tx.findingClosure, before.findingClosures, after.findingClosures, closureToData);
+      await syncCollection(tx.findingAdjustment, before.findingAdjustments, after.findingAdjustments, adjustmentToData);
       await syncCollection(tx.comment, before.comments, after.comments, commentToData);
       await syncCollection(tx.evidence, before.evidence, after.evidence, evidenceToData);
       await syncCollection(tx.notification, before.notifications, after.notifications, notificationToData);

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requirePermission } from "@/lib/guard";
 import { readDb } from "@/lib/db";
 import { findingsInScope } from "@/lib/findings-scope";
-import { findingsResidentInPeriod, queueStatusesForSession, type FindingPeriodSlice } from "@/lib/findings";
+import { findingsResidentInPeriod, queueStatusesForSession, type FindingPeriodSlice, registeredCasesOf } from "@/lib/findings";
 import { findingStatusCode, type Finding } from "@/types";
 import { filterFindingsByText, sortFindings, parseFindingSort } from "@/lib/findingListQuery";
 import { matchesOperationAndIrregularity } from "@/lib/dashboardFilters";
@@ -139,7 +139,7 @@ async function handleGET(request: Request) {
       isHistorical ? `TRANSFERRED_OUT (${slice?.transferredOutToCode ?? ""})` : findingStatusCode(f.status),
       amount,
       f.currency,
-      f.caseCount,
+      registeredCasesOf(f),
       caseCount,
       rectifiedAmount,
       rectifiedCases,

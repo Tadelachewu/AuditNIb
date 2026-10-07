@@ -1,5 +1,6 @@
 import { findingStatusLabel, type Finding } from "@/types";
 import { ALL_ROWS } from "@/lib/pagination";
+import { registeredCasesOf } from "@/lib/findings";
 
 /**
  * Text search + column sort for the Findings list (src/app/(app)/findings)
@@ -76,9 +77,9 @@ export function sortFindings<T extends { finding: Finding; amount?: number }>(
         return f.riskLevel;
       case "amount":
         return amountOf(r);
-      // Originally registered - never changed by transfers.
+      // Originally registered - never changed by transfers or adjustments.
       case "reportedCases":
-        return f.caseCount;
+        return registeredCasesOf(f);
       // This period's share after transfers (the whole count with no period filter).
       case "cases":
         return (r as { slice?: { eligibleCases: number } | null }).slice?.eligibleCases ?? f.caseCount;

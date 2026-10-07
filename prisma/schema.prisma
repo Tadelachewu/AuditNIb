@@ -207,6 +207,11 @@ model Finding {
   amount                 Float
   currency               String
   caseCount              Int                  @map("case_count")
+  /// The case count / amount as originally registered - frozen once the finding
+  /// is approved; case_count / amount above are the CURRENT figures
+  /// (original + approved adjustments, docs/revolving-findings.md).
+  registeredCaseCount    Int                  @default(0) @map("registered_case_count")
+  registeredAmount       Float                @default(0) @map("registered_amount")
   riskLevel              String               @map("risk_level")
   priority               String
   description            String
@@ -240,6 +245,7 @@ model Finding {
   period                 ReportingPeriod      @relation(fields: [periodId], references: [id])
   source                 Source?              @relation(fields: [sourceId], references: [id], onDelete: Restrict)
   rectifications         RectificationEntry[]
+  adjustments            FindingAdjustment[]
 
   @@index([periodId])
   @@index([branchId])
@@ -580,4 +586,51 @@ model AutoTransferRun {
   triggeredBy     String?  @map("triggered_by")
 
   @@map("auto_transfer_runs")
+}
+
+/// Revolving findings (docs/revolving-findings.md): an approved-or-pending
+/// change to a finding's outstanding cases / amount. The original
+/// registration is never edited; the finding's current figures are original
+/// + approved adjustments.
+model FindingAdjustment {
+  id                String   @id
+  findingId         String   @map("finding_id")
+  /// The period it was submitted (reported) in.
+  periodId          String   @map("period_id")
+  /// DRAFT | DISTRICT_REVIEW | HO_REVIEW | PENDING_BANK_APPROVAL | APPROVED | RETURNED | REJECTED | WITHDRAWN
+  status            String
+  addedCases        Int      @default(0) @map("added_cases")
+  /// Non-itemized: the amount change (+/-). Itemized: derived from the case amounts.
+  amountChange      Float    @default(0) @map("amount_change")
+  /// Itemized findings: amounts of the added cases, and changes to outstanding cases ([{caseId, from, to}]).
+  newCaseAmounts    Float[]  @default([]) @map("new_case_amounts")
+  caseAmountChanges Json     @default("[]") @map("case_amount_changes")
+  reason            String
+  requestedBy       String   @map("requested_by")
+  requestedByName   String   @map("requested_by_name")
+  /// The requester's level: BANK (bank-wide approval path) or BRANCH/DISTRICT (district -> HO path).
+  requesterScope    String   @map("requester_scope")
+  submittedAt       DateTime? @map("submitted_at")
+  approvedAt        DateTime? @map("approved_at")
+  /// Every decision: [{step, decision, by, byName, at, reason}].
+  decisions         Json     @default("[]")
+  /// Before / after figures, recorded when applied.
+  applied           Json?
+  createdAt         DateTime @map("created_at")
+  updatedAt         DateTime @map("updated_at")
+  finding           Finding  @relation(fields: [findingId], references: [id], onDelete: Cascade)
+
+  @@index([findingId])
+  @@index([status])
+  @@map("finding_adjustments")
+}
+
+/// Revolving findings: which operation areas allow adjustments (one row).
+model AdjustmentConfig {
+  id                       String   @id @default("singleton")
+  revolvingOperationAreas  String[] @default([]) @map("revolving_operation_areas")
+  updatedAt                DateTime @default(now()) @map("updated_at")
+  updatedBy                String?  @map("updated_by")
+
+  @@map("adjustment_config")
 }

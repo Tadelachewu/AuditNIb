@@ -212,6 +212,8 @@ export async function insertDatabaseIntoPostgres(prisma: PrismaClient, db: Datab
       amount: f.amount,
       currency: f.currency,
       caseCount: f.caseCount,
+      registeredCaseCount: f.registeredCaseCount ?? f.caseCount,
+      registeredAmount: f.registeredAmount ?? f.amount,
       riskLevel: f.riskLevel,
       priority: f.priority,
       description: f.description,
@@ -316,6 +318,33 @@ export async function insertDatabaseIntoPostgres(prisma: PrismaClient, db: Datab
     })),
   });
   console.log(`  findingClosures: ${db.findingClosures.length}`);
+
+  const adjustments = db.findingAdjustments ?? [];
+  if (adjustments.length > 0) {
+    await prisma.findingAdjustment.createMany({
+      data: adjustments.map((a) => ({
+        id: a.id,
+        findingId: a.findingId,
+        periodId: a.periodId,
+        status: a.status,
+        addedCases: a.addedCases,
+        amountChange: a.amountChange,
+        newCaseAmounts: a.newCaseAmounts,
+        caseAmountChanges: a.caseAmountChanges as unknown as object,
+        reason: a.reason,
+        requestedBy: a.requestedBy,
+        requestedByName: a.requestedByName,
+        requesterScope: a.requesterScope,
+        submittedAt: a.submittedAt ? toDate(a.submittedAt) : null,
+        approvedAt: a.approvedAt ? toDate(a.approvedAt) : null,
+        decisions: a.decisions as unknown as object,
+        applied: (a.applied ?? undefined) as unknown as object,
+        createdAt: toDate(a.createdAt),
+        updatedAt: toDate(a.updatedAt),
+      })),
+    });
+  }
+  console.log(`  findingAdjustments: ${adjustments.length}`);
 
   // Comments before evidence - evidence.commentId can reference one.
   await prisma.comment.createMany({

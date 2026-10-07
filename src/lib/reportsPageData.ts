@@ -1,5 +1,5 @@
 import { findingsInScope } from "@/lib/findings-scope";
-import { computePerformance, computeEligibleCaseCounts, findingsResidentInPeriod, type FindingPeriodSlice } from "@/lib/findings";
+import { computePerformance, computeEligibleCaseCounts, findingsResidentInPeriod, type FindingPeriodSlice, registeredCasesOf } from "@/lib/findings";
 import { paginate, parsePage } from "@/lib/pagination";
 import { matchesOperationAndIrregularity } from "@/lib/dashboardFilters";
 import { filterFindingsByText, sortFindings, parseFindingSort, parsePageSize } from "@/lib/findingListQuery";
@@ -177,7 +177,7 @@ export function buildReportsData(db: Database, user: SessionData, get: (key: str
     sourceName: sourceName(f.sourceId),
     currency: f.currency,
     amount: amountOf({ finding: f, slice }),
-    reportedCases: f.caseCount,
+    reportedCases: registeredCasesOf(f),
     totalCases: slice ? slice.eligibleCases : f.caseCount,
     outstanding: slice ? slice.eligibleAmount - slice.closedAmount : f.amount - f.rectifiedAmount,
     status: f.status,

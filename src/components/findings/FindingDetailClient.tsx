@@ -16,6 +16,7 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { Trash2 } from "lucide-react";
 import { FindingStatusBadge } from "@/components/findings/FindingStatusBadge";
 import { NewFindingForm } from "@/components/findings/NewFindingForm";
+import { AdjustmentsCard } from "@/components/findings/AdjustmentsCard";
 import { findingStatusLabel } from "@/types";
 import { amountError } from "@/lib/inputRules";
 import type {
@@ -739,6 +740,9 @@ export function FindingDetailClient({
           )}
         </div>
       )}
+
+      {/* Revolving findings - renders nothing unless the operation area is listed or it was adjusted. */}
+      {!editing && <AdjustmentsCard finding={finding} />}
 
       {permissions.canDistrictReview && (
         <Card>

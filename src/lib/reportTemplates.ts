@@ -1,4 +1,4 @@
-import { computeEligibleCaseCounts, caseAgeDays, findingsResidentInPeriod, isHoApproved, originalPeriodId } from "@/lib/findings";
+import { computeEligibleCaseCounts, caseAgeDays, findingsResidentInPeriod, isHoApproved, originalPeriodId, originalPeriodShare, registeredCasesOf, approvedAdjustmentsOf } from "@/lib/findings";
 import { formatNumber } from "@/lib/format";
 import { addCurrency, mergeCurrencyTotals, type CurrencyTotals } from "@/lib/currency";
 import type { Database, Branch, District, ReportingPeriod, ClassifiedCategory, BranchCoverageNote, Finding, Source } from "@/types";
@@ -75,12 +75,25 @@ function scopedTotals(db: Database, periodId: string | undefined, findings: Find
  * every finding.
  */
 function originalPeriodTotals(db: Database, periodId: string | undefined, findings: Finding[]): { cases: number; closed: number; amount: CurrencyTotals } {
-  const inPeriod = periodId ? findings.filter((f) => originalPeriodId(db, f) === periodId) : findings;
-  return {
-    cases: inPeriod.reduce((s, f) => s + f.caseCount, 0),
-    closed: inPeriod.reduce((s, f) => s + f.closedCases, 0),
-    amount: inPeriod.reduce((t, f) => addCurrency(t, f.currency, f.amount), {} as CurrencyTotals),
-  };
+  // "All periods": every finding with its current figures.
+  if (!periodId) {
+    return {
+      cases: findings.reduce((s, f) => s + f.caseCount, 0),
+      closed: findings.reduce((s, f) => s + f.closedCases, 0),
+      amount: findings.reduce((t, f) => addCurrency(t, f.currency, f.amount), {} as CurrencyTotals),
+    };
+  }
+  // One period: the original figures in the original period, revolving-finding
+  // adjustments in the period they were submitted (originalPeriodShare()).
+  const totals = { cases: 0, closed: 0, amount: {} as CurrencyTotals };
+  for (const f of findings) {
+    const share = originalPeriodShare(db, f, periodId);
+    if (share.cases === 0 && share.amount === 0) continue;
+    totals.cases += share.cases;
+    totals.closed += share.closed;
+    totals.amount = addCurrency(totals.amount, f.currency, share.amount);
+  }
+  return totals;
 }
 
 /**
@@ -671,6 +684,13 @@ export function getWeeklyExecutiveSummary(
   const districts = reportDistricts(db);
   const sourceFilteredFindings = applySourceFilter(db, "weekly-executive-summary", db.findings);
 
+  function casesAsOf(f: Finding, asOfDate: string): number {
+    const added = approvedAdjustmentsOf(db, f.id)
+      .filter((a) => localDay(a.approvedAt!) <= asOfDate)
+      .reduce((sum, a) => sum + a.addedCases, 0);
+    return registeredCasesOf(f) + added;
+  }
+
   function cumulativeAsOf(categoryId: string, districtId: string, asOfDate: string): { totalCases: number; rectifiedCases: number } {
     // isHoApproved() gate, same as every other "official" figure - a
     // still-in-review or rejected finding shouldn't move this week's
@@ -681,7 +701,9 @@ export function getWeeklyExecutiveSummary(
     // Rectified = formally closed on or before the cutoff, so last week's
     // column isn't inflated by closures that happened this week.
     return {
-      totalCases: findings.reduce((sum, f) => sum + f.caseCount, 0),
+      // Cases as of the cutoff: the original cases plus cases added by
+      // revolving-finding adjustments approved on or before it.
+      totalCases: findings.reduce((sum, f) => sum + casesAsOf(f, asOfDate), 0),
       rectifiedCases: findings.reduce((sum, f) => sum + closedAsOf(db, f.id, asOfDate), 0),
     };
   }

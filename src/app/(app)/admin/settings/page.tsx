@@ -6,6 +6,7 @@ import { apiGet, apiSend } from "@/lib/api-client";
 import { notify, notifications, presentError } from "@/lib/notify";
 import { CollapsibleCard } from "@/components/ui/CollapsibleCard";
 import { AutoTransferSettings } from "@/components/admin/AutoTransferSettings";
+import { RevolvingSettings } from "@/components/admin/RevolvingSettings";
 import { Button } from "@/components/ui/Button";
 import { StickyActions } from "@/components/ui/StickyActions";
 import { Input, Select, Label } from "@/components/ui/Field";
@@ -267,6 +268,11 @@ export default function SettingsPage() {
       {/* Its own section and Save (src/lib/autoTransfer), outside the main settings form. */}
       <CollapsibleCard title="Automatic Transfer" description="Carry outstanding findings into the next period when a period ends.">
         <AutoTransferSettings canEdit={canEdit} />
+      </CollapsibleCard>
+
+      {/* Its own section and Save (src/lib/adjustments), outside the main settings form. */}
+      <CollapsibleCard title="Revolving Findings" description="Operation areas whose outstanding findings can be adjusted instead of registered again.">
+        <RevolvingSettings canEdit={canEdit} />
       </CollapsibleCard>
 
       <CollapsibleCard disabled={!canEdit}

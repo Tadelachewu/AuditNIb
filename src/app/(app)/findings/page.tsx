@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 import { readDb } from "@/lib/db";
 import { findingsInScope } from "@/lib/findings-scope";
-import { queueStatusesForSession, findingsResidentInPeriod, type FindingPeriodSlice } from "@/lib/findings";
+import { queueStatusesForSession, findingsResidentInPeriod, type FindingPeriodSlice, registeredCasesOf } from "@/lib/findings";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
 import { paginate, parsePage } from "@/lib/pagination";
 import { filterFindingsByText, sortFindings, parseFindingSort, parsePageSize } from "@/lib/findingListQuery";
@@ -154,7 +154,7 @@ export default async function FindingsPage({
     riskLevel: f.riskLevel,
     currency: f.currency,
     amount: slice ? slice.eligibleAmount : f.amount,
-    reportedCases: f.caseCount,
+    reportedCases: registeredCasesOf(f),
     totalCases: slice ? slice.eligibleCases : f.caseCount,
     status: f.status,
     updatedAt: f.updatedAt,

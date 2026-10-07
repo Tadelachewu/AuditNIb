@@ -48,6 +48,7 @@ const COLLECTION_LABELS: Record<string, string> = {
   rectifications: "Rectification entries",
   findingTransfers: "Transfer records",
   findingClosures: "Closure records",
+  findingAdjustments: "Adjustments (revolving findings)",
   findingCases: "Itemized cases",
   importBatches: "Import batches",
   branchCoverageNotes: "Uncovered-branch notes",

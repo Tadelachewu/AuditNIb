@@ -33,6 +33,15 @@ export const NOTIFICATION_EVENT_GROUPS = [
     ],
   },
   {
+    group: "Revolving findings",
+    events: [
+      { type: "ADJUSTMENT_SUBMITTED", label: "Adjustment submitted", hint: "An adjustment of a finding's outstanding cases / amount awaits review" },
+      { type: "ADJUSTMENT_APPROVED", label: "Adjustment approved", hint: "An adjustment was approved and applied to the finding" },
+      { type: "ADJUSTMENT_RETURNED", label: "Adjustment returned", hint: "An adjustment was returned to its requester for correction" },
+      { type: "ADJUSTMENT_REJECTED", label: "Adjustment rejected", hint: "An adjustment was rejected" },
+    ],
+  },
+  {
     group: "Transfers & periods",
     events: [
       { type: "TRANSFERRED", label: "Transferred", hint: "A finding was moved to another reporting period" },
