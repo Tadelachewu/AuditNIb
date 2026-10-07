@@ -90,6 +90,17 @@ export function AdjustmentsCard({ finding }: { finding: FindingFigures }) {
     await act(() => apiSend(`${base}/${a.id}`, "PATCH", { action: "withdraw" }), notifications.adjustment.withdrawn);
   }
 
+  async function remove(a: AdjustmentWithActions) {
+    const ok = await confirm({
+      title: "Delete this adjustment?",
+      message: `This ${ADJUSTMENT_STATUS_LABELS[a.status].toLowerCase()} adjustment (${changeSummary(a, finding.currency)}) will be permanently removed. It was never applied, so the finding's figures don't change. The audit log keeps a record.`,
+      confirmLabel: "Delete Permanently",
+      tone: "danger",
+    });
+    if (ok === false) return;
+    await act(() => apiSend(`${base}/${a.id}`, "DELETE"), notifications.adjustment.deleted);
+  }
+
   async function submit(a: AdjustmentWithActions) {
     await act(() => apiSend(`${base}/${a.id}`, "PATCH", { action: "submit" }), notifications.adjustment.submitted);
   }
@@ -183,6 +194,11 @@ export function AdjustmentsCard({ finding }: { finding: FindingFigures }) {
                     {a.can.withdraw && (
                       <Button variant="cancel" onClick={() => withdraw(a)} disabled={busy}>
                         Withdraw
+                      </Button>
+                    )}
+                    {a.can.delete && (
+                      <Button variant="danger" onClick={() => remove(a)} disabled={busy}>
+                        Delete
                       </Button>
                     )}
                     {a.can.review && (

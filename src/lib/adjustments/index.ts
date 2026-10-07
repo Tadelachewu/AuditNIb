@@ -22,6 +22,16 @@ export {
   type AdjustmentInput,
   type ResolvedChange,
 } from "./rules";
-export { createAdjustment, editAdjustment, submitAdjustment, withdrawAdjustment, reviewAdjustment, type ReviewDecision } from "./service";
+export {
+  createAdjustment,
+  editAdjustment,
+  submitAdjustment,
+  withdrawAdjustment,
+  reviewAdjustment,
+  deleteAdjustment,
+  canDeleteAdjustment,
+  DELETABLE_ADJUSTMENT_STATUSES,
+  type ReviewDecision,
+} from "./service";
 export { getAdjustmentConfig, saveAdjustmentConfig, normalizeAreas, EMPTY_ADJUSTMENT_CONFIG } from "./config";
 export { adjustmentsView, type AdjustmentsView, type AdjustmentWithActions, type AdjustmentActions } from "./view";

@@ -2,10 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/mail", () => ({ sendNotificationEmail: vi.fn() }));
 
-import { createAdjustment, editAdjustment, reviewAdjustment, submitAdjustment, withdrawAdjustment } from "@/lib/adjustments/service";
+import { createAdjustment, deleteAdjustment, editAdjustment, reviewAdjustment, submitAdjustment, withdrawAdjustment } from "@/lib/adjustments/service";
 import { eligibilityProblem, isRevolvingArea, resolveChange, type AdjustmentInput } from "@/lib/adjustments/rules";
 import type { AdjustmentConfig, FindingAdjustment } from "@/lib/adjustments/types";
 import { findingsResidentInPeriod, originalPeriodShare, queueStatusesForSession, reportedInPeriod } from "@/lib/findings";
+import { adjustmentDashboardTotals } from "@/lib/adjustments/dashboard";
 import type { Database, Finding, FindingCase } from "@/types";
 
 // Revolving findings - docs/revolving-findings.md §9 (automated cases).
@@ -305,5 +306,71 @@ describe("Show My Queue", () => {
     reviewAdjustment(db, district, "f1", adj.id, "RETURN", "Attach the account list");
     expect(queueStatusesForSession(branchCtl, db)(f)).toBe(true);
     expect(queueStatusesForSession(district, db)(f)).toBe(false);
+  });
+});
+
+describe("dashboard figures", () => {
+  it("pending = in review (any period); diff = approved, reported in the period", () => {
+    const f = finding();
+    const db = makeDb(f);
+    const adj = (over: Partial<FindingAdjustment>) => ({ id: Math.random().toString(), findingId: "f1", periodId: "p10", addedCases: 0, amountChange: 0, ...over }) as FindingAdjustment;
+    db.findingAdjustments.push(
+      adj({ status: "DISTRICT_REVIEW", addedCases: 2, amountChange: 500 }),
+      adj({ status: "HO_REVIEW", amountChange: -100 }),
+      adj({ status: "APPROVED", addedCases: 1, amountChange: 2000 }),
+      adj({ status: "APPROVED", amountChange: -300 }),
+      adj({ status: "APPROVED", periodId: "p9", addedCases: 4, amountChange: 50 }),
+      adj({ status: "REJECTED", addedCases: 9 }),
+      adj({ status: "DRAFT", addedCases: 9 })
+    );
+    const t = adjustmentDashboardTotals(db, [f], "p10");
+    expect(t.pending).toMatchObject({ count: 2, addedCases: 2, amountChange: { ETB: 400 }, byStep: { DISTRICT_REVIEW: 1, HO_REVIEW: 1 } });
+    expect(t.diff).toMatchObject({ count: 2, addedCases: 1, amountChange: { ETB: 1700 }, increase: { ETB: 2000 }, decrease: { ETB: -300 } });
+    expect(adjustmentDashboardTotals(db, [f], undefined).diff).toMatchObject({ count: 3, addedCases: 5 });
+    expect(adjustmentDashboardTotals(db, [], "p10").pending.count).toBe(0);
+  });
+});
+
+describe("delete", () => {
+  it("rejected / returned / withdrawn can be deleted by the requester; approved and in-review never", () => {
+    const db = makeDb();
+    const a = createAdjustment(db, config, branchCtl, "f1", input(), { submit: true });
+    expect(() => deleteAdjustment(db, branchCtl, "f1", a.id)).toThrow(/rejected, returned or withdrawn/);
+    reviewAdjustment(db, district, "f1", a.id, "RETURN", "Attach the account list");
+    expect(() => deleteAdjustment(db, otherBranchCtl, "f1", a.id)).toThrow(/requester/);
+    deleteAdjustment(db, branchCtl, "f1", a.id);
+    expect(db.findingAdjustments).toHaveLength(0);
+    expect(db.auditLogs.map((l) => l.action)).toContain("FINDING_ADJUSTMENT_DELETED");
+
+    const b = createAdjustment(db, config, branchCtl, "f1", input(), { submit: true });
+    reviewAdjustment(db, district, "f1", b.id, "APPROVE");
+    reviewAdjustment(db, ho, "f1", b.id, "APPROVE");
+    expect(() => deleteAdjustment(db, branchCtl, "f1", b.id)).toThrow(/rejected, returned or withdrawn/);
+  });
+
+  it("a rejected one can also be deleted with Delete Rejected", () => {
+    const db = makeDb();
+    const a = createAdjustment(db, config, branchCtl, "f1", input(), { submit: true });
+    reviewAdjustment(db, district, "f1", a.id, "REJECT", "Not a revolving case");
+    deleteAdjustment(db, session("hk", "BANK", ["delete-rejected"]), "f1", a.id);
+    expect(db.findingAdjustments).toHaveLength(0);
+  });
+});
+
+describe("dashboard: awaiting you", () => {
+  it("counts only adjustments at the user's own review step (never their own), plus their returned ones", () => {
+    const db = makeDb();
+    const a = createAdjustment(db, config, branchCtl, "f1", input(), { submit: true });
+    const f = db.findings[0];
+    const awaiting = (s: never) => adjustmentDashboardTotals(db, [f], "p10", s).awaitingYou;
+    expect(awaiting(district)).toEqual({ review: 1, returned: 0, total: 1 });
+    expect(awaiting(ho)).toEqual({ review: 0, returned: 0, total: 0 });
+    expect(awaiting(branchCtl).total).toBe(0);
+    reviewAdjustment(db, district, "f1", a.id, "APPROVE");
+    expect(awaiting(district).total).toBe(0);
+    expect(awaiting(ho).review).toBe(1);
+    reviewAdjustment(db, ho, "f1", a.id, "RETURN", "Attach the account list");
+    expect(awaiting(branchCtl)).toEqual({ review: 0, returned: 1, total: 1 });
+    expect(awaiting(ho).total).toBe(0);
   });
 });

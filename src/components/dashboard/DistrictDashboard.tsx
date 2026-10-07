@@ -16,6 +16,7 @@ import { inDateRange, type DateRange } from "@/lib/dateRange";
 import { applyDashboardFilters, dashboardFindingsHref, EMPTY_DASHBOARD_FILTERS, ALL_PERIODS_VALUE, type DashboardFilters } from "@/lib/dashboardFilters";
 import { Card, CardHeader, StatCard } from "@/components/ui/Card";
 import { DASHBOARD_ICONS as ICON } from "@/lib/dashboardIcons";
+import { AdjustmentStatCards } from "@/components/dashboard/AdjustmentStatCards";
 import { Badge } from "@/components/ui/Badge";
 import { FilterBar } from "@/components/dashboard/FilterBar";
 import { TimeRangeFilter } from "@/components/reports/TimeRangeFilter";
@@ -306,6 +307,14 @@ export function DistrictDashboard({
         <StatCard icon={ICON.outstandingCases} label="Outstanding Cases" value={hasPeriodScope ? totalCases - rectifiedCases : "--"} hint="Total minus rectified" />
         <StatCard icon={ICON.transferred} label="Transferred Findings" value={hasPeriodScope ? transferredFindings : "--"} hint="Out of this period" />
         <StatCard icon={ICON.transferred} label="Transferred Cases" value={hasPeriodScope ? transferredCases : "--"} hint="Out of this period" />
+        <AdjustmentStatCards
+          user={user}
+          db={db}
+          findings={districtFindingsInRange}
+          periodId={allPeriodsSelected ? undefined : openPeriod?.id}
+          periodLabel={allPeriodsSelected ? "All periods" : (openPeriod?.code ?? "")}
+          hasPeriodScope={hasPeriodScope}
+        />
         <StatCard
           icon={ICON.performance}
           label="District Performance"

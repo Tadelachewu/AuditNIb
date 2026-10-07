@@ -136,6 +136,7 @@ export const notifications = {
     submitted: n("ADJUSTMENT_SUBMITTED", "Adjustment submitted successfully."),
     updated: n("ADJUSTMENT_UPDATED", "Adjustment updated successfully."),
     withdrawn: n("ADJUSTMENT_WITHDRAWN", "Adjustment withdrawn successfully."),
+    deleted: n("ADJUSTMENT_DELETED", "Adjustment deleted successfully."),
     approved: n("ADJUSTMENT_APPROVED", "Adjustment approved successfully."),
     returned: n("ADJUSTMENT_RETURNED", "Adjustment returned for correction."),
     rejected: n("ADJUSTMENT_REJECTED", "Adjustment rejected."),

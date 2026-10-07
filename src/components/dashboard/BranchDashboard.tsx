@@ -17,6 +17,7 @@ import { inDateRange, type DateRange } from "@/lib/dateRange";
 import { applyDashboardFilters, dashboardFindingsHref, EMPTY_DASHBOARD_FILTERS, ALL_PERIODS_VALUE, type DashboardFilters } from "@/lib/dashboardFilters";
 import { Card, CardHeader, StatCard } from "@/components/ui/Card";
 import { DASHBOARD_ICONS as ICON } from "@/lib/dashboardIcons";
+import { AdjustmentStatCards } from "@/components/dashboard/AdjustmentStatCards";
 import { FilterBar } from "@/components/dashboard/FilterBar";
 import { TimeRangeFilter } from "@/components/reports/TimeRangeFilter";
 import { RiskDistribution } from "@/components/dashboard/RiskDistribution";
@@ -331,6 +332,14 @@ export function BranchDashboard({
         <StatCard icon={ICON.outstanding} label="Outstanding" value={hasPeriodScope ? outstandingFindings : "--"} hint="Findings" />
         <StatCard icon={ICON.transferred} label="Transferred Findings" value={hasPeriodScope ? transferredFindings : "--"} hint="Out of this period" />
         <StatCard icon={ICON.transferred} label="Transferred Cases" value={hasPeriodScope ? transferredCases : "--"} hint="Out of this period" />
+        <AdjustmentStatCards
+          user={user}
+          db={db}
+          findings={branchAllFindings}
+          periodId={allPeriodsSelected ? undefined : openPeriod?.id}
+          periodLabel={allPeriodsSelected ? "All periods" : (openPeriod?.code ?? "")}
+          hasPeriodScope={hasPeriodScope}
+        />
         <StatCard icon={ICON.highRisk} label="High-Risk Findings" value={hasPeriodScope ? highRiskFindings : "--"} hint="Open, top risk tiers" />
         <StatCard
           icon={ICON.performance}

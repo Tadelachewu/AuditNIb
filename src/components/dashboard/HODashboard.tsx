@@ -9,6 +9,7 @@ import { inDateRange, type DateRange } from "@/lib/dateRange";
 import { applyDashboardFilters, dashboardFindingsHref, EMPTY_DASHBOARD_FILTERS, ALL_PERIODS_VALUE, type DashboardFilters } from "@/lib/dashboardFilters";
 import { Card, CardHeader, StatCard } from "@/components/ui/Card";
 import { DASHBOARD_ICONS as ICON } from "@/lib/dashboardIcons";
+import { AdjustmentStatCards } from "@/components/dashboard/AdjustmentStatCards";
 import { Badge } from "@/components/ui/Badge";
 import { FilterBar } from "@/components/dashboard/FilterBar";
 import { TimeRangeFilter } from "@/components/reports/TimeRangeFilter";
@@ -375,6 +376,14 @@ export function HODashboard({
         <StatCard icon={ICON.highRisk} label="High-Risk Findings" value={hasPeriodScope ? highRiskFindings : "--"} hint="Open, top risk tiers" />
         <StatCard icon={ICON.transferred} label="Transferred Findings" value={hasPeriodScope ? transferredFindings : "--"} hint="Out of this period" />
         <StatCard icon={ICON.transferred} label="Transferred Cases" value={hasPeriodScope ? transferredCases : "--"} hint="Out of this period" />
+        <AdjustmentStatCards
+          user={user}
+          db={db}
+          findings={allFindingsInRange}
+          periodId={allPeriodsSelected ? undefined : openPeriod?.id}
+          periodLabel={allPeriodsSelected ? "All periods" : (openPeriod?.code ?? "")}
+          hasPeriodScope={hasPeriodScope}
+        />
         <StatCard icon={ICON.totalAmount} label="Total Amount" value={hasPeriodScope ? totalAmount : "--"} hint="All findings, bank-wide" />
         <StatCard icon={ICON.resolvedAmount} label="Resolved Amount" value={hasPeriodScope ? resolvedAmount : "--"} hint="Cumulative closed only" />
         <StatCard icon={ICON.outstandingAmount} label="Outstanding Amount" value={hasPeriodScope ? outstandingAmount : "--"} hint="Still owed, bank-wide" />

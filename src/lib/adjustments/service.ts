@@ -252,6 +252,32 @@ export function withdrawAdjustment(db: Database, session: SessionData, findingId
   return adj;
 }
 
+/** Statuses whose adjustment can be deleted - never applied (an approved one is part of the finding's figures). */
+export const DELETABLE_ADJUSTMENT_STATUSES: readonly AdjustmentStatus[] = ["REJECTED", "RETURNED", "WITHDRAWN"];
+
+/** Who may delete it: the requester; a rejected one also anyone with Findings > Delete Rejected (housekeeping). */
+export function canDeleteAdjustment(session: SessionData, adj: FindingAdjustment): boolean {
+  if (!DELETABLE_ADJUSTMENT_STATUSES.includes(adj.status)) return false;
+  if (adj.requestedBy === session.userId) return true;
+  return adj.status === "REJECTED" && (session.permissions ?? []).includes("findings.delete-rejected");
+}
+
+/**
+ * Deletes a rejected / returned / withdrawn adjustment. The audit log keeps
+ * a full copy; a deleted returned one frees the finding for a new adjustment.
+ */
+export function deleteAdjustment(db: Database, session: SessionData, findingId: string, adjustmentId: string): FindingAdjustment {
+  const actor = actorOf(session);
+  const adj = adjustmentOf(db, findingId, adjustmentId);
+  if (!DELETABLE_ADJUSTMENT_STATUSES.includes(adj.status)) {
+    throw new BusinessRuleError("BUSINESS_RULE_VIOLATION", "Only a rejected, returned or withdrawn adjustment can be deleted");
+  }
+  if (!canDeleteAdjustment(session, adj)) throw new AuthorizationError("Only the requester (or, for a rejected one, Delete Rejected) can delete this adjustment");
+  db.findingAdjustments = db.findingAdjustments.filter((a) => a.id !== adj.id);
+  audit(db, actor, "FINDING_ADJUSTMENT_DELETED", adj, { oldValue: { ...adj }, newValue: { adjustmentId: adj.id, deleted: true } });
+  return adj;
+}
+
 // ---------------------------------------------------------------------------
 // Review
 

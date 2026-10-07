@@ -2,6 +2,7 @@ import { currentPeriod } from "@/lib/periods";
 import type { SessionData } from "@/lib/session";
 import type { Database, Finding } from "@/types";
 import { caseRowsOf, eligibilityProblem, isEditableByRequester, isRevolvingArea, reviewerProblem, submitProblem } from "./rules";
+import { canDeleteAdjustment } from "./service";
 import type { AdjustmentConfig, FindingAdjustment } from "./types";
 
 /** What this user may do with an adjustment (drives the finding page's buttons). */
@@ -10,6 +11,7 @@ export interface AdjustmentActions {
   submit: boolean;
   withdraw: boolean;
   review: boolean;
+  delete: boolean;
 }
 
 export type AdjustmentWithActions = FindingAdjustment & { can: AdjustmentActions };
@@ -35,6 +37,7 @@ function actionsFor(db: Database, session: SessionData, f: Finding, adj: Finding
     submit: mine && (adj.status === "DRAFT" || adj.status === "RETURNED"),
     withdraw: editable,
     review: reviewerProblem(db, session, adj, f) === null,
+    delete: canDeleteAdjustment(session, adj),
   };
 }
 

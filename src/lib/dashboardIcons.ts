@@ -42,6 +42,8 @@ import {
   Building2,
   Map,
   CalendarClock,
+  Hourglass,
+  Scale,
   type LucideIcon,
 } from "lucide-react";
 import type { StatTone } from "@/components/ui/Card";
@@ -77,4 +79,6 @@ export const DASHBOARD_ICONS = {
   branches: { icon: Building2, tone: "slate" },
   districts: { icon: Map, tone: "slate" },
   openPeriods: { icon: CalendarClock, tone: "slate" },
+  adjustmentsPending: { icon: Hourglass, tone: "amber" },
+  adjustmentDiff: { icon: Scale, tone: "blue" },
 } satisfies Record<string, DashboardStatIcon>;
