@@ -193,12 +193,42 @@ Any scheduler that can send `POST /api/system/auto-transfer` with the header `x-
 The scripts find the app relative to their own location. If you move the app folder, run the install script again so the task or cron entry points to the new place.
 
 
+## Env set up for auto transfer
+  Since the app runs on the same server at localhost:3005, keep the scheduler on localhost. Don't use the public https address.
 
-secret for auto runner:
+Setup
+In the app folder's .env:
+
+PORT=3005
+AUTO_TRANSFER_CRON_SECRET=<your long random secret>
+Start or restart the app with npm start. The launcher reads PORT from .env, so the app listens on 3005.
+The scheduler scripts read the same PORT and call:
+
+http://localhost:3005/api/system/auto-transfer
+You don't need AUTO_TRANSFER_URL.
+Install the task as in the README (administrator), then confirm:
+
+powershell -ExecutionPolicy Bypass -File scheduler\windows\check.ps1
+The first line should say (http://localhost:3005/api/system/auto-transfer), and the check should end with READY.
+Why not https://nibcontrol360test.nibbank.com.et/...
+http://localhost:3005	https://nibcontrol360test.nibbank.com.et
+Path	Straight to the app on the same machine	Out through DNS, the proxy/IIS/load balancer and TLS, then back
+Can fail because of	Only the app being down	Certificate trust, proxy rules, firewall, DNS, a proxy dropping the x-auto-transfer-secret header
+Exposure	Endpoint never leaves the server	The secret travels over the network (encrypted, but unnecessary)
+The public domain is for users' browsers. The scheduler is a background process on the same box, so localhost is simpler and more reliable. The sweep result is the same: it changes the same database, and users see the transfers at the https address.
+
+Two things to confirm
+Where 3005 is set. If the port is set outside .env (an NSSM/pm2/service argument, an IIS reverse-proxy target only, Docker), the script won't know it and will default to 9005. Then either add PORT=3005 to .env as well, or set the machine variable AUTO_TRANSFER_URL=http://localhost:3005/api/system/auto-transfer. Either way check.ps1 will show the right URL.
+Not bound to one IP. If .env has HOST= set to a specific IP (not 0.0.0.0 or 127.0.0.1), localhost won't reach the app. Remove it, or set AUTO_TRANSFER_URL to http://<that-ip>:3005/api/system/auto-transfer.
+Only if the scheduler runs on another machine
+Then use AUTO_TRANSFER_URL=https://nibcontrol360test.nibbank.com.et/api/system/auto-transfer. That machine must trust the certificate, and the proxy must pass the x-auto-transfer-secret header through.
+
+
+## secret for auto runner:
 -join ((48..57)+(65..90)+(97..122) | Get-Random -Count 40 | % {[char]$_})
 
 
 
-secret for session or file encryption:
+## secret for session or file encryption:
 
 node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
