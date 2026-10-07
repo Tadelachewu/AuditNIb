@@ -191,3 +191,14 @@ Any scheduler that can send `POST /api/system/auto-transfer` with the header `x-
 ## Moving the app
 
 The scripts find the app relative to their own location. If you move the app folder, run the install script again so the task or cron entry points to the new place.
+
+
+
+secret for auto runner:
+-join ((48..57)+(65..90)+(97..122) | Get-Random -Count 40 | % {[char]$_})
+
+
+
+secret for session or file encryption:
+
+node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
