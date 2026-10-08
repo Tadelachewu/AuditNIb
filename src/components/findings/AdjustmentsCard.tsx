@@ -5,14 +5,14 @@ import { useRouter } from "next/navigation";
 import { apiGet, apiSend } from "@/lib/api-client";
 import { notify, notifications } from "@/lib/notify";
 import { formatCurrency, formatDateTime } from "@/lib/format";
-import { Card, CardHeader } from "@/components/ui/Card";
+import { CollapsibleCard } from "@/components/ui/CollapsibleCard";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Input, Label, Textarea } from "@/components/ui/Field";
 import { Modal } from "@/components/ui/AddDialog";
 import { StickyActions } from "@/components/ui/StickyActions";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
-import { ADJUSTMENT_STATUS_LABELS, type AdjustmentStatus } from "@/lib/adjustments/types";
+import { ADJUSTMENT_STATUS_LABELS, OPEN_ADJUSTMENT_STATUSES as OPEN_STATUSES, type AdjustmentStatus } from "@/lib/adjustments/types";
 import type { AdjustmentsView, AdjustmentWithActions } from "@/lib/adjustments/view";
 import type { Finding } from "@/types";
 
@@ -133,21 +133,34 @@ export function AdjustmentsCard({ finding }: { finding: FindingFigures }) {
   if (!view.revolving && view.adjustments.length === 0) return null;
 
   const original = finding.registeredCaseCount !== finding.caseCount || finding.registeredAmount !== finding.amount;
+  // Shown in the header, so the collapsed card still says what's going on.
+  const actionable = view.adjustments.filter((a) => a.can.review || a.can.submit).length;
+  const open = view.adjustments.filter((a) => OPEN_STATUSES.includes(a.status)).length;
+  const summary = [
+    original ? `Current ${plural(finding.caseCount, "case")} · ${finding.currency} ${formatCurrency(finding.amount)} (originally ${finding.registeredCaseCount} · ${formatCurrency(finding.registeredAmount)})` : null,
+    open > 0 ? `${open} in progress` : null,
+    actionable > 0 ? `${actionable} awaiting you` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
-    <Card>
-      <CardHeader
+    <>
+      <CollapsibleCard
         title={`Adjustments (${view.adjustments.length})`}
-        description="Revolving finding: added cases and amount changes, each approved like a registration. The original registration never changes."
-        action={
-          view.canStart ? (
+        description={summary || "Revolving finding: add cases or increase / decrease the outstanding, each approved like a registration."}
+      >
+      <div className="flex flex-col gap-3 p-4 text-sm">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <p className="text-xs text-slate-500">
+            Added cases and amount changes, each approved like a registration. The original registration never changes.
+          </p>
+          {view.canStart && (
             <Button variant="info" onClick={() => setEditing("new")} disabled={busy}>
               Adjust outstanding
             </Button>
-          ) : undefined
-        }
-      />
-      <div className="flex flex-col gap-3 p-4 text-sm">
+          )}
+        </div>
         <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
             <dt className="text-xs text-slate-500">Originally registered</dt>
@@ -221,7 +234,7 @@ export function AdjustmentsCard({ finding }: { finding: FindingFigures }) {
                   <p className="mt-1 text-xs text-slate-500">
                     {a.newCaseAmounts.length > 0 && `New case amounts: ${a.newCaseAmounts.map(formatCurrency).join(", ")}. `}
                     {a.caseAmountChanges.length > 0 &&
-                      `Changed: ${a.caseAmountChanges.map((c) => `case ${c.seq} ${formatCurrency(c.from)} → ${formatCurrency(c.to)}`).join(", ")}.`}
+                      `Changed: ${a.caseAmountChanges.map((c) => `case ${c.seq} ${c.to > c.from ? "+" : "-"}${formatCurrency(Math.abs(c.to - c.from))} (${formatCurrency(c.from)} → ${formatCurrency(c.to)})`).join(", ")}.`}
                   </p>
                 )}
                 <ol className="mt-2 flex flex-col gap-0.5 text-xs text-slate-500">
@@ -238,6 +251,7 @@ export function AdjustmentsCard({ finding }: { finding: FindingFigures }) {
           </ul>
         )}
       </div>
+      </CollapsibleCard>
 
       {editing && (
         <AdjustDialog
@@ -254,7 +268,7 @@ export function AdjustmentsCard({ finding }: { finding: FindingFigures }) {
         />
       )}
       {dialog}
-    </Card>
+    </>
   );
 }
 
@@ -278,11 +292,16 @@ function AdjustDialog({
   const [addedCases, setAddedCases] = useState(existing ? String(existing.addedCases) : "");
   const [amountChange, setAmountChange] = useState(existing && !view.itemized ? String(existing.amountChange) : "");
   const [newAmounts, setNewAmounts] = useState<string[]>(existing ? existing.newCaseAmounts.map(String) : []);
-  const [caseAmounts, setCaseAmounts] = useState<Record<string, string>>(() => {
+  // Itemized: the +/- change of each outstanding case (never a typed-over amount).
+  const [caseChanges, setCaseChanges] = useState<Record<string, string>>(() => {
     const initial: Record<string, string> = {};
-    for (const c of outstandingRows) initial[c.id] = String(existing?.caseAmountChanges.find((x) => x.caseId === c.id)?.to ?? c.amount);
+    for (const c of outstandingRows) {
+      const prior = existing?.caseAmountChanges.find((x) => x.caseId === c.id);
+      initial[c.id] = prior ? String(Math.round((prior.to - prior.from) * 100) / 100) : "";
+    }
     return initial;
   });
+  const caseDelta = (id: string) => Number(caseChanges[id]) || 0;
   const [reason, setReason] = useState(existing?.reason ?? "");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -297,9 +316,10 @@ function AdjustDialog({
   const change = useMemo(() => {
     if (!view.itemized) return Number(amountChange) || 0;
     const fromNew = newAmounts.reduce((s, v) => s + (Number(v) || 0), 0);
-    const fromChanged = outstandingRows.reduce((s, c) => s + ((Number(caseAmounts[c.id]) || 0) - c.amount), 0);
+    const fromChanged = outstandingRows.reduce((s, c) => s + caseDelta(c.id), 0);
     return Math.round((fromNew + fromChanged) * 100) / 100;
-  }, [view.itemized, amountChange, newAmounts, outstandingRows, caseAmounts]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view.itemized, amountChange, newAmounts, outstandingRows, caseChanges]);
 
   const resultCases = finding.caseCount + added;
   const resultAmount = Math.round((finding.amount + change) * 100) / 100;
@@ -308,9 +328,10 @@ function AdjustDialog({
     const payload: Record<string, unknown> = { addedCases: added, reason: reason.trim(), submit };
     if (view.itemized) {
       payload.newCaseAmounts = newAmounts.map((v) => Number(v));
+      // Sent as the resulting amount; the server records from -> to and re-checks it.
       payload.caseAmountChanges = outstandingRows
-        .filter((c) => caseAmounts[c.id] !== "" && Number(caseAmounts[c.id]) !== c.amount)
-        .map((c) => ({ caseId: c.id, to: Number(caseAmounts[c.id]) }));
+        .filter((c) => caseDelta(c.id) !== 0)
+        .map((c) => ({ caseId: c.id, to: Math.round((c.amount + caseDelta(c.id)) * 100) / 100 }));
     } else {
       payload.amountChange = Number(amountChange) || 0;
     }
@@ -319,6 +340,11 @@ function AdjustDialog({
 
   async function save(submit: boolean) {
     setError(null);
+    // Each added case needs a value - 0 is fine, blank is not (it would silently count as 0).
+    if (view.itemized && newAmounts.some((v) => v.trim() === "")) {
+      setError("Enter an amount for each added case (0 is allowed)");
+      return;
+    }
     setSaving(true);
     try {
       const url = `/api/findings/${finding.id}/adjustments`;
@@ -338,7 +364,11 @@ function AdjustDialog({
   return (
     <Modal
       title={existing ? "Edit adjustment" : "Adjust outstanding"}
-      description="Add cases and/or change the amount. Cases can only be added; the amount can't go below what's already rectified."
+      description={
+        view.itemized
+          ? "Add cases (each with its amount) and/or increase or decrease outstanding cases. Rectified cases never change."
+          : "Add cases and/or increase or decrease the amount. Cases can only be added; the amount can't go below what's already rectified."
+      }
       size="xl"
       onClose={onClose}
     >
@@ -384,7 +414,7 @@ function AdjustDialog({
 
         {view.itemized && added > 0 && (
           <fieldset className="sm:col-span-2">
-            <legend className="mb-1 text-sm font-medium text-slate-700">Amount of each added case ({finding.currency})</legend>
+            <legend className="mb-1 text-sm font-medium text-slate-700">Amount of each added case ({finding.currency}, 0 or more)</legend>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               {newAmounts.map((v, i) => (
                 <div key={i}>
@@ -394,6 +424,7 @@ function AdjustDialog({
                     type="number"
                     min={0}
                     step="0.01"
+                    placeholder="0.00"
                     value={v}
                     onChange={(e) => setNewAmounts((prev) => prev.map((x, j) => (j === i ? e.target.value : x)))}
                   />
@@ -405,23 +436,35 @@ function AdjustDialog({
 
         {view.itemized && outstandingRows.length > 0 && (
           <fieldset className="sm:col-span-2">
-            <legend className="mb-1 text-sm font-medium text-slate-700">Outstanding case amounts ({finding.currency}) - change only where it changed</legend>
+            <legend className="mb-1 text-sm font-medium text-slate-700">
+              Change an outstanding case ({finding.currency}, e.g. 1000 to increase, -1000 to decrease) - leave blank if unchanged
+            </legend>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              {outstandingRows.map((c) => (
-                <div key={c.id}>
-                  <Label htmlFor={`adj-case-${c.id}`}>
-                    Case {c.seq} (now {formatCurrency(c.amount)})
-                  </Label>
-                  <Input
-                    id={`adj-case-${c.id}`}
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    value={caseAmounts[c.id] ?? ""}
-                    onChange={(e) => setCaseAmounts((prev) => ({ ...prev, [c.id]: e.target.value }))}
-                  />
-                </div>
-              ))}
+              {outstandingRows.map((c) => {
+                const delta = caseDelta(c.id);
+                const after = Math.round((c.amount + delta) * 100) / 100;
+                return (
+                  <div key={c.id}>
+                    <Label htmlFor={`adj-case-${c.id}`}>
+                      Case {c.seq} (now {formatCurrency(c.amount)})
+                    </Label>
+                    <Input
+                      id={`adj-case-${c.id}`}
+                      type="number"
+                      step="0.01"
+                      placeholder="0"
+                      value={caseChanges[c.id] ?? ""}
+                      onChange={(e) => setCaseChanges((prev) => ({ ...prev, [c.id]: e.target.value }))}
+                    />
+                    {delta !== 0 && (
+                      <p className={`mt-0.5 text-xs ${after > 0 ? "text-slate-500" : "text-red-600"}`}>
+                        {formatCurrency(c.amount)} {delta > 0 ? "+" : "-"} {formatCurrency(Math.abs(delta))} = {formatCurrency(after)}
+                        {after > 0 ? "" : " - must stay above 0"}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </fieldset>
         )}

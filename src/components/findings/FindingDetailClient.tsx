@@ -38,6 +38,9 @@ import type {
   OtherValueAllowedField,
 } from "@/types";
 
+// Columns of the Evidence / Comments / Rectification Ledger row by how many of them show.
+const LOWER_GRID_COLS: Record<number, string> = { 1: "", 2: "lg:grid-cols-2", 3: "lg:grid-cols-2 xl:grid-cols-3" };
+
 interface Lookups {
   branchName: string;
   districtName: string;
@@ -572,6 +575,10 @@ export function FindingDetailClient({
     }
   }
 
+  const showEvidence = permissions.canUploadEvidence || evidence.some((e) => !e.commentId);
+  const showComments = permissions.canComment || comments.length > 0;
+  const lowerSectionCount = [showEvidence, showComments, rectifications.length > 0].filter(Boolean).length;
+
   return (
     <div className="flex flex-col gap-5">
       <StickyBack href={backHref} />
@@ -740,9 +747,6 @@ export function FindingDetailClient({
           )}
         </div>
       )}
-
-      {/* Revolving findings - renders nothing unless the operation area is listed or it was adjusted. */}
-      {!editing && <AdjustmentsCard finding={finding} />}
 
       {permissions.canDistrictReview && (
         <Card>
@@ -944,50 +948,55 @@ export function FindingDetailClient({
         </Card>
       )}
 
-      {/* HO's return sits next to Accept in the Verify & Close card below, so
-          the two decisions on the same district-verified work are side by side. */}
-      {(permissions.canVerifyRectification || permissions.canReturnRectification) && !hoReturnWithClose && (
-        <Card>
-          <CardHeader
-            title="Verify Rectification"
-            description={(() => {
-              if (permissions.canVerifyRectification) {
-                return `${verifiableCases} case(s) / ${finding.currency} ${formatCurrency(verifiableAmount)} rectified and awaiting your verification, before it can reach Head Office for final closure. Approve it, or send it back to the Branch Manager for correction.`;
-              }
-              // Neither canVerifyRectification nor canDistrictReturnRectification/
-              // canHoReturnRectification can ever hold before a real
-              // rectification exists (RETURNABLE_STATUSES in
-              // (app)/findings/[id]/page.tsx excludes SENT_TO_BRANCH_MANAGER) -
-              // this card doesn't render at all until the Branch Manager has
-              // recorded something to react to.
-              if (permissions.canDistrictReturnRectification) {
-                return "Recorded rectification awaiting District review. Approve it via Verify, or send it back to the Branch Manager for correction.";
-              }
-              if (permissions.canHoReturnRectification) {
-                return `${finding.districtVerifiedCases - finding.closedCases} case(s) / ${finding.currency} ${formatCurrency(finding.districtVerifiedAmount - finding.closedAmount)} District-verified and awaiting closure, with nothing still awaiting District. You can close it, or return it to the Branch Manager for correction.`;
-              }
-              return "";
-            })()}
-          />
-          <div className="flex gap-2 p-4">
-            {permissions.canVerifyRectification && (
-              <Button variant="info" onClick={handleVerifyRectification} disabled={busy}>
-                Verify
-              </Button>
-            )}
-            {permissions.canDistrictReturnRectification && (
-              <Button variant="warning" onClick={handleReturnRectification} disabled={busy}>
-                Return for Correction (District)
-              </Button>
-            )}
-            {permissions.canHoReturnRectification && (
-              <Button variant="warning" onClick={handleReturnRectification} disabled={busy}>
-                Return for Correction (HO)
-              </Button>
-            )}
-          </div>
-        </Card>
-      )}
+      {/* Adjustments (left) and Verify Rectification (right) side by side; either
+          alone takes the full width, and the row disappears when both are absent. */}
+      <div className="grid grid-cols-1 items-start gap-5 empty:hidden xl:grid-cols-2 xl:[&>*:only-child]:col-span-2">
+        {!editing && <AdjustmentsCard finding={finding} />}
+        {/* HO's return sits next to Accept in the Verify & Close card below, so
+            the two decisions on the same district-verified work are side by side. */}
+        {(permissions.canVerifyRectification || permissions.canReturnRectification) && !hoReturnWithClose && (
+          <Card>
+            <CardHeader
+              title="Verify Rectification"
+              description={(() => {
+                if (permissions.canVerifyRectification) {
+                  return `${verifiableCases} case(s) / ${finding.currency} ${formatCurrency(verifiableAmount)} rectified and awaiting your verification, before it can reach Head Office for final closure. Approve it, or send it back to the Branch Manager for correction.`;
+                }
+                // Neither canVerifyRectification nor canDistrictReturnRectification/
+                // canHoReturnRectification can ever hold before a real
+                // rectification exists (RETURNABLE_STATUSES in
+                // (app)/findings/[id]/page.tsx excludes SENT_TO_BRANCH_MANAGER) -
+                // this card doesn't render at all until the Branch Manager has
+                // recorded something to react to.
+                if (permissions.canDistrictReturnRectification) {
+                  return "Recorded rectification awaiting District review. Approve it via Verify, or send it back to the Branch Manager for correction.";
+                }
+                if (permissions.canHoReturnRectification) {
+                  return `${finding.districtVerifiedCases - finding.closedCases} case(s) / ${finding.currency} ${formatCurrency(finding.districtVerifiedAmount - finding.closedAmount)} District-verified and awaiting closure, with nothing still awaiting District. You can close it, or return it to the Branch Manager for correction.`;
+                }
+                return "";
+              })()}
+            />
+            <div className="flex gap-2 p-4">
+              {permissions.canVerifyRectification && (
+                <Button variant="info" onClick={handleVerifyRectification} disabled={busy}>
+                  Verify
+                </Button>
+              )}
+              {permissions.canDistrictReturnRectification && (
+                <Button variant="warning" onClick={handleReturnRectification} disabled={busy}>
+                  Return for Correction (District)
+                </Button>
+              )}
+              {permissions.canHoReturnRectification && (
+                <Button variant="warning" onClick={handleReturnRectification} disabled={busy}>
+                  Return for Correction (HO)
+                </Button>
+              )}
+            </div>
+          </Card>
+        )}
+      </div>
 
       {permissions.canClose && (
         <Card>
@@ -1144,150 +1153,174 @@ export function FindingDetailClient({
         </Card>
       )}
 
-      {(permissions.canUploadEvidence || evidence.some((e) => !e.commentId)) && (
-        <Card>
-          <CardHeader title="Evidence" description="Optional supporting files (PDF, PNG, JPG, XLSX, DOCX, CSV - up to 10 MB). This is the one place to attach files - comments are text only." />
-          <div className="flex flex-col gap-2 p-4">
-            {permissions.canUploadEvidence && (
-              <FileInput
-                disabled={uploadingEvidence}
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  e.target.value = "";
-                  if (file) void handleEvidenceUpload(file);
-                }}
-              />
-            )}
-            {uploadingEvidence && <p className="text-xs text-slate-500">Uploading...</p>}
-            {evidence.filter((e) => !e.commentId).length === 0 ? (
-              <p className="text-sm text-slate-500">No evidence uploaded yet.</p>
-            ) : (
-              <div className="divide-y divide-slate-100">
-                {evidence.filter((e) => !e.commentId).map((e) => (
-                  <div key={e.id} className="flex items-center justify-between py-2 text-sm">
-                    <div>
-                      <a
-                        href={`/api/findings/${finding.id}/evidence/${e.id}`}
-                        className="font-medium text-blue-700 hover:underline"
-                      >
-                        {e.fileName}
-                      </a>
-                      <p className="text-xs text-slate-500">
-                        {formatBytes(e.size)} · {e.uploadedByName} · {formatDateTime(e.createdAt)}
-                      </p>
+      {/* Evidence, Comments and Rectification Ledger side by side - as many
+          columns as there are sections (stacked on narrow screens). */}
+      {lowerSectionCount > 0 && (
+        <div className={`grid grid-cols-1 items-start gap-5 ${LOWER_GRID_COLS[lowerSectionCount]}`}>
+          {showEvidence && (
+            <Card>
+              <CardHeader title="Evidence" description="Optional supporting files (PDF, PNG, JPG, XLSX, DOCX, CSV - up to 10 MB). This is the one place to attach files - comments are text only." />
+              <div className="flex flex-col gap-2 p-4">
+                {permissions.canUploadEvidence && (
+                  <FileInput
+                    disabled={uploadingEvidence}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      e.target.value = "";
+                      if (file) void handleEvidenceUpload(file);
+                    }}
+                  />
+                )}
+                {uploadingEvidence && <p className="text-xs text-slate-500">Uploading...</p>}
+                {evidence.filter((e) => !e.commentId).length === 0 ? (
+                  <p className="text-sm text-slate-500">No evidence uploaded yet.</p>
+                ) : (
+                  <div className="divide-y divide-slate-100">
+                    {evidence.filter((e) => !e.commentId).map((e) => (
+                      <div key={e.id} className="flex items-center justify-between py-2 text-sm">
+                        <div>
+                          <a
+                            href={`/api/findings/${finding.id}/evidence/${e.id}`}
+                            className="font-medium text-blue-700 hover:underline"
+                          >
+                            {e.fileName}
+                          </a>
+                          <p className="text-xs text-slate-500">
+                            {formatBytes(e.size)} · {e.uploadedByName} · {formatDateTime(e.createdAt)}
+                          </p>
+                        </div>
+                        {removeFileButton(e)}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </Card>
+          )}
+
+          {showComments && (
+            <Card>
+              <CardHeader title="Comments" description="Attachments on a comment are optional (BR-WF-018)." />
+              <div className="flex flex-col gap-3 p-4">
+                {comments.length === 0 ? (
+                  <p className="text-sm text-slate-500">No comments yet.</p>
+                ) : (
+                  <div className="flex flex-col gap-3">
+                    {comments
+                      .filter((c) => !c.parentCommentId)
+                      .map((c) => {
+                        const commentEvidence = evidence.filter((e) => e.commentId === c.id);
+                        return (
+                          <div key={c.id} className="flex flex-col gap-2">
+                            <div className="rounded-md bg-slate-50 p-2 text-sm">
+                              <p className="text-slate-700">
+                                <span className="font-medium text-slate-900">{c.authorName}</span> {c.text}
+                              </p>
+                              {commentEvidence.map((e) => (
+                                <div key={e.id} className="mt-1 flex items-center gap-1">
+                                  <a
+                                    href={`/api/findings/${finding.id}/evidence/${e.id}`}
+                                    className="flex items-center gap-1 text-xs text-blue-700 hover:underline"
+                                  >
+                                    📎 {e.fileName} ({formatBytes(e.size)})
+                                  </a>
+                                  {removeFileButton(e)}
+                                </div>
+                              ))}
+                              <div className="mt-1 flex items-center gap-2">
+                                <span className="text-xs text-slate-500">{formatDateTime(c.createdAt)}</span>
+                                {permissions.canComment && (
+                                  <button
+                                    type="button"
+                                    className="text-xs text-blue-700 hover:underline"
+                                    onClick={() => setReplyTo(replyTo === c.id ? null : c.id)}
+                                  >
+                                    Reply
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                            {comments
+                              .filter((r) => r.parentCommentId === c.id)
+                              .map((r) => {
+                                const replyEvidence = evidence.filter((e) => e.commentId === r.id);
+                                return (
+                                  <div key={r.id} className="ml-6 rounded-md bg-slate-50 p-2 text-sm">
+                                    <p className="text-slate-700">
+                                      <span className="font-medium text-slate-900">{r.authorName}</span> {r.text}
+                                    </p>
+                                    {replyEvidence.map((e) => (
+                                      <div key={e.id} className="mt-1 flex items-center gap-1">
+                                        <a
+                                          href={`/api/findings/${finding.id}/evidence/${e.id}`}
+                                          className="flex items-center gap-1 text-xs text-blue-700 hover:underline"
+                                        >
+                                          📎 {e.fileName} ({formatBytes(e.size)})
+                                        </a>
+                                        {removeFileButton(e)}
+                                      </div>
+                                    ))}
+                                    <span className="text-xs text-slate-500">{formatDateTime(r.createdAt)}</span>
+                                  </div>
+                                );
+                              })}
+                            {replyTo === c.id && (
+                              <div className="ml-6 flex flex-col gap-1.5">
+                                <div className="flex gap-2">
+                                  <Input
+                                    maxLength={5000}
+                                    value={replyText}
+                                    onChange={(e) => setReplyText(e.target.value)}
+                                    placeholder="Write a reply..."
+                                  />
+                                  <Button onClick={() => postComment(replyText, c.id)} disabled={busy}>
+                                    Reply
+                                  </Button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                  </div>
+                )}
+                {permissions.canComment && (
+                  <div className="flex flex-col gap-1.5 border-t border-slate-100 pt-3">
+                    <div className="flex gap-2">
+                      <Input
+                        maxLength={5000}
+                        value={commentText}
+                        onChange={(e) => setCommentText(e.target.value)}
+                        placeholder="Add a comment..."
+                      />
+                      <Button onClick={() => postComment(commentText)} disabled={busy}>
+                        Post
+                      </Button>
                     </div>
-                    {removeFileButton(e)}
+                  </div>
+                )}
+              </div>
+            </Card>
+          )}
+
+          {rectifications.length > 0 && (
+            <Card>
+              <CardHeader title="Rectification Ledger" />
+              <div className="divide-y divide-slate-100">
+                {rectifications.map((r) => (
+                  <div key={r.id} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 px-4 py-2 text-sm">
+                    <span className="text-slate-600">
+                      <span className="font-medium text-slate-900">{r.submittedByName}</span> recorded {r.rectifiedCases}{" "}
+                      case(s) / {finding.currency} {formatCurrency(r.rectifiedAmount)}
+                      {r.note && <span className="text-slate-500"> — {r.note}</span>}
+                    </span>
+                    <span className="text-xs text-slate-500">{formatDateTime(r.createdAt)}</span>
                   </div>
                 ))}
               </div>
-            )}
-          </div>
-        </Card>
-      )}
-
-      {(permissions.canComment || comments.length > 0) && (
-        <Card>
-          <CardHeader title="Comments" description="Attachments on a comment are optional (BR-WF-018)." />
-          <div className="flex flex-col gap-3 p-4">
-            {comments.length === 0 ? (
-              <p className="text-sm text-slate-500">No comments yet.</p>
-            ) : (
-              <div className="flex flex-col gap-3">
-                {comments
-                  .filter((c) => !c.parentCommentId)
-                  .map((c) => {
-                    const commentEvidence = evidence.filter((e) => e.commentId === c.id);
-                    return (
-                      <div key={c.id} className="flex flex-col gap-2">
-                        <div className="rounded-md bg-slate-50 p-2 text-sm">
-                          <p className="text-slate-700">
-                            <span className="font-medium text-slate-900">{c.authorName}</span> {c.text}
-                          </p>
-                          {commentEvidence.map((e) => (
-                            <div key={e.id} className="mt-1 flex items-center gap-1">
-                              <a
-                                href={`/api/findings/${finding.id}/evidence/${e.id}`}
-                                className="flex items-center gap-1 text-xs text-blue-700 hover:underline"
-                              >
-                                📎 {e.fileName} ({formatBytes(e.size)})
-                              </a>
-                              {removeFileButton(e)}
-                            </div>
-                          ))}
-                          <div className="mt-1 flex items-center gap-2">
-                            <span className="text-xs text-slate-500">{formatDateTime(c.createdAt)}</span>
-                            {permissions.canComment && (
-                              <button
-                                type="button"
-                                className="text-xs text-blue-700 hover:underline"
-                                onClick={() => setReplyTo(replyTo === c.id ? null : c.id)}
-                              >
-                                Reply
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                        {comments
-                          .filter((r) => r.parentCommentId === c.id)
-                          .map((r) => {
-                            const replyEvidence = evidence.filter((e) => e.commentId === r.id);
-                            return (
-                              <div key={r.id} className="ml-6 rounded-md bg-slate-50 p-2 text-sm">
-                                <p className="text-slate-700">
-                                  <span className="font-medium text-slate-900">{r.authorName}</span> {r.text}
-                                </p>
-                                {replyEvidence.map((e) => (
-                                  <div key={e.id} className="mt-1 flex items-center gap-1">
-                                    <a
-                                      href={`/api/findings/${finding.id}/evidence/${e.id}`}
-                                      className="flex items-center gap-1 text-xs text-blue-700 hover:underline"
-                                    >
-                                      📎 {e.fileName} ({formatBytes(e.size)})
-                                    </a>
-                                    {removeFileButton(e)}
-                                  </div>
-                                ))}
-                                <span className="text-xs text-slate-500">{formatDateTime(r.createdAt)}</span>
-                              </div>
-                            );
-                          })}
-                        {replyTo === c.id && (
-                          <div className="ml-6 flex flex-col gap-1.5">
-                            <div className="flex gap-2">
-                              <Input
-                                maxLength={5000}
-                                value={replyText}
-                                onChange={(e) => setReplyText(e.target.value)}
-                                placeholder="Write a reply..."
-                              />
-                              <Button onClick={() => postComment(replyText, c.id)} disabled={busy}>
-                                Reply
-                              </Button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-              </div>
-            )}
-            {permissions.canComment && (
-              <div className="flex flex-col gap-1.5 border-t border-slate-100 pt-3">
-                <div className="flex gap-2">
-                  <Input
-                    maxLength={5000}
-                    value={commentText}
-                    onChange={(e) => setCommentText(e.target.value)}
-                    placeholder="Add a comment..."
-                  />
-                  <Button onClick={() => postComment(commentText)} disabled={busy}>
-                    Post
-                  </Button>
-                </div>
-              </div>
-            )}
-          </div>
-        </Card>
+            </Card>
+          )}
+        </div>
       )}
 
       {isItemized && (
@@ -1313,24 +1346,6 @@ export function FindingDetailClient({
                   <Badge tone={fc.status === "RECTIFIED" ? "green" : "amber"}>{fc.status === "RECTIFIED" ? "Rectified" : "Outstanding"}</Badge>
                 </div>
               ))}
-          </div>
-        </Card>
-      )}
-
-      {rectifications.length > 0 && (
-        <Card>
-          <CardHeader title="Rectification Ledger" />
-          <div className="divide-y divide-slate-100">
-            {rectifications.map((r) => (
-              <div key={r.id} className="flex items-center justify-between px-4 py-2 text-sm">
-                <span className="text-slate-600">
-                  <span className="font-medium text-slate-900">{r.submittedByName}</span> recorded {r.rectifiedCases}{" "}
-                  case(s) / {finding.currency} {formatCurrency(r.rectifiedAmount)}
-                  {r.note && <span className="text-slate-500"> — {r.note}</span>}
-                </span>
-                <span className="text-xs text-slate-500">{formatDateTime(r.createdAt)}</span>
-              </div>
-            ))}
           </div>
         </Card>
       )}

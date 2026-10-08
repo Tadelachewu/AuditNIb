@@ -124,7 +124,8 @@ export function resolveChange(db: Database, f: Finding, input: AdjustmentInput):
   if (itemized) {
     newCaseAmounts = (input.newCaseAmounts ?? []).map(round2);
     if (newCaseAmounts.length !== input.addedCases) return fail("Enter an amount for each added case");
-    if (newCaseAmounts.some((a) => !(a > 0))) return fail("Each added case needs an amount greater than 0");
+    // 0 is allowed (as at registration); only negatives are refused.
+    if (newCaseAmounts.some((a) => !Number.isFinite(a) || a < 0)) return fail("An added case's amount can't be negative");
     const byId = new Map(rows.map((c) => [c.id, c]));
     const seen = new Set<string>();
     for (const ch of input.caseAmountChanges ?? []) {
@@ -134,7 +135,7 @@ export function resolveChange(db: Database, f: Finding, input: AdjustmentInput):
       seen.add(row.id);
       if (row.status !== "OUTSTANDING") return fail(`Case ${row.seq} is already rectified - only outstanding cases can change`);
       const to = round2(ch.to);
-      if (!(to > 0)) return fail(`Case ${row.seq} needs an amount greater than 0`);
+      if (!(to > 0)) return fail(`Case ${row.seq}: the decrease can't take it to 0 or below (now ${row.amount})`);
       if (to !== row.amount) caseAmountChanges.push({ caseId: row.id, seq: row.seq, from: row.amount, to });
     }
     caseAmountChanges = caseAmountChanges.sort((a, b) => a.seq - b.seq);
@@ -157,7 +158,10 @@ export function resolveChange(db: Database, f: Finding, input: AdjustmentInput):
   if (newAmount < rectifiedFloor) return fail(`The amount can't go below what's already rectified (${rectifiedFloor})`);
   const openCases = newCaseCount - rectifiedCases;
   const openAmount = round2(newAmount - rectifiedFloor);
-  if (openCases > 0 && !(openAmount > 0)) return fail("While cases are outstanding, the outstanding amount must stay above zero");
+  // Non-itemized only: there a case count and an amount are rectified
+  // together, so open cases need an open amount. Itemized cases are
+  // rectified by picking cases, so an outstanding case may carry 0.
+  if (!itemized && openCases > 0 && !(openAmount > 0)) return fail("While cases are outstanding, the outstanding amount must stay above zero");
   if (openCases <= 0 && openAmount > 0) return fail("Every case is already rectified - add a case to carry the extra amount");
   return { ok: true, change: { addedCases: input.addedCases, amountChange, newCaseAmounts, caseAmountChanges, newCaseCount, newAmount } };
 }

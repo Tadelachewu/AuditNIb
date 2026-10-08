@@ -146,6 +146,8 @@ describe("validation (R3, R5, R7)", () => {
     const f = finding({ caseCount: 2, amount: 300, rectifiedCases: 1, rectifiedAmount: 100 });
     expect(check(f, input({ addedCases: 2, newCaseAmounts: [50] }), cases)).toMatchObject({ ok: false, problem: expect.stringMatching(/each added case/) });
     expect(check(f, input({ addedCases: 0, caseAmountChanges: [{ caseId: "c1", to: 90 }] }), cases)).toMatchObject({ ok: false, problem: expect.stringMatching(/already rectified/) });
+    expect(check(f, input({ addedCases: 1, newCaseAmounts: [-5] }), cases)).toMatchObject({ ok: false, problem: expect.stringMatching(/negative/) });
+    expect(check(f, input({ addedCases: 1, newCaseAmounts: [0] }), cases)).toMatchObject({ ok: true, change: { amountChange: 0, newCaseCount: 3, newAmount: 300 } });
     expect(check(f, input({ addedCases: 1, newCaseAmounts: [50], caseAmountChanges: [{ caseId: "c2", to: 150 }] }), cases)).toMatchObject({
       ok: true,
       change: { amountChange: 0, newCaseCount: 3, newAmount: 300 },
