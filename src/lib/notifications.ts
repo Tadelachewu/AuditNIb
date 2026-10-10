@@ -2,7 +2,7 @@ import { v4 as uuid } from "uuid";
 import { permissionKey } from "@/lib/permissions/registry";
 import { emailForNotification } from "@/lib/emailQueue/rules";
 import type { NotificationEventType } from "@/lib/notificationEvents";
-import type { Database, Notification } from "@/types";
+import type { Database, Finding, Notification } from "@/types";
 
 export interface NotifyOptions {
   // Must be in the email-events catalog (src/lib/notificationEvents.ts),
@@ -121,6 +121,39 @@ export function notifyFindingsPermissionHolders(
 ): void {
   const recipients = usersWithFindingsPermission(db, action, scope);
   if (recipients.length > 0) notifyUsers(db, recipients, opts);
+}
+
+/**
+ * Tells whoever must act next that a finding was just submitted. Call it
+ * right after submitFinding(), in the same updateDb() - from EVERY path that
+ * submits (the Register form's one-step Submit and the separate Submit /
+ * Resubmit), so none of them can forget it. Decided from where the finding
+ * actually landed:
+ *   District review      -> the district's reviewers
+ *   Bank-wide approval   -> the assigned approvers
+ *   Sent to the branch   -> the branch's rectifiers (bank-registered, no approval required)
+ */
+export function notifyFindingSubmitted(db: Database, finding: Pick<Finding, "id" | "reference" | "status" | "districtId" | "branchId">, submitterName: string): void {
+  const base = { type: "SUBMITTED" as const, entityType: "Finding", entityId: finding.id };
+  if (finding.status === "DISTRICT_REVIEW") {
+    notifyFindingsPermissionHolders(db, "district-review", { districtId: finding.districtId }, {
+      ...base,
+      title: `${finding.reference} awaiting district review`,
+      message: `${submitterName} submitted this finding for district review.`,
+    });
+  } else if (finding.status === "PENDING_BANK_APPROVAL") {
+    notifyUsers(db, db.settings.hoApproval.approverUserIds, {
+      ...base,
+      title: `${finding.reference} awaiting approval`,
+      message: `${submitterName} submitted this finding for approval.`,
+    });
+  } else if (finding.status === "SENT_TO_BRANCH_MANAGER") {
+    notifyFindingsPermissionHolders(db, "rectify", { branchId: finding.branchId }, {
+      ...base,
+      title: `${finding.reference} awaiting rectification`,
+      message: `${submitterName} submitted this finding, sent straight to the branch (no approval required).`,
+    });
+  }
 }
 
 /** Every ACTIVE user whose role holds support.respond - not org-scoped, unlike findings notifications, since Support isn't tied to a district/branch. */

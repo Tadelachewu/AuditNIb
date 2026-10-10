@@ -8,6 +8,7 @@ import { readDb, updateDb } from "@/lib/db";
 import { findingsInScope } from "@/lib/findings-scope";
 import { nextFindingReference, submitFinding, assertPeriodOpenForSubmission, assertRequiredFindingFieldsPresent } from "@/lib/findings";
 import { isDepartmentInScope } from "@/lib/org";
+import { notifyFindingSubmitted } from "@/lib/notifications";
 import type { Finding, FindingCase } from "@/types";
 import { matchesOperationAndIrregularity } from "@/lib/dashboardFilters";
 import { withApiHandler } from "@/lib/api/handler";
@@ -283,6 +284,10 @@ async function handlePOST(request: Request) {
       // actually persisted by updateDb().
       const persisted = current.findings.find((f) => f.id === finding.id)!;
       submitFinding(current, persisted, session.userId!, session.name!, { registeredByBankScope: session.orgScope === "BANK" });
+      // Registered and submitted in one step: the next actor must hear about
+      // it exactly as with the separate Submit (district reviewers, the
+      // bank-wide approvers, or the branch).
+      notifyFindingSubmitted(current, persisted, session.name!);
     }
   });
 

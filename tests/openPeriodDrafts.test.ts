@@ -15,6 +15,7 @@ vi.mock("@/lib/monitoring", () => ({ captureServerException: vi.fn(async () => {
 vi.mock("@/lib/notifications", () => ({
   notifyUsers: vi.fn(),
   notifyFindingsPermissionHolders: vi.fn(),
+  notifyFindingSubmitted: vi.fn(),
   usersWithFindingsPermission: vi.fn(() => []),
 }));
 

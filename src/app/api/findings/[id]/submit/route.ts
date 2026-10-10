@@ -3,7 +3,7 @@ import { requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { assertFindingInScope } from "@/lib/findings-scope";
 import { submitFinding, assertPeriodWritable, assertPeriodOpenForSubmission } from "@/lib/findings";
-import { notifyFindingsPermissionHolders, notifyUsers } from "@/lib/notifications";
+import { notifyFindingSubmitted } from "@/lib/notifications";
 import { withApiHandler } from "@/lib/api/handler";
 
 const SUBMITTABLE_STATUSES = ["DRAFT", "RETURNED"];
@@ -40,34 +40,8 @@ async function handlePOST(_request: Request, { params }: { params: Promise<{ id:
     const f = current.findings.find((x) => x.id === id)!;
     const registeredByBankScope = auth.session.orgScope === "BANK";
     submitFinding(current, f, auth.session.userId!, auth.session.name!, { registeredByBankScope });
-
-    if (registeredByBankScope) {
-      if (current.settings.hoApproval.required) {
-        notifyUsers(current, current.settings.hoApproval.approverUserIds, {
-          type: "SUBMITTED",
-          title: `${f.reference} awaiting approval`,
-          message: `${auth.session.name} submitted this finding for approval.`,
-          entityType: "Finding",
-          entityId: f.id,
-        });
-      } else {
-        notifyFindingsPermissionHolders(current, "rectify", { branchId: f.branchId }, {
-          type: "SUBMITTED",
-          title: `${f.reference} awaiting rectification`,
-          message: `${auth.session.name} submitted this finding, sent straight to the branch (no approval required).`,
-          entityType: "Finding",
-          entityId: f.id,
-        });
-      }
-    } else {
-      notifyFindingsPermissionHolders(current, "district-review", { districtId: f.districtId }, {
-        type: "SUBMITTED",
-        title: `${f.reference} awaiting district review`,
-        message: `${auth.session.name} submitted this finding for district review.`,
-        entityType: "Finding",
-        entityId: f.id,
-      });
-    }
+    // Whoever must act next: district reviewers, the bank-wide approvers, or the branch.
+    notifyFindingSubmitted(current, f, auth.session.name!);
     return f;
   });
 
