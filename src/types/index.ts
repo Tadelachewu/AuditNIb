@@ -396,6 +396,11 @@ export interface Settings {
   rectificationReminders: {
     enabled: boolean;
     thresholdDays: number;
+    /** Server-local time of the daily run, "HH:mm" (default 08:00) - src/lib/reminders. */
+    sendAt?: string;
+    /** Weekdays it runs on, 0 = Sunday ... 6 = Saturday (default Monday-Friday). */
+    days?: number[];
+    /** Only used by the old on-poll check, before the reminder_runs migration is applied. */
     lastCheckedAt?: string;
   };
   // Which of SIMILAR_FINDING_FIELDS the duplicate-suggestion lookup on the
@@ -874,6 +879,12 @@ export interface Database {
   findingClosures: FindingClosure[];
   /** Revolving findings: adjustments of outstanding cases / amount (src/lib/adjustments). */
   findingAdjustments: FindingAdjustment[];
+  /**
+   * Transient - never loaded or stored on the model: emails decided on
+   * inside an updateDb() mutator (by notifyUsers()), inserted into the
+   * email queue when that same transaction commits (src/lib/emailQueue).
+   */
+  pendingEmails?: QueuedEmail[];
   importBatches: ImportBatch[];
   findingCases: FindingCase[];
   // Every permission key that has ever been auto-reconciled onto the
@@ -961,5 +972,6 @@ export interface SupportMessage {
 }
 
 // Revolving findings (src/lib/adjustments) - part of the Database model.
+import type { QueuedEmail } from "@/lib/emailQueue/types";
 import type { FindingAdjustment } from "@/lib/adjustments/types";
 export type { FindingAdjustment };

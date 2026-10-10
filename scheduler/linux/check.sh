@@ -37,7 +37,15 @@ case "$CODE" in
   200)
     pass "App answered and accepted the secret"
     if echo "$JSON" | grep -q '"enabled":true'; then pass "Installed and switched ON"; else fail "Not installed or switched OFF: $JSON"; fi
-    note "Status: $JSON" ;;
+    note "Status: $JSON"
+    # Rectification reminders run on the same call (informational).
+    if echo "$JSON" | grep -q '"reminders":{"installed":true,"enabled":true'; then
+      if echo "$JSON" | grep -q '"ranToday":true'; then pass "Rectification reminders: ON, today's run is done"; else note "Rectification reminders: ON, today's run not done yet (see nextRunAt above)"; fi
+    elif echo "$JSON" | grep -q '"reminders":{"installed":false'; then
+      note "Rectification reminders: daily run not installed (apply its migration)"
+    else
+      note "Rectification reminders: switched OFF"
+    fi ;;
   403) fail "Wrong secret (403): the running app has a different AUTO_TRANSFER_CRON_SECRET - restart it after changing .env" ;;
   404) fail "Endpoint off (404): the running app has no AUTO_TRANSFER_CRON_SECRET - set it in .env and restart the app" ;;
   429) fail "Blocked (429) after too many wrong secrets - wait 15 minutes" ;;

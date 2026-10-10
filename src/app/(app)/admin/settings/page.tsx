@@ -7,6 +7,9 @@ import { notify, notifications, presentError } from "@/lib/notify";
 import { CollapsibleCard } from "@/components/ui/CollapsibleCard";
 import { AutoTransferSettings } from "@/components/admin/AutoTransferSettings";
 import { RevolvingSettings } from "@/components/admin/RevolvingSettings";
+import { EmailQueuePanel } from "@/components/admin/EmailQueuePanel";
+import { ReminderStatusPanel } from "@/components/admin/ReminderStatusPanel";
+import { DAY_LABELS, DEFAULT_DAYS, DEFAULT_SEND_AT } from "@/lib/reminders/types";
 import { Button } from "@/components/ui/Button";
 import { StickyActions } from "@/components/ui/StickyActions";
 import { Input, Select, Label } from "@/components/ui/Field";
@@ -265,6 +268,11 @@ export default function SettingsPage() {
         />
       </CollapsibleCard>
 
+      {/* Delivery status and actions of queued notification emails (src/lib/emailQueue). */}
+      <CollapsibleCard className="xl:col-span-2" title="Email Queue" description="Notification emails waiting, sent and failed - with retry, pause and resume.">
+        <EmailQueuePanel canEdit={canEdit} />
+      </CollapsibleCard>
+
       {/* Its own section and Save (src/lib/autoTransfer), outside the main settings form. */}
       <CollapsibleCard title="Automatic Transfer" description="Carry outstanding findings into the next period when a period ends.">
         <AutoTransferSettings canEdit={canEdit} />
@@ -353,11 +361,59 @@ export default function SettingsPage() {
               />
             </div>
           )}
+          {settings.rectificationReminders.enabled && (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="max-w-xs">
+                <Label htmlFor="reminderTime">Send at (server time)</Label>
+                <Input
+                  id="reminderTime"
+                  type="time"
+                  value={settings.rectificationReminders.sendAt ?? DEFAULT_SEND_AT}
+                  onChange={(e) =>
+                    setSettings({
+                      ...settings,
+                      rectificationReminders: { ...settings.rectificationReminders, sendAt: e.target.value || DEFAULT_SEND_AT },
+                    })
+                  }
+                />
+              </div>
+              <div>
+                <Label>On these days</Label>
+                <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1.5">
+                  {DAY_LABELS.map((label, day) => {
+                    const days = settings.rectificationReminders.days ?? [...DEFAULT_DAYS];
+                    return (
+                      <label key={label} className="flex items-center gap-1.5 text-sm text-slate-700">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-slate-300"
+                          checked={days.includes(day)}
+                          onChange={() =>
+                            setSettings({
+                              ...settings,
+                              rectificationReminders: {
+                                ...settings.rectificationReminders,
+                                days: (days.includes(day) ? days.filter((d) => d !== day) : [...days, day]).sort(),
+                              },
+                            })
+                          }
+                        />
+                        {label}
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
           <p className="text-xs text-slate-500">
-            Reminds the Branch Manager/Controller when a finding has gone this many days without any rectification
-            progress. Checked lazily off the existing notification poll (no scheduler in this app), so it may take a
-            few minutes past the exact threshold to fire, never less.
+            Once a day, at this time on the ticked days, the Branch Manager / Controller is reminded of every finding that has gone this many
+            days without rectification progress (bell and email). Progress means the branch recording or resubmitting a rectification, or the
+            finding being sent, returned, reversed or transferred to the branch - not comments, evidence, district verification or adjustments.
+            A finding is reminded again only after the same number of days. The scheduler runs it on time even when nobody is signed in; without
+            a scheduler it runs when the first user is signed in after that time.
           </p>
+          <ReminderStatusPanel canEdit={canEdit} />
         </div>
       </CollapsibleCard>
 

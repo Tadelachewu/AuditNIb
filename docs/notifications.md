@@ -1,8 +1,8 @@
 # Notifications: Who Receives What
 
-Every notification appears in the **bell** in the top bar. It is also **emailed** to the recipient when email delivery is configured (Admin → Settings → Notification Delivery, see [EMAIL_SETUP.md](EMAIL_SETUP.md)) and the user has an email address, **and** that event is switched on for email in Admin → Settings → **Email Events** (all are on by default; see [email-events.md](email-events.md)).
+Every notification appears in the **bell** in the top bar. It is also **emailed** to the recipient when email delivery is configured (Admin → Settings → Notification Delivery, see [EMAIL_SETUP.md](EMAIL_SETUP.md)) and the user has an email address, **and** that event is switched on for email in Admin → Settings → **Email Events** (all are on by default; see [email-events.md](email-events.md)). Emails are queued and delivered with retries; delivery status is in Admin → Settings → **Email Queue** ([email-queue.md](email-queue.md)).
 
-This page lists which notification each role receives, and why.
+This page lists which notification each role receives, and why. The *Rectification reminder* is time-based: when and for which findings it is sent is in [rectification-reminders.md](rectification-reminders.md).
 
 ---
 

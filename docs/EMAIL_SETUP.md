@@ -104,13 +104,19 @@ setup above.
 
 ## How it works, briefly
 
-- `src/lib/mail.ts` builds a `nodemailer` SMTP transporter from the
-  Settings above and sends the email. It's called from
-  `src/lib/notifications.ts`, right next to where each in-app notification
-  is created — every existing trigger gets email for free, with no changes
-  needed per trigger.
-- Sending is fire-and-forget: the in-app notification (bell icon) is always
-  created first and is the source of truth; the email is a best-effort
-  mirror of it and never blocks or fails the underlying action.
+- **Notification emails are queued, then delivered.** Each one is saved in the
+  database together with the in-app notification that caused it
+  (`src/lib/notifications.ts` → `src/lib/emailQueue`), and a worker sends it
+  over SMTP with retries. A slow or unreachable mail server never blocks or
+  fails the action, and the email isn't lost: it is retried after 1 min,
+  5 min, 15 min, 1 h and 4 h, then marked Failed for an admin to retry.
+  See [email-queue.md](email-queue.md).
+- **Admin → Settings → Email Queue** shows what is waiting, sent and failed,
+  and lets an admin pause, resume and retry. A wrong `SMTP_USER` /
+  `SMTP_PASSWORD` pauses the queue with the reason shown there.
+- **Two emails are sent immediately** (`src/lib/mail.ts`), because the user
+  needs the result at once: forgot-password and **Send Test Email**.
+- The in-app notification (bell icon) is always created and is the source of
+  truth; the email mirrors it.
 - A user with no email address on their account simply never receives
   email notifications — the in-app bell still works as before.

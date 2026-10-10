@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prismaClient";
 import { Prisma } from "@/generated/prisma/client";
 import { ALL_PERMISSION_KEYS } from "@/lib/permissions/registry";
+import { prepareQueuedEmails } from "@/lib/emailQueue/service";
 import type {
   Database,
   User,
@@ -1174,6 +1175,20 @@ export async function updateDb<T>(
   const before = await readDb();
   const after: Database = JSON.parse(JSON.stringify(before));
   const result = mutator(after);
-  await persistChanges(before, after, opts.alsoWrite ? (tx) => opts.alsoWrite!(tx, result) : undefined);
+  // Emails queued by notifyUsers() during the mutator: saved in the same
+  // transaction as the notifications, delivered after it commits.
+  const emails = await prepareQueuedEmails(after.pendingEmails ?? []);
+  delete after.pendingEmails;
+  await persistChanges(
+    before,
+    after,
+    emails.insert || opts.alsoWrite
+      ? async (tx) => {
+          if (emails.insert) await emails.insert(tx);
+          if (opts.alsoWrite) await opts.alsoWrite(tx, result);
+        }
+      : undefined
+  );
+  emails.afterCommit();
   return result;
 }

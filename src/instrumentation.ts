@@ -3,8 +3,9 @@ import type { Instrumentation } from "next";
 /**
  * Server startup + server-error hooks (Next.js instrumentation).
  *
- * register():      validates configuration (src/lib/env.ts) and starts
- *                  Sentry when SENTRY_DSN is set.
+ * register():      validates configuration (src/lib/env.ts), starts Sentry
+ *                  when SENTRY_DSN is set, and starts the email worker
+ *                  (src/lib/emailQueue).
  * onRequestError:  every error Next.js captures while rendering a page /
  *                  Server Component / Route Handler is logged (structured,
  *                  with the request ID and the digest the error page shows)
@@ -30,6 +31,10 @@ export async function register() {
     Sentry.init(sentryBaseOptions(process.env.SENTRY_DSN));
     logger.info("Error monitoring (Sentry) enabled");
   }
+
+  // Delivers queued notification emails (retries included) - docs/email-queue.md.
+  const { startEmailWorker } = await import("@/lib/emailQueue/service");
+  startEmailWorker();
 }
 
 export const onRequestError: Instrumentation.onRequestError = async (err, request, context) => {

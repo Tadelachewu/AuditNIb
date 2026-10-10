@@ -4,12 +4,19 @@ import { withApiHandler } from "@/lib/api/handler";
 import { readDb } from "@/lib/db";
 import { dueSweeps, prismaAutoTransferStore, runAutoTransferIfDue, sweepDueAt } from "@/lib/autoTransfer";
 import { clientIp, isRateLimited, recordAttempt } from "@/lib/rateLimit";
+import { getReminderStatus, runRemindersIfDue } from "@/lib/reminders";
 
 /**
- * For a scheduler (cron, Windows Task Scheduler, systemd, Kubernetes...):
- *   POST - runs the automatic transfer now (exact timing at period end).
+ * For a scheduler (cron, Windows Task Scheduler, systemd, Kubernetes...) -
+ * the one call that runs every time-based job:
+ *   POST - runs what is due now: the automatic transfer (period end) and
+ *          the daily rectification reminders (src/lib/reminders). Each job
+ *          decides for itself whether it is due; a failure in one never
+ *          stops the other. The response keeps the automatic transfer's
+ *          { ran, runs } and adds { reminders }.
  *   GET  - READ-ONLY readiness check: is the feature installed and on, what
- *          is due, when the next period becomes due. Never moves anything.
+ *          is due, when the next period becomes due, and the reminders'
+ *          status. Never moves or sends anything.
  * Without a scheduler it still runs lazily within minutes (see
  * runAutoTransferIfDue()). Protected by a shared secret, not a user session:
  * header `x-auto-transfer-secret: $AUTO_TRANSFER_CRON_SECRET` (no Origin
@@ -46,15 +53,34 @@ async function handlePOST(request: Request) {
   const refused = await checkCaller(request);
   if (refused) return refused;
   const result = await runAutoTransferIfDue({ force: true, trigger: "scheduler" });
-  return NextResponse.json(result);
+  // After the transfer, so a finding just carried forward counts from today.
+  const reminders = await runRemindersIfDue({ trigger: "scheduler" });
+  return NextResponse.json({
+    ...result,
+    reminders: { ran: reminders.ran, skipped: reminders.skipped ?? null, findings: reminders.run?.remindedFindings ?? 0, users: reminders.run?.notifiedUsers ?? 0 },
+  });
 }
 
 async function handleGET(request: Request) {
   const refused = await checkCaller(request);
   if (refused) return refused;
 
+  const r = await getReminderStatus();
+  const reminders = {
+    installed: r.installed,
+    enabled: r.config.enabled,
+    sendAt: r.config.sendAt,
+    days: r.config.days,
+    thresholdDays: r.config.thresholdDays,
+    ranToday: r.ranToday,
+    dueNow: r.dueNow,
+    nextRunAt: r.nextRunAt,
+    overdueNow: r.overdueNow,
+    lastRun: r.runs[0] ? { at: r.runs[0].ranAt, findings: r.runs[0].remindedFindings, users: r.runs[0].notifiedUsers, triggeredBy: r.runs[0].triggeredBy } : null,
+  };
+
   const config = await prismaAutoTransferStore.getConfig();
-  if (!config) return NextResponse.json({ ready: false, installed: false, reason: "Automatic transfer tables are missing - apply its migration (docs/auto-transfer.md)." });
+  if (!config) return NextResponse.json({ ready: false, installed: false, reason: "Automatic transfer tables are missing - apply its migration (docs/auto-transfer.md).", reminders });
   const [runs, db] = await Promise.all([prismaAutoTransferStore.listRuns(), readDb()]);
   const now = Date.now();
   const runByPeriod = new Map(runs.map((r) => [r.periodId, r]));
@@ -75,6 +101,7 @@ async function handleGET(request: Request) {
     nextDue: upcoming ? { period: upcoming.code, at: new Date(sweepDueAt(upcoming, config)).toISOString() } : null,
     waitingForNextPeriod: runs.filter((r) => r.status === "WAITING_NO_NEXT").map((r) => codeOf(r.periodId)),
     lastRun: last ? { period: codeOf(last.periodId), to: codeOf(last.toPeriodId), at: last.ranAt, moved: last.movedCount, kept: last.keptCount, triggeredBy: last.triggeredBy } : null,
+    reminders,
   });
 }
 

@@ -150,6 +150,8 @@ If the scheduler runs on another machine than the app, set `AUTO_TRANSFER_URL` (
 - **Kubernetes:** `scheduler/kubernetes/auto-transfer-cronjob.yaml`, a CronJob every 5 minutes with the secret from a Kubernetes Secret (instructions in the file).
 - **Azure Logic Apps, AWS EventBridge, Google Cloud Scheduler:** an HTTP POST to the same URL with the same header, every 5 minutes.
 
+> **Notifications from a sweep** are emailed through the email queue, not by the sweep itself. How the two background runs differ: [email-queue.md §9](email-queue.md).
+
 ## 5. Installation (database)
 
 The feature has its own two tables:

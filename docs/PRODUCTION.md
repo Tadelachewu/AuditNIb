@@ -33,10 +33,10 @@ A step-by-step runbook for running this app **safely** on a server with real ban
 | Component | Why it's needed |
 |---|---|
 | **PostgreSQL** | All application data. |
-| **Redis** (or Memurai on Windows) | Login lockout and rate limits, upload rate limits, and Register Finding draft recovery. **Needed in production**: if Redis is down, rate limiting and lockout silently turn **off**, because they're designed not to block logins. |
+| **Redis** (or Memurai on Windows) | Login lockout and rate limits, upload rate limits, and Register Finding draft recovery. **Needed in production**: if Redis is down, rate limiting and lockout silently turn **off**, because they're designed not to block logins. With the optional BullMQ email driver it also dispatches notification emails, and must then be durable (§6.3). |
 | **Storage folder** | Evidence and import files, encrypted ([files.md](files.md)). |
 | **Reverse proxy** | HTTPS certificate, the only public entry point, security headers, upload size limit. |
-| **SMTP** *(optional)* | Notification and password-reset emails ([EMAIL_SETUP.md](EMAIL_SETUP.md)). |
+| **SMTP** *(optional)* | Notification and password-reset emails ([EMAIL_SETUP.md](EMAIL_SETUP.md)). Notification emails are queued in the database and delivered with retries ([email-queue.md](email-queue.md)). |
 
 ---
 
@@ -117,6 +117,10 @@ STORAGE_DIR=/var/lib/nib-control360/storage     # or D:\nib-storage on Windows; 
 # --- Email (only if Settings > Notification Delivery uses SMTP) ---
 SMTP_USER=
 SMTP_PASSWORD=
+
+# --- Email queue (optional; defaults shown - see §6.3 and email-queue.md) ---
+# EMAIL_QUEUE_DRIVER=postgres        # or bullmq (Redis dispatches)
+# EMAIL_WORKER=inprocess             # or external (run `npm run worker:email` as a service)
 ```
 
 | Setting | Rule |
@@ -230,6 +234,65 @@ nssm set NIBControl360 Start SERVICE_AUTO_START
 nssm start NIBControl360
 ```
 
+### 6.3 Email queue and worker
+
+Notification emails are saved in the database with the action that caused them and delivered by a worker with retries ([email-queue.md](email-queue.md)). **The default needs no setup:** the app delivers them itself.
+
+| Choice | `.env` | Extra to run | Use when |
+|---|---|---|---|
+| **Built-in worker** (default) | nothing | nothing | Normal use |
+| **Separate worker process** | `EMAIL_WORKER=external` | `npm run worker:email` as a service | Mail delivery should be isolated from the web process |
+| **BullMQ on Redis** | `EMAIL_QUEUE_DRIVER=bullmq` (usually with `EMAIL_WORKER=external`) | `npm run worker:email` as a service; durable Redis (below) | Several worker machines, or the same queue infrastructure for other background jobs |
+
+**Worker as a service**
+
+Linux (`/etc/systemd/system/nib-control360-email.service`):
+
+```ini
+[Unit]
+Description=NIB Control360 email worker
+After=network.target postgresql.service redis.service
+
+[Service]
+WorkingDirectory=/opt/nib-control360
+ExecStart=/usr/bin/npm run worker:email
+User=nibapp
+Restart=always
+RestartSec=5
+# Finishes the sends in progress before exiting.
+KillSignal=SIGTERM
+TimeoutStopSec=60
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Windows:
+
+```powershell
+nssm install NIBControl360Email "C:\Program Files\nodejs\npm.cmd" run worker:email
+nssm set NIBControl360Email AppDirectory D:\apps\nib-control360
+nssm set NIBControl360Email ObjectName .\nibapp <password>
+nssm set NIBControl360Email AppStdout D:\apps\logs\nib-control360-email.log
+nssm set NIBControl360Email AppStderr D:\apps\logs\nib-control360-email.err.log
+nssm set NIBControl360Email AppRotateFiles 1
+nssm set NIBControl360Email Start SERVICE_AUTO_START
+nssm start NIBControl360Email
+```
+
+The worker reads the same `.env` as the app. Several workers may run at once; each email is taken by exactly one.
+
+**Redis for BullMQ** (only when `EMAIL_QUEUE_DRIVER=bullmq`)
+
+| Setting | Value | Check |
+|---|---|---|
+| `maxmemory-policy` | `noeviction` | `redis-cli CONFIG GET maxmemory-policy` |
+| `appendonly` | `yes` | `redis-cli CONFIG GET appendonly` |
+
+Without AOF a Redis restart empties the queue. The emails are not lost (the database recovers them within about two minutes), but run Redis durably so that is the exception. If Redis is down, emails are delivered by the built-in worker until it returns.
+
+**After go-live:** Admin → Settings → **Email Queue** shows waiting / sent / failed emails and lets an admin pause, resume and retry.
+
 ---
 
 ## 7. Reverse proxy and HTTPS
@@ -315,6 +378,8 @@ npm run build
 
 # 4. restart the service
 sudo systemctl restart nib-control360          # or: nssm restart NIBControl360
+# ... and the email worker, if you run one (§6.3)
+sudo systemctl restart nib-control360-email    # or: nssm restart NIBControl360Email
 ```
 
 - **If the release notes mention storage changes,** run `npm run storage:migrate` once ([files.md](files.md)).
@@ -345,12 +410,16 @@ sudo systemctl restart nib-control360          # or: nssm restart NIBControl360
 - [ ] Every user has a real, deliverable email (needed for password reset)
 - [ ] Roles & Permissions reviewed; only real administrators hold the Administrator role
 - [ ] Settings → Notification Delivery configured, and **Send Test Email** works
+- [ ] Settings → **Email Queue** shows no "isn't installed" message, and a real notification (e.g. submit a finding) moves *Sent today* up
 
 **Operations**
 - [ ] Runs as a service under a low-privilege account and restarts after a reboot
 - [ ] Backups of the database, storage and key scheduled, and **one restore tested**
 - [ ] Log files rotated (NSSM `AppRotate*` or `journald`)
 - [ ] Redis monitored: if it stops, login lockout and rate limits stop too
+- [ ] Email queue watched: *Failed* near zero and nothing *Waiting* for long (Settings → Email Queue)
+- [ ] If `EMAIL_WORKER=external`: the email worker service runs and restarts after a reboot
+- [ ] If `EMAIL_QUEUE_DRIVER=bullmq`: Redis has `maxmemory-policy noeviction` and `appendonly yes`
 
 *Optional:* to ship without the reset tool at all, delete the three files listed in [reset-data.md §6](reset-data.md). `APP_ENV=production` already disables it.
 
@@ -376,6 +445,8 @@ sudo systemctl restart nib-control360          # or: nssm restart NIBControl360
 | Topic | Document |
 |---|---|
 | Uploaded files, encryption, backups of files | [files.md](files.md) |
+| Email queue, worker, BullMQ driver | [email-queue.md](email-queue.md) |
+| Email setup (SMTP) | [EMAIL_SETUP.md](EMAIL_SETUP.md) |
 | Evidence upload rules | [EVIDENCE_VALIDATION_RULES.md](../EVIDENCE_VALIDATION_RULES.md) |
 | Import rules | [IMPORT_VALIDATION_RULES.md](../IMPORT_VALIDATION_RULES.md) |
 | Login, sessions, lockout, password reset | [LOGIN_SECURITY_RULES.md](LOGIN_SECURITY_RULES.md) |

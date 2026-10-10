@@ -50,6 +50,21 @@ try {
       Note "Last sweep: $($s.lastRun.period) -> $($s.lastRun.to) at $(([datetime]$s.lastRun.at).ToLocalTime()), moved $($s.lastRun.moved), kept $($s.lastRun.kept), by $by"
     }
   }
+  # Rectification reminders - run by the same task (informational: they don't change READY).
+  $rm = $s.reminders
+  if ($rm) {
+    Write-Host "   Rectification reminders"
+    if (-not $rm.installed) { Note "Daily run not installed (apply its migration) - only checked while someone is signed in" }
+    elseif (-not $rm.enabled) { Note "Switched OFF (Settings -> Rectification Reminders)" }
+    else {
+      Pass "ON: daily at $($rm.sendAt) server time, after $($rm.thresholdDays) day(s) without progress"
+      if ($rm.ranToday) { Pass "Today's run is done" }
+      elseif ($rm.dueNow) { Note "Due now (runs on the next task run)" }
+      if ($rm.nextRunAt -and -not $rm.dueNow) { Note "Next run: $(([datetime]$rm.nextRunAt).ToLocalTime())" }
+      Note "Overdue findings right now: $($rm.overdueNow)"
+      if ($rm.lastRun) { Note "Last run: $(([datetime]$rm.lastRun.at).ToLocalTime()), $($rm.lastRun.findings) finding(s), $($rm.lastRun.users) user(s), by $($rm.lastRun.triggeredBy)" }
+    }
+  }
 } catch {
   $code = $_.Exception.Response.StatusCode.value__
   if ($code -eq 403) { Fail "Wrong secret (403): the app's AUTO_TRANSFER_CRON_SECRET differs - restart the app after changing .env" }

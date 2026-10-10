@@ -16,7 +16,8 @@
     "tunnel:cloudflare": "node scripts/run.mjs tunnel:cloudflare",
     "test": "vitest run",
     "test:watch": "vitest",
-    "reports:verify": "tsx --env-file=.env --env-file-if-exists=.env.local scripts/verify-report-templates.ts"
+    "reports:verify": "tsx --env-file=.env --env-file-if-exists=.env.local scripts/verify-report-templates.ts",
+    "worker:email": "tsx --env-file=.env --env-file-if-exists=.env.local scripts/email-worker.ts"
   },
   "dependencies": {
     "@emotion/cache": "^11.14.0",
@@ -30,6 +31,7 @@
     "@prisma/client": "^7.8.0",
     "@sentry/nextjs": "^11.1.0",
     "bcryptjs": "^3.0.3",
+    "bullmq": "^6.3.12",
     "exceljs": "^4.4.0",
     "ioredis": "^6.0.0",
     "iron-session": "^8.0.4",

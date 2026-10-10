@@ -45,6 +45,8 @@ const updateSchema = z.object({
   rectificationReminders: z.object({
     enabled: z.boolean(),
     thresholdDays: z.number().int().min(1).max(365),
+    sendAt: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Reminder time must be HH:mm (00:00 - 23:59)").optional(),
+    days: z.array(z.number().int().min(0).max(6)).max(7).optional(),
     lastCheckedAt: z.string().optional(),
   }),
   performanceThresholds: z.object({

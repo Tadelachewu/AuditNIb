@@ -692,8 +692,9 @@ always with a mandatory reason and never as a self-action.
 ## 9. Notifications triggered per transition
 
 All notifications go through `notifyUsers()`/`notifyFindingsPermissionHolders()`
-(`src/lib/notifications.ts`), which also fires a mirrored, non-blocking email
-per recipient (`sendNotificationEmail`, doc comment lines 14-22, master.txt
+(`src/lib/notifications.ts`), which also queues a mirrored email per recipient
+(saved with the notification, delivered by the email worker with retries -
+[email-queue.md](email-queue.md); master.txt
 §12: "Notifications for submit, approve, reject, return, assignment,
 rectification, transfer and period events").
 

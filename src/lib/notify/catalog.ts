@@ -131,6 +131,21 @@ export const notifications = {
     saveFailed: n("AUTO_TRANSFER_SAVE_FAILED", "Unable to save the automatic transfer settings. Please try again."),
     loadFailed: n("AUTO_TRANSFER_LOAD_FAILED", "Unable to load the automatic transfer settings. Please try again."),
   },
+  reminders: {
+    loadFailed: n("REMINDERS_LOAD_FAILED", "Unable to load the reminder status. Please try again."),
+    ran: n("REMINDERS_RAN", "Reminders sent successfully."),
+    nothingDue: n("REMINDERS_NOTHING_DUE", "No finding is overdue for a reminder."),
+    runFailed: n("REMINDERS_RUN_FAILED", "Unable to send the reminders. Please try again."),
+  },
+  emailQueue: {
+    loadFailed: n("EMAIL_QUEUE_LOAD_FAILED", "Unable to load the email queue. Please try again."),
+    actionFailed: n("EMAIL_QUEUE_ACTION_FAILED", "Unable to update the email queue. Please try again."),
+    paused: n("EMAIL_QUEUE_PAUSED", "Email sending paused successfully."),
+    resumed: n("EMAIL_QUEUE_RESUMED", "Email sending resumed successfully."),
+    ran: n("EMAIL_QUEUE_RAN", "Waiting emails sent successfully."),
+    retried: n("EMAIL_QUEUE_RETRIED", "Failed emails queued again successfully."),
+    cancelled: n("EMAIL_QUEUE_CANCELLED", "Email cancelled successfully."),
+  },
   adjustment: {
     draftSaved: n("ADJUSTMENT_DRAFT_SAVED", "Adjustment saved as draft."),
     submitted: n("ADJUSTMENT_SUBMITTED", "Adjustment submitted successfully."),

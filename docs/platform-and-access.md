@@ -184,12 +184,14 @@ For which finding statuses each of these transitions requires/produces, see `doc
 
 ### Email notifications
 
-Every in-app notification is also mirrored as an email, **fire-and-forget** (never awaited — `sendNotificationEmail()` is called synchronously inside `notifyUsers()`, which itself runs inside `updateDb()` mutators; a slow/down mail server must never delay or break the workflow action that triggered it — `src/lib/notifications.ts:14-21,38`, `src/lib/mail.ts:56-73`).
+Every in-app notification is also mirrored as an email through the **email queue** ([email-queue.md](email-queue.md)): `notifyUsers()` decides the email inside the `updateDb()` mutator, it is saved to `email_outbox` in the same transaction as the notification, and a worker delivers it after the commit with retries. A slow or down mail server never delays or breaks the workflow action, a rolled-back action never emails, and nothing is lost on a restart.
 
-- Implemented in `src/lib/mail.ts:74-99` (`sendNotificationEmail`). Uses the notification's own `title`/`message` verbatim as the email subject/body — no separate template system.
-- No-ops silently (no throw) if the recipient has no email on file, or if `getTransporter()` returns `null` (SMTP not configured) — `src/lib/mail.ts:76-80`.
-- Includes a deep link back into the app, built from `notificationPath()` (`src/lib/mail.ts:44-54`) which maps `entityType`/`type` to a real route: `Finding` → `/findings/[id]`; `SupportThread` with type `SUPPORT_MESSAGE` → `/admin/support` (staff inbox) vs. any other `SupportThread` type → `/support` (requester's own page); `ReportingPeriod` → `/admin/reporting-periods`; anything else falls back to `/dashboard`. The link's base URL comes from the `APP_BASE_URL` env var and is omitted entirely if that's unset (`src/lib/mail.ts:82-83`).
-- SMTP transport (`getTransporter()`, `src/lib/mail.ts:12-36`) is shared with the forgot-password flow: driven by `Settings.notification.provider` (`"NONE" | "SMTP" | "GRAPH"`), `smtpHost`/`smtpPort` (admin-editable), plus `SMTP_USER`/`SMTP_PASSWORD` env secrets. `"GRAPH"` is not implemented (logs a warning, returns `null`).
+- Decided and rendered in `src/lib/emailQueue/rules.ts` (`emailForNotification`, `renderNotificationEmail`). Uses the notification's own `title`/`message` as the subject/body (HTML-escaped) - no separate template system.
+- No email is queued if the event is switched off in Email Events, the recipient has no email on file, or SMTP isn't configured.
+- Includes a deep link back into the app (`notificationPath()`): `Finding` → `/findings/[id]`; `SupportThread` with type `SUPPORT_MESSAGE` → `/admin/support` (staff inbox) vs. any other `SupportThread` type → `/support`; `ReportingPeriod` → `/admin/reporting-periods`; anything else → `/dashboard`. The base URL comes from `APP_BASE_URL` and the link is omitted if that's unset.
+- Delivery: the built-in Postgres worker by default, or BullMQ on Redis (`EMAIL_QUEUE_DRIVER=bullmq`) - `src/lib/emailQueue/service.ts`, `bullmq.ts`. Status and admin actions: Settings → Email Queue.
+- Forgot-password and the Settings test email are sent immediately instead (`src/lib/mail.ts`).
+- SMTP settings are shared by the queue's pooled transport (`src/lib/emailQueue/transport.ts`) and `getTransporter()` in `src/lib/mail.ts` (forgot-password, test email): driven by `Settings.notification.provider` (`"NONE" | "SMTP" | "GRAPH"`), `smtpHost`/`smtpPort` (admin-editable), plus `SMTP_USER`/`SMTP_PASSWORD` env secrets. `"GRAPH"` is not implemented (logs a warning, returns `null`).
 
 ---
 

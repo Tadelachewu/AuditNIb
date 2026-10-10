@@ -4,6 +4,7 @@ import { readDb, updateDb } from "@/lib/db";
 import { checkRectificationReminders, REMINDER_SCAN_COOLDOWN_MS } from "@/lib/notifications";
 import { withApiHandler } from "@/lib/api/handler";
 import { runAutoTransferIfDue } from "@/lib/autoTransfer";
+import { prismaReminderStore, runRemindersIfDue } from "@/lib/reminders";
 
 // A notification is always scoped to its own recipientUserId, checked
 // directly here rather than gated through the page-permission system -
@@ -23,9 +24,17 @@ async function handleGET() {
   // (throttled per server; it never throws - src/lib/autoTransfer).
   await runAutoTransferIfDue();
 
+  // Rectification reminders: the daily scheduled run (src/lib/reminders) -
+  // here only as the backup for when no scheduler calls. Throttled per
+  // server; never throws. Before its migration is applied, the old hourly
+  // on-poll check below still runs.
+  const remindersInstalled = await prismaReminderStore.isInstalled();
+  if (remindersInstalled) await runRemindersIfDue({ trigger: "in-app" });
+
   const peek = await readDb();
   const settings = peek.settings.rectificationReminders;
   const scanDue =
+    !remindersInstalled &&
     settings.enabled &&
     (!settings.lastCheckedAt || Date.now() - new Date(settings.lastCheckedAt).getTime() >= REMINDER_SCAN_COOLDOWN_MS);
 

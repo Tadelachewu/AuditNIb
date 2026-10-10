@@ -1,5 +1,7 @@
 # Scheduler files: automatic transfer at period end
 
+> **One task, every scheduled job.** The same call also runs the **daily rectification reminders** ([docs/rectification-reminders.md](../docs/rectification-reminders.md)) when they are due. If this task is installed, nothing more is needed for reminders; `check` shows their status too, and the log gets a `reminders: …` line when a run sends something.
+
 Ready-to-use files for running the **automatic transfer** on a schedule, every 5 minutes. A scheduler is optional: without one it still runs within about 5 minutes while anyone is using the app. With one it runs on time even when nobody is signed in. Full guide: [docs/auto-transfer.md](../docs/auto-transfer.md) §4.
 
 The scripts:

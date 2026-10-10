@@ -1,4 +1,5 @@
-# NIB Control360 - automatic transfer at period end (docs/auto-transfer.md).
+# NIB Control360 - scheduled jobs: automatic transfer at period end (docs/auto-transfer.md)
+# and the daily rectification reminders (docs/rectification-reminders.md).
 # Called every 5 minutes by Windows Task Scheduler (see install-task.ps1).
 # Reads AUTO_TRANSFER_CRON_SECRET and PORT from the app's .env / .env.local,
 # so the secret lives in one place. Logs to scheduler\logs\auto-transfer.log.
@@ -49,6 +50,10 @@ try {
     Write-Log "ran: $summary"
   } else {
     Write-Log "nothing due"
+  }
+  # The same call also runs the daily rectification reminders when they are due.
+  if ($r.reminders -and $r.reminders.ran) {
+    Write-Log "reminders: $($r.reminders.findings) finding(s), $($r.reminders.users) user(s) notified"
   }
 } catch {
   Write-Log "ERROR $url - $($_.Exception.Message)"

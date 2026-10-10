@@ -78,7 +78,7 @@ Every save is recorded in the **Audit Log** (entity *Settings*) with the old and
 | File | Role |
 |---|---|
 | `src/lib/notificationEvents.ts` | The event catalog (type, label, group, hint) and `isEmailEnabled()` |
-| `src/lib/mail.ts` | `sendNotificationEmail()` skips the email when the event is switched off |
+| `src/lib/emailQueue/rules.ts` | `emailForNotification()` queues no email when the event is switched off ([email-queue.md](email-queue.md)) |
 | `src/lib/notifications.ts` | `notifyUsers()` always creates the bell notification; `NotifyOptions.type` must be a catalog type |
 | `src/components/admin/EmailEventsEditor.tsx` | The Settings section |
 | `src/app/api/admin/settings/route.ts` | Validates `notification.emailEvents` (unknown event names are rejected) |

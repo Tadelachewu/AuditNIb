@@ -1,8 +1,8 @@
 import { v4 as uuid } from "uuid";
 import { permissionKey } from "@/lib/permissions/registry";
-import { sendNotificationEmail } from "@/lib/mail";
+import { emailForNotification } from "@/lib/emailQueue/rules";
 import type { NotificationEventType } from "@/lib/notificationEvents";
-import type { Database } from "@/types";
+import type { Database, Notification } from "@/types";
 
 export interface NotifyOptions {
   // Must be in the email-events catalog (src/lib/notificationEvents.ts),
@@ -17,11 +17,11 @@ export interface NotifyOptions {
 /**
  * master.txt §12: "Notifications for submit, approve, reject, return,
  * assignment, rectification, transfer and period events." Every push here
- * also fires a mirrored email (see src/lib/mail.ts) fire-and-forget - not
- * awaited, since this runs synchronously inside updateDb() mutators across
- * the whole app and a slow/down mail server must never delay or break the
- * underlying workflow action. Sending itself no-ops silently whenever the
- * recipient has no email or SMTP isn't configured (see EMAIL_SETUP.md).
+ * also queues a mirrored email (src/lib/emailQueue): it is saved with the
+ * notification and delivered by the email worker with retries, so a slow or
+ * down mail server never delays or breaks the workflow action, and nothing
+ * is lost. No email is queued when the recipient has no address, the event
+ * is switched off, or SMTP isn't configured (see EMAIL_SETUP.md).
  */
 /**
  * The Administrator role holds every permission and is bank-wide, so every
@@ -34,6 +34,22 @@ export interface NotifyOptions {
  */
 export const ADMIN_ROLE_CODE = "ADMIN";
 export const ADMIN_NOTIFICATION_TYPES: ReadonlySet<string> = new Set(["SUPPORT_MESSAGE", "SUPPORT_REPLY"]);
+
+/**
+ * Queues the notification's email on the data being saved. updateDb()
+ * inserts it into the email queue in the SAME transaction as the
+ * notification, and the worker delivers it after the commit - so a
+ * rolled-back action never emails, and a mail outage loses nothing
+ * (docs/email-queue.md). Never throws: email must not break the action.
+ */
+function queueNotificationEmail(db: Database, recipientUserId: string, notification: Notification): void {
+  try {
+    const email = emailForNotification(db, recipientUserId, notification);
+    if (email) (db.pendingEmails ??= []).push(email);
+  } catch {
+    // No email for this one; the in-app notification was still created.
+  }
+}
 
 export function notifyUsers(db: Database, recipientUserIds: string[], opts: NotifyOptions): void {
   const now = new Date().toISOString();
@@ -60,7 +76,7 @@ export function notifyUsers(db: Database, recipientUserIds: string[], opts: Noti
       createdAt: now,
     };
     db.notifications.unshift(notification);
-    sendNotificationEmail(db, recipientUserId, notification);
+    queueNotificationEmail(db, recipientUserId, notification);
   }
 }
 
@@ -144,6 +160,10 @@ export const REMINDER_SCAN_COOLDOWN_MS = 60 * 60 * 1000;
  *
  * Returns whether it actually ran (so the caller only pays for a
  * updateDb() write when there was something to do).
+ *
+ * SUPERSEDED by the daily scheduled run in src/lib/reminders
+ * (docs/rectification-reminders.md). This old on-poll check only still runs
+ * on a database where that module's migration hasn't been applied yet.
  */
 export function checkRectificationReminders(db: Database): boolean {
   const settings = db.settings.rectificationReminders;
