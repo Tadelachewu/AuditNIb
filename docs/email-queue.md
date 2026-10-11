@@ -239,6 +239,18 @@ Both are background work, but they solve different problems and are started diff
 
 **Rectification reminders** work like the automatic transfer: time-triggered, started by that same scheduled task (once a day at a set time), with a signed-in user's page as the backup. Their emails also go through this queue. See [rectification-reminders.md](rectification-reminders.md).
 
+### Emails stay in *Waiting*
+
+| Check | Cause | Fix |
+|---|---|---|
+| `EMAIL_WORKER=external` and no worker running | The app only queues; nothing sends | Start `npm run worker:email` (or remove the setting) |
+| The worker was started before a code or `.env` change | It reads both only at start | Restart the worker |
+| Queue shows **Paused** | Paused by an admin, or the SMTP sign-in was refused | Fix the cause, **Resume sending** |
+| A retry is scheduled | A temporary failure; it waits for its retry time | Wait, or fix the mail server |
+| *"Email can't be sent right now"* | SMTP isn't fully configured | Notification Delivery, `SMTP_USER` / `SMTP_PASSWORD` |
+
+**Time zones:** every time in the queue is stored in UTC, and the queries compare in UTC whatever the database's own time zone is. (An earlier version compared with the database's local clock, so on a database not set to UTC an email waited for the zone's offset - for example 7 hours on `America/Los_Angeles` - before it was sent. Fixed; covered by a test.)
+
 ## 10. Housekeeping
 
 Hourly, the worker blanks the bodies of emails sent more than 7 days ago, deletes Sent / Cancelled rows older than 90 days and Failed rows older than 180 days.

@@ -59,6 +59,7 @@ Edit is allowed in DRAFT, RETURNED and the first review step (DISTRICT_REVIEW or
 | **Weekly Executive Summary** (by date) | Cases as of a date = original cases + cases of adjustments **approved on or before** that date → added cases appear as **Additional** in the week they were approved |
 | **Reported Cases** (HO / Executive dashboards) | Cases reported in the period: original cases of findings reported then + cases added by adjustments submitted then |
 | **Dashboards** (Branch, District, HO, Executive) | **Adjustments Awaiting You**: the adjustments **this user** must act on: ones at a review step they can decide (never their own, the same check as the review API), plus their own returned ones to correct. Underneath: the total in review with its cases and amount. On click: the split (to review / returned to you), the count at each step, and a link to Show My Queue. **Adjustment Diff**: approved adjustments reported (submitted) in the selected period, as cases added plus net amount change per currency; increases and decreases on click. Both follow the dashboard's scope and filters (`src/lib/adjustments/dashboard.ts`) |
+| **Rectification reminders** | An **approved** adjustment restarts the finding's "days without progress" count; one still in review doesn't ([rectification-reminders.md](rectification-reminders.md)) |
 | **Transfers** | Carry the current outstanding (adjustments included) |
 | **Reverse** | Undoes closures only; adjustments stay |
 | **Delete finding / reverse import / Dev Reset** | Adjustments go with the finding |

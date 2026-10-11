@@ -76,8 +76,10 @@ export function nextRunAt(config: ReminderConfig, ranToday: boolean, now: number
 /**
  * Steps that put work in the branch's hands or show the branch working -
  * the "days without progress" count restarts from the latest of them. A
- * comment, an evidence upload, the district verifying, a partial close or an
- * approved adjustment is NOT branch progress and doesn't restart it.
+ * comment, an evidence upload, the district verifying or a partial close is
+ * NOT branch progress and doesn't restart it. An adjustment still in review
+ * changes nothing either; once approved and applied it does restart the
+ * count - the branch has just been handed changed work.
  */
 export const PROGRESS_ACTIONS: ReadonlySet<string> = new Set([
   "QUEUE_BRANCH_MANAGER", // approved and sent to the branch
@@ -90,6 +92,7 @@ export const PROGRESS_ACTIONS: ReadonlySet<string> = new Set([
   "IMPORT_APPROVE", // imported straight to the branch
   "IMPORT_RECTIFY",
   "IMPORT_TRANSFER",
+  "ADJUSTMENT_APPLIED", // an approved adjustment changed the cases / amount the branch must rectify
 ]);
 
 /** Latest progress step per finding (ms) - built once per run instead of scanning the history per finding. */

@@ -200,6 +200,7 @@ Details: [rectification-reminders.md](rectification-reminders.md). Preparation: 
 | I5 | Next day's run (or **Run now**) with F-old untouched and *Remind after* 1 | F-old is reminded again (a day has passed) | |
 | I6 | *Remind after* 5; F-old last rectified 6 days ago, **district verified yesterday** | It **is** reminded: verification isn't branch progress | |
 | I7 | The branch records a rectification on F-old today | Not reminded for the next 5 days | |
+| I7a | An adjustment on F-old is **approved** today | Not reminded for the next 5 days (the count restarts). An adjustment still in review changes nothing | |
 | I8 | A **Rectified** finding (all cases recorded, awaiting close), untouched for weeks | Never reminded | |
 | I9 | Untick today's weekday, save | `check.ps1` and the panel show the next ticked day; nothing runs today | |
 | I10 | **Run now** on an unticked day / before the send time | Overdue findings are reminded at once; the run is recorded *by an administrator*; Audit Log has `REMINDERS_RUN_NOW` | |
@@ -238,7 +239,7 @@ Details: [rectification-reminders.md](rectification-reminders.md). Preparation: 
 | F. BullMQ | 13 | | | | |
 | G. Automatic transfer | 17 | | | | |
 | H. Both together | 6 | | | | |
-| I. Rectification reminders | 17 | | | | |
+| I. Rectification reminders | 18 | | | | |
 | J. Regression | 8 | | | | |
 
 **Restore after testing:** correct SMTP host / port / password, Email Events all on, queue resumed, `EMAIL_QUEUE_DRIVER` / `EMAIL_WORKER` as intended, Redis running, scheduler task enabled, Automatic Transfer settings (on/off, delay, exclusions) and Rectification Reminders settings (on/off, days, time, weekdays) as intended, and delete the test periods and findings.

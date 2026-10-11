@@ -404,3 +404,17 @@ describe("BullMQ driver", () => {
     expect(transport.sent).toEqual([]);
   });
 });
+
+describe("time zones", () => {
+  // Stored times are UTC wall-clock values; the database's now() is in its
+  // own time zone. A bare now() made emails wait for the zone's offset
+  // (7 hours on a database set to America/Los_Angeles) before being sent.
+  it("raw SQL never uses a bare now()", async () => {
+    const { readFileSync } = await import("node:fs");
+    for (const file of ["src/lib/emailQueue/store.ts", "src/lib/reminders/store.ts"]) {
+      const sql = readFileSync(file, "utf8").replace(/\(now\(\) AT TIME ZONE 'UTC'\)/g, "");
+      const code = sql.split("\n").filter((line) => !line.trim().startsWith("//") && !line.trim().startsWith("*"));
+      expect(code.filter((line) => /\bnow\(\)/.test(line) && !/Date\.now\(\)/.test(line))).toEqual([]);
+    }
+  });
+});

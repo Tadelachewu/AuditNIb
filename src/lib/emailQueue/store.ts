@@ -37,6 +37,13 @@ export interface EmailQueueStore {
   cleanup(now: number): Promise<void>;
 }
 
+// TIME ZONES. Every time in these tables is a UTC wall-clock value (that is
+// how Prisma stores a Date in a `timestamp` column). The database's own
+// now() is in ITS session time zone, so the raw SQL below never compares
+// with or stores a bare now() - always (now() AT TIME ZONE 'UTC'). With a
+// bare now() and a database not running in UTC, an email was "not due" for
+// as many hours as the zone's offset, and lock times were off by the same.
+
 const SINGLETON = "singleton";
 const EMPTY_STATE: EmailQueueState = { paused: false, pausedReason: null, pausedAt: null, pausedBy: null, lastRunAt: null, lastRunBy: null };
 
@@ -155,10 +162,10 @@ export const prismaEmailQueueStore: EmailQueueStore = {
     // them ours - two workers can never take the same email.
     const rows = await prisma.$queryRaw<ClaimedRow[]>`
       UPDATE email_outbox
-         SET status = 'SENDING', locked_at = now(), locked_by = ${workerId}, attempts = attempts + 1
+         SET status = 'SENDING', locked_at = (now() AT TIME ZONE 'UTC'), locked_by = ${workerId}, attempts = attempts + 1
        WHERE id IN (
              SELECT id FROM email_outbox
-              WHERE status = 'PENDING' AND next_attempt_at <= now()
+              WHERE status = 'PENDING' AND next_attempt_at <= (now() AT TIME ZONE 'UTC')
               ORDER BY priority DESC, created_at ASC
               LIMIT ${limit}
                 FOR UPDATE SKIP LOCKED)
@@ -169,10 +176,10 @@ export const prismaEmailQueueStore: EmailQueueStore = {
   async handOff(workerId, limit) {
     const rows = await prisma.$queryRaw<{ id: string; priority: number }[]>`
       UPDATE email_outbox
-         SET status = 'QUEUED', locked_at = now(), locked_by = ${workerId}
+         SET status = 'QUEUED', locked_at = (now() AT TIME ZONE 'UTC'), locked_by = ${workerId}
        WHERE id IN (
              SELECT id FROM email_outbox
-              WHERE status = 'PENDING' AND next_attempt_at <= now()
+              WHERE status = 'PENDING' AND next_attempt_at <= (now() AT TIME ZONE 'UTC')
               ORDER BY priority DESC, created_at ASC
               LIMIT ${limit}
                 FOR UPDATE SKIP LOCKED)
@@ -183,7 +190,7 @@ export const prismaEmailQueueStore: EmailQueueStore = {
   async claimQueued(id, workerId) {
     const rows = await prisma.$queryRaw<ClaimedRow[]>`
       UPDATE email_outbox
-         SET status = 'SENDING', locked_at = now(), locked_by = ${workerId}, attempts = attempts + 1
+         SET status = 'SENDING', locked_at = (now() AT TIME ZONE 'UTC'), locked_by = ${workerId}, attempts = attempts + 1
        WHERE id = ${id} AND status = 'QUEUED'
       RETURNING id, notification_type, to_address, from_address, subject, body_text, body_html, attempts, max_attempts, expires_at`;
     return rows[0] ? toOutboxRow(rows[0]) : null;

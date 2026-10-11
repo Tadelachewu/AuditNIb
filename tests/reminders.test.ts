@@ -107,12 +107,13 @@ describe("which findings are overdue", () => {
     expect(overdueFindings(db, config(), NOW)[0].days).toBe(11);
   });
 
-  it("only branch work restarts the count - not verification, a partial close or an adjustment", () => {
+  it("only work in the branch's hands restarts the count - not verification or a partial close", () => {
     const sent = step("f", "QUEUE_BRANCH_MANAGER", at(2026, 10, 1));
-    const noise = ["DISTRICT_VERIFY_RECTIFICATION", "PARTIAL_CLOSE", "ADJUSTMENT_APPLIED"].map((a) => step("f", a, at(2026, 10, 11)));
+    const noise = ["DISTRICT_VERIFY_RECTIFICATION", "PARTIAL_CLOSE"].map((a) => step("f", a, at(2026, 10, 11)));
     // updatedAt is yesterday (those steps touch it), yet it is still overdue.
     expect(ids(makeDb([finding("f", { status: "PARTIALLY_RECTIFIED", rectifiedCases: 1, updatedAt: iso(at(2026, 10, 11)) })], [sent, ...noise]))).toEqual(["f"]);
-    for (const action of ["RECTIFY", "RESUBMIT_RECTIFICATION", "RETURN_RECTIFICATION", "REVERSE", "TRANSFER"]) {
+    // An approved adjustment hands the branch changed work, so it restarts the count too.
+    for (const action of ["RECTIFY", "RESUBMIT_RECTIFICATION", "RETURN_RECTIFICATION", "REVERSE", "TRANSFER", "ADJUSTMENT_APPLIED"]) {
       expect(ids(makeDb([finding("f")], [sent, step("f", action, at(2026, 10, 11))]))).toEqual([]);
     }
   });

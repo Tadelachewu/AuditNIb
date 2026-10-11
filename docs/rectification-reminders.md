@@ -39,8 +39,9 @@ The count restarts from the latest of these steps on the finding:
 | The branch records a rectification | Evidence uploads |
 | The branch resubmits a returned rectification | District verifies a rectification |
 | A rectification is returned to the branch | A portion is closed |
-| Reverse (back with the branch) | An adjustment (in review or approved) |
+| Reverse (back with the branch) | An adjustment still in review |
 | Transfer to another period (manual or automatic) | Edits that don't change the workflow |
+| An adjustment is **approved** (the cases / amount to rectify changed) | |
 
 Days are **calendar days**: sent on the 7th at 17:00, with N = 5, it is reminded by the run on the 12th.
 
@@ -104,7 +105,7 @@ Before step 1 the app still works: the old check keeps running (only while someo
 | Time of day | Any, whenever someone signed in | The set time, on the set weekdays |
 | Lateness | Up to an hour, plus however long nobody was signed in | Within 5 minutes |
 | Duplicates from two simultaneous checks | Possible | No: a lock, and one recorded run per day |
-| "Days without progress" | Reset by any update (district verification, partial close, adjustment…) | Reset only by branch work and by the finding being put in the branch's hands |
+| "Days without progress" | Reset by any update (district verification, partial close…) | Reset only by branch work and by work being put in the branch's hands (sent, returned, reversed, transferred, an approved adjustment) |
 | Day counting | Hours since the last update | Calendar days |
 | Run history | None | Last runs in Settings, with who started them |
 | Manual run | None | **Run now** |
