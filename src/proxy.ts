@@ -133,6 +133,43 @@ function isCrossOriginApiRequest(request: NextRequest): boolean {
   return true;
 }
 
+/**
+ * Content Security Policy for pages, with a per-request nonce
+ * (docs/session-security.md): only scripts carrying this request's nonce -
+ * the app's own, which Next.js stamps automatically - may run. An injected
+ * inline script has no nonce and is blocked, so it can't act as the
+ * signed-in user. This replaces `script-src 'unsafe-inline'` from
+ * next.config.ts for pages (that header still covers API and static
+ * responses, and is what applies when CSP_NONCE=false).
+ *
+ * style-src keeps 'unsafe-inline': the UI library writes inline styles, and
+ * a style can't run code.
+ */
+const cspNonceEnabled = (process.env.CSP_NONCE ?? "true").trim().toLowerCase() !== "false";
+const cspSentryOrigin = (() => {
+  try {
+    return process.env.NEXT_PUBLIC_SENTRY_DSN ? new URL(process.env.NEXT_PUBLIC_SENTRY_DSN).origin : "";
+  } catch {
+    return "";
+  }
+})();
+function pageCsp(nonce: string): string {
+  // Fast Refresh in `next dev` needs eval; never in production.
+  const devEval = process.env.NODE_ENV === "production" ? "" : " 'unsafe-eval'";
+  return [
+    "default-src 'self'",
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${devEval}`,
+    "style-src 'self' 'unsafe-inline'",
+    "font-src 'self'",
+    "img-src 'self' data:",
+    `connect-src 'self'${cspSentryOrigin ? ` ${cspSentryOrigin}` : ""}`,
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+  ].join("; ");
+}
+
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
@@ -175,7 +212,18 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // A page: give it this request's nonce. Next.js reads the policy from the
+  // forwarded request header and stamps the nonce on its own scripts; the
+  // root layout reads x-nonce for the one inline script it writes itself.
+  let csp: string | null = null;
+  if (cspNonceEnabled) {
+    const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
+    csp = pageCsp(nonce);
+    forwardedHeaders.set("x-nonce", nonce);
+    forwardedHeaders.set("Content-Security-Policy", csp);
+  }
   const response = withId(NextResponse.next({ request: { headers: forwardedHeaders } }));
+  if (csp) response.headers.set("Content-Security-Policy", csp);
   const session = await getIronSession<SessionData>(request, response, sessionOptions);
   const hasSession = Boolean(session.isLoggedIn && session.userId);
   const isPublicPath = PUBLIC_PATHS.includes(pathname);

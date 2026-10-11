@@ -5,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { apiSend } from "@/lib/api-client";
+import { formatDateTime } from "@/lib/format";
 import { notify, notifications } from "@/lib/notify";
 import { Button } from "@/components/ui/Button";
 import { Input, Label } from "@/components/ui/Field";
@@ -23,7 +24,19 @@ export interface DemoUser {
 // production the list is null and the demo credentials are never sent to
 // the browser at all (not just hidden). See docs/PRODUCTION.md.
 
-export function LoginClient({ demoUsers, sessionEnded = false }: { demoUsers: DemoUser[] | null; sessionEnded?: boolean }) {
+export function LoginClient({
+  demoUsers,
+  sessionEnded = false,
+  endReason = null,
+  endedAt = null,
+}: {
+  demoUsers: DemoUser[] | null;
+  sessionEnded?: boolean;
+  /** Why the previous session ended, when the server could tell. */
+  endReason?: "signed-in-elsewhere" | "timed-out" | null;
+  /** ISO time of the newer sign-in (endReason "signed-in-elsewhere"). */
+  endedAt?: string | null;
+}) {
   const router = useRouter();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -95,8 +108,16 @@ export function LoginClient({ demoUsers, sessionEnded = false }: { demoUsers: De
     setError(null);
     setLoading(true);
     try {
-      await apiSend("/api/auth/login", "POST", { username: user, password: pass });
-      notify.success(notifications.auth.loginSuccess);
+      const res = await apiSend<{ previousLogin?: { at: string; ip: string | null; device: string | null } | null }>("/api/auth/login", "POST", { username: user, password: pass });
+      // ONE notification: the confirmation, with the sign-in before this one
+      // underneath - so a sign-in that wasn't theirs gets noticed. (It stays
+      // on My Profile -> Previous sign-in afterwards.)
+      const p = res.previousLogin;
+      notify.success(notifications.auth.loginSuccess, {
+        description: p
+          ? `Previous sign-in: ${formatDateTime(p.at)}${p.device ? `, ${p.device}` : ""}${p.ip ? `, from ${p.ip}` : ""}. Not you? Change your password.`
+          : undefined,
+      });
       router.push("/dashboard");
       router.refresh();
     } catch (err) {
@@ -120,7 +141,11 @@ export function LoginClient({ demoUsers, sessionEnded = false }: { demoUsers: De
 
         {sessionEnded && (
           <p role="status" className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-            Your session ended (signed in elsewhere, timed out, or your account changed). Please sign in again.
+            {endReason === "signed-in-elsewhere"
+              ? `Your account was signed in from another browser or device${endedAt ? ` at ${formatDateTime(endedAt)}` : ""}, which ended this session. If that wasn't you, sign in and change your password immediately.`
+              : endReason === "timed-out"
+                ? "Your session timed out. Please sign in again."
+                : "Your session ended (signed out, signed in elsewhere, timed out, or your account changed). Please sign in again."}
           </p>
         )}
         <form onSubmit={handleSubmit}>

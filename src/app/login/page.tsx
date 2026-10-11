@@ -22,6 +22,16 @@ export const dynamic = "force-dynamic";
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const isDevelopment = (process.env.APP_ENV ?? "").trim().toLowerCase() === "development";
-  const sessionEnded = (await searchParams).reason === "session-ended";
-  return <LoginClient demoUsers={isDevelopment ? DEMO_USERS : null} sessionEnded={sessionEnded} />;
+  const params = await searchParams;
+  const reason = typeof params.reason === "string" ? params.reason : "";
+  const sessionEnded = reason === "session-ended" || reason === "signed-in-elsewhere" || reason === "timed-out";
+  const at = typeof params.at === "string" && !Number.isNaN(Date.parse(params.at)) ? params.at : null;
+  return (
+    <LoginClient
+      demoUsers={isDevelopment ? DEMO_USERS : null}
+      sessionEnded={sessionEnded}
+      endReason={reason === "signed-in-elsewhere" || reason === "timed-out" ? reason : null}
+      endedAt={at}
+    />
+  );
 }

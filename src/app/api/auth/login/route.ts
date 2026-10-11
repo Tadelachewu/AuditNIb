@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { clientSeen, describeUserAgent, userAgentHash } from "@/lib/sessionBinding";
 import { z } from "zod";
 import { readDb, updateDb } from "@/lib/db";
 import { verifyPassword, hashPassword, needsRehash, DUMMY_PASSWORD_HASH } from "@/lib/auth";
@@ -141,6 +142,11 @@ async function handlePOST(request: Request) {
   const nextSessionVersion = (user.sessionVersion ?? 1) + 1;
 
   const loginTime = new Date().toISOString();
+  const seen = clientSeen(request.headers);
+  // The sign-in before this one - returned so the user can spot one that wasn't theirs.
+  const previous = db.auditLogs.filter((l) => l.action === "LOGIN" && l.userId === user.id).sort((a, b) => b.timestamp.localeCompare(a.timestamp))[0];
+  const previousSeen = (previous?.newValue ?? null) as { ip?: string | null; device?: string } | null;
+  const previousLogin = previous ? { at: previous.timestamp, ip: previousSeen?.ip ?? null, device: previousSeen?.device ?? null } : null;
   // An older, weaker hash (lower bcrypt cost) is upgraded now, while the
   // plain password is at hand - the only time it can be.
   const upgradedHash = needsRehash(user.passwordHash) ? await hashPassword(password) : null;
@@ -157,6 +163,9 @@ async function handlePOST(request: Request) {
       action: "LOGIN",
       entityType: "User",
       entityId: user.id,
+      // Where from - shown to the user at their next sign-in ("last sign-in"),
+      // and to anyone reviewing the audit log.
+      newValue: { ip: seen.ip || null, device: describeUserAgent(seen.userAgent), userAgent: seen.userAgent || null },
     });
   });
 
@@ -191,9 +200,14 @@ async function handlePOST(request: Request) {
   // every subsequent guarded request.
   session.sessionCreatedAt = now;
   session.lastActivityAt = now;
+  // Bound to this browser (and address, when known) - src/lib/sessionBinding.ts.
+  session.uaHash = seen.userAgent ? userAgentHash(seen.userAgent) : undefined;
+  session.ip = seen.ip || undefined;
+  // The password was just entered: high-risk actions don't ask again for a few minutes.
+  session.reauthAt = now;
   await session.save();
 
-  return NextResponse.json({ user: toSafeUser({ ...user, lastLoginAt: loginTime }) });
+  return NextResponse.json({ user: toSafeUser({ ...user, lastLoginAt: loginTime }), previousLogin });
 }
 
 // Central error handling, request ID and access logging: src/lib/api/handler.ts

@@ -116,8 +116,13 @@ async function handlePOST(request: Request) {
   const role = db.roles.find((r) => r.code === existing.role);
   const now = Date.now();
   const session = await getSession();
+  const { uaHash, ip } = session;
   session.destroy();
   session.isLoggedIn = true;
+  // Still this browser; and the password was just entered.
+  session.uaHash = uaHash;
+  session.ip = ip;
+  session.reauthAt = now;
   session.userId = existing.id;
   session.username = existing.username;
   session.name = existing.name;

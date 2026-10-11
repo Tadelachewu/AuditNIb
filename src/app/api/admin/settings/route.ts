@@ -3,6 +3,7 @@ import { NOTIFICATION_EVENT_TYPES } from "@/lib/notificationEvents";
 import { z } from "zod";
 import { emailError, hostError, LIMITS, zUniqueList } from "@/lib/inputRules";
 import { requirePermission } from "@/lib/guard";
+import { requireRecentAuth } from "@/lib/reauth";
 import { readDb, updateDb } from "@/lib/db";
 import { appendAuditLog } from "@/lib/audit";
 import { withApiHandler } from "@/lib/api/handler";
@@ -125,6 +126,9 @@ const updateSchema = z.object({
 async function handlePATCH(request: Request) {
   const auth = await requirePermission("settings.edit");
   if (!auth.ok) return auth.response;
+  // Changes who can do what (or how the system is secured): the password must have been confirmed recently.
+  const refused = requireRecentAuth(auth.session);
+  if (refused) return refused;
 
   const parsed = updateSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {

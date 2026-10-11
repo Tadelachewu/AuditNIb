@@ -12,6 +12,11 @@ async function handlePOST() {
     const user = db.users.find((u) => u.id === session.userId);
     if (user) {
       await updateDb((current) => {
+        // Sign out on the SERVER too: every cookie issued for this sign-in -
+        // including a copy someone may have taken - stops working at once,
+        // not just the one in this browser (docs/session-security.md).
+        const u = current.users.find((x) => x.id === user.id);
+        if (u && (u.sessionVersion ?? 1) === (session.sessionVersion ?? 1)) u.sessionVersion = (u.sessionVersion ?? 1) + 1;
         appendAuditLog(current, {
           userId: user.id,
           userName: user.name,

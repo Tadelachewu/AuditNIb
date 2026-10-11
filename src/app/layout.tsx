@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AppToaster } from "@/components/ui/AppToaster";
@@ -30,7 +31,10 @@ export const metadata: Metadata = {
 // never flashes open before collapsing.
 const THEME_INIT_SCRIPT = `(function(){try{var t=localStorage.getItem("theme");if(t==="light"||t==="dark"){document.documentElement.setAttribute("data-theme",t)}if(localStorage.getItem("sidebar")==="collapsed"){document.documentElement.setAttribute("data-sidebar","collapsed")}}catch(e){}})();`;
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  // This request's Content-Security-Policy nonce (set in src/proxy.ts): the
+  // inline script below is only allowed to run because it carries it.
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
   return (
     <html
       lang="en"
@@ -44,7 +48,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       suppressHydrationWarning
     >
       <head>
-        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>
       <body className="min-h-full flex flex-col">
         {children}

@@ -3,6 +3,7 @@ import { v4 as uuid } from "uuid";
 import { z } from "zod";
 import { zEntityName, zRoleCode, zText } from "@/lib/inputRules";
 import { requirePermission } from "@/lib/guard";
+import { requireRecentAuth } from "@/lib/reauth";
 import { readDb, updateDb } from "@/lib/db";
 import { appendAuditLog } from "@/lib/audit";
 import { PAGE_REGISTRY, isValidPermissionKey } from "@/lib/permissions/registry";
@@ -42,6 +43,9 @@ const createSchema = z.object({
 async function handlePOST(request: Request) {
   const auth = await requirePermission("roles.manage");
   if (!auth.ok) return auth.response;
+  // Changes who can do what (or how the system is secured): the password must have been confirmed recently.
+  const refused = requireRecentAuth(auth.session);
+  if (refused) return refused;
 
   const parsed = createSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {

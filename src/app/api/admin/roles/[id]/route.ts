@@ -3,6 +3,7 @@ import { lockoutError } from "@/lib/permissions/lockout";
 import { z } from "zod";
 import { zEntityName, zText } from "@/lib/inputRules";
 import { requirePermission } from "@/lib/guard";
+import { requireRecentAuth } from "@/lib/reauth";
 import { readDb, updateDb } from "@/lib/db";
 import { appendAuditLog } from "@/lib/audit";
 import { isValidPermissionKey, permissionKey } from "@/lib/permissions/registry";
@@ -27,6 +28,9 @@ const updateSchema = z.object({
 async function handlePATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requirePermission("roles.manage");
   if (!auth.ok) return auth.response;
+  // Changes who can do what (or how the system is secured): the password must have been confirmed recently.
+  const refused = requireRecentAuth(auth.session);
+  if (refused) return refused;
   const { id } = await params;
 
   const parsed = updateSchema.safeParse(await request.json().catch(() => null));
@@ -156,6 +160,9 @@ async function handlePATCH(request: Request, { params }: { params: Promise<{ id:
 async function handleDELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requirePermission("roles.manage");
   if (!auth.ok) return auth.response;
+  // Changes who can do what (or how the system is secured): the password must have been confirmed recently.
+  const refused = requireRecentAuth(auth.session);
+  if (refused) return refused;
   const { id } = await params;
 
   const db = await readDb();

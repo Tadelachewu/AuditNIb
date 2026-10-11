@@ -3,6 +3,7 @@ import { lockoutError } from "@/lib/permissions/lockout";
 import { z } from "zod";
 import { zEmail, zPersonName, zPhone } from "@/lib/inputRules";
 import { requireToggleOrEditPermission, requirePermission } from "@/lib/guard";
+import { requireRecentAuth } from "@/lib/reauth";
 import { readDb, updateDb } from "@/lib/db";
 import { hashPassword } from "@/lib/auth";
 import { PASSWORD_MIN_LENGTH, validatePasswordFull } from "@/lib/passwordValidation";
@@ -57,6 +58,18 @@ async function handlePATCH(request: Request, { params }: { params: Promise<{ id:
   const db = await readDb();
   const existing = db.users.find((u) => u.id === id);
   if (!existing) return NextResponse.json({ error: "User not found" }, { status: 404 });
+
+  // Taking over or promoting an account - a new password, another role, or
+  // another email (where password-reset links go) - needs the admin's own
+  // password confirmed recently (src/lib/reauth.ts).
+  const highRisk =
+    Boolean(input.password) ||
+    (input.role !== undefined && input.role !== existing.role) ||
+    (input.email !== undefined && (input.email ?? "") !== (existing.email ?? ""));
+  if (highRisk) {
+    const refused = requireRecentAuth(auth.session);
+    if (refused) return refused;
+  }
 
   // Deactivating signs the user out on their next request and blocks
   // login (src/lib/session.ts, the login route). Never allowed on your own

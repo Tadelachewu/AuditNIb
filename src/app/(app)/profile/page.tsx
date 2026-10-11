@@ -24,6 +24,16 @@ export default async function ProfilePage() {
   const branch = db.branches.find((b) => b.id === user.branchId);
   const department = db.departments.find((d) => d.id === user.departmentId);
 
+  // The two latest sign-ins from the audit log (docs/session-security.md):
+  // this one, and the one before - where a sign-in that wasn't theirs shows.
+  const [thisSignIn, previousSignIn] = db.auditLogs
+    .filter((l) => l.action === "LOGIN" && l.userId === user.id)
+    .sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+  const signInText = (entry: { timestamp: string; newValue?: unknown }) => {
+    const seen = (entry.newValue ?? null) as { ip?: string | null; device?: string | null } | null;
+    return [formatDateTime(entry.timestamp), seen?.device, seen?.ip ? `from ${seen.ip}` : null].filter(Boolean).join(", ");
+  };
+
   return (
     <div className="flex flex-col gap-5">
       <div>
@@ -62,8 +72,13 @@ export default async function ProfilePage() {
             <dd className="mt-0.5 text-slate-900">{user.phone ?? "—"}</dd>
           </div>
           <div>
-            <dt className="text-xs font-medium text-slate-500">Last Login</dt>
-            <dd className="mt-0.5 text-slate-900">{user.lastLoginAt ? formatDateTime(user.lastLoginAt) : "—"}</dd>
+            <dt className="text-xs font-medium text-slate-500">This sign-in</dt>
+            <dd className="mt-0.5 text-slate-900">{thisSignIn ? signInText(thisSignIn) : user.lastLoginAt ? formatDateTime(user.lastLoginAt) : "—"}</dd>
+          </div>
+          <div>
+            <dt className="text-xs font-medium text-slate-500">Previous sign-in</dt>
+            <dd className="mt-0.5 text-slate-900">{previousSignIn ? signInText(previousSignIn) : "None before this one"}</dd>
+            {previousSignIn && <dd className="mt-0.5 text-xs text-slate-500">Not you? Change your password below.</dd>}
           </div>
         </dl>
       </CollapsibleCard>

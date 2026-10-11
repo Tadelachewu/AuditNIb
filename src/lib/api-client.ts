@@ -61,15 +61,38 @@ function safeMessage(message: unknown, code: string | undefined, status: number)
   return status >= 500 ? ERROR_CODES.INTERNAL_SERVER_ERROR.message : `Request failed (${status})`;
 }
 
-async function request<T>(url: string, init: RequestInit): Promise<T> {
-  let res: Response;
+/**
+ * "Confirm your password" for high-risk actions (src/lib/reauth.ts): the
+ * dialog (ReauthPrompt, mounted in the app layout) registers itself here.
+ * It resolves true once the password was confirmed, false when cancelled.
+ */
+let reauthHandler: (() => Promise<boolean>) | null = null;
+export function setReauthHandler(handler: (() => Promise<boolean>) | null): void {
+  reauthHandler = handler;
+}
+
+async function send(url: string, init: RequestInit): Promise<Response> {
   try {
-    res = await fetch(url, init);
+    return await fetch(url, init);
   } catch (e) {
     if (e instanceof DOMException && e.name === "AbortError") throw e;
     throw new ApiError(NETWORK_MESSAGE, 0, { code: "NETWORK_ERROR" });
   }
-  if (!res.ok) throw await toApiError(res);
+}
+
+async function request<T>(url: string, init: RequestInit): Promise<T> {
+  let res = await send(url, init);
+  if (!res.ok) {
+    let err = await toApiError(res);
+    // The server wants the password confirmed first: ask, then repeat the
+    // same request once. Cancelling leaves the original refusal.
+    if (err.code === "REAUTH_REQUIRED" && reauthHandler && (await reauthHandler())) {
+      res = await send(url, init);
+      if (res.ok) return (await res.json().catch(() => ({}))) as T;
+      err = await toApiError(res);
+    }
+    throw err;
+  }
   return (await res.json().catch(() => ({}))) as T;
 }
 

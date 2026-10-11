@@ -2,6 +2,8 @@ import { cookies, headers } from "next/headers";
 import { getIronSession, type IronSession, type SessionOptions } from "iron-session";
 import { prisma } from "@/lib/prismaClient";
 import type { OrgScope } from "@/types";
+import { logger } from "@/lib/logger";
+import { bindingProblem, clientSeen, userAgentHash } from "@/lib/sessionBinding";
 
 export interface SessionData {
   isLoggedIn: boolean;
@@ -42,6 +44,16 @@ export interface SessionData {
   // against the idle timeout to sign out an inactive user; updated (and the
   // cookie re-sent) on each request that passes all other checks.
   lastActivityAt?: number;
+  // Device binding (src/lib/sessionBinding.ts): a fingerprint of the browser
+  // this session was issued to, and its address when known. A request from a
+  // different browser (or, when SESSION_BIND_IP is on, another network) is
+  // refused - a copied cookie doesn't simply work elsewhere.
+  uaHash?: string;
+  ip?: string;
+  // Epoch ms the password was last confirmed in this session - at sign-in
+  // and on each "Confirm your password" (src/lib/reauth.ts). High-risk admin
+  // actions need it to be recent.
+  reauthAt?: number;
 }
 
 const password = process.env.IRON_SESSION_PASSWORD;
@@ -215,10 +227,31 @@ export async function getCurrentUser(): Promise<SessionData | null> {
   // the idle timeout could never fire. They are still checked against both
   // timeouts above, just without sliding the idle window forward.
   let background = false;
+  let seen: ReturnType<typeof clientSeen> | null = null;
   try {
-    background = (await headers()).get(BACKGROUND_REQUEST_HEADER) === "1";
+    const h = await headers();
+    background = h.get(BACKGROUND_REQUEST_HEADER) === "1";
+    seen = clientSeen(h);
   } catch {
     // No request context (scripts/tests) - treat as normal activity.
+  }
+
+  // Device binding: the cookie was issued to another browser (or network) -
+  // most likely a copied cookie. Refused like any other invalid session.
+  if (seen) {
+    const problem = bindingProblem(session, seen);
+    if (problem) {
+      logger.warn({ event: "session.binding_mismatch", userId: session.userId, problem }, "Session used from a different browser or network - refused");
+      try {
+        session.destroy();
+      } catch {
+        // Expected when called from a Server Component.
+      }
+      return null;
+    }
+    // Sessions issued before binding existed take on the first browser seen.
+    if (!session.uaHash && seen.userAgent) session.uaHash = userAgentHash(seen.userAgent);
+    if (!session.ip && seen.ip) session.ip = seen.ip;
   }
   // Who the user is NOW, not at sign-in: an admin's change to their role,
   // that role's permissions, or their branch / district applies from this

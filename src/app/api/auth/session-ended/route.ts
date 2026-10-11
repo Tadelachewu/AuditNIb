@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { getIronSession } from "iron-session";
 import { cookies } from "next/headers";
-import { sessionOptions, type SessionData } from "@/lib/session";
+import { sessionOptions, ABSOLUTE_TIMEOUT_MS, IDLE_TIMEOUT_MS, type SessionData } from "@/lib/session";
+import { prisma } from "@/lib/prismaClient";
 
 /**
  * Where pages send a user whose session is no longer valid (signed in on
@@ -15,8 +16,36 @@ import { sessionOptions, type SessionData } from "@/lib/session";
  */
 export async function GET(request: Request) {
   const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
-  session.destroy();
   const url = new URL("/login", request.url);
   url.searchParams.set("reason", "session-ended");
+
+  // Tell the user WHY, when it can be told from the cookie they still hold:
+  // a newer sign-in to their account (which they should know about if it
+  // wasn't them), or a timeout.
+  try {
+    if (session.isLoggedIn && session.userId) {
+      const now = Date.now();
+      const timedOut =
+        (session.sessionCreatedAt !== undefined && now - session.sessionCreatedAt >= ABSOLUTE_TIMEOUT_MS) ||
+        (session.lastActivityAt !== undefined && now - session.lastActivityAt >= IDLE_TIMEOUT_MS);
+      const user = await prisma.user.findUnique({ where: { id: session.userId }, select: { status: true, sessionVersion: true, lastLoginAt: true } });
+      const newerSignIn =
+        user?.status === "ACTIVE" &&
+        user.sessionVersion !== (session.sessionVersion ?? 1) &&
+        user.lastLoginAt !== null &&
+        session.sessionCreatedAt !== undefined &&
+        user.lastLoginAt.getTime() > session.sessionCreatedAt;
+      if (newerSignIn) {
+        url.searchParams.set("reason", "signed-in-elsewhere");
+        url.searchParams.set("at", user.lastLoginAt!.toISOString());
+      } else if (timedOut) {
+        url.searchParams.set("reason", "timed-out");
+      }
+    }
+  } catch {
+    // The generic message is shown.
+  }
+
+  session.destroy();
   return NextResponse.redirect(url);
 }

@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { ReauthPrompt } from "@/components/auth/ReauthPrompt";
 import { SESSION_ENDED_PATH } from "@/lib/session";
 import { getCurrentUser } from "@/lib/session";
 import { Sidebar } from "@/components/layout/Sidebar";
@@ -23,6 +24,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <Topbar user={user} />
         <main className="min-w-0 flex-1 overflow-x-clip p-6">
           <MuiProvider>{children}</MuiProvider>
+          <ReauthPrompt />
         </main>
       </div>
     );
@@ -36,6 +38,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <Topbar user={user} sidebar />
           <main className="min-w-0 flex-1 overflow-x-clip p-6">
           <MuiProvider>{children}</MuiProvider>
+          <ReauthPrompt />
         </main>
         </div>
       </div>
