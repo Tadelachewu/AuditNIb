@@ -62,7 +62,7 @@ export function useAutoTransferStatus(rows: { id: string; code: string }[]) {
             : run.triggeredBy === "in-app"
               ? "by in-app check"
               : "";
-        const text = `Done ${formatDateTime(run.ranAt)}${by ? ` ${by}` : ""} - ${run.movedCount} moved to ${to}${run.keptCount ? `, ${run.keptCount} kept (area not transferred)` : ""}`;
+        const text = `Done ${formatDateTime(run.ranAt)}${by ? ` ${by}` : ""} - ${run.movedCount} moved to ${to}${run.keptCount ? `, ${run.keptCount} kept (area or source not transferred)` : ""}`;
         return {
           text,
           cell: (

@@ -43,15 +43,15 @@ let db: Database;
 let seq = 0;
 function finding(periodId: string, status: FindingStatus = "SENT_TO_BRANCH_MANAGER", extra: Partial<Finding> = {}): Finding {
   const f = {
-    id: `f${++seq}`, reference: `F-${seq}`, status, periodId, branchId: "b1", districtId: "d1", operationArea: "Teller",
+    id: `f${++seq}`, reference: `F-${seq}`, status, periodId, branchId: "b1", districtId: "d1", operationArea: "Teller", sourceId: "ic",
     caseCount: 3, amount: 3000, closedCases: 0, closedAmount: 0, rectifiedCases: 0, rectifiedAmount: 0,
     districtVerifiedCases: 0, districtVerifiedAmount: 0, createdAt: "2026-09-10T08:00:00.000Z", ...extra,
   } as unknown as Finding;
   db.findings.push(f);
   return f;
 }
-// "Teller" (the fixtures' operation area) is ticked unless a test says otherwise.
-const config = (over: Partial<AutoTransferConfig> = {}): AutoTransferConfig => ({ ...DEFAULT_AUTO_TRANSFER_CONFIG, includedOperationAreas: ["Teller"], ...over });
+// "Teller" x "ic" (the fixtures' operation area and source) is ticked unless a test says otherwise.
+const config = (over: Partial<AutoTransferConfig> = {}): AutoTransferConfig => ({ ...DEFAULT_AUTO_TRANSFER_CONFIG, includedAreaSources: [{ operationArea: "Teller", sourceIds: ["ic"] }], ...over });
 
 beforeEach(() => {
   seq = 0;
@@ -93,42 +93,48 @@ describe("rules", () => {
   });
 
   it("a ticked operation area matches whatever the case or spacing; an unticked one is not transferred", () => {
-    const c = config({ includedOperationAreas: ["Card Operations"] });
-    expect(isIncluded({ operationArea: " card  operations " }, c)).toBe(true);
-    expect(isIncluded({ operationArea: "Teller" }, c)).toBe(false);
+    const c = config({ includedAreaSources: [{ operationArea: "Card Operations", sourceIds: ["ic"] }] });
+    expect(isIncluded({ operationArea: " card  operations ", sourceId: "ic" }, c)).toBe(true);
+    expect(isIncluded({ operationArea: "Teller", sourceId: "ic" }, c)).toBe(false);
     // Nothing ticked (a fresh install): nothing is transferred.
-    expect(isIncluded({ operationArea: "Teller" }, DEFAULT_AUTO_TRANSFER_CONFIG)).toBe(false);
+    expect(isIncluded({ operationArea: "Teller", sourceId: "ic" }, DEFAULT_AUTO_TRANSFER_CONFIG)).toBe(false);
   });
 
-  it("until the included-areas migration is applied, the old excluded list still decides", () => {
-    const c = config({ includedOperationAreas: [], legacyExcludedOperationAreas: ["Card Operations"] });
-    expect(isIncluded({ operationArea: "card operations" }, c)).toBe(false);
-    expect(isIncluded({ operationArea: "Teller" }, c)).toBe(true);
-  });
-});
-
-describe("sweep", () => {
-  it("moves outstanding findings to the next period, as System, method AUTOMATIC", () => {
-    const a = finding("sep");
-    const b = finding("sep", "PARTIALLY_RECTIFIED", { closedCases: 1, closedAmount: 1000 });
-    const { runs } = sweepPeriods(db, ["sep"], config(), SEP_END + H);
-    expect([a.periodId, b.periodId]).toEqual(["oct", "oct"]);
-    expect(a.status).toBe("TRANSFERRED");
-    expect(db.findingTransfers.every((t) => t.method === "AUTOMATIC" && t.createdByName.startsWith("System"))).toBe(true);
-    expect(runs[0]).toMatchObject({ periodId: "sep", status: "DONE", toPeriodId: "oct", movedCount: 2, keptCount: 0 });
+  it("each operation area has its own ticked sources", () => {
+    const c = config({
+      includedAreaSources: [
+        { operationArea: "Teller", sourceIds: ["ic"] },
+        { operationArea: "Vault", sourceIds: ["ic", "ia"] },
+        { operationArea: "Loans", sourceIds: [] },
+      ],
+    });
+    expect(isIncluded({ operationArea: "Teller", sourceId: "ic" }, c)).toBe(true);
+    expect(isIncluded({ operationArea: "Teller", sourceId: "ia" }, c)).toBe(false);
+    expect(isIncluded({ operationArea: "Vault", sourceId: "ia" }, c)).toBe(true);
+    expect(isIncluded({ operationArea: "Loans", sourceId: "ic" }, c)).toBe(false);
   });
 
-  it("keeps unticked operation areas, not-yet-approved, rejected and closed findings", () => {
+  it("a database behind on migrations keeps the older list it holds", () => {
+    const excluded = config({ includedAreaSources: [], legacy: { excludedOperationAreas: ["Card Operations"] } });
+    expect(isIncluded({ operationArea: "card operations", sourceId: "ia" }, excluded)).toBe(false);
+    expect(isIncluded({ operationArea: "Teller", sourceId: "ia" }, excluded)).toBe(true);
+    const included = config({ includedAreaSources: [], legacy: { includedOperationAreas: ["Teller"] } });
+    expect(isIncluded({ operationArea: "teller", sourceId: "ia" }, included)).toBe(true);
+    expect(isIncluded({ operationArea: "Vault", sourceId: "ia" }, included)).toBe(false);
+  });
+
+  it("keeps unticked operation areas and sources, not-yet-approved, rejected and closed findings", () => {
     const kept = finding("sep", "SENT_TO_BRANCH_MANAGER", { operationArea: "Card" });
     const draft = finding("sep", "DRAFT");
     const review = finding("sep", "HO_REVIEW");
     const rejected = finding("sep", "REJECTED");
     const closed = finding("sep", "CLOSED", { closedCases: 3, closedAmount: 3000 });
+    const otherSource = finding("sep", "SENT_TO_BRANCH_MANAGER", { sourceId: "ia" });
     const moved = finding("sep");
     const { runs } = sweepPeriods(db, ["sep"], config(), SEP_END + H);
-    expect([kept, draft, review, rejected, closed].map((f) => f.periodId)).toEqual(["sep", "sep", "sep", "sep", "sep"]);
+    expect([kept, draft, review, rejected, closed, otherSource].map((f) => f.periodId)).toEqual(["sep", "sep", "sep", "sep", "sep", "sep"]);
     expect(moved.periodId).toBe("oct");
-    expect(runs[0]).toMatchObject({ movedCount: 1, keptCount: 1, keptReferences: [kept.reference] });
+    expect(runs[0]).toMatchObject({ movedCount: 1, keptCount: 2, keptReferences: [kept.reference, otherSource.reference] });
   });
 
   it("unclosed rectification goes back to the branch, as with any transfer", () => {

@@ -5,25 +5,31 @@ import { apiGet, apiSend } from "@/lib/api-client";
 import { Button } from "@/components/ui/Button";
 import { CheckboxField, Input, Label } from "@/components/ui/Field";
 import { notify, notifications, presentError } from "@/lib/notify";
-import type { AutoTransferConfig } from "@/lib/autoTransfer/types";
+import type { AreaSources, AutoTransferConfig } from "@/lib/autoTransfer/types";
+
+type SourceChoice = { id: string; code: string; name: string; active: boolean };
+type Loaded = { installed: boolean; config: AutoTransferConfig | null; operationAreas: string[]; sources: SourceChoice[] };
+
+const norm = (s: string) => s.trim().replace(/\s+/g, " ").toLowerCase();
 
 /**
- * Settings -> Automatic Transfer: on/off, the operation areas it transfers,
+ * Settings -> Automatic Transfer: on/off, what it transfers (a grid of
+ * operation areas x sources - a ticked box is transferred),
  * and an optional delay. Self-contained - loads and saves through
  * /api/admin/auto-transfer (src/lib/autoTransfer), with its own Save,
  * independent of the rest of the Settings form.
  */
 export function AutoTransferSettings({ canEdit }: { canEdit: boolean }) {
-  const [state, setState] = useState<{ installed: boolean; config: AutoTransferConfig | null; operationAreas: string[] } | null>(null);
-  const [draft, setDraft] = useState({ enabled: true, includedOperationAreas: [] as string[], delayHours: "0" });
+  const [state, setState] = useState<Loaded | null>(null);
+  const [draft, setDraft] = useState({ enabled: true, includedAreaSources: [] as AreaSources[], delayHours: "0" });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    apiGet<{ installed: boolean; config: AutoTransferConfig | null; operationAreas: string[] }>("/api/admin/auto-transfer")
+    apiGet<Loaded>("/api/admin/auto-transfer")
       .then((res) => {
         setState(res);
-        if (res.config) setDraft({ enabled: res.config.enabled, includedOperationAreas: res.config.includedOperationAreas, delayHours: String(res.config.delayHours) });
+        if (res.config) setDraft({ enabled: res.config.enabled, includedAreaSources: res.config.includedAreaSources, delayHours: String(res.config.delayHours) });
       })
       .catch((err) => setError(presentError(err, notifications.autoTransfer.loadFailed).message));
   }, []);
@@ -41,23 +47,51 @@ export function AutoTransferSettings({ canEdit }: { canEdit: boolean }) {
 
   const delay = Number(draft.delayHours);
   const delayProblem = !/^\d+$/.test(draft.delayHours) || delay > 720 ? "Enter whole hours from 0 to 720" : null;
-  // Database not yet on the "ticked = transferred" layout: show, don't save.
-  const migrationPending = Boolean(state.config?.legacyExcludedOperationAreas);
-  // Choices: every known area, plus any ticked one no longer in the list.
-  const choices = [...new Set([...state.operationAreas, ...draft.includedOperationAreas])].sort((a, b) => a.localeCompare(b));
-  const toggleArea = (area: string) =>
-    setDraft((d) => ({
-      ...d,
-      includedOperationAreas: d.includedOperationAreas.includes(area) ? d.includedOperationAreas.filter((a) => a !== area) : [...d.includedOperationAreas, area],
-    }));
-  const allTicked = choices.length > 0 && choices.every((a) => draft.includedOperationAreas.includes(a));
+  // Database behind on migrations: the older list stays in force - show, don't save.
+  const migrationPending = Boolean(state.config?.legacy);
+  // Rows: every known area, plus any ticked one no longer in the list.
+  const areas = [...new Map([...state.operationAreas, ...draft.includedAreaSources.map((r) => r.operationArea)].map((a) => [norm(a), a])).values()].sort((a, b) =>
+    a.localeCompare(b)
+  );
+  // Columns: the active sources, plus any inactive one still ticked somewhere.
+  const tickedIds = new Set(draft.includedAreaSources.flatMap((r) => r.sourceIds));
+  const sources = state.sources.filter((s) => s.active || tickedIds.has(s.id));
+  const allIds = sources.map((s) => s.id);
+  const idsOf = (area: string) => draft.includedAreaSources.find((r) => norm(r.operationArea) === norm(area))?.sourceIds ?? [];
+  /** Sets one area's sources; an area with none ticked drops out of the list. */
+  const setArea = (rows: AreaSources[], area: string, sourceIds: string[]) => [
+    ...rows.filter((r) => norm(r.operationArea) !== norm(area)),
+    ...(sourceIds.length > 0 ? [{ operationArea: area, sourceIds }] : []),
+  ];
+  const toggleCell = (area: string, id: string) =>
+    setDraft((d) => {
+      const now = d.includedAreaSources.find((r) => norm(r.operationArea) === norm(area))?.sourceIds ?? [];
+      return { ...d, includedAreaSources: setArea(d.includedAreaSources, area, now.includes(id) ? now.filter((x) => x !== id) : [...now, id]) };
+    });
+  const rowFull = (area: string) => allIds.length > 0 && allIds.every((id) => idsOf(area).includes(id));
+  const colFull = (id: string) => areas.length > 0 && areas.every((a) => idsOf(a).includes(id));
+  const toggleRow = (area: string) => setDraft((d) => ({ ...d, includedAreaSources: setArea(d.includedAreaSources, area, rowFull(area) ? [] : allIds) }));
+  const toggleColumn = (id: string) =>
+    setDraft((d) => {
+      const full = colFull(id);
+      return {
+        ...d,
+        includedAreaSources: areas.reduce((rows, a) => {
+          const now = rows.find((r) => norm(r.operationArea) === norm(a))?.sourceIds ?? [];
+          return setArea(rows, a, full ? now.filter((x) => x !== id) : [...new Set([...now, id])]);
+        }, d.includedAreaSources),
+      };
+    });
+  const allTicked = areas.length > 0 && areas.every(rowFull);
+  const nothingTicked = draft.includedAreaSources.every((r) => r.sourceIds.length === 0);
+  const box = "h-4 w-4 rounded border-slate-300";
 
   async function save() {
     setSaving(true);
     setError(null);
     try {
       const res = await apiSend<{ config: AutoTransferConfig }>("/api/admin/auto-transfer", "PATCH", { ...draft, delayHours: delay });
-      setDraft((d) => ({ ...d, includedOperationAreas: res.config.includedOperationAreas }));
+      setDraft((d) => ({ ...d, includedAreaSources: res.config.includedAreaSources }));
       setState((s) => (s ? { ...s, config: res.config } : s));
       notify.success(notifications.autoTransfer.saved);
     } catch (err) {
@@ -71,8 +105,8 @@ export function AutoTransferSettings({ canEdit }: { canEdit: boolean }) {
     <fieldset disabled={!canEdit || migrationPending} className="flex flex-col gap-4 p-4">
       {migrationPending && (
         <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
-          This database still uses the old &quot;excluded operation areas&quot; list, which stays in force. Apply the latest migration (
-          <code>npx prisma migrate deploy</code>) to choose the areas to transfer here.
+          This database still uses an older operation-area list, which stays in force. Apply the pending migrations (
+          <code>npx prisma migrate deploy</code>) to choose the areas and sources to transfer here.
         </p>
       )}
       <CheckboxField
@@ -89,35 +123,73 @@ export function AutoTransferSettings({ canEdit }: { canEdit: boolean }) {
 
       <div>
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <Label>Operation areas to transfer automatically</Label>
-          {choices.length > 0 && !migrationPending && (
+          <Label>Operation areas and sources to transfer automatically</Label>
+          {areas.length > 0 && sources.length > 0 && !migrationPending && (
             <button
               type="button"
               className="text-xs font-medium text-blue-700 hover:underline disabled:text-slate-400 disabled:no-underline"
-              onClick={() => setDraft((d) => ({ ...d, includedOperationAreas: allTicked ? [] : choices }))}
+              onClick={() => setDraft((d) => ({ ...d, includedAreaSources: allTicked ? [] : areas.map((a) => ({ operationArea: a, sourceIds: allIds })) }))}
             >
               {allTicked ? "Clear all" : "Tick all"}
             </button>
           )}
         </div>
         <p className="mb-2 text-xs text-slate-500">
-          Findings in the <strong>ticked</strong> areas are carried into the next period when theirs ends. Findings in every other area stay
-          where they are; transfer them manually when needed. A new operation area starts unticked.
+          A <strong>ticked</strong> box means findings of that source in that operation area are carried into the next period when theirs
+          ends. Everything unticked stays where it is; transfer it manually when needed. The box beside an area, or under a source, ticks
+          the whole row or column. A new operation area or source starts unticked.
         </p>
-        {choices.length === 0 ? (
+        {migrationPending ? (
+          <p className="text-sm text-slate-500">
+            {state.config?.legacy?.excludedOperationAreas
+              ? `In force now: every operation area is transferred except ${state.config.legacy.excludedOperationAreas.join(", ") || "none"}.`
+              : `In force now: transferred for every source - ${state.config?.legacy?.includedOperationAreas?.join(", ") || "no operation area"}.`}
+          </p>
+        ) : areas.length === 0 ? (
           <p className="text-sm text-slate-500">No operation areas configured yet.</p>
+        ) : sources.length === 0 ? (
+          <p className="text-sm text-slate-500">No active sources configured yet.</p>
         ) : (
-          <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-            {choices.map((area) => (
-              <label key={area} className="flex items-center gap-2 text-sm text-slate-700">
-                <input type="checkbox" className="h-4 w-4 rounded border-slate-300" checked={draft.includedOperationAreas.includes(area)} onChange={() => toggleArea(area)} />
-                {area}
-              </label>
-            ))}
+          <div className="overflow-x-auto rounded-md border border-slate-200">
+            <table className="w-full text-sm text-slate-700">
+              <thead className="bg-slate-50 text-xs text-slate-600">
+                <tr>
+                  <th scope="col" className="px-3 py-2 text-left font-medium">Operation area</th>
+                  {sources.map((s) => (
+                    <th key={s.id} scope="col" className="px-3 py-2 text-center font-medium">
+                      <label className="inline-flex flex-col items-center gap-1">
+                        <span>
+                          {s.name}
+                          {!s.active && " (inactive)"}
+                        </span>
+                        <input type="checkbox" className={box} aria-label={`All operation areas for ${s.name}`} checked={colFull(s.id)} onChange={() => toggleColumn(s.id)} />
+                      </label>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {areas.map((area) => (
+                  <tr key={area}>
+                    <th scope="row" className="px-3 py-1.5 text-left font-normal">
+                      <label className="flex items-center gap-2">
+                        <input type="checkbox" className={box} aria-label={`All sources for ${area}`} checked={rowFull(area)} onChange={() => toggleRow(area)} />
+                        {area}
+                      </label>
+                    </th>
+                    {sources.map((s) => (
+                      <td key={s.id} className="px-3 py-1.5 text-center">
+                        <input type="checkbox" className={box} aria-label={`${area} - ${s.name}`} checked={idsOf(area).includes(s.id)} onChange={() => toggleCell(area, s.id)} />
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
-        {!migrationPending && draft.enabled && choices.length > 0 && draft.includedOperationAreas.length === 0 && (
-          <p className="mt-2 text-xs text-amber-700">No area is ticked, so nothing will be transferred automatically.</p>
+        {!migrationPending && draft.enabled && areas.length > 0 && sources.length > 0 && nothingTicked && (
+          <p className="mt-2 text-xs text-amber-700">Nothing is ticked, so nothing will be transferred automatically.</p>
         )}
       </div>
 

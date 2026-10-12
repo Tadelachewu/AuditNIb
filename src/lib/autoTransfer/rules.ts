@@ -39,15 +39,18 @@ export function dueSweeps(periods: readonly ReportingPeriod[], runs: readonly Au
     .sort((a, b) => a.year - b.year || a.month - b.month);
 }
 
-/** Transferred automatically: its operation area is one of the ticked ones. */
+/** Transferred automatically: its source is ticked for its operation area. */
 export function isIncluded(
-  finding: Pick<Finding, "operationArea">,
-  config: Pick<AutoTransferConfig, "includedOperationAreas" | "legacyExcludedOperationAreas">
+  finding: Pick<Finding, "operationArea" | "sourceId">,
+  config: Pick<AutoTransferConfig, "includedAreaSources" | "legacy">
 ): boolean {
   const listed = (areas: string[]) => areas.some((area) => area.trim() && matchesListValue(area, finding.operationArea));
-  // Migration not applied yet: the old "left behind" list still decides.
-  if (config.legacyExcludedOperationAreas) return !listed(config.legacyExcludedOperationAreas);
-  return listed(config.includedOperationAreas);
+  // Database behind on migrations: the older list still decides.
+  if (config.legacy?.excludedOperationAreas) return !listed(config.legacy.excludedOperationAreas);
+  if (config.legacy?.includedOperationAreas) return listed(config.legacy.includedOperationAreas);
+  return config.includedAreaSources.some(
+    (row) => row.operationArea.trim() && matchesListValue(row.operationArea, finding.operationArea) && row.sourceIds.includes(finding.sourceId)
+  );
 }
 
 /** Still outstanding in the period: a transferable status, with something not closed. */

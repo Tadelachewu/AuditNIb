@@ -33,6 +33,7 @@ export function RevolvingSettings({ canEdit }: { canEdit: boolean }) {
 
   const isOn = (area: string) => selected.some((s) => s.toLowerCase() === area.toLowerCase());
   const toggle = (area: string) => setSelected((cur) => (isOn(area) ? cur.filter((s) => s.toLowerCase() !== area.toLowerCase()) : [...cur, area]));
+  const allTicked = state.operationAreas.length > 0 && state.operationAreas.every(isOn);
 
   async function save() {
     setSaving(true);
@@ -52,7 +53,18 @@ export function RevolvingSettings({ canEdit }: { canEdit: boolean }) {
   return (
     <fieldset disabled={!canEdit} className="flex flex-col gap-4 p-4">
       <div>
-        <Label>Revolving operation areas</Label>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <Label>Revolving operation areas</Label>
+          {state.operationAreas.length > 0 && (
+            <button
+              type="button"
+              className="text-xs font-medium text-blue-700 hover:underline disabled:text-slate-400 disabled:no-underline"
+              onClick={() => setSelected(allTicked ? [] : state.operationAreas)}
+            >
+              {allTicked ? "Clear all" : "Tick all"}
+            </button>
+          )}
+        </div>
         <p className="mb-2 text-xs text-slate-500">
           An outstanding finding in one of these areas, in the current period, can be <strong>adjusted</strong> by its registrant&apos;s role: cases
           added and the amount increased or decreased, approved like a registration. The original registration never changes. Removing an

@@ -2,23 +2,35 @@
  * Automatic transfer at period end - a self-contained module
  * (src/lib/autoTransfer). When a reporting period has ended, every finding
  * still outstanding in it is carried into the next period, once - for the
- * operation areas ticked in its settings. See docs/auto-transfer.md.
+ * operation areas and sources ticked in its settings. See docs/auto-transfer.md.
  *
  * Client-safe: types and constants only.
  */
+
+/** One operation area and the sources (ids) of findings transferred automatically in it. */
+export interface AreaSources {
+  operationArea: string;
+  sourceIds: string[];
+}
 
 /** The module's own settings (table auto_transfer_config, one row). */
 export interface AutoTransferConfig {
   /** Master switch. */
   enabled: boolean;
-  /** Only findings with one of these operation areas are moved automatically (matched case- and space-insensitively); the rest stay. */
-  includedOperationAreas: string[];
   /**
-   * Set only while migration 20261012120000_auto_transfer_included_areas is
-   * not applied: the old list of areas left behind, still honoured as it was
-   * (everything else is transferred). Settings can't be saved until then.
+   * What is moved automatically: per operation area (matched case- and
+   * space-insensitively), the sources whose findings are transferred.
+   * Anything not ticked here stays.
    */
-  legacyExcludedOperationAreas?: string[];
+  includedAreaSources: AreaSources[];
+  /**
+   * Set only while the database is behind on the automatic-transfer
+   * migrations: the older list it still holds, honoured as it was. Settings
+   * can't be saved until `npx prisma migrate deploy` has run.
+   *  - excludedOperationAreas: these areas stay, everything else is transferred
+   *  - includedOperationAreas: these areas are transferred, whatever the source
+   */
+  legacy?: { excludedOperationAreas?: string[]; includedOperationAreas?: string[] };
   /** Run this many hours after the period's end (and its submission window's end). */
   delayHours: number;
   updatedAt: string | null;
@@ -27,7 +39,7 @@ export interface AutoTransferConfig {
 
 export const DEFAULT_AUTO_TRANSFER_CONFIG: AutoTransferConfig = {
   enabled: true,
-  includedOperationAreas: [],
+  includedAreaSources: [],
   delayHours: 0,
   updatedAt: null,
   updatedBy: null,

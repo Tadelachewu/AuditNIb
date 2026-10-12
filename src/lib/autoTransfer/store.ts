@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prismaClient";
 import type { Prisma } from "@/generated/prisma/client";
 import { logger } from "@/lib/logger";
-import { DEFAULT_AUTO_TRANSFER_CONFIG, type AutoTransferConfig, type AutoTransferRun, type AutoTransferRunStatus, type AutoTransferTrigger } from "./types";
+import { DEFAULT_AUTO_TRANSFER_CONFIG, type AreaSources, type AutoTransferConfig, type AutoTransferRun, type AutoTransferRunStatus, type AutoTransferTrigger } from "./types";
 
 /**
  * Storage of the automatic transfer - its own two tables, nothing else.
@@ -11,7 +11,7 @@ import { DEFAULT_AUTO_TRANSFER_CONFIG, type AutoTransferConfig, type AutoTransfe
 export interface AutoTransferStore {
   /** null = the tables don't exist yet (migration not applied): the feature stays idle. */
   getConfig(): Promise<AutoTransferConfig | null>;
-  saveConfig(config: Pick<AutoTransferConfig, "enabled" | "includedOperationAreas" | "delayHours">, updatedBy: string): Promise<AutoTransferConfig>;
+  saveConfig(config: Pick<AutoTransferConfig, "enabled" | "includedAreaSources" | "delayHours">, updatedBy: string): Promise<AutoTransferConfig>;
   listRuns(): Promise<AutoTransferRun[]>;
   /**
    * Records runs. `tx` = an open database transaction (an opaque handle from
@@ -30,10 +30,10 @@ function isMissingTable(err: unknown): boolean {
   return typeof err === "object" && err !== null && "code" in err && (err as { code?: string }).code === "P2021";
 }
 
-/** The settings row can't be saved: the included-areas column doesn't exist yet. */
+/** The settings row can't be saved: the database is behind on the automatic-transfer migrations. */
 export class AutoTransferNotMigratedError extends Error {
   constructor() {
-    super("Apply migration 20261012120000_auto_transfer_included_areas (npx prisma migrate deploy) before changing automatic transfer.");
+    super("Apply the latest automatic transfer migrations (npx prisma migrate deploy) before changing automatic transfer.");
     this.name = "AutoTransferNotMigratedError";
   }
 }
@@ -50,11 +50,16 @@ function warnMissingOnce() {
 
 /**
  * The settings row as JSON, whatever columns it has. Read and written with
- * plain SQL so the store works before and after the included-areas migration
- * (and doesn't depend on a regenerated Prisma client).
+ * plain SQL so the store works on a database that is behind on the
+ * automatic-transfer migrations (and doesn't depend on a regenerated Prisma
+ * client). The area list has had three shapes, newest first:
+ *   included_area_sources    [{ operationArea, sourceIds }]
+ *   included_operation_areas areas transferred, any source
+ *   excluded_operation_areas areas left behind
  */
 type ConfigRow = {
   enabled: boolean;
+  included_area_sources?: unknown;
   included_operation_areas?: string[];
   excluded_operation_areas?: string[];
   delay_hours: number;
@@ -62,17 +67,41 @@ type ConfigRow = {
   updated_by: string | null;
 };
 
+function toAreaSources(raw: unknown): AreaSources[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((r) => {
+    const row = r as { operationArea?: unknown; sourceIds?: unknown };
+    if (typeof row?.operationArea !== "string" || !Array.isArray(row.sourceIds)) return [];
+    return [{ operationArea: row.operationArea, sourceIds: row.sourceIds.filter((id): id is string => typeof id === "string") }];
+  });
+}
+
+/** Which older list a database behind on migrations still holds. */
+function legacyOf(r: Pick<ConfigRow, "included_area_sources" | "included_operation_areas" | "excluded_operation_areas">): AutoTransferConfig["legacy"] {
+  if (r.included_area_sources !== undefined) return undefined;
+  if (r.included_operation_areas !== undefined) return { includedOperationAreas: r.included_operation_areas };
+  return { excludedOperationAreas: r.excluded_operation_areas ?? [] };
+}
+
 function toConfig(r: ConfigRow): AutoTransferConfig {
-  const migrated = Array.isArray(r.included_operation_areas);
+  const legacy = legacyOf(r);
   return {
     enabled: r.enabled,
-    includedOperationAreas: r.included_operation_areas ?? [],
-    ...(migrated ? {} : { legacyExcludedOperationAreas: r.excluded_operation_areas ?? [] }),
+    includedAreaSources: toAreaSources(r.included_area_sources),
+    ...(legacy ? { legacy } : {}),
     delayHours: r.delay_hours,
     // Stored as UTC wall-clock, without a zone.
     updatedAt: new Date(/Z|[+-]\d\d(:?\d\d)?$/.test(r.updated_at) ? r.updated_at : `${r.updated_at}Z`).toISOString(),
     updatedBy: r.updated_by,
   };
+}
+
+/** The area-list columns the settings table has right now. */
+async function areaColumns(): Promise<Set<string>> {
+  const rows = await prisma.$queryRaw<{ column_name: string }[]>`
+    SELECT column_name::text AS column_name FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'auto_transfer_config'`;
+  return new Set(rows.map((r) => r.column_name));
 }
 
 let warnedLegacy = false;
@@ -88,22 +117,22 @@ export const prismaAutoTransferStore: AutoTransferStore = {
       const rows = await prisma.$queryRaw<{ row: ConfigRow }[]>`SELECT to_jsonb(c) AS row FROM auto_transfer_config c WHERE c.id = ${SINGLETON}`;
       if (rows[0]) {
         const config = toConfig(rows[0].row);
-        if (config.legacyExcludedOperationAreas && !warnedLegacy) {
+        if (config.legacy && !warnedLegacy) {
           warnedLegacy = true;
           logger.warn(
             { event: "auto_transfer.migration_pending" },
-            "Automatic transfer still uses the old 'excluded operation areas' list - apply prisma/migrations/20261012120000_auto_transfer_included_areas (npx prisma migrate deploy)."
+            "Automatic transfer still uses an older operation-area list - apply the pending migrations (npx prisma migrate deploy)."
           );
         }
         return config;
       }
-      // No settings saved yet. Before the migration that meant "transfer everything".
-      const cols = await prisma.$queryRaw<{ migrated: boolean }[]>`
-        SELECT EXISTS (
-          SELECT 1 FROM information_schema.columns
-          WHERE table_schema = 'public' AND table_name = 'auto_transfer_config' AND column_name = 'included_operation_areas'
-        ) AS migrated`;
-      return cols[0]?.migrated ? { ...DEFAULT_AUTO_TRANSFER_CONFIG } : { ...DEFAULT_AUTO_TRANSFER_CONFIG, legacyExcludedOperationAreas: [] };
+      // No settings saved yet. On the oldest layout that meant "transfer everything".
+      const cols = await areaColumns();
+      const legacy = legacyOf({
+        included_area_sources: cols.has("included_area_sources") ? [] : undefined,
+        included_operation_areas: cols.has("included_operation_areas") ? [] : undefined,
+      });
+      return { ...DEFAULT_AUTO_TRANSFER_CONFIG, ...(legacy ? { legacy } : {}) };
     } catch (err) {
       if (isMissingTable(err)) {
         warnMissingOnce();
@@ -114,19 +143,14 @@ export const prismaAutoTransferStore: AutoTransferStore = {
   },
 
   async saveConfig(config, updatedBy) {
-    const cols = await prisma.$queryRaw<{ migrated: boolean }[]>`
-      SELECT EXISTS (
-        SELECT 1 FROM information_schema.columns
-        WHERE table_schema = 'public' AND table_name = 'auto_transfer_config' AND column_name = 'included_operation_areas'
-      ) AS migrated`;
-    if (!cols[0]?.migrated) throw new AutoTransferNotMigratedError();
+    if (!(await areaColumns()).has("included_area_sources")) throw new AutoTransferNotMigratedError();
     // Stored times are UTC wall-clock: never bare now() (the DB session may be in another zone).
     const rows = await prisma.$queryRaw<{ row: ConfigRow }[]>`
-      INSERT INTO auto_transfer_config AS c (id, enabled, included_operation_areas, delay_hours, updated_at, updated_by)
-      VALUES (${SINGLETON}, ${config.enabled}, ${config.includedOperationAreas}::text[], ${config.delayHours}, (now() AT TIME ZONE 'UTC'), ${updatedBy})
+      INSERT INTO auto_transfer_config AS c (id, enabled, included_area_sources, delay_hours, updated_at, updated_by)
+      VALUES (${SINGLETON}, ${config.enabled}, ${JSON.stringify(config.includedAreaSources)}::jsonb, ${config.delayHours}, (now() AT TIME ZONE 'UTC'), ${updatedBy})
       ON CONFLICT (id) DO UPDATE SET
         enabled = EXCLUDED.enabled,
-        included_operation_areas = EXCLUDED.included_operation_areas,
+        included_area_sources = EXCLUDED.included_area_sources,
         delay_hours = EXCLUDED.delay_hours,
         updated_at = EXCLUDED.updated_at,
         updated_by = EXCLUDED.updated_by

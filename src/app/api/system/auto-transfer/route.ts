@@ -95,8 +95,9 @@ async function handleGET(request: Request) {
     ready: config.enabled,
     installed: true,
     enabled: config.enabled,
-    includedOperationAreas: config.includedOperationAreas,
-    migrationPending: Boolean(config.legacyExcludedOperationAreas),
+    // Areas with at least one source ticked (names only; the grid is in Settings).
+    includedOperationAreas: config.includedAreaSources.filter((r) => r.sourceIds.length > 0).map((r) => r.operationArea),
+    migrationPending: Boolean(config.legacy),
     delayHours: config.delayHours,
     dueNow,
     nextDue: upcoming ? { period: upcoming.code, at: new Date(sweepDueAt(upcoming, config)).toISOString() } : null,

@@ -78,7 +78,7 @@ Without a restart the endpoint answers **404** (secret not set).
 
 ### Step 3: Switch the feature on
 
-In the app: **Settings → Automatic Transfer** → tick *Transfer outstanding findings automatically…* → **Save automatic transfer**. Tick the operation areas to transfer (only ticked areas are moved; none ticked = nothing moves) and optionally set a delay.
+In the app: **Settings → Automatic Transfer** → tick *Transfer outstanding findings automatically…* → **Save automatic transfer**. Tick the operation areas and sources to transfer (only ticked boxes are moved; none ticked = nothing moves) and optionally set a delay.
 
 ### Step 4: Test one run by hand (normal PowerShell)
 
