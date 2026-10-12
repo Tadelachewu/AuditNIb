@@ -23,7 +23,7 @@ export const LIMITS = {
   longText: { max: 5000 },
   shortText: { max: 500 },
   reason: { min: 5, max: 500 },
-  listItem: { max: 100 },
+  listItem: { min: 2, max: 100 },
   email: { max: 254 },
   amount: { max: 1_000_000_000_000 },
   caseCount: { max: 10_000 },
@@ -257,8 +257,30 @@ export const zAmount = (label = "Amount") =>
     if (problem) ctx.addIssue({ code: "custom", message: problem });
   });
 export const zCaseCount = () => z.number().int("Number of cases must be a whole number").min(1, "Number of cases must be at least 1").max(LIMITS.caseCount.max, `Number of cases must be at most ${LIMITS.caseCount.max}`);
-/** An item in a settings list (risk levels, currencies, operation areas...). */
+/**
+ * An item in a Configurable List (Settings: currencies, risk levels,
+ * operation areas, priority levels, irregularity types): words only -
+ * letters (any script) separated by single spaces, at least 2 letters, at
+ * most 100 characters. No digits and no special characters, so the dropdowns
+ * built from these lists stay clean and comparable.
+ */
 export function listItemError(value: string | null | undefined, label: string): string | null {
+  const v = trimmed(value);
+  if (!v) return `${label} is required`;
+  if (v.length > LIMITS.listItem.max) return `${label} must be at most ${LIMITS.listItem.max} characters`;
+  if (/\p{N}/u.test(v)) return `${label} can't contain numbers`;
+  if (!/^[\p{L}\p{M} ]+$/u.test(v)) return `${label} can only contain letters and spaces (no special characters)`;
+  if (/ {2,}/.test(v)) return `${label} can't have two spaces in a row`;
+  if ((v.match(LETTERS) ?? []).length < LIMITS.listItem.min) return `${label} must be at least ${LIMITS.listItem.min} letters`;
+  return null;
+}
+/**
+ * A value that only has to be a sensible label: letters or numbers present,
+ * at most 100 characters. For lists that hold values taken from existing
+ * data (e.g. operation areas typed as "Other" on findings), not typed into
+ * a Configurable List.
+ */
+export function looseListItemError(value: string | null | undefined, label: string): string | null {
   const v = trimmed(value);
   if (!v) return `${label} is required`;
   if (v.length > LIMITS.listItem.max) return `${label} must be at most ${LIMITS.listItem.max} characters`;
@@ -266,11 +288,17 @@ export function listItemError(value: string | null | undefined, label: string): 
   return null;
 }
 export const zListItem = (label: string) => rule((v) => listItemError(v, label));
-/** A settings list: each item valid, and no item repeated (case-insensitive). */
-export const zUniqueList = (label: string) =>
-  z.array(zListItem(label)).superRefine((items, ctx) => {
+/**
+ * A list of values: each item valid (by `itemError` - the Configurable List
+ * rule unless another is given), and no item repeated (case-insensitive).
+ * A problem names the offending value, since the form sends the whole list.
+ */
+export const zUniqueList = (label: string, itemError: (value: string, label: string) => string | null = listItemError) =>
+  z.array(z.string().transform((v) => v.trim())).superRefine((items, ctx) => {
     const seen = new Set<string>();
     for (const item of items) {
+      const problem = itemError(item, label);
+      if (problem) ctx.addIssue({ code: "custom", message: item ? `${problem}: "${item}"` : problem });
       const key = item.toLowerCase();
       if (seen.has(key)) ctx.addIssue({ code: "custom", message: `${label} "${item}" is listed twice` });
       seen.add(key);

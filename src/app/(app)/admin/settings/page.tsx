@@ -146,7 +146,7 @@ export default function SettingsPage() {
       <div className="mt-5 grid grid-cols-1 items-start gap-4 xl:grid-cols-2">
       <CollapsibleCard disabled={!canEdit}
         title="Configurable Lists"
-        description="Each list drives a dropdown on the Finding registration form. Expand a section to add or remove a value."
+        description="Each list drives a dropdown on the Finding registration form. Expand a section to add or remove a value. A value is letters and spaces only (no numbers or special characters), at least 2 letters."
       >
         <div className="flex flex-col gap-2 p-4">
           <SettingsListEditor

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { appendAuditLog } from "@/lib/audit";
-import { zUniqueList } from "@/lib/inputRules";
+import { looseListItemError, zUniqueList } from "@/lib/inputRules";
 import { withApiHandler } from "@/lib/api/handler";
 import { prismaAutoTransferStore, sweepDueAt } from "@/lib/autoTransfer";
 
@@ -40,7 +40,8 @@ async function handleGET() {
 
 const updateSchema = z.object({
   enabled: z.boolean(),
-  excludedOperationAreas: zUniqueList("Operation area"),
+  // May include areas typed as "Other" on findings, so not the strict Configurable List rule.
+  excludedOperationAreas: zUniqueList("Operation area", looseListItemError),
   delayHours: z.number().int().min(0, "Delay must be 0 or more hours").max(720, "Delay must be at most 720 hours (30 days)"),
 });
 

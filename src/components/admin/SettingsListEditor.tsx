@@ -27,8 +27,9 @@ export function SettingsListEditor({
   const [open, setOpen] = useState(defaultOpen);
   const [newItem, setNewItem] = useState("");
 
-  // Same rule as the server (src/lib/inputRules.ts): letters or numbers,
-  // at most 100 characters, and not already in the list (case-insensitive).
+  // Same rule as the server (src/lib/inputRules.ts): letters and single
+  // spaces only (no numbers, no special characters), at least 2 letters, at
+  // most 100 characters, and not already in the list (case-insensitive).
   const newItemProblem = newItem.trim()
     ? (listItemError(newItem, "Value") ??
       (items.some((i) => i.toLowerCase() === newItem.trim().toLowerCase()) ? "Value is already in the list" : null))
@@ -93,7 +94,7 @@ export function SettingsListEditor({
               maxLength={LIMITS.listItem.max}
               aria-invalid={newItemProblem ? true : undefined}
               className={newItemProblem ? "border-red-400" : undefined}
-              placeholder="Add new..."
+              placeholder="Add new (letters only)..."
               onChange={(e) => setNewItem(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
