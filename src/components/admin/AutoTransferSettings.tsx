@@ -70,7 +70,9 @@ export function AutoTransferSettings({ canEdit }: { canEdit: boolean }) {
     });
   const rowFull = (area: string) => allIds.length > 0 && allIds.every((id) => idsOf(area).includes(id));
   const colFull = (id: string) => areas.length > 0 && areas.every((a) => idsOf(a).includes(id));
-  const toggleRow = (area: string) => setDraft((d) => ({ ...d, includedAreaSources: setArea(d.includedAreaSources, area, rowFull(area) ? [] : allIds) }));
+  // The area's own box: on while any of its sources is ticked. Ticking it takes every source; unticking it drops the area.
+  const rowOn = (area: string) => idsOf(area).length > 0;
+  const toggleRow = (area: string) => setDraft((d) => ({ ...d, includedAreaSources: setArea(d.includedAreaSources, area, rowOn(area) ? [] : allIds) }));
   const toggleColumn = (id: string) =>
     setDraft((d) => {
       const full = colFull(id);
@@ -136,8 +138,9 @@ export function AutoTransferSettings({ canEdit }: { canEdit: boolean }) {
         </div>
         <p className="mb-2 text-xs text-slate-500">
           A <strong>ticked</strong> box means findings of that source in that operation area are carried into the next period when theirs
-          ends. Everything unticked stays where it is; transfer it manually when needed. The box beside an area, or under a source, ticks
-          the whole row or column. A new operation area or source starts unticked.
+          ends. Everything unticked stays where it is; transfer it manually when needed. Ticking an operation area
+          ticks all its sources; untick the ones to leave out and the area stays ticked. The box under a source ticks its whole column. A
+          new operation area or source starts unticked.
         </p>
         {migrationPending ? (
           <p className="text-sm text-slate-500">
@@ -151,7 +154,7 @@ export function AutoTransferSettings({ canEdit }: { canEdit: boolean }) {
           <p className="text-sm text-slate-500">No active sources configured yet.</p>
         ) : (
           <div className="overflow-x-auto rounded-md border border-slate-200">
-            <table className="w-full text-sm text-slate-700">
+            <table className="no-row-hover w-full text-sm text-slate-700">
               <thead className="bg-slate-50 text-xs text-slate-600">
                 <tr>
                   <th scope="col" className="px-3 py-2 text-left font-medium">Operation area</th>
@@ -173,7 +176,7 @@ export function AutoTransferSettings({ canEdit }: { canEdit: boolean }) {
                   <tr key={area}>
                     <th scope="row" className="px-3 py-1.5 text-left font-normal">
                       <label className="flex items-center gap-2">
-                        <input type="checkbox" className={box} aria-label={`All sources for ${area}`} checked={rowFull(area)} onChange={() => toggleRow(area)} />
+                        <input type="checkbox" className={box} aria-label={`Transfer ${area}`} checked={rowOn(area)} onChange={() => toggleRow(area)} />
                         {area}
                       </label>
                     </th>

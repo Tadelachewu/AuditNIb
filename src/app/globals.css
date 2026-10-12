@@ -404,6 +404,10 @@ tbody tr:hover > td,
 .MuiTableBody-root .MuiTableRow-root:hover > td::after {
   background-color: transparent !important;
 }
+/* A grid of checkboxes is not a list of records: no row tint. */
+table.no-row-hover tbody tr:hover > td {
+  background-color: transparent !important;
+}
 
 /* Icon tiles: an icon on a small tinted tile, both from one colour (--ql) -
    the sidebar's page icons and the Admin Dashboard's Quick Links (each
