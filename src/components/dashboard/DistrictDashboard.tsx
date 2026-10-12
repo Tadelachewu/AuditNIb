@@ -1,3 +1,4 @@
+import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import Link from "next/link";
 import { HO_APPROVED_OR_LATER_STATUSES, type Database } from "@/types";
 import type { SessionData } from "@/lib/session";
@@ -264,12 +265,7 @@ export function DistrictDashboard({
 
   return (
     <div className="flex flex-col gap-5">
-      <div>
-        <h1 className="text-lg font-semibold text-slate-900">
-          {district.name} <span className="font-mono text-sm font-normal text-slate-500">({district.code})</span>
-        </h1>
-        <p className="mt-1 text-sm text-slate-600">{branches.length} branch(es)</p>
-      </div>
+      <DashboardHeader user={user} title="District Dashboard" scope={`${district.name} (${district.code}) · ${branches.length} branch(es)`} />
 
       <FilterBar
         periods={sortPeriods(db.reportingPeriods)}

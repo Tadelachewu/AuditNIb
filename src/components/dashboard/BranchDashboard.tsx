@@ -1,3 +1,4 @@
+import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import Link from "next/link";
 import { HO_APPROVED_OR_LATER_STATUSES, type Database } from "@/types";
 import type { SessionData } from "@/lib/session";
@@ -289,15 +290,16 @@ export function BranchDashboard({
 
   return (
     <div className="flex flex-col gap-5">
-      <div>
-        <h1 className="text-lg font-semibold text-slate-900">
-          {branch.name} <span className="font-mono text-sm font-normal text-slate-500">({branch.code})</span>
-        </h1>
-        <p className="mt-1 text-sm text-slate-600">
-          {district?.name ?? "Unknown district"} · Manager: {manager?.name ?? "Unassigned"}
-          {subManager && <> · Sub-Manager: {subManager.name}</>} · Controller: {controller?.name ?? "Unassigned"}
-        </p>
-      </div>
+      <DashboardHeader
+        user={user}
+        title="Branch Dashboard"
+        scope={
+          <>
+            {branch.name} ({branch.code}) · {district?.name ?? "Unknown district"} · Manager: {manager?.name ?? "Unassigned"}
+            {subManager && <> · Sub-Manager: {subManager.name}</>} · Controller: {controller?.name ?? "Unassigned"}
+          </>
+        }
+      />
 
       <FilterBar
         periods={sortPeriods(db.reportingPeriods)}

@@ -1,3 +1,4 @@
+import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import Link from "next/link";
 import { HO_APPROVED_OR_LATER_STATUSES, type Database } from "@/types";
 import type { SessionData } from "@/lib/session";
@@ -325,10 +326,7 @@ export function HODashboard({
 
   return (
     <div className="flex flex-col gap-5">
-      <div>
-        <h1 className="text-lg font-semibold text-slate-900">Head Office Dashboard</h1>
-        <p className="mt-1 text-sm text-slate-600">Bank-wide view across {db.districts.length} district(s)</p>
-      </div>
+      <DashboardHeader title="Head Office Dashboard" scope={`Bank-wide · ${db.districts.length} district(s)`} user={user} />
 
       <FilterBar
         periods={sortPeriods(db.reportingPeriods)}

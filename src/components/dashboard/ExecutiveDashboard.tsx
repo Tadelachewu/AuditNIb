@@ -1,3 +1,4 @@
+import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import { HO_APPROVED_OR_LATER_STATUSES, type Database } from "@/types";
 import type { SessionData } from "@/lib/session";
 import { computePerformance, computeEligibleCaseCounts, findingCaseTotals, findingCaseTotalsInPeriod, transferTotals, averageCaseAgeDays, isHoApproved } from "@/lib/findings";
@@ -205,10 +206,7 @@ export function ExecutiveDashboard({
 
   return (
     <div className="flex flex-col gap-5">
-      <div>
-        <h1 className="text-lg font-semibold text-slate-900">Executive Dashboard</h1>
-        <p className="mt-1 text-sm text-slate-600">Bank-wide summary, view-only</p>
-      </div>
+      <DashboardHeader title="Executive Dashboard" scope="Bank-wide · View-only summary" user={user} />
 
       <FilterBar
         periods={sortPeriods(db.reportingPeriods)}

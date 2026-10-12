@@ -1,3 +1,4 @@
+import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import Link from "next/link";
 import { findBranchManager, findBranchController } from "@/lib/org";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
@@ -55,8 +56,7 @@ export function AdminDashboard({ user, db }: { user: SessionData; db: Database }
 
   return (
     <div>
-      <h1 className="text-lg font-semibold text-slate-900">Admin Dashboard</h1>
-      <p className="mt-1 text-sm text-slate-600">Bank-wide configuration and user administration.</p>
+      <DashboardHeader title="Admin Dashboard" scope="Bank-wide · Configuration and user administration" user={user} />
 
       <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <StatCard icon={ICON.activeUsers} label="Active Users" value={activeUsers} hint={`${db.users.length} total`} />
