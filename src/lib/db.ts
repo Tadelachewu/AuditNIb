@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prismaClient";
+import { packCaseDetail, unpackCaseDetail } from "@/lib/adjustments/storage";
 import { Prisma } from "@/generated/prisma/client";
 import { ALL_PERMISSION_KEYS } from "@/lib/permissions/registry";
 import { prepareQueuedEmails } from "@/lib/emailQueue/service";
@@ -370,7 +371,7 @@ function adjustmentFromRow(r: Prisma.FindingAdjustmentGetPayload<object>): Findi
     addedCases: r.addedCases,
     amountChange: r.amountChange,
     newCaseAmounts: r.newCaseAmounts,
-    caseAmountChanges: (r.caseAmountChanges ?? []) as unknown as FindingAdjustment["caseAmountChanges"],
+    ...unpackCaseDetail(r.caseAmountChanges, r.newCaseAmounts.length),
     reason: r.reason,
     requestedBy: r.requestedBy,
     requestedByName: r.requestedByName,
@@ -956,7 +957,7 @@ function adjustmentToData(r: FindingAdjustment) {
     addedCases: r.addedCases,
     amountChange: r.amountChange,
     newCaseAmounts: r.newCaseAmounts,
-    caseAmountChanges: r.caseAmountChanges as unknown as object,
+    caseAmountChanges: packCaseDetail(r),
     reason: r.reason,
     requestedBy: r.requestedBy,
     requestedByName: r.requestedByName,

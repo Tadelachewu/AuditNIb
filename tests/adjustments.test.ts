@@ -7,6 +7,7 @@ import { eligibilityProblem, isRevolvingArea, resolveChange, type AdjustmentInpu
 import type { AdjustmentConfig, FindingAdjustment } from "@/lib/adjustments/types";
 import { findingsResidentInPeriod, originalPeriodShare, queueStatusesForSession, reportedInPeriod } from "@/lib/findings";
 import { adjustmentDashboardTotals } from "@/lib/adjustments/dashboard";
+import { packCaseDetail, unpackCaseDetail } from "@/lib/adjustments/storage";
 import type { Database, Finding, FindingCase } from "@/types";
 
 // Revolving findings - docs/revolving-findings.md §9 (automated cases).
@@ -374,5 +375,64 @@ describe("dashboard: awaiting you", () => {
     reviewAdjustment(db, ho, "f1", a.id, "RETURN", "Attach the account list");
     expect(awaiting(branchCtl)).toEqual({ review: 0, returned: 1, total: 1 });
     expect(awaiting(ho).total).toBe(0);
+  });
+});
+
+describe("added cases: a name / description and an amount, as on the Register form", () => {
+  const cases = () =>
+    [
+      { id: "c1", findingId: "f1", seq: 1, amount: 100, description: "Transfer of 12 Mar", status: "OUTSTANDING", createdAt: "" },
+      { id: "c2", findingId: "f1", seq: 2, amount: 200, description: "Transfer of 14 Mar", status: "OUTSTANDING", createdAt: "" },
+    ] as FindingCase[];
+  const itemized = () => makeDb(finding({ caseCount: 2, amount: 300, registeredCaseCount: 2 }), cases());
+  const approve = (db: Database, i: AdjustmentInput) => {
+    const adj = createAdjustment(db, config, branchCtl, "f1", i, { submit: true });
+    reviewAdjustment(db, district, "f1", adj.id, "APPROVE");
+    reviewAdjustment(db, ho, "f1", adj.id, "APPROVE");
+    return adj;
+  };
+
+  it("each added case gets the name typed for it; a blank one gets the standard text", () => {
+    const db = itemized();
+    const adj = approve(db, { addedCases: 2, newCaseAmounts: [70, 80], newCaseDescriptions: ["  Transfer of 20 Mar  ", ""], reason: "Two more unsigned transfers" });
+    expect(adj.newCaseDescriptions).toEqual(["Transfer of 20 Mar", ""]);
+    expect(db.findingCases.map((c) => [c.seq, c.amount, c.description])).toEqual([
+      [1, 100, "Transfer of 12 Mar"],
+      [2, 200, "Transfer of 14 Mar"],
+      [3, 70, "Transfer of 20 Mar"],
+      [4, 80, "Added by adjustment"],
+    ]);
+  });
+
+  it("names are optional - amounts alone still work", () => {
+    const db = itemized();
+    approve(db, { addedCases: 1, newCaseAmounts: [70], reason: "One more unsigned transfer" });
+    expect(db.findingCases[2]).toMatchObject({ seq: 3, amount: 70, description: "Added by adjustment" });
+  });
+
+  it("refuses names that don't line up with the added cases, or that are too long", () => {
+    const f = finding({ caseCount: 2, amount: 300 });
+    const db = makeDb(f, cases());
+    const base = { addedCases: 2, newCaseAmounts: [70, 80], reason: "Two more unsigned transfers" };
+    expect(resolveChange(db, f, { ...base, newCaseDescriptions: ["only one"] })).toMatchObject({ ok: false, problem: expect.stringMatching(/one name \/ description per added case/) });
+    expect(resolveChange(db, f, { ...base, newCaseDescriptions: ["x".repeat(201), ""] })).toMatchObject({ ok: false, problem: expect.stringMatching(/at most 200 characters/) });
+    expect(resolveChange(db, f, { ...base, newCaseDescriptions: ["ok", "also ok"] })).toMatchObject({ ok: true, change: { newCaseDescriptions: ["ok", "also ok"] } });
+  });
+
+  it("the names survive an edit and a resubmit", () => {
+    const db = itemized();
+    const adj = createAdjustment(db, config, branchCtl, "f1", { addedCases: 1, newCaseAmounts: [70], newCaseDescriptions: ["First name"], reason: "One more unsigned transfer" }, { submit: true });
+    reviewAdjustment(db, district, "f1", adj.id, "RETURN", "Name the case properly");
+    editAdjustment(db, config, branchCtl, "f1", adj.id, { addedCases: 1, newCaseAmounts: [70], newCaseDescriptions: ["Transfer of 20 Mar"], reason: "One more unsigned transfer" }, { submit: true });
+    expect(adj).toMatchObject({ status: "DISTRICT_REVIEW", newCaseDescriptions: ["Transfer of 20 Mar"] });
+  });
+
+  it("is stored with the case changes in one column, and older rows are still read", () => {
+    const changes = [{ caseId: "c2", seq: 2, from: 200, to: 230 }];
+    const packed = packCaseDetail({ caseAmountChanges: changes, newCaseDescriptions: ["A", ""] });
+    expect(unpackCaseDetail(JSON.parse(JSON.stringify(packed)), 2)).toEqual({ caseAmountChanges: changes, newCaseDescriptions: ["A", ""] });
+    // A row saved before added cases could be named: just the array of changes.
+    expect(unpackCaseDetail(changes, 2)).toEqual({ caseAmountChanges: changes, newCaseDescriptions: ["", ""] });
+    expect(unpackCaseDetail(null, 0)).toEqual({ caseAmountChanges: [], newCaseDescriptions: [] });
   });
 });

@@ -22,8 +22,8 @@ async function handlePATCH(request: Request, { params }: { params: Promise<{ id:
   const adjustment = await updateDb((db) => {
     if (body.action === "withdraw") return withdrawAdjustment(db, auth.session, id, adjId, body.reason);
     if (body.action === "submit") return submitAdjustment(db, config, auth.session, id, adjId);
-    const { submit, addedCases, amountChange, newCaseAmounts, caseAmountChanges, reason } = body;
-    return editAdjustment(db, config, auth.session, id, adjId, { addedCases, amountChange, newCaseAmounts, caseAmountChanges, reason }, { submit });
+    const { submit, addedCases, amountChange, newCaseAmounts, newCaseDescriptions, caseAmountChanges, reason } = body;
+    return editAdjustment(db, config, auth.session, id, adjId, { addedCases, amountChange, newCaseAmounts, newCaseDescriptions, caseAmountChanges, reason }, { submit });
   });
   return NextResponse.json({ adjustment });
 }

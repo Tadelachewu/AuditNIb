@@ -963,7 +963,7 @@ export function NewFindingForm({
                 <div className="hidden items-center gap-2 text-xs font-medium text-slate-500 sm:flex">
                   <span className="w-14 shrink-0" />
                   <span className="flex-1">Name / description</span>
-                  <span className="w-40 shrink-0">Amount ({form.currency || "currency"})</span>
+                  <span className="w-40 shrink-0">Amount ({form.currency || "currency"}, 0 or more)</span>
                 </div>
                 {caseAmounts.map((value, i) => (
                   <div key={i} className="flex flex-wrap items-center gap-2 sm:flex-nowrap">
@@ -973,7 +973,7 @@ export function NewFindingForm({
                         type="text"
                         maxLength={200}
                         aria-label={`Case ${i + 1} name or description`}
-                        placeholder="e.g. Fund transfer of 12 Mar - no customer signature"
+                        placeholder="Name / description, e.g. Fund transfer of 12 Mar - no customer signature"
                         value={caseDescriptions[i] ?? ""}
                         onChange={(e) =>
                           setCaseDescriptions((prev) => caseAmounts.map((_, idx) => (idx === i ? e.target.value : (prev[idx] ?? ""))))
@@ -986,7 +986,7 @@ export function NewFindingForm({
                         min="0"
                         step="0.01"
                         aria-label={`Case ${i + 1} amount`}
-                        placeholder="0.00"
+                        placeholder="Amount 0.00"
                         value={value}
                         onChange={(e) =>
                           setCaseAmounts((prev) => prev.map((v, idx) => (idx === i ? e.target.value : v)))

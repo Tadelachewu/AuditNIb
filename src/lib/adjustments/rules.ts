@@ -6,6 +6,7 @@ import { hasPermission, permissionKey } from "@/lib/permissions/registry";
 import type { SessionData } from "@/lib/session";
 import type { Database, Finding, FindingCase } from "@/types";
 import {
+  CASE_DESCRIPTION_MAX,
   OPEN_ADJUSTMENT_STATUSES,
   type AdjustmentConfig,
   type AdjustmentReviewStep,
@@ -90,6 +91,8 @@ export interface AdjustmentInput {
   amountChange?: number;
   /** Itemized findings: amounts of the added cases (one per added case). */
   newCaseAmounts?: number[];
+  /** Itemized findings: a name / description for each added case, same order (each optional). */
+  newCaseDescriptions?: string[];
   /** Itemized findings: new amounts for existing outstanding cases. */
   caseAmountChanges?: { caseId: string; to: number }[];
   reason: string;
@@ -99,6 +102,7 @@ export interface ResolvedChange {
   addedCases: number;
   amountChange: number;
   newCaseAmounts: number[];
+  newCaseDescriptions: string[];
   caseAmountChanges: CaseAmountChange[];
   /** The finding's figures after it is applied. */
   newCaseCount: number;
@@ -119,6 +123,7 @@ export function resolveChange(db: Database, f: Finding, input: AdjustmentInput):
   const itemized = rows.length > 0;
   let amountChange: number;
   let newCaseAmounts: number[] = [];
+  let newCaseDescriptions: string[] = [];
   let caseAmountChanges: CaseAmountChange[] = [];
 
   if (itemized) {
@@ -126,6 +131,10 @@ export function resolveChange(db: Database, f: Finding, input: AdjustmentInput):
     if (newCaseAmounts.length !== input.addedCases) return fail("Enter an amount for each added case");
     // 0 is allowed (as at registration); only negatives are refused.
     if (newCaseAmounts.some((a) => !Number.isFinite(a) || a < 0)) return fail("An added case's amount can't be negative");
+    // A name / description per added case, as on the Register Finding form: optional, one per case.
+    if (input.newCaseDescriptions && input.newCaseDescriptions.length !== input.addedCases) return fail("Give one name / description per added case");
+    newCaseDescriptions = newCaseAmounts.map((_, i) => (input.newCaseDescriptions?.[i] ?? "").trim());
+    if (newCaseDescriptions.some((d) => d.length > CASE_DESCRIPTION_MAX)) return fail(`A case name / description must be at most ${CASE_DESCRIPTION_MAX} characters`);
     const byId = new Map(rows.map((c) => [c.id, c]));
     const seen = new Set<string>();
     for (const ch of input.caseAmountChanges ?? []) {
@@ -163,7 +172,7 @@ export function resolveChange(db: Database, f: Finding, input: AdjustmentInput):
   // rectified by picking cases, so an outstanding case may carry 0.
   if (!itemized && openCases > 0 && !(openAmount > 0)) return fail("While cases are outstanding, the outstanding amount must stay above zero");
   if (openCases <= 0 && openAmount > 0) return fail("Every case is already rectified - add a case to carry the extra amount");
-  return { ok: true, change: { addedCases: input.addedCases, amountChange, newCaseAmounts, caseAmountChanges, newCaseCount, newAmount } };
+  return { ok: true, change: { addedCases: input.addedCases, amountChange, newCaseAmounts, newCaseDescriptions, caseAmountChanges, newCaseCount, newAmount } };
 }
 
 // ---------------------------------------------------------------------------

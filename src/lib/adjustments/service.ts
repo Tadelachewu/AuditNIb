@@ -22,7 +22,7 @@ import {
   type AdjustmentInput,
   type ResolvedChange,
 } from "./rules";
-import type { AdjustmentConfig, AdjustmentDecision, AdjustmentDecisionKind, AdjustmentStatus, FindingAdjustment } from "./types";
+import { DEFAULT_ADDED_CASE_NAME, type AdjustmentConfig, type AdjustmentDecision, type AdjustmentDecisionKind, type AdjustmentStatus, type FindingAdjustment } from "./types";
 
 /**
  * Workflow of revolving-finding adjustments (docs/revolving-findings.md §2-§3).
@@ -76,6 +76,7 @@ function setChange(adj: FindingAdjustment, change: ResolvedChange, reason: strin
   adj.addedCases = change.addedCases;
   adj.amountChange = change.amountChange;
   adj.newCaseAmounts = change.newCaseAmounts;
+  adj.newCaseDescriptions = change.newCaseDescriptions;
   adj.caseAmountChanges = change.caseAmountChanges;
   adj.reason = reason.trim();
 }
@@ -86,6 +87,7 @@ function inputOf(adj: FindingAdjustment): AdjustmentInput {
     addedCases: adj.addedCases,
     amountChange: adj.amountChange,
     newCaseAmounts: adj.newCaseAmounts,
+    newCaseDescriptions: adj.newCaseDescriptions?.length === adj.newCaseAmounts.length ? adj.newCaseDescriptions : undefined,
     caseAmountChanges: adj.caseAmountChanges.map((c) => ({ caseId: c.caseId, to: c.to })),
     reason: adj.reason,
   };
@@ -171,6 +173,7 @@ export function createAdjustment(
     addedCases: 0,
     amountChange: 0,
     newCaseAmounts: [],
+    newCaseDescriptions: [],
     caseAmountChanges: [],
     reason: "",
     requestedBy: actor.userId,
@@ -348,12 +351,13 @@ function applyAdjustment(db: Database, f: Finding, adj: FindingAdjustment, actor
       if (row) row.amount = ch.to;
     }
     let seq = Math.max(...rows.map((c) => c.seq));
-    const added: FindingCase[] = adj.newCaseAmounts.map((amount) => ({
+    const added: FindingCase[] = adj.newCaseAmounts.map((amount, i) => ({
       id: uuid(),
       findingId: f.id,
       seq: ++seq,
       amount,
-      description: "Added by adjustment",
+      // The name given in the adjustment, as at registration; a fixed text when none was.
+      description: adj.newCaseDescriptions?.[i]?.trim() || DEFAULT_ADDED_CASE_NAME,
       status: "OUTSTANDING",
       createdAt: now,
     }));

@@ -26,7 +26,7 @@ export interface AdjustmentsView {
   /** Why submitting isn't possible right now (window closed / locked) - drafts still are. */
   submitProblem: string | null;
   itemized: boolean;
-  cases: { id: string; seq: number; amount: number; status: "OUTSTANDING" | "RECTIFIED" }[];
+  cases: { id: string; seq: number; amount: number; status: "OUTSTANDING" | "RECTIFIED"; description: string | null }[];
 }
 
 function actionsFor(db: Database, session: SessionData, f: Finding, adj: FindingAdjustment): AdjustmentActions {
@@ -55,6 +55,6 @@ export function adjustmentsView(db: Database, config: AdjustmentConfig, session:
     startProblem,
     submitProblem: current ? submitProblem(db, current.id) : "There is no current reporting period",
     itemized: rows.length > 0,
-    cases: rows.map((c) => ({ id: c.id, seq: c.seq, amount: c.amount, status: c.status })),
+    cases: rows.map((c) => ({ id: c.id, seq: c.seq, amount: c.amount, status: c.status, description: c.description?.trim() || null })),
   };
 }

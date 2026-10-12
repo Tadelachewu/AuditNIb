@@ -232,7 +232,8 @@ export function AdjustmentsCard({ finding }: { finding: FindingFigures }) {
                 <p className="mt-2 whitespace-pre-wrap text-slate-700">{a.reason}</p>
                 {(a.newCaseAmounts.length > 0 || a.caseAmountChanges.length > 0) && (
                   <p className="mt-1 text-xs text-slate-500">
-                    {a.newCaseAmounts.length > 0 && `New case amounts: ${a.newCaseAmounts.map(formatCurrency).join(", ")}. `}
+                    {a.newCaseAmounts.length > 0 &&
+                      `New cases: ${a.newCaseAmounts.map((amount, i) => `${a.newCaseDescriptions?.[i] || "(no name)"} - ${formatCurrency(amount)}`).join("; ")}. `}
                     {a.caseAmountChanges.length > 0 &&
                       `Changed: ${a.caseAmountChanges.map((c) => `case ${c.seq} ${c.to > c.from ? "+" : "-"}${formatCurrency(Math.abs(c.to - c.from))} (${formatCurrency(c.from)} → ${formatCurrency(c.to)})`).join(", ")}.`}
                   </p>
@@ -292,6 +293,8 @@ function AdjustDialog({
   const [addedCases, setAddedCases] = useState(existing ? String(existing.addedCases) : "");
   const [amountChange, setAmountChange] = useState(existing && !view.itemized ? String(existing.amountChange) : "");
   const [newAmounts, setNewAmounts] = useState<string[]>(existing ? existing.newCaseAmounts.map(String) : []);
+  // A name / description for each added case, alongside its amount - as on the Register Finding form.
+  const [newNames, setNewNames] = useState<string[]>(existing ? existing.newCaseAmounts.map((_, i) => existing.newCaseDescriptions?.[i] ?? "") : []);
   // Itemized: the +/- change of each outstanding case (never a typed-over amount).
   const [caseChanges, setCaseChanges] = useState<Record<string, string>>(() => {
     const initial: Record<string, string> = {};
@@ -310,7 +313,9 @@ function AdjustDialog({
   // Keep one amount field per added case (itemized findings).
   useEffect(() => {
     if (!view.itemized) return;
-    setNewAmounts((prev) => (prev.length === added ? prev : Array.from({ length: added }, (_, i) => prev[i] ?? "")));
+    const resize = (prev: string[]) => (prev.length === added ? prev : Array.from({ length: added }, (_, i) => prev[i] ?? ""));
+    setNewAmounts(resize);
+    setNewNames(resize);
   }, [added, view.itemized]);
 
   const change = useMemo(() => {
@@ -328,6 +333,7 @@ function AdjustDialog({
     const payload: Record<string, unknown> = { addedCases: added, reason: reason.trim(), submit };
     if (view.itemized) {
       payload.newCaseAmounts = newAmounts.map((v) => Number(v));
+      payload.newCaseDescriptions = newAmounts.map((_, i) => (newNames[i] ?? "").trim());
       // Sent as the resulting amount; the server records from -> to and re-checks it.
       payload.caseAmountChanges = outstandingRows
         .filter((c) => caseDelta(c.id) !== 0)
@@ -414,20 +420,39 @@ function AdjustDialog({
 
         {view.itemized && added > 0 && (
           <fieldset className="sm:col-span-2">
-            <legend className="mb-1 text-sm font-medium text-slate-700">Amount of each added case ({finding.currency}, 0 or more)</legend>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <legend className="mb-1 text-sm font-medium text-slate-700">Added cases - a name / description and an amount for each</legend>
+            <div className="flex flex-col gap-2">
+              <div className="hidden items-center gap-2 text-xs font-medium text-slate-500 sm:flex">
+                <span className="w-16 shrink-0" />
+                <span className="flex-1">Name / description</span>
+                <span className="w-40 shrink-0">Amount ({finding.currency}, 0 or more)</span>
+              </div>
               {newAmounts.map((v, i) => (
-                <div key={i}>
-                  <Label htmlFor={`adj-new-${i}`}>New case {view.cases.length + i + 1}</Label>
-                  <Input
-                    id={`adj-new-${i}`}
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    placeholder="0.00"
-                    value={v}
-                    onChange={(e) => setNewAmounts((prev) => prev.map((x, j) => (j === i ? e.target.value : x)))}
-                  />
+                <div key={i} className="flex flex-wrap items-center gap-2 sm:flex-nowrap">
+                  <span className="w-16 shrink-0 text-xs text-slate-500">Case {view.cases.length + i + 1}</span>
+                  <div className="min-w-0 flex-1 basis-full sm:basis-0">
+                    <Input
+                      id={`adj-new-name-${i}`}
+                      type="text"
+                      maxLength={200}
+                      aria-label={`Case ${view.cases.length + i + 1} name or description`}
+                      placeholder="Name / description, e.g. Fund transfer of 12 Mar - no customer signature"
+                      value={newNames[i] ?? ""}
+                      onChange={(e) => setNewNames((prev) => newAmounts.map((_, j) => (j === i ? e.target.value : (prev[j] ?? ""))))}
+                    />
+                  </div>
+                  <div className="w-40 shrink-0">
+                    <Input
+                      id={`adj-new-${i}`}
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      aria-label={`Case ${view.cases.length + i + 1} amount`}
+                      placeholder="Amount 0.00"
+                      value={v}
+                      onChange={(e) => setNewAmounts((prev) => prev.map((x, j) => (j === i ? e.target.value : x)))}
+                    />
+                  </div>
                 </div>
               ))}
             </div>
@@ -446,7 +471,8 @@ function AdjustDialog({
                 return (
                   <div key={c.id}>
                     <Label htmlFor={`adj-case-${c.id}`}>
-                      Case {c.seq} (now {formatCurrency(c.amount)})
+                      Case {c.seq}
+                      {c.description ? ` - ${c.description}` : ""} (now {formatCurrency(c.amount)})
                     </Label>
                     <Input
                       id={`adj-case-${c.id}`}

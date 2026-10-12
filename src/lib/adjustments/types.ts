@@ -41,6 +41,11 @@ export interface CaseAmountChange {
   to: number;
 }
 
+/** Longest name / description of one case - the same limit as on the Register Finding form. */
+export const CASE_DESCRIPTION_MAX = 200;
+/** What an added case is called when no name was given. */
+export const DEFAULT_ADDED_CASE_NAME = "Added by adjustment";
+
 /** Figures before / after an approved adjustment was applied. */
 export interface AdjustmentApplied {
   before: { caseCount: number; amount: number; status: string };
@@ -60,6 +65,8 @@ export interface FindingAdjustment {
   amountChange: number;
   /** Itemized findings only. */
   newCaseAmounts: number[];
+  /** Name / description of each added case, same order as newCaseAmounts ("" = none given). Itemized findings only. */
+  newCaseDescriptions: string[];
   caseAmountChanges: CaseAmountChange[];
   reason: string;
   requestedBy: string;

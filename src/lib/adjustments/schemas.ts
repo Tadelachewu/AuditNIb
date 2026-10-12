@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { CASE_DESCRIPTION_MAX } from "./types";
 
 /** Request bodies of the adjustment API (src/app/api/findings/[id]/adjustments, src/app/api/admin/adjustments). */
 
@@ -9,6 +10,7 @@ export const adjustmentInputSchema = z.object({
   addedCases: z.number().int("Cases to add must be a whole number").min(0, "Cases can only be added (0 or more)").max(MAX_CASES, `At most ${MAX_CASES} cases`),
   amountChange: z.number().finite().min(-MAX_AMOUNT).max(MAX_AMOUNT).optional(),
   newCaseAmounts: z.array(z.number().finite().min(0, "An added case's amount can't be negative").max(MAX_AMOUNT)).max(MAX_CASES).optional(),
+  newCaseDescriptions: z.array(z.string().trim().max(CASE_DESCRIPTION_MAX, `A case name / description must be at most ${CASE_DESCRIPTION_MAX} characters`)).max(MAX_CASES).optional(),
   caseAmountChanges: z
     .array(z.object({ caseId: z.string().min(1), to: z.number().finite().positive("A decrease can't take a case to 0 or below").max(MAX_AMOUNT) }))
     .max(MAX_CASES)

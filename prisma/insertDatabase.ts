@@ -330,7 +330,8 @@ export async function insertDatabaseIntoPostgres(prisma: PrismaClient, db: Datab
         addedCases: a.addedCases,
         amountChange: a.amountChange,
         newCaseAmounts: a.newCaseAmounts,
-        caseAmountChanges: a.caseAmountChanges as unknown as object,
+        // Case detail in one JSON column - same shape as packCaseDetail() in src/lib/db.ts.
+        caseAmountChanges: { changes: a.caseAmountChanges ?? [], newCaseDescriptions: a.newCaseDescriptions ?? [] } as unknown as object,
         reason: a.reason,
         requestedBy: a.requestedBy,
         requestedByName: a.requestedByName,
