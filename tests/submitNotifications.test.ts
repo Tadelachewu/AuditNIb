@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
-import { notifyFindingSubmitted } from "@/lib/notifications";
+import { isHighRisk, notifyFindingSubmitted, notifyHighRiskApproved } from "@/lib/notifications";
 import type { Database, Finding } from "@/types";
 
 // Whoever must act next is told when a finding is submitted - from every
@@ -70,6 +70,76 @@ describe("every path that submits sends it", () => {
       const notifies = source.split("notifyFindingSubmitted(current").length - 1;
       expect(submits).toBeGreaterThan(0);
       expect(notifies).toBe(submits);
+    });
+  }
+});
+
+describe("High / Critical risk finding approved -> Executive Dashboard users", () => {
+  function execDb(): Database {
+    return {
+      notifications: [],
+      branches: [{ id: "b1", name: "Bole Branch" }],
+      users: [
+        { id: "exec1", status: "ACTIVE", role: "EXECUTIVE_READONLY" },
+        { id: "exec2", status: "ACTIVE", role: "EXECUTIVE_READONLY" },
+        { id: "exec-off", status: "INACTIVE", role: "EXECUTIVE_READONLY" },
+        { id: "ho", status: "ACTIVE", role: "HO_CONTROLLER" },
+        { id: "bm", status: "ACTIVE", role: "BRANCH_MANAGER", branchId: "b1" },
+        { id: "admin", status: "ACTIVE", role: "ADMIN" },
+      ],
+      roles: [
+        { code: "EXECUTIVE_READONLY", status: "ACTIVE", orgScope: "BANK", permissions: ["executive-dashboard.view", "findings.view"] },
+        { code: "HO_CONTROLLER", status: "ACTIVE", orgScope: "BANK", permissions: ["ho-dashboard.view", "findings.ho-review"] },
+        { code: "BRANCH_MANAGER", status: "ACTIVE", orgScope: "BRANCH", permissions: ["branch-dashboard.view", "findings.rectify"] },
+        { code: "ADMIN", status: "ACTIVE", orgScope: "BANK", permissions: ["executive-dashboard.view"] },
+      ],
+      settings: { riskLevels: ["Low", "Medium", "High", "Critical"], hoApproval: { required: false, approverUserIds: [] }, notification: { provider: "NONE", fromAddress: "" } },
+    } as unknown as Database;
+  }
+  const risky = (riskLevel: string) => ({ id: "f1", reference: "F-1", title: "Vault shortage", riskLevel, branchId: "b1", currency: "ETB", amount: 250000, caseCount: 2 });
+  const ho = { userId: "ho", name: "Selam" };
+
+  it("the top two risk levels count as high-risk, whatever their letter case", () => {
+    const db = execDb();
+    expect(["High", "critical", " HIGH "].map((r) => isHighRisk(db, r))).toEqual([true, true, true]);
+    expect(["Low", "Medium", "", undefined].map((r) => isHighRisk(db, r))).toEqual([false, false, false, false]);
+  });
+
+  it("notifies every active Executive Dashboard user - not the HO controller, the branch or administrators", () => {
+    const db = execDb();
+    notifyHighRiskApproved(db, risky("Critical"), ho);
+    expect(sentTo(db)).toEqual(["exec1", "exec2"]);
+    expect(db.notifications[0]).toMatchObject({ type: "HIGH_RISK_APPROVED", title: "Critical-risk finding approved: F-1", entityType: "Finding", entityId: "f1" });
+    expect(db.notifications[0].message).toBe("Vault shortage - Bole Branch. 2 cases, ETB 250,000. Final approval by Selam; it is now with the branch for rectification.");
+  });
+
+  it("says nothing for Low / Medium risk", () => {
+    for (const level of ["Low", "Medium"]) {
+      const db = execDb();
+      notifyHighRiskApproved(db, risky(level), ho);
+      expect(db.notifications).toHaveLength(0);
+    }
+  });
+
+  it("an executive who made the final approval themselves isn't notified of it", () => {
+    const db = execDb();
+    notifyHighRiskApproved(db, risky("High"), { userId: "exec1", name: "Executive Office" });
+    expect(sentTo(db)).toEqual(["exec2"]);
+  });
+
+  it("follows the Risk levels list in Settings", () => {
+    const db = execDb();
+    db.settings.riskLevels = ["Minor", "Moderate", "Major", "Severe"];
+    notifyHighRiskApproved(db, risky("Major"), ho);
+    notifyHighRiskApproved(db, risky("High"), ho);
+    expect(db.notifications.map((n) => n.title)).toEqual(["Major-risk finding approved: F-1", "Major-risk finding approved: F-1"]);
+  });
+
+  // Every final approval sends it: HO's, the bank-wide approver's, and a
+  // bank-registered finding that goes straight to the branch on submit.
+  for (const route of ["src/app/api/findings/[id]/ho-review/route.ts", "src/app/api/findings/[id]/bank-approval/route.ts", "src/app/api/findings/[id]/submit/route.ts", "src/app/api/findings/route.ts"]) {
+    it(`is called from ${route}`, () => {
+      expect(readFileSync(route, "utf8")).toContain("notifyHighRiskApproved(current, ");
     });
   }
 });

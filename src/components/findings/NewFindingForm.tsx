@@ -360,15 +360,20 @@ export function NewFindingForm({
   // all, so offering this toggle there would be misleading).
   const [itemizeCases, setItemizeCases] = useState(false);
   const [caseAmounts, setCaseAmounts] = useState<string[]>([]);
+  // A name / description for each itemized case, alongside its amount
+  // (e.g. "Transfer of 12 Mar, no customer signature"). Optional per case.
+  const [caseDescriptions, setCaseDescriptions] = useState<string[]>([]);
 
   function setCaseCount(value: string) {
     setForm((f) => ({ ...f, caseCount: value }));
     const n = Math.max(0, Math.min(500, Number(value) || 0));
-    setCaseAmounts((prev) => {
+    const resize = (prev: string[]) => {
       const next = prev.slice(0, n);
       while (next.length < n) next.push("");
       return next;
-    });
+    };
+    setCaseAmounts(resize);
+    setCaseDescriptions(resize);
   }
 
   const caseAmountsSum = caseAmounts.reduce((sum, a) => sum + (Number(a) || 0), 0);
@@ -400,10 +405,10 @@ export function NewFindingForm({
   useEffect(() => {
     if (isEditing) return;
     let cancelled = false;
-    apiGet<{ draft: (typeof form & { itemizeCases?: boolean; caseAmounts?: string[] }) | null }>("/api/findings/draft-autosave")
+    apiGet<{ draft: (typeof form & { itemizeCases?: boolean; caseAmounts?: string[]; caseDescriptions?: string[] }) | null }>("/api/findings/draft-autosave")
       .then((res) => {
         if (cancelled || !res.draft) return;
-        const { itemizeCases: draftItemize, caseAmounts: draftCaseAmounts, ...draftForm } = res.draft;
+        const { itemizeCases: draftItemize, caseAmounts: draftCaseAmounts, caseDescriptions: draftCaseDescriptions, ...draftForm } = res.draft;
         if (!hasUserInput(draftForm, Boolean(draftItemize), draftCaseAmounts ?? [], pristineForm.current)) {
           // A stale default-only "draft" (e.g. from before this check
           // existed) - nothing to restore; drop it quietly, no banner.
@@ -423,7 +428,11 @@ export function NewFindingForm({
           sourceId: draftForm.sourceId || f.sourceId,
         }));
         if (draftItemize) setItemizeCases(true);
-        if (draftCaseAmounts) setCaseAmounts(draftCaseAmounts);
+        if (draftCaseAmounts) {
+          setCaseAmounts(draftCaseAmounts);
+          // One description per amount, whatever an older draft held.
+          setCaseDescriptions(draftCaseAmounts.map((_, i) => draftCaseDescriptions?.[i] ?? ""));
+        }
         setRestoredBanner(true);
       })
       .catch(() => {});
@@ -444,7 +453,7 @@ export function NewFindingForm({
     const timer = setTimeout(() => {
       if (hasUserInput(form, itemizeCases, caseAmounts, pristineForm.current)) {
         draftStored.current = true;
-        apiSend("/api/findings/draft-autosave", "PATCH", { ...form, itemizeCases, caseAmounts }).catch(() => {});
+        apiSend("/api/findings/draft-autosave", "PATCH", { ...form, itemizeCases, caseAmounts, caseDescriptions }).catch(() => {});
       } else if (draftStored.current) {
         // Back to the untouched defaults (everything typed was cleared) -
         // nothing left worth restoring, so drop the stored copy.
@@ -453,7 +462,7 @@ export function NewFindingForm({
       }
     }, 800);
     return () => clearTimeout(timer);
-  }, [form, itemizeCases, caseAmounts, isEditing]);
+  }, [form, itemizeCases, caseAmounts, caseDescriptions, isEditing]);
 
   async function discardRestoredDraft() {
     setRestoredBanner(false);
@@ -655,6 +664,7 @@ export function NewFindingForm({
         rootCause: form.rootCause || undefined,
         evidenceNote: form.evidenceNote || undefined,
         caseAmounts: !isEditing && itemizeCases ? caseAmounts.map((a) => Number(a) || 0) : undefined,
+        caseDescriptions: !isEditing && itemizeCases ? caseAmounts.map((_, i) => (caseDescriptions[i] ?? "").trim()) : undefined,
       };
       if (finding) {
         await apiSend<{ finding: Finding }>(`/api/findings/${finding.id}`, "PATCH", payload);
@@ -942,26 +952,47 @@ export function NewFindingForm({
                 onChange={(e) => setItemizeCases(e.target.checked)}
                 className="h-4 w-4 rounded border-slate-300"
               />
-              Track individual case amounts (optional)
+              Track individual cases - a description and an amount for each (optional)
             </label>
             <p className="mt-1 text-xs text-slate-500">
               Lets a future rectification pick specific cases (e.g. &quot;only Case 2&quot;) instead of just a
-              count/amount that happens to add up.
+              count/amount that happens to add up. Give each case a short name or description and its amount.
             </p>
             {itemizeCases && (
               <div className="mt-3 flex flex-col gap-2">
+                <div className="hidden items-center gap-2 text-xs font-medium text-slate-500 sm:flex">
+                  <span className="w-14 shrink-0" />
+                  <span className="flex-1">Name / description</span>
+                  <span className="w-40 shrink-0">Amount ({form.currency || "currency"})</span>
+                </div>
                 {caseAmounts.map((value, i) => (
-                  <div key={i} className="flex items-center gap-2">
+                  <div key={i} className="flex flex-wrap items-center gap-2 sm:flex-nowrap">
                     <span className="w-14 shrink-0 text-xs text-slate-500">Case {i + 1}</span>
-                    <Input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={value}
-                      onChange={(e) =>
-                        setCaseAmounts((prev) => prev.map((v, idx) => (idx === i ? e.target.value : v)))
-                      }
-                    />
+                    <div className="min-w-0 flex-1 basis-full sm:basis-0">
+                      <Input
+                        type="text"
+                        maxLength={200}
+                        aria-label={`Case ${i + 1} name or description`}
+                        placeholder="e.g. Fund transfer of 12 Mar - no customer signature"
+                        value={caseDescriptions[i] ?? ""}
+                        onChange={(e) =>
+                          setCaseDescriptions((prev) => caseAmounts.map((_, idx) => (idx === i ? e.target.value : (prev[idx] ?? ""))))
+                        }
+                      />
+                    </div>
+                    <div className="w-40 shrink-0">
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        aria-label={`Case ${i + 1} amount`}
+                        placeholder="0.00"
+                        value={value}
+                        onChange={(e) =>
+                          setCaseAmounts((prev) => prev.map((v, idx) => (idx === i ? e.target.value : v)))
+                        }
+                      />
+                    </div>
                   </div>
                 ))}
                 <p className={`text-xs ${caseAmountsMatch ? "text-slate-500" : "text-red-600"}`}>

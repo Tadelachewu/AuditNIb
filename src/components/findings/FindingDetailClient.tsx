@@ -853,7 +853,10 @@ export function FindingDetailClient({
                           }
                           className="h-4 w-4 rounded border-slate-300"
                         />
-                        Case {fc.seq} — {finding.currency} {formatCurrency(fc.amount)}
+                        <span>
+                          Case {fc.seq} — {finding.currency} {formatCurrency(fc.amount)}
+                          {fc.description && <span className="text-slate-500"> — {fc.description}</span>}
+                        </span>
                       </label>
                     ))}
                   </div>
@@ -1335,6 +1338,7 @@ export function FindingDetailClient({
                   <span className="text-slate-600">
                     <span className="font-medium text-slate-900">Case {fc.seq}</span> — {finding.currency}{" "}
                     {formatCurrency(fc.amount)}
+                    {fc.description && <span className="text-slate-900"> — {fc.description}</span>}
                     {fc.status === "RECTIFIED" && fc.rectifiedByName && (
                       <span className="text-slate-500">
                         {" "}

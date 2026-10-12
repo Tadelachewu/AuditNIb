@@ -123,6 +123,42 @@ export function notifyFindingsPermissionHolders(
   if (recipients.length > 0) notifyUsers(db, recipients, opts);
 }
 
+/** Every ACTIVE user whose role holds this exact permission key (any page / action), bank-wide. */
+export function usersWithPermissionKey(db: Database, key: string): string[] {
+  const roles = new Set(db.roles.filter((r) => r.status === "ACTIVE" && r.permissions.includes(key)).map((r) => r.code));
+  return db.users.filter((u) => u.status === "ACTIVE" && roles.has(u.role)).map((u) => u.id);
+}
+
+/** The top two of Settings -> Risk levels (e.g. High, Critical) - the same "high-risk" the dashboards count. */
+export function isHighRisk(db: Pick<Database, "settings">, riskLevel: string | undefined): boolean {
+  const top = db.settings.riskLevels.slice(-2).map((l) => l.trim().toLowerCase());
+  return top.includes((riskLevel ?? "").trim().toLowerCase());
+}
+
+/**
+ * Management oversight: when a finding in the top two risk levels receives
+ * its FINAL approval - it is now official and with the branch - every user
+ * of the Executive Dashboard (role permission executive-dashboard.view) is
+ * told. Call it right after that approval, in the same updateDb():
+ *   HO Controller's approval, the bank-wide approver's approval, and a
+ *   bank-registered finding sent straight to the branch (no approval needed).
+ * The approver themselves is not notified of their own decision. Imports of
+ * historical findings don't call this.
+ */
+export function notifyHighRiskApproved(db: Database, finding: Pick<Finding, "id" | "reference" | "title" | "riskLevel" | "branchId" | "currency" | "amount" | "caseCount">, approver: { userId: string; name: string }): void {
+  if (!isHighRisk(db, finding.riskLevel)) return;
+  const recipients = usersWithPermissionKey(db, permissionKey("executive-dashboard", "view")).filter((id) => id !== approver.userId);
+  if (recipients.length === 0) return;
+  const branch = db.branches.find((b) => b.id === finding.branchId)?.name ?? "Unknown branch";
+  notifyUsers(db, recipients, {
+    type: "HIGH_RISK_APPROVED",
+    title: `${finding.riskLevel}-risk finding approved: ${finding.reference}`,
+    message: `${finding.title} - ${branch}. ${finding.caseCount} case${finding.caseCount === 1 ? "" : "s"}, ${finding.currency} ${finding.amount.toLocaleString("en-US")}. Final approval by ${approver.name}; it is now with the branch for rectification.`,
+    entityType: "Finding",
+    entityId: finding.id,
+  });
+}
+
 /**
  * Tells whoever must act next that a finding was just submitted. Call it
  * right after submitFinding(), in the same updateDb() - from EVERY path that

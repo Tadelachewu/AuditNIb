@@ -18,6 +18,7 @@ export const NOTIFICATION_EVENT_GROUPS = [
       { type: "BANK_APPROVED", label: "Bank approved", hint: "Bank-Wide Approval approved a bank-registered finding" },
       { type: "RETURNED", label: "Returned", hint: "A finding was returned to its registrant for correction" },
       { type: "REJECTED", label: "Rejected", hint: "A finding was rejected" },
+      { type: "HIGH_RISK_APPROVED", label: "High-risk finding approved", hint: "A finding in the top two risk levels (e.g. High, Critical) received final approval - sent to Executive Dashboard users" },
     ],
   },
   {

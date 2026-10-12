@@ -5,7 +5,7 @@ import { requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { assertFindingInScope } from "@/lib/findings-scope";
 import { transitionFinding } from "@/lib/findings";
-import { notifyFindingsPermissionHolders, notifyUsers, usersWithFindingsPermission } from "@/lib/notifications";
+import { notifyHighRiskApproved, notifyFindingsPermissionHolders, notifyUsers, usersWithFindingsPermission } from "@/lib/notifications";
 import { withApiHandler } from "@/lib/api/handler";
 
 const reviewSchema = z
@@ -92,6 +92,8 @@ async function handlePOST(request: Request, { params }: { params: Promise<{ id: 
         entityType: "Finding",
         entityId: f.id,
       });
+      // High / Critical risk: the Executive Dashboard's users are told too.
+      notifyHighRiskApproved(current, f, { userId: auth.session.userId!, name: auth.session.name! });
     } else {
       transitionFinding(current, f, {
         toStatus: decision === "REJECT" ? "REJECTED" : "RETURNED",

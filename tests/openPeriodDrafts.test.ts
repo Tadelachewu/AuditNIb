@@ -15,6 +15,7 @@ vi.mock("@/lib/monitoring", () => ({ captureServerException: vi.fn(async () => {
 vi.mock("@/lib/notifications", () => ({
   notifyUsers: vi.fn(),
   notifyFindingsPermissionHolders: vi.fn(),
+  notifyHighRiskApproved: vi.fn(),
   notifyFindingSubmitted: vi.fn(),
   usersWithFindingsPermission: vi.fn(() => []),
 }));
@@ -151,5 +152,39 @@ describe("a deleted rejected finding's reference number", () => {
     expect((await remove(json("DELETE"), ctx)).status).toBe(200);
     await create(json("POST", { ...newDraft, submit: false }), { params: Promise.resolve({}) });
     expect(db.findings[0].reference).toBe("B001-2026-09-00001");
+  });
+});
+
+describe("individual cases: a description and an amount for each", () => {
+  beforeEach(() => {
+    db = fixture(true);
+  });
+  const three = { ...newDraft, title: "Fund transfers without customer signature", caseCount: 3, amount: 600, submit: false };
+
+  it("stores each case's description with its amount, in order", async () => {
+    const res = await create(json("POST", { ...three, caseAmounts: [100, 200, 300], caseDescriptions: ["Transfer of 12 Mar", "  Transfer of 14 Mar  ", ""] }), { params: Promise.resolve({}) });
+    expect(res.status).toBe(201);
+    expect(db.findingCases.map((c) => [c.seq, c.amount, c.description])).toEqual([
+      [1, 100, "Transfer of 12 Mar"],
+      [2, 200, "Transfer of 14 Mar"],
+      [3, 300, undefined], // left blank: optional
+    ]);
+  });
+
+  it("descriptions stay optional - amounts alone still work", async () => {
+    const res = await create(json("POST", { ...three, caseAmounts: [100, 200, 300] }), { params: Promise.resolve({}) });
+    expect(res.status).toBe(201);
+    expect(db.findingCases).toHaveLength(3);
+    expect(db.findingCases.every((c) => c.description === undefined)).toBe(true);
+  });
+
+  it("refuses descriptions that don't line up with the case amounts, or that are too long", async () => {
+    const mismatch = await create(json("POST", { ...three, caseAmounts: [100, 200, 300], caseDescriptions: ["only one"] }), { params: Promise.resolve({}) });
+    expect(mismatch.status).toBe(400);
+    const noAmounts = await create(json("POST", { ...three, caseDescriptions: ["a", "b", "c"] }), { params: Promise.resolve({}) });
+    expect(noAmounts.status).toBe(400);
+    const tooLong = await create(json("POST", { ...three, caseAmounts: [100, 200, 300], caseDescriptions: ["x".repeat(201), "", ""] }), { params: Promise.resolve({}) });
+    expect(tooLong.status).toBe(400);
+    expect(db.findingCases).toHaveLength(0);
   });
 });

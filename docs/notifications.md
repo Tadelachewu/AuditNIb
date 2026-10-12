@@ -88,7 +88,14 @@ Permission: rectify. They receive the same as the Branch Internal Controller **e
 - Comment: only a reply to their own comment
 
 ### Executive (Read-only) (bank-wide)
-- **None by default.** The role has view-only access.
+
+| Notification | When |
+|---|---|
+| **High-risk finding approved** | A finding in the **top two risk levels** (by default High and Critical) received its **final approval** and is now with the branch. Sent to every active user whose role has *Executive Dashboard › View*. |
+
+Final approval means: the HO Controller's approval, the bank-wide approver's approval, or a bank-registered finding sent straight to the branch because no approval step is required. The notice names the finding, its branch, cases and amount, and who approved it, and links to the finding. The person who gave the approval isn't notified of their own decision; imports of historical findings don't send it. "Top two" follows the order of Settings → Risk levels, the same rule as the dashboards' High-Risk figures. Email copy: Settings → Email Events → *High-risk finding approved*.
+
+Other than that the role has view-only access and receives no workflow notifications (unless it is also the assigned bank-wide approver).
 
 ### Support, for any role
 **Support reply** goes to whoever opened the thread. By default only the Administrator can open support threads (`support.create`). Grant **Support › Create** to other roles in Roles & Permissions and their users can send support messages and get replies.

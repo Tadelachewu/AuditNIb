@@ -245,6 +245,12 @@ the normal district/HO review path.
   row per case, `status: "OUTSTANDING"` (`route.ts:253-263`), which later lets a
   rectification target specific cases (e.g. "only Case 2") instead of just an aggregate
   count/amount (`FindingCase` doc comment, `src/types/index.ts:643-653`).
+- **A name / description per case.** When individual cases are tracked, each case row has a
+  *Name / description* box next to its amount (up to 200 characters, optional per case) -
+  e.g. three fund transfers without customer signature, each with its own description and
+  amount. Sent as `caseDescriptions` (same order and length as `caseAmounts`), stored on
+  `FindingCase.description`, kept by draft autosave, and shown wherever cases are listed:
+  the finding's **Cases** card and the case picker in **Record Rectification**.
 - Once itemized at creation, the case count/amount can never be changed via edit without
   a 409 (`[id]/route.ts:194-209`) — itemization is a create-time-only decision.
 

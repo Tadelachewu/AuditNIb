@@ -8,10 +8,13 @@ import { readDb, updateDb } from "@/lib/db";
 import { findingsInScope } from "@/lib/findings-scope";
 import { nextFindingReference, submitFinding, assertPeriodOpenForSubmission, assertRequiredFindingFieldsPresent } from "@/lib/findings";
 import { isDepartmentInScope } from "@/lib/org";
-import { notifyFindingSubmitted } from "@/lib/notifications";
+import { notifyFindingSubmitted, notifyHighRiskApproved } from "@/lib/notifications";
 import type { Finding, FindingCase } from "@/types";
 import { matchesOperationAndIrregularity } from "@/lib/dashboardFilters";
 import { withApiHandler } from "@/lib/api/handler";
+
+/** Longest name / description of one itemized case. */
+const CASE_DESCRIPTION_MAX = 200;
 
 async function handleGET(request: Request) {
   const auth = await requirePermission("findings.view");
@@ -82,6 +85,8 @@ const createSchema = z.object({
   // entries summing to amount - validated below, not just by the schema,
   // since it's a cross-field rule.
   caseAmounts: z.array(zAmount("Case amount")).max(500).optional(),
+  // One name / description per itemized case, in the same order as caseAmounts (each optional).
+  caseDescriptions: z.array(z.string().trim().max(CASE_DESCRIPTION_MAX, `A case description must be at most ${CASE_DESCRIPTION_MAX} characters`)).max(500).optional(),
 });
 
 // Branch-scoped roles (Branch Internal Controller registering their own
@@ -203,6 +208,9 @@ async function handlePOST(request: Request) {
   if (matchedCategory && !matchedCategory.active) {
     return NextResponse.json({ error: "Selected classified case is not active" }, { status: 400 });
   }
+  if (input.caseDescriptions && (!input.caseAmounts || input.caseDescriptions.length !== input.caseAmounts.length)) {
+    return NextResponse.json({ error: "Case descriptions must match the individual case amounts, one per case" }, { status: 400 });
+  }
   if (input.caseAmounts) {
     if (input.caseAmounts.length !== input.caseCount) {
       return NextResponse.json(
@@ -273,6 +281,7 @@ async function handlePOST(request: Request) {
         findingId: finding.id,
         seq: i + 1,
         amount,
+        description: input.caseDescriptions?.[i] || undefined,
         status: "OUTSTANDING",
         createdAt: now,
       }));
@@ -288,6 +297,8 @@ async function handlePOST(request: Request) {
       // it exactly as with the separate Submit (district reviewers, the
       // bank-wide approvers, or the branch).
       notifyFindingSubmitted(current, persisted, session.name!);
+      // Bank-registered with no approval step: submitting IS its final approval.
+      if (persisted.status === "SENT_TO_BRANCH_MANAGER") notifyHighRiskApproved(current, persisted, { userId: session.userId!, name: session.name! });
     }
   });
 

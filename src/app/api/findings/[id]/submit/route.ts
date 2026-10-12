@@ -3,7 +3,7 @@ import { requirePermission } from "@/lib/guard";
 import { readDb, updateDb } from "@/lib/db";
 import { assertFindingInScope } from "@/lib/findings-scope";
 import { submitFinding, assertPeriodWritable, assertPeriodOpenForSubmission } from "@/lib/findings";
-import { notifyFindingSubmitted } from "@/lib/notifications";
+import { notifyFindingSubmitted, notifyHighRiskApproved } from "@/lib/notifications";
 import { withApiHandler } from "@/lib/api/handler";
 
 const SUBMITTABLE_STATUSES = ["DRAFT", "RETURNED"];
@@ -42,6 +42,8 @@ async function handlePOST(_request: Request, { params }: { params: Promise<{ id:
     submitFinding(current, f, auth.session.userId!, auth.session.name!, { registeredByBankScope });
     // Whoever must act next: district reviewers, the bank-wide approvers, or the branch.
     notifyFindingSubmitted(current, f, auth.session.name!);
+    // Bank-registered with no approval step: submitting IS its final approval.
+    if (f.status === "SENT_TO_BRANCH_MANAGER") notifyHighRiskApproved(current, f, { userId: auth.session.userId!, name: auth.session.name! });
     return f;
   });
 

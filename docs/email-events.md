@@ -43,6 +43,7 @@ While the provider is *None*, the Email Events section shows a warning: you can 
 | | **Bank approved** | Bank-Wide Approval approves a bank-registered finding | Branch rectifiers |
 | | **Returned** | A finding is returned for correction (by district, HO or bank approval) | The registrant (+ district reviewers when HO / bank returns it) |
 | | **Rejected** | A finding is rejected | The registrant (+ district reviewers when HO rejects it) |
+| | **High-risk finding approved** | A finding in the top two risk levels (e.g. High, Critical) receives its final approval | Users of the Executive Dashboard (*Executive Dashboard › View*) |
 | Rectification | **Rectified** | The branch records a rectification | Other branch rectifiers, district verifiers |
 | | **Rectification resubmitted** | The branch corrects a returned rectification | District verifiers |
 | | **Rectification returned** | The district or HO sends a rectification back | Branch rectifiers (+ district verifiers when HO returns it) |
