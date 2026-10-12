@@ -92,15 +92,21 @@ Not recommended for real production traffic (rate-limited, and mail from a
 personal Gmail account can look suspicious to recipients) — use it only to
 confirm the plumbing works end-to-end.
 
-## Microsoft Graph / Outlook — not implemented yet
+## Outlook / Microsoft 365 / Exchange
 
-`Provider` also offers `Outlook / Graph API` in the dropdown, but selecting
-it currently **no-ops** (a console warning is logged, no email sends). It
-needs an Azure AD app registration and OAuth token flow, which is
-materially more setup than SMTP and hasn't been built. Use `SMTP relay`
-instead — most Exchange/Outlook environments also expose a standard SMTP
-endpoint (ask IT; the port is usually `587`) that works fine with the
-setup above.
+There is one provider, **SMTP relay**. To send through Microsoft, point it at Microsoft's SMTP server:
+
+| Mail system | SMTP host | Port |
+|---|---|---|
+| Microsoft 365 / Outlook | `smtp.office365.com` | `587` |
+| The bank's own Exchange server | Ask IT for the internal relay's host | Usually `587` or `25` |
+
+- `SMTP_USER` / `SMTP_PASSWORD` in `.env` are the sending mailbox's sign-in (an app password if the account uses multi-factor sign-in).
+- **SMTP AUTH must be enabled** for that mailbox on the Microsoft side, and the **From address** must be that mailbox or one it may send as.
+- Microsoft has been phasing out password sign-in for SMTP on Microsoft 365: confirm with your mail administrator that it is allowed for the mailbox. An internal Exchange relay is not affected.
+- The app always signs in with a username and password; a relay that accepts mail without sign-in isn't supported.
+
+(An "Outlook / Graph API" provider used to be listed in the dropdown but was never built; it has been removed.)
 
 ## How it works, briefly
 

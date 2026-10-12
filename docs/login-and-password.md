@@ -210,7 +210,7 @@ Only reached for a real, deliverable-email match:
 Via `getTransporter()` (`src/lib/mail.ts:12-36`) — a `nodemailer` SMTP transport built from
 `Settings.notification` (host/port, admin-editable at Admin → Settings → Notification Delivery) plus
 `SMTP_USER`/`SMTP_PASSWORD` env vars (secrets, never admin-editable in the UI). Returns `null` (no
-throw) if the provider is `"NONE"`, the unimplemented `"GRAPH"` option, or missing required config — a
+throw) if the provider is `"NONE"` or required config is missing — a
 `null` transporter means the route still creates the token row but skips sending, logging a detailed
 `console.warn` pointing an admin at `docs/EMAIL_SETUP.md` (`forgot-password/route.ts:138-146`). The
 reset email itself (subject *"Reset your NIB Control360 password"*, both plain-text and HTML bodies,

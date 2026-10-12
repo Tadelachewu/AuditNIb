@@ -327,7 +327,7 @@ This is one of the most heavily-gated features in the codebase, not an under-pro
 
 `GET/PATCH /api/admin/settings` (`src/app/api/admin/settings/route.ts`) manage one `Settings` object covering (schema at `settings/route.ts:14-102`):
 - **Dropdown lists**: `currencies`, `riskLevels`, `operationAreas`, `priorityLevels`, `irregularityTypes` (each must stay non-empty).
-- **Notification delivery**: `notification.provider` ∈ `NONE | SMTP | GRAPH`, plus `fromAddress`/`smtpHost`/`smtpPort`. A companion endpoint, `POST /api/admin/settings/test-email` (requires `settings.edit`), sends a real test email to the calling admin's own address via `getTransporter()` — it fails with a clear 400 if the caller has no email or if no transporter is configured, and logs raw SMTP errors server-side only (never echoing internals like hostnames/auth failures to the client) (`settings/test-email/route.ts:12-52`).
+- **Notification delivery**: `notification.provider` ∈ `NONE | SMTP`, plus `fromAddress`/`smtpHost`/`smtpPort`. A companion endpoint, `POST /api/admin/settings/test-email` (requires `settings.edit`), sends a real test email to the calling admin's own address via `getTransporter()` — it fails with a clear 400 if the caller has no email or if no transporter is configured, and logs raw SMTP errors server-side only (never echoing internals like hostnames/auth failures to the client) (`settings/test-email/route.ts:12-52`).
 - **Automatic Transfer** (its own section and Save, replacing the old `autoTransferOnLock`): on/off, excluded operation areas, delay - see [auto-transfer.md](auto-transfer.md).
 - **`rankingVisibility`**: whether branch/district rankings are shown.
 - **`rectificationReminders`**: enabled + threshold-days.

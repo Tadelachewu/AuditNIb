@@ -22,7 +22,7 @@ const updateSchema = z.object({
   priorityLevels: zUniqueList("Priority level").min(1, "At least one priority level is required"),
   irregularityTypes: zUniqueList("Irregularity type").min(1, "At least one irregularity type is required"),
   notification: z.object({
-    provider: z.enum(["NONE", "SMTP", "GRAPH"]),
+    provider: z.enum(["NONE", "SMTP"]),
     fromAddress: z.string().trim().max(LIMITS.email.max),
     smtpHost: z.string().optional(),
     smtpPort: z.number().int().min(1, "SMTP port must be 1-65535").max(65535, "SMTP port must be 1-65535").optional(),

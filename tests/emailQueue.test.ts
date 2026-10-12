@@ -418,3 +418,11 @@ describe("time zones", () => {
     }
   });
 });
+
+describe("providers", () => {
+  it("SMTP is the only provider - a value left by an older version (the removed Outlook / Graph option) is off", () => {
+    expect(emailConfigProblem({ ...smtp, provider: "GRAPH" as never }, env)).toMatch(/switched off/);
+    expect(emailForNotification(makeDb({ ...smtp, provider: "GRAPH" as never }), "u1", notification(), env)).toBeNull();
+    expect(emailConfigProblem(smtp, env)).toBeNull();
+  });
+});

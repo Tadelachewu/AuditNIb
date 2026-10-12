@@ -27,8 +27,8 @@ export const BREAKER_PAUSE_MS = 2 * 60_000;
  * definition used by the enqueue decision, the worker and src/lib/mail.ts.
  */
 export function emailConfigProblem(settings: NotificationSettings | undefined, env: Record<string, string | undefined> = process.env): string | null {
-  if (!settings || settings.provider === "NONE") return "Email delivery is switched off (provider: None)";
-  if (settings.provider === "GRAPH") return "The GRAPH provider isn't implemented yet";
+  // SMTP is the only provider; anything else (None, or a value left in an older database) is off.
+  if (!settings || settings.provider !== "SMTP") return "Email delivery is switched off (provider: None)";
   if (!settings.smtpHost || !settings.smtpPort) return "SMTP host / port aren't set";
   if (!env.SMTP_USER || !env.SMTP_PASSWORD) return "SMTP_USER / SMTP_PASSWORD aren't set in the environment";
   return null;

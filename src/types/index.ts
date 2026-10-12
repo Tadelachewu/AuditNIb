@@ -222,7 +222,7 @@ export interface ReportingPeriod {
 }
 
 export interface NotificationSettings {
-  provider: "NONE" | "SMTP" | "GRAPH";
+  provider: "NONE" | "SMTP";
   fromAddress: string;
   smtpHost?: string;
   smtpPort?: number;

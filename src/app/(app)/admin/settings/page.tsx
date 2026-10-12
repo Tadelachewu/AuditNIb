@@ -193,7 +193,6 @@ export default function SettingsPage() {
             >
               <option value="NONE">None (disabled)</option>
               <option value="SMTP">SMTP relay</option>
-              <option value="GRAPH">Outlook / Graph API</option>
             </Select>
           </div>
           <div>

@@ -508,7 +508,12 @@ function settingsFromRow(r: Prisma.SettingsGetPayload<object>): Settings {
     operationAreas: r.operationAreas,
     priorityLevels: r.priorityLevels,
     irregularityTypes: r.irregularityTypes,
-    notification: r.notification as unknown as Settings["notification"],
+    // "SMTP" or "NONE" only: any other provider saved by an older version
+    // (the removed, never-built Outlook / Graph option) reads as off.
+    notification: (() => {
+      const n = r.notification as unknown as Settings["notification"];
+      return n && (n.provider as string) !== "SMTP" && (n.provider as string) !== "NONE" ? { ...n, provider: "NONE" as const } : n;
+    })(),
     rankingVisibility: r.rankingVisibility as unknown as Settings["rankingVisibility"],
     performanceThresholds: r.performanceThresholds as unknown as Settings["performanceThresholds"],
     hoApproval: r.hoApproval as unknown as Settings["hoApproval"],

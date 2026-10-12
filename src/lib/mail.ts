@@ -15,12 +15,9 @@ import { logger } from "@/lib/logger";
  * silently" instead of special-casing each missing piece itself.
  */
 export function getTransporter(settings: NotificationSettings): Transporter | null {
-  if (settings.provider === "NONE") return null;
-
-  if (settings.provider === "GRAPH") {
-    logger.warn({ event: "email.provider_unsupported" }, "Notification provider is GRAPH, which isn't implemented yet - no email sent. See EMAIL_SETUP.md.");
-    return null;
-  }
+  // SMTP is the only provider. Anything else - "NONE", or a value left in an
+  // older database - means email is switched off.
+  if (settings.provider !== "SMTP") return null;
 
   const host = settings.smtpHost;
   const port = settings.smtpPort;

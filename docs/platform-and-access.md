@@ -89,7 +89,7 @@ Self-service, requires no permission — proof of the *current* password is the 
 - **Token TTL: 30 minutes** (`TOKEN_TTL_MS = 30 * 60 * 1000`, `src/app/api/auth/forgot-password/route.ts:17`).
 - Any prior unused token for that user is invalidated (`usedAt` set) before issuing a new one (`src/app/api/auth/forgot-password/route.ts:154-158`) — only one live reset link per user at a time.
 - The reset link's origin is built from `X-Forwarded-Proto`/`X-Forwarded-Host` headers first (trusting a reverse proxy), falling back to the raw request `Host` (`buildPublicOrigin()`, `src/app/api/auth/forgot-password/route.ts:28-49`).
-- Delivery: via `getTransporter()` from `src/lib/mail.ts:12-36`, an `nodemailer` SMTP transport built from `Settings.notification` (host/port, admin-editable) plus `SMTP_USER`/`SMTP_PASSWORD` env vars (secrets). Returns `null` (no throw) if the provider is `"NONE"`, unimplemented (`"GRAPH"`), or missing config — every caller treats a `null` transporter as "skip silently." The reset email itself is sent directly in the route (`src/app/api/auth/forgot-password/route.ts:194-229`), not via `src/lib/mail.ts`'s notification-email helper.
+- Delivery: via `getTransporter()` from `src/lib/mail.ts:12-36`, an `nodemailer` SMTP transport built from `Settings.notification` (host/port, admin-editable) plus `SMTP_USER`/`SMTP_PASSWORD` env vars (secrets). Returns `null` (no throw) if the provider is `"NONE"` or config is missing — every caller treats a `null` transporter as "skip silently." The reset email itself is sent directly in the route (`src/app/api/auth/forgot-password/route.ts:194-229`), not via `src/lib/mail.ts`'s notification-email helper.
 - A `PASSWORD_RESET_REQUESTED` audit-log entry is appended regardless of whether the email actually sent (`src/app/api/auth/forgot-password/route.ts:175-184`).
 
 ### Reset password (`POST /api/auth/reset-password`, `src/app/api/auth/reset-password/route.ts`)
@@ -191,7 +191,7 @@ Every in-app notification is also mirrored as an email through the **email queue
 - Includes a deep link back into the app (`notificationPath()`): `Finding` → `/findings/[id]`; `SupportThread` with type `SUPPORT_MESSAGE` → `/admin/support` (staff inbox) vs. any other `SupportThread` type → `/support`; `ReportingPeriod` → `/admin/reporting-periods`; anything else → `/dashboard`. The base URL comes from `APP_BASE_URL` and the link is omitted if that's unset.
 - Delivery: the built-in Postgres worker by default, or BullMQ on Redis (`EMAIL_QUEUE_DRIVER=bullmq`) - `src/lib/emailQueue/service.ts`, `bullmq.ts`. Status and admin actions: Settings → Email Queue.
 - Forgot-password and the Settings test email are sent immediately instead (`src/lib/mail.ts`).
-- SMTP settings are shared by the queue's pooled transport (`src/lib/emailQueue/transport.ts`) and `getTransporter()` in `src/lib/mail.ts` (forgot-password, test email): driven by `Settings.notification.provider` (`"NONE" | "SMTP" | "GRAPH"`), `smtpHost`/`smtpPort` (admin-editable), plus `SMTP_USER`/`SMTP_PASSWORD` env secrets. `"GRAPH"` is not implemented (logs a warning, returns `null`).
+- SMTP settings are shared by the queue's pooled transport (`src/lib/emailQueue/transport.ts`) and `getTransporter()` in `src/lib/mail.ts` (forgot-password, test email): driven by `Settings.notification.provider` (`"NONE" | "SMTP"`), `smtpHost`/`smtpPort` (admin-editable), plus `SMTP_USER`/`SMTP_PASSWORD` env secrets.
 
 ---
 
