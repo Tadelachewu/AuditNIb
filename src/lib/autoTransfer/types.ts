@@ -1,8 +1,8 @@
 /**
  * Automatic transfer at period end - a self-contained module
  * (src/lib/autoTransfer). When a reporting period has ended, every finding
- * still outstanding in it is carried into the next period, once, except
- * findings whose operation area is excluded. See docs/auto-transfer.md.
+ * still outstanding in it is carried into the next period, once - for the
+ * operation areas ticked in its settings. See docs/auto-transfer.md.
  *
  * Client-safe: types and constants only.
  */
@@ -11,8 +11,14 @@
 export interface AutoTransferConfig {
   /** Master switch. */
   enabled: boolean;
-  /** Findings with one of these operation areas are never moved automatically (matched case- and space-insensitively). */
-  excludedOperationAreas: string[];
+  /** Only findings with one of these operation areas are moved automatically (matched case- and space-insensitively); the rest stay. */
+  includedOperationAreas: string[];
+  /**
+   * Set only while migration 20261012120000_auto_transfer_included_areas is
+   * not applied: the old list of areas left behind, still honoured as it was
+   * (everything else is transferred). Settings can't be saved until then.
+   */
+  legacyExcludedOperationAreas?: string[];
   /** Run this many hours after the period's end (and its submission window's end). */
   delayHours: number;
   updatedAt: string | null;
@@ -21,7 +27,7 @@ export interface AutoTransferConfig {
 
 export const DEFAULT_AUTO_TRANSFER_CONFIG: AutoTransferConfig = {
   enabled: true,
-  excludedOperationAreas: [],
+  includedOperationAreas: [],
   delayHours: 0,
   updatedAt: null,
   updatedBy: null,

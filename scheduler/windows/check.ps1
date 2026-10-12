@@ -40,7 +40,9 @@ try {
   Pass "App answered and accepted the secret"
   if (-not $s.installed) { Fail "Not installed: $($s.reason)" }
   elseif (-not $s.enabled) { Fail "Automatic Transfer is switched OFF (Settings -> Automatic Transfer)" }
-  else { Pass "Installed and switched ON (delay $($s.delayHours) h, $($s.excludedOperationAreas.Count) excluded operation area(s))" }
+  elseif ($s.migrationPending) { Note "Switched ON, but the operation-area migration is not applied - run: npx prisma migrate deploy" }
+  elseif (@($s.includedOperationAreas).Count -eq 0) { Note "Switched ON, but no operation area is ticked - nothing will be transferred (Settings > Automatic Transfer)" }
+  else { Pass "Installed and switched ON (delay $($s.delayHours) h, $(@($s.includedOperationAreas).Count) operation area(s) transferred)" }
   if ($s.installed) {
     if ($s.dueNow.Count -gt 0) { Note "Due now (moves on the next run): $($s.dueNow -join ', ')" } else { Pass "Nothing due right now" }
     if ($s.nextDue) { Note "Next period due: $($s.nextDue.period) at $(([datetime]$s.nextDue.at).ToLocalTime())" }

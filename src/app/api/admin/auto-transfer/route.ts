@@ -5,7 +5,7 @@ import { readDb, updateDb } from "@/lib/db";
 import { appendAuditLog } from "@/lib/audit";
 import { looseListItemError, zUniqueList } from "@/lib/inputRules";
 import { withApiHandler } from "@/lib/api/handler";
-import { prismaAutoTransferStore, sweepDueAt } from "@/lib/autoTransfer";
+import { AutoTransferNotMigratedError, prismaAutoTransferStore, sweepDueAt } from "@/lib/autoTransfer";
 
 /**
  * Automatic transfer at period end - its settings and each period's status
@@ -19,7 +19,7 @@ async function handleGET() {
   if (!auth.ok) return auth.response;
 
   const [config, runs, db] = await Promise.all([prismaAutoTransferStore.getConfig(), prismaAutoTransferStore.listRuns(), readDb()]);
-  // Choices for the exclusion list: the configured operation areas plus any
+  // Choices for the areas to transfer: the configured operation areas plus any
   // other value already used on findings (typed-in "Other" values).
   const used = new Map<string, string>();
   for (const a of [...db.settings.operationAreas, ...db.findings.map((f) => f.operationArea)]) {
@@ -41,7 +41,7 @@ async function handleGET() {
 const updateSchema = z.object({
   enabled: z.boolean(),
   // May include areas typed as "Other" on findings, so not the strict Configurable List rule.
-  excludedOperationAreas: zUniqueList("Operation area", looseListItemError),
+  includedOperationAreas: zUniqueList("Operation area", looseListItemError),
   delayHours: z.number().int().min(0, "Delay must be 0 or more hours").max(720, "Delay must be at most 720 hours (30 days)"),
 });
 
@@ -58,6 +58,7 @@ async function handlePATCH(request: Request) {
       { status: 409 }
     );
   }
+  if (before.legacyExcludedOperationAreas) return NextResponse.json({ error: new AutoTransferNotMigratedError().message }, { status: 409 });
   const config = await prismaAutoTransferStore.saveConfig(parsed.data, auth.session.name!);
   await updateDb((current) => {
     appendAuditLog(current, {
@@ -66,7 +67,7 @@ async function handlePATCH(request: Request) {
       action: "UPDATE",
       entityType: "AutoTransferConfig",
       entityId: "singleton",
-      oldValue: { enabled: before.enabled, excludedOperationAreas: before.excludedOperationAreas, delayHours: before.delayHours },
+      oldValue: { enabled: before.enabled, includedOperationAreas: before.includedOperationAreas, delayHours: before.delayHours },
       newValue: parsed.data,
     });
   });

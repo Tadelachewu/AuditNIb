@@ -562,7 +562,8 @@ enum SupportThreadStatus {
 model AutoTransferConfig {
   id                     String   @id @default("singleton")
   enabled                Boolean  @default(true)
-  excludedOperationAreas String[] @default([]) @map("excluded_operation_areas")
+  /// Findings in these operation areas are transferred automatically; the rest stay.
+  includedOperationAreas String[] @default([]) @map("included_operation_areas")
   delayHours             Int      @default(0) @map("delay_hours")
   updatedAt              DateTime @default(now()) @map("updated_at")
   updatedBy              String?  @map("updated_by")

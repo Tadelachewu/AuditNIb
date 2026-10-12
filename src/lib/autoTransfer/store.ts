@@ -11,7 +11,7 @@ import { DEFAULT_AUTO_TRANSFER_CONFIG, type AutoTransferConfig, type AutoTransfe
 export interface AutoTransferStore {
   /** null = the tables don't exist yet (migration not applied): the feature stays idle. */
   getConfig(): Promise<AutoTransferConfig | null>;
-  saveConfig(config: Pick<AutoTransferConfig, "enabled" | "excludedOperationAreas" | "delayHours">, updatedBy: string): Promise<AutoTransferConfig>;
+  saveConfig(config: Pick<AutoTransferConfig, "enabled" | "includedOperationAreas" | "delayHours">, updatedBy: string): Promise<AutoTransferConfig>;
   listRuns(): Promise<AutoTransferRun[]>;
   /**
    * Records runs. `tx` = an open database transaction (an opaque handle from
@@ -30,6 +30,14 @@ function isMissingTable(err: unknown): boolean {
   return typeof err === "object" && err !== null && "code" in err && (err as { code?: string }).code === "P2021";
 }
 
+/** The settings row can't be saved: the included-areas column doesn't exist yet. */
+export class AutoTransferNotMigratedError extends Error {
+  constructor() {
+    super("Apply migration 20261012120000_auto_transfer_included_areas (npx prisma migrate deploy) before changing automatic transfer.");
+    this.name = "AutoTransferNotMigratedError";
+  }
+}
+
 let warnedMissing = false;
 function warnMissingOnce() {
   if (warnedMissing) return;
@@ -40,21 +48,62 @@ function warnMissingOnce() {
   );
 }
 
-function toConfig(r: { enabled: boolean; excludedOperationAreas: string[]; delayHours: number; updatedAt: Date; updatedBy: string | null }): AutoTransferConfig {
+/**
+ * The settings row as JSON, whatever columns it has. Read and written with
+ * plain SQL so the store works before and after the included-areas migration
+ * (and doesn't depend on a regenerated Prisma client).
+ */
+type ConfigRow = {
+  enabled: boolean;
+  included_operation_areas?: string[];
+  excluded_operation_areas?: string[];
+  delay_hours: number;
+  updated_at: string;
+  updated_by: string | null;
+};
+
+function toConfig(r: ConfigRow): AutoTransferConfig {
+  const migrated = Array.isArray(r.included_operation_areas);
   return {
     enabled: r.enabled,
-    excludedOperationAreas: r.excludedOperationAreas,
-    delayHours: r.delayHours,
-    updatedAt: r.updatedAt.toISOString(),
-    updatedBy: r.updatedBy,
+    includedOperationAreas: r.included_operation_areas ?? [],
+    ...(migrated ? {} : { legacyExcludedOperationAreas: r.excluded_operation_areas ?? [] }),
+    delayHours: r.delay_hours,
+    // Stored as UTC wall-clock, without a zone.
+    updatedAt: new Date(/Z|[+-]\d\d(:?\d\d)?$/.test(r.updated_at) ? r.updated_at : `${r.updated_at}Z`).toISOString(),
+    updatedBy: r.updated_by,
   };
 }
+
+let warnedLegacy = false;
 
 export const prismaAutoTransferStore: AutoTransferStore = {
   async getConfig() {
     try {
-      const row = await prisma.autoTransferConfig.findUnique({ where: { id: SINGLETON } });
-      return row ? toConfig(row) : { ...DEFAULT_AUTO_TRANSFER_CONFIG };
+      const installed = await prisma.$queryRaw<{ installed: boolean }[]>`SELECT to_regclass('public.auto_transfer_config') IS NOT NULL AS installed`;
+      if (!installed[0]?.installed) {
+        warnMissingOnce();
+        return null;
+      }
+      const rows = await prisma.$queryRaw<{ row: ConfigRow }[]>`SELECT to_jsonb(c) AS row FROM auto_transfer_config c WHERE c.id = ${SINGLETON}`;
+      if (rows[0]) {
+        const config = toConfig(rows[0].row);
+        if (config.legacyExcludedOperationAreas && !warnedLegacy) {
+          warnedLegacy = true;
+          logger.warn(
+            { event: "auto_transfer.migration_pending" },
+            "Automatic transfer still uses the old 'excluded operation areas' list - apply prisma/migrations/20261012120000_auto_transfer_included_areas (npx prisma migrate deploy)."
+          );
+        }
+        return config;
+      }
+      // No settings saved yet. Before the migration that meant "transfer everything".
+      const cols = await prisma.$queryRaw<{ migrated: boolean }[]>`
+        SELECT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema = 'public' AND table_name = 'auto_transfer_config' AND column_name = 'included_operation_areas'
+        ) AS migrated`;
+      return cols[0]?.migrated ? { ...DEFAULT_AUTO_TRANSFER_CONFIG } : { ...DEFAULT_AUTO_TRANSFER_CONFIG, legacyExcludedOperationAreas: [] };
     } catch (err) {
       if (isMissingTable(err)) {
         warnMissingOnce();
@@ -65,15 +114,24 @@ export const prismaAutoTransferStore: AutoTransferStore = {
   },
 
   async saveConfig(config, updatedBy) {
-    const data = {
-      enabled: config.enabled,
-      excludedOperationAreas: config.excludedOperationAreas,
-      delayHours: config.delayHours,
-      updatedAt: new Date(),
-      updatedBy,
-    };
-    const row = await prisma.autoTransferConfig.upsert({ where: { id: SINGLETON }, create: { id: SINGLETON, ...data }, update: data });
-    return toConfig(row);
+    const cols = await prisma.$queryRaw<{ migrated: boolean }[]>`
+      SELECT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'auto_transfer_config' AND column_name = 'included_operation_areas'
+      ) AS migrated`;
+    if (!cols[0]?.migrated) throw new AutoTransferNotMigratedError();
+    // Stored times are UTC wall-clock: never bare now() (the DB session may be in another zone).
+    const rows = await prisma.$queryRaw<{ row: ConfigRow }[]>`
+      INSERT INTO auto_transfer_config AS c (id, enabled, included_operation_areas, delay_hours, updated_at, updated_by)
+      VALUES (${SINGLETON}, ${config.enabled}, ${config.includedOperationAreas}::text[], ${config.delayHours}, (now() AT TIME ZONE 'UTC'), ${updatedBy})
+      ON CONFLICT (id) DO UPDATE SET
+        enabled = EXCLUDED.enabled,
+        included_operation_areas = EXCLUDED.included_operation_areas,
+        delay_hours = EXCLUDED.delay_hours,
+        updated_at = EXCLUDED.updated_at,
+        updated_by = EXCLUDED.updated_by
+      RETURNING to_jsonb(c) AS row`;
+    return toConfig(rows[0].row);
   },
 
   async listRuns() {

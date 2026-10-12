@@ -39,9 +39,15 @@ export function dueSweeps(periods: readonly ReportingPeriod[], runs: readonly Au
     .sort((a, b) => a.year - b.year || a.month - b.month);
 }
 
-/** Excluded from automatic transfer by its operation area. */
-export function isExcluded(finding: Pick<Finding, "operationArea">, config: Pick<AutoTransferConfig, "excludedOperationAreas">): boolean {
-  return config.excludedOperationAreas.some((area) => area.trim() && matchesListValue(area, finding.operationArea));
+/** Transferred automatically: its operation area is one of the ticked ones. */
+export function isIncluded(
+  finding: Pick<Finding, "operationArea">,
+  config: Pick<AutoTransferConfig, "includedOperationAreas" | "legacyExcludedOperationAreas">
+): boolean {
+  const listed = (areas: string[]) => areas.some((area) => area.trim() && matchesListValue(area, finding.operationArea));
+  // Migration not applied yet: the old "left behind" list still decides.
+  if (config.legacyExcludedOperationAreas) return !listed(config.legacyExcludedOperationAreas);
+  return listed(config.includedOperationAreas);
 }
 
 /** Still outstanding in the period: a transferable status, with something not closed. */
@@ -62,7 +68,7 @@ export function planSweep(
   const outstanding = db.findings.filter((f) => isOutstandingIn(f, period.id));
   return {
     destination: nextPeriod(db.reportingPeriods, period),
-    toMove: outstanding.filter((f) => !isExcluded(f, config)),
-    kept: outstanding.filter((f) => isExcluded(f, config)),
+    toMove: outstanding.filter((f) => isIncluded(f, config)),
+    kept: outstanding.filter((f) => !isIncluded(f, config)),
   };
 }

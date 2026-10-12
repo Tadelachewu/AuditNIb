@@ -99,7 +99,7 @@ export function sweepPeriods(
       action: "PERIOD_AUTO_TRANSFER",
       entityType: "ReportingPeriod",
       entityId: period.id,
-      newValue: { from: period.code, to: destination.code, moved: run.movedReferences, kept: run.keptReferences, excludedOperationAreas: config.excludedOperationAreas, triggeredBy: trigger },
+      newValue: { from: period.code, to: destination.code, moved: run.movedReferences, kept: run.keptReferences, includedOperationAreas: config.includedOperationAreas, triggeredBy: trigger },
       reason: `Automatic transfer at the end of ${period.code} (started by ${trigger === "scheduler" ? "the scheduler" : "the in-app check"})`,
     });
 
@@ -109,7 +109,7 @@ export function sweepPeriods(
         title: `${period.code} ended: ${toMove.length} finding(s) moved to ${destination.code}`,
         message:
           `${toMove.length} outstanding finding(s) were carried into ${destination.code} automatically.` +
-          (kept.length > 0 ? ` ${kept.length} kept in ${period.code} (excluded operation areas) - transfer them manually if needed.` : ""),
+          (kept.length > 0 ? ` ${kept.length} kept in ${period.code} (operation areas not set to transfer automatically) - transfer them manually if needed.` : ""),
         entityType: "ReportingPeriod",
         entityId: destination.id,
       });

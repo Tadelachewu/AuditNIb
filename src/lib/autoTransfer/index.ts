@@ -3,6 +3,7 @@
  * code imports from here; client components import "./types" only.
  */
 export * from "./types";
-export { dueSweeps, isExcluded, nextPeriod, planSweep, sweepDueAt } from "./rules";
+export { dueSweeps, isIncluded, nextPeriod, planSweep, sweepDueAt } from "./rules";
 export { prismaAutoTransferStore, type AutoTransferStore } from "./store";
 export { runAutoTransferIfDue, sweepPeriods, rearmIfRescheduled, forgetAllRuns, CHECK_INTERVAL_MS, resetAutoTransferThrottle, type AutoTransferDeps } from "./service";
+export { AutoTransferNotMigratedError } from "./store";

@@ -13,7 +13,7 @@ import {
   DEFAULT_AUTO_TRANSFER_CONFIG,
   dueSweeps,
   forgetAllRuns,
-  isExcluded,
+  isIncluded,
   rearmIfRescheduled,
   nextPeriod,
   resetAutoTransferThrottle,
@@ -50,7 +50,8 @@ function finding(periodId: string, status: FindingStatus = "SENT_TO_BRANCH_MANAG
   db.findings.push(f);
   return f;
 }
-const config = (over: Partial<AutoTransferConfig> = {}): AutoTransferConfig => ({ ...DEFAULT_AUTO_TRANSFER_CONFIG, ...over });
+// "Teller" (the fixtures' operation area) is ticked unless a test says otherwise.
+const config = (over: Partial<AutoTransferConfig> = {}): AutoTransferConfig => ({ ...DEFAULT_AUTO_TRANSFER_CONFIG, includedOperationAreas: ["Teller"], ...over });
 
 beforeEach(() => {
   seq = 0;
@@ -91,10 +92,18 @@ describe("rules", () => {
     expect(dueSweeps(db.reportingPeriods, [], config(), SEP_END - 1)).toEqual([]);
   });
 
-  it("an excluded operation area matches whatever the case or spacing", () => {
-    const c = config({ excludedOperationAreas: ["Card Operations"] });
-    expect(isExcluded({ operationArea: " card  operations " }, c)).toBe(true);
-    expect(isExcluded({ operationArea: "Teller" }, c)).toBe(false);
+  it("a ticked operation area matches whatever the case or spacing; an unticked one is not transferred", () => {
+    const c = config({ includedOperationAreas: ["Card Operations"] });
+    expect(isIncluded({ operationArea: " card  operations " }, c)).toBe(true);
+    expect(isIncluded({ operationArea: "Teller" }, c)).toBe(false);
+    // Nothing ticked (a fresh install): nothing is transferred.
+    expect(isIncluded({ operationArea: "Teller" }, DEFAULT_AUTO_TRANSFER_CONFIG)).toBe(false);
+  });
+
+  it("until the included-areas migration is applied, the old excluded list still decides", () => {
+    const c = config({ includedOperationAreas: [], legacyExcludedOperationAreas: ["Card Operations"] });
+    expect(isIncluded({ operationArea: "card operations" }, c)).toBe(false);
+    expect(isIncluded({ operationArea: "Teller" }, c)).toBe(true);
   });
 });
 
@@ -109,14 +118,14 @@ describe("sweep", () => {
     expect(runs[0]).toMatchObject({ periodId: "sep", status: "DONE", toPeriodId: "oct", movedCount: 2, keptCount: 0 });
   });
 
-  it("keeps excluded operation areas, not-yet-approved, rejected and closed findings", () => {
+  it("keeps unticked operation areas, not-yet-approved, rejected and closed findings", () => {
     const kept = finding("sep", "SENT_TO_BRANCH_MANAGER", { operationArea: "Card" });
     const draft = finding("sep", "DRAFT");
     const review = finding("sep", "HO_REVIEW");
     const rejected = finding("sep", "REJECTED");
     const closed = finding("sep", "CLOSED", { closedCases: 3, closedAmount: 3000 });
     const moved = finding("sep");
-    const { runs } = sweepPeriods(db, ["sep"], config({ excludedOperationAreas: ["Card"] }), SEP_END + H);
+    const { runs } = sweepPeriods(db, ["sep"], config(), SEP_END + H);
     expect([kept, draft, review, rejected, closed].map((f) => f.periodId)).toEqual(["sep", "sep", "sep", "sep", "sep"]);
     expect(moved.periodId).toBe("oct");
     expect(runs[0]).toMatchObject({ movedCount: 1, keptCount: 1, keptReferences: [kept.reference] });

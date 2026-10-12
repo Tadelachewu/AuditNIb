@@ -1,6 +1,6 @@
 # Automatic Transfer at Period End
 
-When a reporting period ends, every finding still outstanding in it is carried into the **next period**, automatically and **once**. Findings in **excluded operation areas** stay. Locking a period no longer transfers anything.
+When a reporting period ends, every finding still outstanding in it is carried into the **next period**, automatically and **once**. Only findings in the **operation areas ticked in its settings** are carried; the rest stay. Locking a period no longer transfers anything.
 
 Replaces the old "transfer outstanding cases when locking a period" option (see `TRANSFER_ON_LOCK.md`, now historical).
 
@@ -13,7 +13,7 @@ Replaces the old "transfer outstanding cases when locking a period" option (see 
 | **When** | Once the period's **end** *and* its **submission window's end** have passed (whichever is later), plus an optional delay. A grace window that runs past the period end is respected: nothing moves while people may still submit into the period |
 | **Which periods** | Every period, open **or locked**, not yet handled |
 | **What moves** | Findings currently in that period that are **with the branch and not fully closed**: Sent to Branch Manager (/R), Partially Rectified, Rectified (awaiting closure), Rectification Returned, Transferred |
-| **What stays** | Drafts and findings in review, returned or rejected findings, closed findings, and findings whose **operation area is excluded** |
+| **What stays** | Drafts and findings in review, returned or rejected findings, closed findings, and findings whose **operation area is not ticked** for automatic transfer |
 | **Where to** | The **next period** by calendar (Oct → Nov, Dec → Jan), one step, even if that period is locked (a lock only blocks submission) |
 | **How** | The same transfer as a manual one: unclosed rectification goes back to the branch, closed work stays with the period, history and audit are recorded. Method **Automatic**, by **System (automatic transfer)** |
 | **How often** | Once per period. A finding moved back into an already-handled period later is not swept again; it needs a manual transfer |
@@ -32,7 +32,7 @@ If the app wasn't used for a while, the due periods are handled **oldest first**
 | Setting | Meaning | Default |
 |---|---|---|
 | **Transfer outstanding findings automatically when a reporting period ends** | Master switch | On |
-| **Operation areas excluded from automatic transfer** | Findings in these areas stay in their period (matched regardless of letter case and spacing). Choices: the configured operation areas plus any typed-in value already used on findings | None |
+| **Operation areas to transfer automatically** | Findings in the **ticked** areas are carried into the next period; findings in every other area stay in theirs (matched regardless of letter case and spacing). Choices: the configured operation areas plus any typed-in value already used on findings. *Tick all* / *Clear all* sets the whole list. A newly added operation area starts **unticked** | None ticked (nothing is transferred until areas are chosen) |
 | **Run after (hours past the period end)** | A delay after the end / submission window | 0 |
 
 It has its own **Save** button, separate from the rest of the Settings page. Viewing needs *Settings › View* (or *Reporting Periods › View*); changing it needs *Settings › Edit*. Every change is audit-logged.
@@ -52,7 +52,7 @@ It has its own **Save** button, separate from the rest of the Settings page. Vie
   - the transfer-permission holders get one summary per period;
   - each affected branch's rectifiers get one message ("N findings carried into 2026-11");
   - never one notification per finding.
-- **Audit log:** one `PERIOD_AUTO_TRANSFER` entry per period, listing the moved and kept references, the exclusions in force and **what started it** (`triggeredBy`: `scheduler` or `in-app`).
+- **Audit log:** one `PERIOD_AUTO_TRANSFER` entry per period, listing the moved and kept references, the operation areas ticked at the time and **what started it** (`triggeredBy`: `scheduler` or `in-app`).
 
 ## 4. When it actually runs
 
@@ -170,6 +170,23 @@ npx prisma migrate deploy
 
 Then restart the app. Until the migration is applied the feature stays **idle**: nothing moves, Settings shows "not installed", and a single warning is logged.
 
+### Ticked areas are transferred (migration `20261012120000_auto_transfer_included_areas`)
+
+The area list used to name the areas **left behind**; it now names the areas **transferred**. The migration replaces the column
+`excluded_operation_areas` with `included_operation_areas` and converts the saved setting so nothing changes by itself: every
+operation area known at that moment (the configured list plus any value used on a finding) that was not excluded becomes ticked.
+A database with no saved setting (everything was transferred) gets every known area ticked.
+
+```
+npx prisma migrate deploy
+```
+
+Until it is applied the old excluded list stays in force, Settings shows the list read-only with a notice, saving answers 409, and
+one warning is logged (`auto_transfer.migration_pending`).
+
+After it, two things differ from before: an operation area **added later starts unticked**, and a finding whose area is in no list
+(a typed-in value) **stays** until that area is ticked.
+
 ## 6. Design (for developers)
 
 A self-contained module, `src/lib/autoTransfer/`, loosely coupled to the rest of the app:
@@ -177,7 +194,7 @@ A self-contained module, `src/lib/autoTransfer/`, loosely coupled to the rest of
 | File | Role |
 |---|---|
 | `types.ts` | Config and run types, defaults, the System actor (client-safe) |
-| `rules.ts` | **Pure** rules: when due, next period, exclusion, what a sweep would do |
+| `rules.ts` | **Pure** rules: when due, next period, which areas are transferred, what a sweep would do |
 | `store.ts` | `AutoTransferStore` interface + the Prisma implementation (its own two tables only) |
 | `service.ts` | `sweepPeriods()` (moves findings, audit, notifications) and `runAutoTransferIfDue()` (throttle, lock, store); dependencies injectable for tests |
 | `index.ts` | Public surface |
@@ -190,7 +207,7 @@ A self-contained module, `src/lib/autoTransfer/`, loosely coupled to the rest of
 
 Tests: `tests/autoTransfer.test.ts`:
 - the rules;
-- moved, kept and excluded findings;
+- moved and kept findings, ticked and unticked operation areas;
 - unclosed work reset;
 - cascade;
 - a locked destination;
@@ -203,7 +220,7 @@ Tests: `tests/autoTransfer.test.ts`:
 | # | Steps | Expected |
 |---|---|---|
 | A1 | Create a period ending a few minutes from now (submission window ending at the same time) and its next period; register and approve a finding in it; stay signed in | Within ~5 minutes after the end the finding is in the next period, status Transferred, Transfer History "Automatic" by System |
-| A2 | As A1, but give the finding an excluded operation area | It stays; the Auto-transfer column shows "1 kept" |
+| A2 | As A1, but untick the finding's operation area | It stays; the Auto-transfer column shows "1 kept" |
 | A3 | As A1 without creating the next period | Column "Waiting: no next period"; one notification; create the next period → the finding moves on the next check |
 | A4 | Submission window ending a day after the period end | Nothing moves until the window ends |
 | A5 | Switch Automatic Transfer off, let a period end | Nothing moves; column "Off" |
