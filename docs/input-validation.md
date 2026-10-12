@@ -25,7 +25,7 @@ The rules live in one place: `src/lib/inputRules.ts`, plus `src/lib/usernameVali
 | **Description, root cause, recommendation, evidence note, comment, support message** | Must contain words (not only symbols); max 5,000 | length limit |
 | **Reason** (reverse, transfer, return, reject, lock / unlock, import reverse) | 5–500 characters with words | length limit |
 | **Rectification** | Cases: whole number; amount: as above; note max 500 | — |
-| **Configurable Lists** (currencies, risk levels, operation areas, priority levels, irregularity types) | **Letters and single spaces only** (any language): no numbers, no special characters; at least 2 letters, max 100; **no duplicates** (case-insensitive) | — |
+| **Configurable Lists** (currencies, risk levels, operation areas, priority levels, irregularity types) | **2 to 100 characters**, with at least one letter or number; numbers and special characters are allowed; **no duplicates** (case-insensitive) | — |
 | **Automatic Transfer → excluded operation areas** | Letters or numbers, max 100, no duplicates (it may hold areas typed as "Other" on findings) | — |
 | **Email settings** | When email is on: a valid *From address*; for SMTP a valid host (e.g. `smtp.office365.com`) and a port 1–65535 | — |
 | **Reporting period** | Valid start / end / submission dates (end after start); name max 100 | — |

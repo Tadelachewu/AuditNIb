@@ -259,19 +259,16 @@ export const zAmount = (label = "Amount") =>
 export const zCaseCount = () => z.number().int("Number of cases must be a whole number").min(1, "Number of cases must be at least 1").max(LIMITS.caseCount.max, `Number of cases must be at most ${LIMITS.caseCount.max}`);
 /**
  * An item in a Configurable List (Settings: currencies, risk levels,
- * operation areas, priority levels, irregularity types): words only -
- * letters (any script) separated by single spaces, at least 2 letters, at
- * most 100 characters. No digits and no special characters, so the dropdowns
- * built from these lists stay clean and comparable.
+ * operation areas, priority levels, irregularity types): 2 to 100
+ * characters, and at least one letter or number. Numbers and special
+ * characters are allowed ("ATM/Cards", "Level 2", "Cash & Vault").
  */
 export function listItemError(value: string | null | undefined, label: string): string | null {
   const v = trimmed(value);
   if (!v) return `${label} is required`;
+  if (v.length < LIMITS.listItem.min) return `${label} must be at least ${LIMITS.listItem.min} characters`;
   if (v.length > LIMITS.listItem.max) return `${label} must be at most ${LIMITS.listItem.max} characters`;
-  if (/\p{N}/u.test(v)) return `${label} can't contain numbers`;
-  if (!/^[\p{L}\p{M} ]+$/u.test(v)) return `${label} can only contain letters and spaces (no special characters)`;
-  if (/ {2,}/.test(v)) return `${label} can't have two spaces in a row`;
-  if ((v.match(LETTERS) ?? []).length < LIMITS.listItem.min) return `${label} must be at least ${LIMITS.listItem.min} letters`;
+  if (!/[\p{L}\p{N}]/u.test(v)) return `${label} must contain letters or numbers`;
   return null;
 }
 /**
