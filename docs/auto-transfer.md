@@ -1,6 +1,17 @@
 # Automatic Transfer at Period End
 
-When a reporting period ends, every finding still outstanding in it is carried into the **next period**, automatically and **once**. Only findings whose **operation area and source are ticked in its settings** are carried; the rest stay. Locking a period no longer transfers anything.
+When a reporting period **stops being the current period**, every finding still outstanding in it is carried into the **next period**, automatically and **once**. Only findings whose **operation area and source are ticked in its settings** are carried; the rest stay. Locking a period no longer transfers anything.
+
+**The current period is the previous calendar month's.** During October it is 2026-09. On **1 November at 00:00** 2026-10 becomes the current period, and what is still outstanding in 2026-09 is carried into it. The current period is the default in every filter, on Register Finding, and the only period whose findings can be adjusted.
+
+| Date | Current period | Automatic transfer |
+|---|---|---|
+| 1–31 Oct | 2026-09 | None |
+| 1 Nov, 00:00 | 2026-10 | 2026-09 → 2026-10 |
+| 1–30 Nov | 2026-10 | None |
+| 1 Dec, 00:00 | 2026-11 | 2026-10 → 2026-11 |
+
+If last month's period doesn't exist (a gap, or the system's first month), the current period is the most recent one that started before this calendar month; failing that, the earliest one.
 
 Replaces the old "transfer outstanding cases when locking a period" option (see `TRANSFER_ON_LOCK.md`, now historical).
 
@@ -10,43 +21,46 @@ Replaces the old "transfer outstanding cases when locking a period" option (see 
 
 | | |
 |---|---|
-| **When** | Once the period's **end** *and* its **submission window's end** have passed (whichever is later), plus an optional delay. A grace window that runs past the period end is respected: nothing moves while people may still submit into the period |
+| **When** | At **00:00 (server time) on the 1st of the month after next**: the moment the period stops being the current period (2026-09 on 1 November), plus an optional delay. The period's own end date and submission window don't change this |
 | **Which periods** | Every period, open **or locked**, not yet handled |
 | **What moves** | Findings currently in that period that are **with the branch and not fully closed**: Sent to Branch Manager (/R), Partially Rectified, Rectified (awaiting closure), Rectification Returned, Transferred |
 | **What stays** | Drafts and findings in review, returned or rejected findings, closed findings, and findings whose **operation area / source is not ticked** for automatic transfer |
-| **Where to** | The **next period** by calendar (Oct → Nov, Dec → Jan), one step, even if that period is locked (a lock only blocks submission) |
+| **Where to** | The **next period** by calendar (Oct → Nov, Dec → Jan), one step: the period that has just become current. Even if that period is locked (a lock only blocks submission) |
 | **How** | The same transfer as a manual one: unclosed rectification goes back to the branch, closed work stays with the period, history and audit are recorded. Method **Automatic**, by **System (automatic transfer)** |
 | **How often** | Once per period. A finding moved back into an already-handled period later is not swept again; it needs a manual transfer |
-| **Rescheduled period** | If a period that was already handled is edited to end (or its submission window to end) **later than now**, it is **re-armed** and swept again when it really ends. Moving the end to a time that has already passed changes nothing |
-| **Dev Reset** | Wipes the record of which periods were swept (with the findings), so every period is handled afresh. Periods that have already ended are swept at the next check, and with nothing in them are simply marked Done |
+| **Edited period** | If a period that was already handled is edited (its dates or submission window saved) while its sweep is **still in the future**, it is **re-armed** and swept again on its 1st. This applies to a period swept under the older period-end rule and still current, or one moved to a later month. Editing a period that is no longer current changes nothing |
+| **Dev Reset** | Wipes the record of which periods were swept (with the findings), so every period is handled afresh. Periods that are no longer current are swept at the next check, and with nothing in them are simply marked Done |
 | **Deleting a period** | Its record is deleted with it |
 
 ### No next period yet
 Nothing moves. The period shows **Waiting: no next period**, the transfer-permission holders are told once, and the transfer happens automatically as soon as the next period is created.
 
 ### Several months missed
-If the app wasn't used for a while, the due periods are handled **oldest first** in one go, so a finding in September ends up in the first period that hasn't ended (Sep → Oct → Nov).
+If the app wasn't used for a while, the due periods are handled **oldest first** in one go, so a finding in an old period ends up in the current period (in December: Sep → Oct → Nov) and never beyond it.
+
+### Finding the transfer queue
+A finding is flagged as needing a transfer (HO Controller's list) when the period it sits in is **older than the current period** or is locked. Findings in the current period are not flagged, even though that period's dates have passed.
 
 ## 2. Settings: Admin → Settings → Automatic Transfer
 
 | Setting | Meaning | Default |
 |---|---|---|
-| **Transfer outstanding findings automatically when a reporting period ends** | Master switch | On |
+| **Transfer outstanding findings automatically when a reporting period stops being the current period** | Master switch | On |
 | **Operation areas and sources to transfer automatically** | A grid: one row per operation area, one column per source (Internal Control, Internal Audit, ...). A **ticked** box means findings of that source in that area are carried into the next period; everything unticked stays (areas matched regardless of letter case and spacing). Ticking an area ticks all its sources; untick the ones to leave out and the area stays ticked while at least one source is (unticking the area clears its row). The box under a source ticks its whole column; *Tick all* / *Clear all* sets the grid. Rows: the configured operation areas plus any typed-in value already used on findings. Columns: the active sources. A newly added operation area or source starts **unticked** | Nothing ticked (nothing is transferred until boxes are chosen) |
-| **Run after (hours past the period end)** | A delay after the end / submission window | 0 |
+| **Run after (hours past 00:00 on the 1st)** | A delay after the period stops being current | 0 |
 
 It has its own **Save** button, separate from the rest of the Settings page. Viewing needs *Settings › View* (or *Reporting Periods › View*); changing it needs *Settings › Edit*. Every change is audit-logged.
 
 ## 3. Where you see it
 
 - **Reporting Periods → Auto-transfer column:**
-  - *Runs after 31/10/2026, 23:59:00*: pending.
+  - *Runs after 01/12/2026, 00:00:00* (for 2026-10): pending.
   - **Done** · 12 moved, 3 kept · **by scheduler** / **by in-app check**: what started the sweep; hover for the date and destination.
   - **Waiting: no next period**.
   - **Before install**: the period had already ended when this feature was installed; it is never swept.
   - **Off**: the switch is off.
 - **Lock dialog:** a note that locking no longer transfers.
-- **The finding:** its Transfer History shows the hop with method *Automatic* and reason *"Automatic transfer at the end of 2026-10 (ended …)"*.
+- **The finding:** its Transfer History shows the hop with method *Automatic* and reason *"Automatic transfer: 2026-10 stopped being the current period (…)"*.
 - **Reports → Transfers / Transferred Findings:** listed like any transfer, *Transferred by: System (automatic transfer)*.
 - **Notifications** (Email Events → *Automatic transfer*):
   - the transfer-permission holders get one summary per period;

@@ -113,14 +113,14 @@ export function AutoTransferSettings({ canEdit }: { canEdit: boolean }) {
       )}
       <CheckboxField
         id="auto-transfer-enabled"
-        label="Transfer outstanding findings automatically when a reporting period ends"
+        label="Transfer outstanding findings automatically when a reporting period stops being the current period"
         checked={draft.enabled}
         onChange={(enabled) => setDraft((d) => ({ ...d, enabled }))}
       />
       <p className="-mt-2 text-xs text-slate-500">
-        Once a period&apos;s end <strong>and</strong> its submission window have passed, every finding still outstanding in it (sent to the branch,
-        partly rectified, rectified but not closed, returned for correction, transferred) is carried into the <strong>next period</strong>,
-        once. Unclosed rectification goes back to the branch, as with any transfer. Locking a period no longer transfers anything.
+        The current period is the previous calendar month&apos;s. On the <strong>1st of each month</strong> the next period becomes current, and
+        every finding still outstanding in the old one (sent to the branch, partly rectified, rectified but not closed, returned for
+        correction, transferred) is carried into the <strong>new current period</strong>, once. Unclosed rectification goes back to the branch, as with any transfer. Locking a period no longer transfers anything.
       </p>
 
       <div>
@@ -197,9 +197,9 @@ export function AutoTransferSettings({ canEdit }: { canEdit: boolean }) {
       </div>
 
       <div className="max-w-xs">
-        <Label htmlFor="auto-transfer-delay">Run after (hours past the period end)</Label>
+        <Label htmlFor="auto-transfer-delay">Run after (hours past 00:00 on the 1st)</Label>
         <Input id="auto-transfer-delay" type="number" min={0} max={720} step={1} value={draft.delayHours} onChange={(e) => setDraft((d) => ({ ...d, delayHours: e.target.value }))} />
-        {delayProblem ? <p className="mt-1 text-xs text-red-600">{delayProblem}</p> : <p className="mt-1 text-xs text-slate-500">0 = as soon as it ends.</p>}
+        {delayProblem ? <p className="mt-1 text-xs text-red-600">{delayProblem}</p> : <p className="mt-1 text-xs text-slate-500">0 = at 00:00 on the 1st.</p>}
       </div>
 
       {error && <p className="text-sm text-red-600">{error}</p>}

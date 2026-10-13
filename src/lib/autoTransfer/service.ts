@@ -59,7 +59,7 @@ export function sweepPeriods(
         const recipients = usersWithFindingsPermission(db, "transfer");
         notifyUsers(db, recipients, {
           type: "AUTO_TRANSFERRED",
-          title: `${period.code} ended - create the next period`,
+          title: `${period.code} is no longer the current period - create the next period`,
           message: `${toMove.length} outstanding finding(s) in ${period.code} will be carried over automatically as soon as the next reporting period is created.`,
           entityType: "ReportingPeriod",
           entityId: period.id,
@@ -69,11 +69,11 @@ export function sweepPeriods(
       continue;
     }
 
-    const endedAt = formatDateTime(new Date(sweepDueAt(period, { delayHours: 0 })).toISOString());
+    const since = formatDateTime(new Date(sweepDueAt(period, { delayHours: 0 })).toISOString());
     for (const f of toMove) {
       transferFinding(db, f, {
         toPeriodId: destination.id,
-        reason: `Automatic transfer at the end of ${period.code} (ended ${endedAt}).`,
+        reason: `Automatic transfer: ${period.code} stopped being the current period (${since}).`,
         userId: SYSTEM_ACTOR.userId,
         userName: SYSTEM_ACTOR.userName,
         method: "AUTOMATIC",
@@ -100,13 +100,13 @@ export function sweepPeriods(
       entityType: "ReportingPeriod",
       entityId: period.id,
       newValue: { from: period.code, to: destination.code, moved: run.movedReferences, kept: run.keptReferences, includedAreaSources: config.includedAreaSources, triggeredBy: trigger },
-      reason: `Automatic transfer at the end of ${period.code} (started by ${trigger === "scheduler" ? "the scheduler" : "the in-app check"})`,
+      reason: `Automatic transfer out of ${period.code} (started by ${trigger === "scheduler" ? "the scheduler" : "the in-app check"})`,
     });
 
     if (toMove.length > 0 || kept.length > 0) {
       notifyUsers(db, usersWithFindingsPermission(db, "transfer"), {
         type: "AUTO_TRANSFERRED",
-        title: `${period.code} ended: ${toMove.length} finding(s) moved to ${destination.code}`,
+        title: `${period.code} is no longer current: ${toMove.length} finding(s) moved to ${destination.code}`,
         message:
           `${toMove.length} outstanding finding(s) were carried into ${destination.code} automatically.` +
           (kept.length > 0 ? ` ${kept.length} kept in ${period.code} (operation area or source not set to transfer automatically) - transfer them manually if needed.` : ""),
@@ -120,7 +120,7 @@ export function sweepPeriods(
       notifyUsers(db, usersWithFindingsPermission(db, "rectify", { branchId }), {
         type: "AUTO_TRANSFERRED",
         title: `${count} finding(s) carried into ${destination.code}`,
-        message: `${period.code} ended with ${count} of your findings still outstanding; they were carried into ${destination.code} for rectification.`,
+        message: `${count} of your findings were still outstanding in ${period.code}; they were carried into ${destination.code} for rectification.`,
         entityType: "Branch",
         entityId: branchId,
       });
@@ -215,13 +215,14 @@ export async function runAutoTransferIfDue(
 }
 
 /**
- * A period's dates changed (Reporting Periods -> Edit). If it was already
- * handled but now ends LATER than now, it is re-armed - its run is forgotten
- * - so it is swept again when it really ends. Called after the period is
- * saved; never throws (a failure is logged and the period keeps its record).
+ * A period was edited (Reporting Periods -> Edit). If it was already handled
+ * but its sweep is now due LATER than now, it is re-armed - its run is
+ * forgotten - so it is swept again when it stops being the current period.
+ * Called after the period is saved; never throws (a failure is logged and
+ * the period keeps its record).
  */
 export async function rearmIfRescheduled(
-  period: Pick<ReportingPeriod, "id" | "code" | "endsAt" | "submissionEndsAt">,
+  period: Pick<ReportingPeriod, "id" | "code" | "year" | "month">,
   opts: { now?: number; store?: AutoTransferStore } = {}
 ): Promise<boolean> {
   const store = opts.store ?? prismaAutoTransferStore;
@@ -231,7 +232,7 @@ export async function rearmIfRescheduled(
     const run = (await store.listRuns()).find((r) => r.periodId === period.id);
     if (!run || sweepDueAt(period, config) <= (opts.now ?? Date.now())) return false;
     await store.deleteRuns([period.id]);
-    logger.info({ event: "auto_transfer.rearmed", periodId: period.id, period: period.code, previousStatus: run.status }, "Period rescheduled to end later - automatic transfer re-armed");
+    logger.info({ event: "auto_transfer.rearmed", periodId: period.id, period: period.code, previousStatus: run.status }, "Period's sweep is due later - automatic transfer re-armed");
     return true;
   } catch (err) {
     logger.error({ err, event: "auto_transfer.rearm_failed", periodId: period.id }, "Could not re-arm the automatic transfer for a rescheduled period");

@@ -11,7 +11,7 @@ This document is both the business specification (§1–§6) and the implementat
 | # | Rule |
 |---|---|
 | R1 | **Eligible findings:** the finding's **operation area** is in Settings → *Revolving operation areas* (matched regardless of letter case and spacing). Existing, imported and new findings all qualify |
-| R2 | **Outstanding in the current period:** the finding sits in the **current reporting period** (the one containing today) and is with the branch, not fully closed: Sent to Branch Manager (/R), Partially Rectified, Rectified (awaiting close), Rectification Returned, Transferred. A finding left in an older period must first be transferred into the current one |
+| R2 | **Outstanding in the current period:** the finding sits in the **current reporting period** (the previous calendar month's: 2026-09 during October) and is with the branch, not fully closed: Sent to Branch Manager (/R), Partially Rectified, Rectified (awaiting close), Rectification Returned, Transferred. A finding left in an older period must first be transferred into the current one |
 | R3 | **What may change:** cases can only be **added** (+N) or left unchanged. The **amount may increase or decrease.** Both in one adjustment, or either alone; at least one change |
 | R4 | **Originals never change:** the registration's case count and amount are frozen as *Originally registered*. The finding's *current* figures are original + approved adjustments |
 | R5 | **Amount floor:** the new amount can never be below what is already **rectified (awaiting close or closed)**, and while any case is outstanding the outstanding amount (amount − closed) must stay **above zero** |

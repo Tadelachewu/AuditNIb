@@ -10,14 +10,21 @@ describe("reporting period helpers", () => {
   it("lists periods newest first", () => {
     expect(sortPeriods(periods).map((p) => p.code)).toEqual(["2026-11", "2026-10", "2026-09", "2026-08"]);
   });
-  it("current = the period whose dates contain today (not the first open one)", () => {
-    expect(currentPeriod(periods, at("2026-10-03"))?.code).toBe("2026-10");
+  it("current = the previous calendar month's period, all month long", () => {
+    expect(currentPeriod(periods, at("2026-10-03"))?.code).toBe("2026-09");
+    expect(currentPeriod(periods, at("2026-10-31"))?.code).toBe("2026-09");
+    expect(currentPeriod(periods, at("2026-11-01"))?.code).toBe("2026-10");
+    expect(currentPeriod(periods, at("2026-12-15"))?.code).toBe("2026-11");
+  });
+  it("across a year end: January's current period is December's", () => {
+    const yearEnd = [...periods, P("2026-12", "2026-12-01", "2026-12-31"), P("2027-01", "2027-01-01", "2027-01-31")];
+    expect(currentPeriod(yearEnd, at("2027-01-10"))?.code).toBe("2026-12");
+  });
+  it("last month's period doesn't exist: the most recent one that started before this month", () => {
+    expect(currentPeriod(periods, at("2027-02-10"))?.code).toBe("2026-11");
+  });
+  it("nothing earlier than this month (the system's first month, or before every period): the earliest", () => {
     expect(currentPeriod(periods, at("2026-08-15"))?.code).toBe("2026-08");
-  });
-  it("no period covers today: the most recent one that has started", () => {
-    expect(currentPeriod(periods, at("2027-01-10"))?.code).toBe("2026-11");
-  });
-  it("before every period: the earliest", () => {
     expect(currentPeriod(periods, at("2026-01-01"))?.code).toBe("2026-08");
   });
   it("filter value: none -> current, ALL -> every period, else that period", () => {

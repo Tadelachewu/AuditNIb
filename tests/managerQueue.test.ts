@@ -24,24 +24,27 @@ describe("Branch Manager's queue (Show My Queue)", () => {
 
 describe("HO Controller's queue: findings to transfer", async () => {
   const { needsTransfer } = await import("@/lib/findings");
-  const now = new Date("2026-10-03T12:00:00Z").getTime();
+  // 3 Nov: the current period is October's (the previous calendar month).
+  const now = new Date("2026-11-03T12:00:00Z").getTime();
   const dbP = {
     settings: { hoApproval: { approverUserIds: [] } },
     reportingPeriods: [
-      { id: "aug", status: "OPEN", endsAt: "2026-08-31T20:59:00Z" }, // ended
-      { id: "sep", status: "LOCKED", endsAt: "2026-09-30T20:59:00Z" }, // locked
-      { id: "oct", status: "OPEN", endsAt: "2026-10-31T20:59:00Z" }, // current
+      { id: "aug", code: "2026-08", status: "OPEN", startsAt: "2026-08-01T00:00:00Z", endsAt: "2026-08-31T20:59:00Z" }, // older than the current period
+      { id: "sep", code: "2026-09", status: "LOCKED", startsAt: "2026-09-01T00:00:00Z", endsAt: "2026-09-30T20:59:00Z" }, // locked
+      { id: "oct", code: "2026-10", status: "OPEN", startsAt: "2026-10-01T00:00:00Z", endsAt: "2026-10-31T20:59:00Z" }, // current, though its dates have passed
+      { id: "nov", code: "2026-11", status: "OPEN", startsAt: "2026-11-01T00:00:00Z", endsAt: "2026-11-30T20:59:00Z" }, // this calendar month
     ],
   } as unknown as Database;
   const at = (periodId: string, status = "SENT_TO_BRANCH_MANAGER", extra: Partial<Finding> = {}) => f(status, { periodId, ...extra });
 
-  it("an open finding in an ended or locked period needs transferring", () => {
+  it("an open finding in a period older than the current one, or a locked one, needs transferring", () => {
     expect(needsTransfer(dbP, at("aug"), now)).toBe(true);
     expect(needsTransfer(dbP, at("sep", "PARTIALLY_RECTIFIED"), now)).toBe(true);
     expect(needsTransfer(dbP, at("sep", "TRANSFERRED"), now)).toBe(true);
   });
-  it("not in the current period, not when closed, not before approval", () => {
+  it("not in the current period or a later one, not when closed, not before approval", () => {
     expect(needsTransfer(dbP, at("oct"), now)).toBe(false);
+    expect(needsTransfer(dbP, at("nov"), now)).toBe(false);
     expect(needsTransfer(dbP, at("aug", "CLOSED", { closedCases: 2, closedAmount: 200 }), now)).toBe(false);
     expect(needsTransfer(dbP, at("aug", "DISTRICT_REVIEW"), now)).toBe(false);
   });

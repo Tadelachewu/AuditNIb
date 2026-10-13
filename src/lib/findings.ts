@@ -1,6 +1,7 @@
 import { v4 as uuid } from "uuid";
 import { appendAuditLog } from "@/lib/audit";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
+import { currentPeriod } from "@/lib/periods";
 import type { SessionData } from "@/lib/session";
 import { REQUIRABLE_FINDING_FIELDS, HO_APPROVED_OR_LATER_STATUSES } from "@/types";
 import type {
@@ -860,16 +861,18 @@ export function queueStatusesForSession(session: SessionData, db: Database): (fi
 
 /**
  * A finding that should be carried into another period: it still has cases
- * that aren't formally closed, and its current reporting period has ended
- * or is locked. What puts it in the queue of anyone who can transfer (by
- * default the HO Controller).
+ * that aren't formally closed, and the period it sits in is older than the
+ * current reporting period (src/lib/periods.ts) or is locked. What puts it
+ * in the queue of anyone who can transfer (by default the HO Controller).
  */
 export function needsTransfer(db: Database, f: Finding, now: number = Date.now()): boolean {
   if (!AUTO_TRANSFERABLE_STATUSES.includes(f.status)) return false;
   if (f.closedCases >= f.caseCount && f.closedAmount >= f.amount) return false;
   const period = db.reportingPeriods.find((p) => p.id === f.periodId);
   if (!period) return false;
-  return period.status === "LOCKED" || new Date(period.endsAt).getTime() < now;
+  if (period.status === "LOCKED") return true;
+  const current = currentPeriod(db.reportingPeriods, now);
+  return !!current && period.startsAt < current.startsAt;
 }
 
 /**

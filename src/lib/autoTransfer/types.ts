@@ -1,7 +1,8 @@
 /**
  * Automatic transfer at period end - a self-contained module
- * (src/lib/autoTransfer). When a reporting period has ended, every finding
- * still outstanding in it is carried into the next period, once - for the
+ * (src/lib/autoTransfer). When a reporting period stops being the current
+ * period (the 1st of the month after next), every finding still
+ * outstanding in it is carried into the next period, once - for the
  * operation areas and sources ticked in its settings. See docs/auto-transfer.md.
  *
  * Client-safe: types and constants only.
@@ -31,7 +32,7 @@ export interface AutoTransferConfig {
    *  - includedOperationAreas: these areas are transferred, whatever the source
    */
   legacy?: { excludedOperationAreas?: string[]; includedOperationAreas?: string[] };
-  /** Run this many hours after the period's end (and its submission window's end). */
+  /** Run this many hours after the period stops being the current one (00:00 on the 1st). */
   delayHours: number;
   updatedAt: string | null;
   updatedBy: string | null;

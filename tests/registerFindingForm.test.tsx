@@ -2,9 +2,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 
-// Register Finding: the finding date (pre-filled with today) must be a real,
-// non-future date, on or before the end of the chosen reporting period. A
-// disabled Save button always says why.
+// Register Finding: the finding date must be a real, non-future date, on or
+// before the end of the chosen reporting period. It starts blank, because the
+// current period (last month's) has already ended. A disabled Save button
+// always says why.
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }));
 vi.mock("@/lib/api-client", () => ({ apiSend: vi.fn(async () => ({ finding: { id: "f1" } })), apiGet: vi.fn(async () => ({})) }));
@@ -34,7 +35,7 @@ function renderForm(requiredFields: Record<string, boolean> = noneRequired) {
   render(
     <NewFindingForm
       sources={[]} departments={[]} categories={[]}
-      periods={[period("2026-08", 8), period("2026-10", 10)]}
+      periods={[period("2026-08", 8), period("2026-09", 9), period("2026-10", 10)]}
       districts={[]} branches={[]}
       currencies={["ETB"]} riskLevels={["Low"]} operationAreas={["Teller"]} priorityLevels={["Low"]} irregularityTypes={["Cash"]}
       requiredFields={requiredFields as never} allowOther={noOther as never}
@@ -49,6 +50,7 @@ describe("Register Finding: the finding date must be within the reporting period
   it("period 2026-08 with today's date (2026-10-02, after August) is refused, with the reason shown", () => {
     renderForm();
     choosePeriod("p8");
+    fireEvent.change(screen.getByLabelText(/Finding date/), { target: { value: "2026-10-02" } });
     fireEvent.change(screen.getByLabelText("Amount involved"), { target: { value: "500" } });
     fireEvent.change(screen.getByLabelText("Number of cases"), { target: { value: "1" } });
     expect(saveDraft().disabled).toBe(true);
@@ -119,11 +121,12 @@ describe("Register Finding: the administrator's required fields", () => {
     expect(screen.queryByText("Can't save yet: Classified case is required.")).not.toBeNull();
   });
 
-  it("the current reporting period is selected by default, and periods are listed newest first", () => {
+  it("the current reporting period (last month's) is selected by default with a blank finding date, and periods are listed newest first", () => {
     renderForm();
-    expect((screen.getByLabelText(/Reporting period/i) as HTMLSelectElement).value).toBe("p10"); // today is 2026-10-02
+    expect((screen.getByLabelText(/Reporting period/i) as HTMLSelectElement).value).toBe("p9"); // today is 2026-10-02
+    expect((screen.getByLabelText(/Finding date/) as HTMLInputElement).value).toBe(""); // today is after 2026-09's end
     const codes = Array.from((screen.getByLabelText(/Reporting period/i) as HTMLSelectElement).options).map((o) => o.text).filter((t) => t.startsWith("2026"));
-    expect(codes.map((t) => t.slice(0, 7))).toEqual(["2026-10", "2026-08"]);
+    expect(codes.map((t) => t.slice(0, 7))).toEqual(["2026-10", "2026-09", "2026-08"]);
   });
 
   it("no reporting period chosen: the reason is shown", () => {

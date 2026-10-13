@@ -273,7 +273,7 @@ export default function SettingsPage() {
       </CollapsibleCard>
 
       {/* Its own section and Save (src/lib/autoTransfer), outside the main settings form. */}
-      <CollapsibleCard title="Automatic Transfer" description="Carry outstanding findings into the next period when a period ends.">
+      <CollapsibleCard title="Automatic Transfer" description="Carry outstanding findings into the new current period on the 1st of each month.">
         <AutoTransferSettings canEdit={canEdit} />
       </CollapsibleCard>
 

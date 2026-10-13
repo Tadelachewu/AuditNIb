@@ -630,7 +630,7 @@ export default function ReportingPeriodsPage() {
             {!isFlagEditOnly && (
               <p className="text-xs text-slate-500 sm:col-span-2">
                 Locking only blocks submission. Outstanding findings are carried into the next period automatically when this
-                period ends (Settings → Automatic Transfer).
+                period stops being the current period (Settings → Automatic Transfer).
               </p>
             )}
             <StickyActions>

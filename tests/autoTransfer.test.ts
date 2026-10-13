@@ -68,13 +68,17 @@ beforeEach(() => {
   } as unknown as Database;
 });
 
-const SEP_END = Date.UTC(2026, 8, 30, 23, 59);
+// Sep 2026 is the current period all through October; it is swept on 1 Nov, 00:00 local time.
+const SEP_END = new Date(2026, 10, 1).getTime();
 
 describe("rules", () => {
-  it("due at the later of the period end and its submission window end, plus the delay", () => {
-    const p = period("x", 2026, 9, { submissionEndsAt: new Date(SEP_END + 5 * 24 * H).toISOString() });
-    expect(sweepDueAt(p, { delayHours: 0 })).toBe(SEP_END + 5 * 24 * H);
+  it("due on the 1st of the month after next (when the period stops being current), plus the delay", () => {
+    expect(sweepDueAt(period("x", 2026, 9), { delayHours: 0 })).toBe(new Date(2026, 10, 1).getTime());
     expect(sweepDueAt(period("y", 2026, 9), { delayHours: 2 })).toBe(SEP_END + 2 * H);
+    // The period's own dates and submission window don't move it.
+    expect(sweepDueAt(period("z", 2026, 9, { submissionEndsAt: new Date(SEP_END + 5 * 24 * H).toISOString() }), { delayHours: 0 })).toBe(SEP_END);
+    // Across a year end: Dec 2026 is swept on 1 Feb 2027.
+    expect(sweepDueAt(period("d", 2026, 12), { delayHours: 0 })).toBe(new Date(2027, 1, 1).getTime());
   });
 
   it("next period = the next calendar month, across a year end", () => {
@@ -83,8 +87,9 @@ describe("rules", () => {
     expect(nextPeriod(db.reportingPeriods, db.reportingPeriods[2])).toBeUndefined();
   });
 
-  it("due periods: ended, not handled, oldest first; none when switched off", () => {
-    const now = Date.UTC(2026, 10, 2); // 2 Nov: Sep and Oct have ended
+  it("due periods: no longer current, not handled, oldest first; none when switched off", () => {
+    expect(dueSweeps(db.reportingPeriods, [], config(), new Date(2026, 10, 2).getTime()).map((p) => p.id)).toEqual(["sep"]); // 2 Nov: Oct is current
+    const now = new Date(2026, 11, 2).getTime(); // 2 Dec: Nov is current, Sep and Oct are behind it
     expect(dueSweeps(db.reportingPeriods, [], config(), now).map((p) => p.id)).toEqual(["sep", "oct"]);
     const handled: AutoTransferRun[] = [{ periodId: "sep", status: "DONE", toPeriodId: "oct", movedCount: 0, keptCount: 0, movedReferences: [], keptReferences: [], ranAt: "", triggeredBy: null }];
     expect(dueSweeps(db.reportingPeriods, handled, config(), now).map((p) => p.id)).toEqual(["oct"]);
@@ -236,11 +241,11 @@ describe("service", () => {
     expect(db.auditLogs.find((l) => l.action === "PERIOD_AUTO_TRANSFER")?.reason).toContain("the scheduler");
     db.reportingPeriods.push(period("dec", 2026, 12));
     finding("nov");
-    const inApp = await runAutoTransferIfDue({ now: Date.UTC(2026, 11, 2), force: true, deps: deps(store) });
+    const inApp = await runAutoTransferIfDue({ now: new Date(2027, 0, 2).getTime(), force: true, deps: deps(store) }); // 2 Jan: Oct and Nov are due
     expect(inApp.runs.map((r) => r.triggeredBy)).toEqual(["in-app", "in-app"]);
   });
 
-  it("does nothing before the period ends, when off, or when not installed", async () => {
+  it("does nothing while the period is still current, when off, or when not installed", async () => {
     const f = finding("sep");
     expect((await runAutoTransferIfDue({ now: SEP_END - H, force: true, deps: deps(fakeStore(config())) })).ran).toBe(false);
     expect((await runAutoTransferIfDue({ now: SEP_END + H, force: true, deps: deps(fakeStore(config({ enabled: false }))) })).ran).toBe(false);
@@ -289,19 +294,20 @@ describe("service", () => {
     expect(db.findingTransfers).toHaveLength(0);
   });
 
-  it("re-arms a swept period whose end is moved later than now, but not one still ended", async () => {
+  it("re-arms a swept period whose sweep is due later than now, but not one still due", async () => {
     const done: AutoTransferRun = { periodId: "sep", status: "DONE", toPeriodId: "oct", movedCount: 0, keptCount: 0, movedReferences: [], keptReferences: [], ranAt: "", triggeredBy: "in-app" };
     const store = fakeStore(config(), [done]);
     const sep = db.reportingPeriods[0];
-    // Still ended (end moved, but to a time already past): keeps its record.
-    expect(await rearmIfRescheduled({ ...sep, endsAt: new Date(SEP_END + H).toISOString(), submissionEndsAt: new Date(SEP_END + H).toISOString() }, { now: SEP_END + 2 * H, store })).toBe(false);
-    // Ends later than now: re-armed, then swept again when it ends.
-    const later = { ...sep, endsAt: new Date(SEP_END + 5 * H).toISOString(), submissionEndsAt: new Date(SEP_END + 5 * H).toISOString() };
-    expect(await rearmIfRescheduled(later, { now: SEP_END + 2 * H, store })).toBe(true);
+    // Edited after it stopped being current (its dates don't change when it is due): keeps its record.
+    const edited: ReportingPeriod = { ...sep, endsAt: new Date(SEP_END + H).toISOString(), submissionEndsAt: new Date(SEP_END + H).toISOString() };
+    expect(await rearmIfRescheduled(edited, { now: SEP_END + 2 * H, store })).toBe(false);
+    // Swept before it stopped being current (e.g. under the older period-end rule), then edited
+    // while still current: re-armed, then swept again on the 1st.
+    expect(await rearmIfRescheduled(sep, { now: SEP_END - 2 * H, store })).toBe(true);
     expect(await store.listRuns()).toEqual([]);
-    db.reportingPeriods[0] = later as ReportingPeriod;
     const f = finding("sep");
-    const res = await runAutoTransferIfDue({ now: SEP_END + 6 * H, force: true, deps: deps(store) });
+    expect((await runAutoTransferIfDue({ now: SEP_END - H, force: true, deps: deps(store) })).ran).toBe(false);
+    const res = await runAutoTransferIfDue({ now: SEP_END + H, force: true, deps: deps(store) });
     expect(res.ran).toBe(true);
     expect(db.findings.find((x) => x.id === f.id)?.periodId).toBe("oct");
   });

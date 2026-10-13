@@ -14,15 +14,23 @@ export function sortPeriods<T extends PeriodLike>(periods: readonly T[]): T[] {
 }
 
 /**
- * The current reporting period: the one whose date range contains today.
- * When none does (a gap, or no period created for this month yet), the most
- * recent period that has already started; failing that, the earliest one.
+ * The current reporting period: the one of the PREVIOUS calendar month
+ * (local time). During October it is 2026-09; on 1 November it becomes
+ * 2026-10, and the automatic transfer carries what is still outstanding in
+ * 2026-09 into it (src/lib/autoTransfer).
+ * When that period doesn't exist (a gap, or the system's first month), the
+ * most recent period that started before this calendar month; failing that,
+ * the earliest one.
  */
 export function currentPeriod<T extends PeriodLike>(periods: readonly T[], now: number = Date.now()): T | undefined {
-  const containing = periods.find((p) => new Date(p.startsAt).getTime() <= now && now <= new Date(p.endsAt).getTime());
-  if (containing) return containing;
-  const started = sortPeriods(periods).find((p) => new Date(p.startsAt).getTime() <= now);
-  return started ?? sortPeriods(periods).at(-1);
+  const today = new Date(now);
+  const lastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+  const code = `${lastMonth.getFullYear()}-${String(lastMonth.getMonth() + 1).padStart(2, "0")}`;
+  const previous = periods.find((p) => p.code === code);
+  if (previous) return previous;
+  const thisMonthStart = new Date(today.getFullYear(), today.getMonth(), 1).getTime();
+  const sorted = sortPeriods(periods);
+  return sorted.find((p) => new Date(p.startsAt).getTime() < thisMonthStart) ?? sorted.at(-1);
 }
 
 /**

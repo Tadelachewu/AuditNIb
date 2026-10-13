@@ -90,7 +90,7 @@ export function useAutoTransferStatus(rows: { id: string; code: string }[]) {
         };
       }
       if (run?.status === "WAITING_NO_NEXT") {
-        const text = "Ended - waiting for the next period to be created";
+        const text = "Due - waiting for the next period to be created";
         return {
           text,
           cell: (

@@ -12,7 +12,8 @@ import type { Database, Finding, FindingCase } from "@/types";
 
 // Revolving findings - docs/revolving-findings.md §9 (automated cases).
 
-const NOW = new Date("2026-10-15T09:00:00Z");
+// 5 Nov: the current period is October's (p10) - the previous calendar month.
+const NOW = new Date("2026-11-05T09:00:00Z");
 const config: AdjustmentConfig = { revolvingOperationAreas: ["Dormant Accounts"], updatedAt: null, updatedBy: null };
 
 const session = (userId: string, orgScope: "BANK" | "DISTRICT" | "BRANCH", permissions: string[]) =>
@@ -213,7 +214,7 @@ describe("routing (R11-R13)", () => {
 
   it("submit needs the submission window; a draft can be saved any time", () => {
     const db = makeDb();
-    db.reportingPeriods[1].submissionEndsAt = "2026-10-14T00:00:00Z";
+    db.reportingPeriods[1].submissionEndsAt = "2026-11-04T00:00:00Z";
     const adj = createAdjustment(db, config, branchCtl, "f1", input(), { submit: false });
     expect(adj.status).toBe("DRAFT");
     expect(() => submitAdjustment(db, config, branchCtl, "f1", adj.id)).toThrow(/submission window/);

@@ -11,7 +11,7 @@ import { StickyActions } from "@/components/ui/StickyActions";
 import { Input, Select, Label } from "@/components/ui/Field";
 import { RuleInput } from "@/components/ui/RuleInput";
 import { currentPeriod, sortPeriods } from "@/lib/periods";
-import { amountError, findingDateError, findingDateInPeriodError, LIMITS, localToday, textError, titleError } from "@/lib/inputRules";
+import { amountError, findingDateError, findingDateInPeriodError, LIMITS, localDateOf, localToday, textError, titleError } from "@/lib/inputRules";
 import { FindingStatusBadge } from "@/components/findings/FindingStatusBadge";
 import { Info } from "lucide-react";
 import { notify, notifications } from "@/lib/notify";
@@ -263,6 +263,19 @@ const emptyForm = {
   evidenceNote: "",
 };
 
+/**
+ * What a new registration opens with: the current reporting period, and
+ * today as the finding date (the user's local date, worked out when the form
+ * opens - not in UTC). The current period is last month's, so today is
+ * normally after its end, and a finding date can't be after its period:
+ * the date is then left blank for the registrant to pick.
+ */
+function registrationDefaults(periods: ReportingPeriod[]): { periodId: string; findingDate: string } {
+  const period = currentPeriod(periods);
+  const today = localToday();
+  return { periodId: period?.id ?? "", findingDate: period && today > localDateOf(period.endsAt) ? "" : today };
+}
+
 // Per plan doc §3.3: "Finding creation form: source, period, district/
 // branch (auto-scoped), date, operation area, irregularity type,
 // classified case, amount+currency, case count, risk level, description,
@@ -324,12 +337,8 @@ export function NewFindingForm({
         }
       : {
           ...emptyForm,
-          // Today in the user's local date, worked out when the form opens -
-          // not once at load time, and not in UTC (which is still yesterday
-          // in the early hours here, or would make a late-evening date "tomorrow").
-          findingDate: localToday(),
-          // The current reporting period (still changeable).
-          periodId: currentPeriod(periods)?.id ?? "",
+          // The current reporting period (still changeable) and its finding date.
+          ...registrationDefaults(periods),
           districtId: fixedDistrict?.id ?? "",
           branchId: fixedBranch?.id ?? "",
           // Not auto-selected like currency/riskLevel below - which

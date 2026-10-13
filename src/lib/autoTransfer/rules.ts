@@ -9,14 +9,15 @@ import { isHandled, type AutoTransferConfig, type AutoTransferRun } from "./type
  */
 
 /**
- * When a period's sweep becomes due: the LATER of its end and its
- * submission window's end (a grace window can run past the period end -
- * moving findings while people may still submit into the period would pull
- * work out from under them), plus the configured delay.
+ * When a period's sweep becomes due: 00:00 (local time) on the 1st of the
+ * month after next - the moment it stops being the current period
+ * (src/lib/periods.ts: the current period is the previous calendar month's)
+ * and the next one takes over. 2026-09 is swept into 2026-10 on 1 November.
+ * Plus the configured delay.
  */
-export function sweepDueAt(period: Pick<ReportingPeriod, "endsAt" | "submissionEndsAt">, config: Pick<AutoTransferConfig, "delayHours">): number {
-  const end = Math.max(new Date(period.endsAt).getTime(), new Date(period.submissionEndsAt).getTime());
-  return end + Math.max(0, config.delayHours) * 60 * 60 * 1000;
+export function sweepDueAt(period: Pick<ReportingPeriod, "year" | "month">, config: Pick<AutoTransferConfig, "delayHours">): number {
+  const noLongerCurrent = new Date(period.year, period.month + 1, 1).getTime();
+  return noLongerCurrent + Math.max(0, config.delayHours) * 60 * 60 * 1000;
 }
 
 /** The period right after this one by calendar (year/month + 1), whatever its status - one step. */
