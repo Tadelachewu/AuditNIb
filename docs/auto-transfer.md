@@ -37,10 +37,6 @@ Nothing moves. The period shows **Waiting: no next period**, the transfer-permis
 
 ### Several months missed
 If the app wasn't used for a while, the due periods are handled **oldest first** in one go, so a finding in an old period ends up in the current period (in December: Sep → Oct → Nov) and never beyond it.
-
-### Finding the transfer queue
-A finding is flagged as needing a transfer (HO Controller's list) when the period it sits in is **older than the current period** or is locked. Findings in the current period are not flagged, even though that period's dates have passed.
-
 ## 2. Settings: Admin → Settings → Automatic Transfer
 
 | Setting | Meaning | Default |
