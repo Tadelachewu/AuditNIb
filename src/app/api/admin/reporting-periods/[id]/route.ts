@@ -179,7 +179,8 @@ async function handlePATCH(request: Request, { params }: { params: Promise<{ id:
     });
 
     // Locking no longer transfers anything: outstanding findings are carried
-    // over automatically when the period ENDS (src/lib/autoTransfer).
+    // over automatically when the period stops being the current period
+    // (src/lib/autoTransfer).
 
     // master.txt §12: "period events" is one of the listed notification
     // triggers - district and HO controllers bank-wide need to know a
@@ -203,8 +204,8 @@ async function handlePATCH(request: Request, { params }: { params: Promise<{ id:
     return p;
   });
 
-  // Automatic transfer: a period already swept but now ending later than now
-  // is re-armed, so it's swept again when it really ends.
+  // Automatic transfer: a period already swept whose sweep is now due later
+  // than now is re-armed, so it's swept again when it stops being current.
   if (startsAt !== undefined || submissionStartsAt !== undefined) await rearmIfRescheduled(updated);
 
   return NextResponse.json({ reportingPeriod: updated });
