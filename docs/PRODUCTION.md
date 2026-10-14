@@ -359,6 +359,7 @@ Back up **four** things. Without all four, a restore is incomplete.
 
 - **Test a restore** into a separate test server at least once before go-live and periodically after. That test server must use `APP_ENV=development` only if its data is a disposable copy.
 - Keep backups encrypted, and off the app server.
+- Step-by-step backup script, restore procedure and checks: [backup-and-restore.md](backup-and-restore.md).
 
 ---
 
