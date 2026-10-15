@@ -1,11 +1,13 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
+import Box from "@mui/material/Box";
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
 import ListItemText from "@mui/material/ListItemText";
 import {
   MaterialReactTable,
+  MRT_BottomToolbar,
   MRT_TableBodyCellValue,
   useMaterialReactTable,
   type MRT_ColumnDef,
@@ -88,6 +90,67 @@ function RowDetail<T extends MRT_RowData>({ row, table }: { row: MRT_Row<T>; tab
         </div>
       ))}
     </dl>
+  );
+}
+
+/** CSS variable on the table container: its visible width (detail panels use it). */
+const VISIBLE_WIDTH_VAR = "--app-table-visible-width";
+
+/**
+ * A copy of the table's horizontal scrollbar, pinned to the bottom of the
+ * screen with the page bar, so a wide table can be scrolled sideways without
+ * first scrolling down to its last row. Kept in step with the table both
+ * ways; shown only when the table is wider than its box. Also publishes the
+ * box's visible width (VISIBLE_WIDTH_VAR) for the detail panels.
+ */
+function StickyHorizontalScrollbar({ containerRef }: { containerRef: RefObject<HTMLDivElement | null> }) {
+  const barRef = useRef<HTMLDivElement>(null);
+  const [size, setSize] = useState({ scroll: 0, client: 0 });
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const measure = () => {
+      container.style.setProperty(VISIBLE_WIDTH_VAR, `${container.clientWidth}px`);
+      setSize((s) => (s.scroll === container.scrollWidth && s.client === container.clientWidth ? s : { scroll: container.scrollWidth, client: container.clientWidth }));
+    };
+    measure();
+    // The box (window resize) and the table inside it (columns shown / hidden, rows loaded).
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
+    observer?.observe(container);
+    const table = container.querySelector("table");
+    if (table) observer?.observe(table);
+    const followTable = () => {
+      const bar = barRef.current;
+      if (bar && bar.scrollLeft !== container.scrollLeft) bar.scrollLeft = container.scrollLeft;
+    };
+    container.addEventListener("scroll", followTable, { passive: true });
+    return () => {
+      observer?.disconnect();
+      container.removeEventListener("scroll", followTable);
+    };
+  }, [containerRef]);
+
+  // Re-align after it appears (it isn't rendered while the table fits).
+  const overflows = size.scroll > size.client + 1;
+  useEffect(() => {
+    const container = containerRef.current;
+    if (overflows && container && barRef.current) barRef.current.scrollLeft = container.scrollLeft;
+  }, [overflows, containerRef]);
+
+  if (!overflows) return null;
+  return (
+    <div
+      ref={barRef}
+      aria-hidden
+      className="overflow-x-auto overflow-y-hidden"
+      onScroll={(e) => {
+        const container = containerRef.current;
+        if (container && container.scrollLeft !== e.currentTarget.scrollLeft) container.scrollLeft = e.currentTarget.scrollLeft;
+      }}
+    >
+      <div style={{ width: size.scroll, height: 1 }} />
+    </div>
   );
 }
 
@@ -189,12 +252,26 @@ export function AdminTable<T extends MRT_RowData>({
     enableRowActions: Boolean(renderRowActions),
     positionActionsColumn: "last",
     renderRowActions: renderRowActions ? ({ row }) => renderRowActions(row.original) : undefined,
+    // The detail panel stays at the left of the visible part of a wide table,
+    // as wide as what is visible, instead of stretching across every column
+    // and scrolling away sideways with them.
     renderDetailPanel:
       renderDetail === false
         ? undefined
-        : ({ row, table: t }) => (renderDetail ? renderDetail(row.original) : <RowDetail row={row} table={t} />),
+        : ({ row, table: t }) => (
+            <Box sx={{ position: "sticky", left: 0, width: `var(${VISIBLE_WIDTH_VAR}, 100%)`, maxWidth: "100%", boxSizing: "border-box", px: 2 }}>
+              {renderDetail ? renderDetail(row.original) : <RowDetail row={row} table={t} />}
+            </Box>
+          ),
+    muiDetailPanelProps: { sx: { px: 0 } },
     positionExpandColumn: "first",
     displayColumnDefOptions: {
+      // The expand arrow stays at the left edge while a wide table is
+      // scrolled sideways, so a row's details can always be opened.
+      "mrt-row-expand": {
+        muiTableHeadCellProps: { sx: { position: "sticky", left: 0, zIndex: 2, backgroundColor: "background.paper" } },
+        muiTableBodyCellProps: { sx: { position: "sticky", left: 0, zIndex: 1, backgroundColor: "background.paper" } },
+      },
       "mrt-row-actions": {
         header: "",
         size: 120,
@@ -232,15 +309,27 @@ export function AdminTable<T extends MRT_RowData>({
       sx: { fontSize: "0.75rem", color: "text.secondary", fontWeight: 600 },
     },
     muiTableBodyCellProps: { sx: { fontSize: "0.875rem" } },
-    // Pagination pinned to the bottom of the screen while the list scrolls
-    // (same behaviour as the rest of the app's lists).
+    // The table's own sideways scrollbar is hidden: the copy pinned with the
+    // page bar below replaces it (not in full screen, where the table box
+    // scrolls by itself and keeps its scrollbars).
+    muiTableContainerProps: ({ table: t }) =>
+      t.getState().isFullScreen ? {} : { sx: { scrollbarWidth: "none", "&::-webkit-scrollbar": { height: 0 } } },
+    // The sideways scrollbar and the pagination pinned to the bottom of the
+    // screen while the list scrolls (same behaviour as the rest of the app's
+    // lists).
     // Toolbars (search, export, page bar) are hidden when printing - only
     // the rows print (the "no-print" rule, e.g. on the Reports page).
     muiTopToolbarProps: { className: "no-print app-table-toolbar" },
-    muiBottomToolbarProps: {
-      className: "no-print app-table-toolbar",
-      sx: { position: "sticky", bottom: 0, zIndex: 3, backgroundColor: "background.paper", borderTop: 1, borderColor: "divider" },
-    },
+    muiBottomToolbarProps: { className: "no-print app-table-toolbar", sx: { backgroundColor: "background.paper" } },
+    renderBottomToolbar: ({ table: t }) => (
+      <Box
+        className="no-print app-table-toolbar"
+        sx={{ position: "sticky", bottom: 0, zIndex: 3, backgroundColor: "background.paper", borderTop: 1, borderColor: "divider" }}
+      >
+        <StickyHorizontalScrollbar containerRef={t.refs.tableContainerRef} />
+        <MRT_BottomToolbar table={t} />
+      </Box>
+    ),
     localization: { noRecordsToDisplay: emptyText },
     renderTopToolbarCustomActions: ({ table: t }) =>
       exportFileName || onExport || toolbarActions ? (
