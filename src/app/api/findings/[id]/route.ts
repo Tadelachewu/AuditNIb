@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { v4 as uuid } from "uuid";
 import { inactiveOrgUnitError } from "@/lib/org";
 import { z } from "zod";
 import { zAmount, zCaseCount, zFindingDate, zText, zTitle, findingDateInPeriodError } from "@/lib/inputRules";
@@ -11,8 +12,10 @@ import { isDepartmentInScope } from "@/lib/org";
 import { appendAuditLog } from "@/lib/audit";
 import { deleteStoredFile } from "@/lib/fileStorage";
 import { withApiHandler } from "@/lib/api/handler";
+import type { FindingCase } from "@/types";
 
 const EDITABLE_STATUSES = ["DRAFT", "RETURNED"];
+const CASE_DESCRIPTION_MAX = 200;
 
 async function handleGET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requirePermission("findings.view");
@@ -71,6 +74,15 @@ const updateSchema = z.object({
   recommendation: zText("Recommendation").optional(),
   rootCause: zText("Root cause").optional(),
   evidenceNote: zText("Evidence note").optional(),
+  // The individual cases (FindingCase), in order, replacing the current
+  // breakdown: one amount per case, summing to the amount involved. `null`
+  // = stop tracking individual cases; left out = keep the breakdown as it is.
+  caseAmounts: z.array(zAmount("Case amount")).max(500).nullable().optional(),
+  // One name / description per case, in the same order as caseAmounts (each optional).
+  caseDescriptions: z
+    .array(z.string().trim().max(CASE_DESCRIPTION_MAX, `A case description must be at most ${CASE_DESCRIPTION_MAX} characters`))
+    .max(500)
+    .optional(),
 });
 
 // Only DRAFT/RETURNED are editable (plan doc §3.3). Editing a RETURNED
@@ -86,7 +98,7 @@ async function handlePATCH(request: Request, { params }: { params: Promise<{ id:
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid input" }, { status: 400 });
   }
-  const input = parsed.data;
+  const { caseAmounts, caseDescriptions, ...input } = parsed.data;
 
   const db = await readDb();
   const existing = db.findings.find((f) => f.id === id);
@@ -211,15 +223,33 @@ async function handlePATCH(request: Request, { params }: { params: Promise<{ id:
   );
   if (requiredFieldError) return NextResponse.json({ error: requiredFieldError }, { status: 400 });
 
-  // Document_3 §12/§34's per-case itemization (FindingCase) sums to
-  // caseCount/amount by construction at creation time - there's no UI yet
-  // to re-itemize on edit, so changing either total out from under an
-  // already-itemized finding would leave stale case rows that no longer
-  // add up. Blocked rather than silently dropping the itemization.
-  const hasItemizedCases = db.findingCases.some((fc) => fc.findingId === id);
-  if (hasItemizedCases) {
-    const newCaseCount = input.caseCount ?? existing.caseCount;
-    const newAmount = input.amount ?? existing.amount;
+  // Document_3 §12/§34's per-case itemization (FindingCase) must always add
+  // up to caseCount/amount. Editing a draft / returned finding can replace
+  // the breakdown (caseAmounts) or drop it (null); without either, an
+  // itemized finding's totals can't change, so its case rows never stop
+  // adding up.
+  const existingCases = db.findingCases.filter((fc) => fc.findingId === id).sort((a, b) => a.seq - b.seq);
+  const newCaseCount = input.caseCount ?? existing.caseCount;
+  const newAmount = input.amount ?? existing.amount;
+  if (caseDescriptions && (!caseAmounts || caseDescriptions.length !== caseAmounts.length)) {
+    return NextResponse.json({ error: "Case descriptions must match the individual case amounts, one per case" }, { status: 400 });
+  }
+  if (caseAmounts !== undefined && existingCases.some((c) => c.status !== "OUTSTANDING")) {
+    // Not reachable for a draft / returned finding today; kept so a recorded rectification is never rewritten.
+    return NextResponse.json({ error: "Some of this finding's cases are already rectified - its case breakdown can't be changed" }, { status: 409 });
+  }
+  if (caseAmounts) {
+    if (caseAmounts.length !== newCaseCount) {
+      return NextResponse.json({ error: `Case breakdown has ${caseAmounts.length} entries but the case count is ${newCaseCount}` }, { status: 400 });
+    }
+    const sum = caseAmounts.reduce((s, a) => s + a, 0);
+    if (Math.abs(sum - newAmount) > 0.01) {
+      return NextResponse.json(
+        { error: `Case breakdown totals ${sum.toLocaleString()} but the amount involved is ${newAmount.toLocaleString()}` },
+        { status: 400 }
+      );
+    }
+  } else if (caseAmounts === undefined && existingCases.length > 0) {
     if (newCaseCount !== existing.caseCount || Math.abs(newAmount - existing.amount) > 0.01) {
       return NextResponse.json(
         { error: "This finding's cases are itemized - case count/amount can't be changed here without updating the case breakdown" },
@@ -231,9 +261,23 @@ async function handlePATCH(request: Request, { params }: { params: Promise<{ id:
   const referenceNeedsRegeneration = branchId !== existing.branchId || periodId !== existing.periodId;
 
   const before = { ...existing };
+  const casesChanged = caseAmounts !== undefined;
   const updated = await updateDb((current) => {
     const f = current.findings.find((x) => x.id === id)!;
     Object.assign(f, input, { districtId, branchId, periodId, sourceId, departmentId, categoryId });
+    let casesAfter: FindingCase[] = existingCases;
+    if (casesChanged) {
+      // Case N keeps case N's record (same id), so an unchanged case stays
+      // the same row; extra cases are added, removed ones deleted.
+      const now = new Date().toISOString();
+      casesAfter = (caseAmounts ?? []).map((amount, i) => ({
+        ...(existingCases[i] ?? { id: uuid(), findingId: id, status: "OUTSTANDING" as const, createdAt: now }),
+        seq: i + 1,
+        amount,
+        description: caseDescriptions?.[i] || undefined,
+      }));
+      current.findingCases = [...current.findingCases.filter((c) => c.findingId !== id), ...casesAfter];
+    }
     // Still a draft / returned registration: its original figures follow the edit.
     f.registeredCaseCount = f.caseCount;
     f.registeredAmount = f.amount;
@@ -251,13 +295,18 @@ async function handlePATCH(request: Request, { params }: { params: Promise<{ id:
       action: "UPDATE",
       entityType: "Finding",
       entityId: f.id,
-      oldValue: before,
-      newValue: f,
+      oldValue: casesChanged ? { ...before, cases: existingCases.map(caseSummary) } : before,
+      newValue: casesChanged ? { ...f, cases: casesAfter.map(caseSummary) } : f,
     });
     return f;
   });
 
   return NextResponse.json({ finding: updated });
+}
+
+/** What the audit log keeps of one case when a breakdown is edited. */
+function caseSummary(c: FindingCase): { seq: number; amount: number; description: string | null } {
+  return { seq: c.seq, amount: c.amount, description: c.description ?? null };
 }
 
 async function handleDELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {

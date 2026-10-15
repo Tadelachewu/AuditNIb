@@ -23,6 +23,7 @@ import type {
   District,
   Branch,
   Finding,
+  FindingCase,
   FindingStatus,
   RequirableFindingField,
   OtherValueAllowedField,
@@ -217,6 +218,9 @@ interface Props {
   // Rendered inline (no card/page nav) inside FindingDetailClient's own
   // "Finding Details" card.
   finding?: Finding;
+  // Edit mode: the finding's tracked cases (its case breakdown), in order -
+  // shown and editable like on registration. Empty / left out = not tracked.
+  findingCases?: FindingCase[];
   onSaved?: () => void;
   onCancel?: () => void;
 }
@@ -276,6 +280,8 @@ function registrationDefaults(periods: ReportingPeriod[]): { periodId: string; f
   return { periodId: period?.id ?? "", findingDate: period && today > localDateOf(period.endsAt) ? "" : today };
 }
 
+const NO_CASES: FindingCase[] = [];
+
 // Per plan doc §3.3: "Finding creation form: source, period, district/
 // branch (auto-scoped), date, operation area, irregularity type,
 // classified case, amount+currency, case count, risk level, description,
@@ -300,6 +306,7 @@ export function NewFindingForm({
   fixedDistrict,
   fixedBranch,
   finding,
+  findingCases = NO_CASES,
   onSaved,
   onCancel,
 }: Props) {
@@ -364,14 +371,14 @@ export function NewFindingForm({
   const [submitting, setSubmitting] = useState<"draft" | "submit" | null>(null);
 
   // Document_3 §12/§34: optional per-case breakdown instead of just a
-  // total (create-only - there's no case-breakdown-edit flow yet, and an
-  // already-itemized finding can't have its totals changed via edit at
-  // all, so offering this toggle there would be misleading).
-  const [itemizeCases, setItemizeCases] = useState(false);
-  const [caseAmounts, setCaseAmounts] = useState<string[]>([]);
+  // total. Editing a draft / returned finding starts from its saved cases
+  // and can change, add or remove them (the server replaces the breakdown).
+  const hadTrackedCases = findingCases.length > 0;
+  const [itemizeCases, setItemizeCases] = useState(hadTrackedCases);
+  const [caseAmounts, setCaseAmounts] = useState<string[]>(() => findingCases.map((c) => String(c.amount)));
   // A name / description for each itemized case, alongside its amount
   // (e.g. "Transfer of 12 Mar, no customer signature"). Optional per case.
-  const [caseDescriptions, setCaseDescriptions] = useState<string[]>([]);
+  const [caseDescriptions, setCaseDescriptions] = useState<string[]>(() => findingCases.map((c) => c.description ?? ""));
 
   function setCaseCount(value: string) {
     setForm((f) => ({ ...f, caseCount: value }));
@@ -383,6 +390,20 @@ export function NewFindingForm({
     };
     setCaseAmounts(resize);
     setCaseDescriptions(resize);
+  }
+
+  /** Removes tracked case `index` (the number of cases follows; at least one stays). */
+  function removeCase(index: number) {
+    if (caseAmounts.length <= 1) return;
+    setForm((f) => ({ ...f, caseCount: String(caseAmounts.length - 1) }));
+    setCaseAmounts((prev) => prev.filter((_, i) => i !== index));
+    setCaseDescriptions((prev) => caseAmounts.map((_, i) => prev[i] ?? "").filter((_, i) => i !== index));
+  }
+
+  /** Switching tracking on starts one row per case (keeping rows already typed). */
+  function setTracking(on: boolean) {
+    setItemizeCases(on);
+    if (on) setCaseCount(form.caseCount);
   }
 
   const caseAmountsSum = caseAmounts.reduce((sum, a) => sum + (Number(a) || 0), 0);
@@ -646,7 +667,7 @@ export function NewFindingForm({
       notify.warning(notifications.generic.fixFields);
       return;
     }
-    if (!isEditing && itemizeCases && !caseAmountsMatch) {
+    if (itemizeCases && !caseAmountsMatch) {
       setError("Case breakdown must add up to the amount involved before saving");
       return;
     }
@@ -672,8 +693,10 @@ export function NewFindingForm({
         recommendation: form.recommendation || undefined,
         rootCause: form.rootCause || undefined,
         evidenceNote: form.evidenceNote || undefined,
-        caseAmounts: !isEditing && itemizeCases ? caseAmounts.map((a) => Number(a) || 0) : undefined,
-        caseDescriptions: !isEditing && itemizeCases ? caseAmounts.map((_, i) => (caseDescriptions[i] ?? "").trim()) : undefined,
+        // Tracked cases: the whole breakdown. Editing a finding whose tracking
+        // was switched off sends null, so its saved cases are removed.
+        caseAmounts: itemizeCases ? caseAmounts.map((a) => Number(a) || 0) : isEditing && hadTrackedCases ? null : undefined,
+        caseDescriptions: itemizeCases ? caseAmounts.map((_, i) => (caseDescriptions[i] ?? "").trim()) : undefined,
       };
       if (finding) {
         await apiSend<{ finding: Finding }>(`/api/findings/${finding.id}`, "PATCH", payload);
@@ -952,13 +975,13 @@ export function NewFindingForm({
           </div>
         </div>
 
-        {!isEditing && Number(form.caseCount) > 1 && (
+        {(Number(form.caseCount) > 1 || itemizeCases) && (
           <div className="rounded-md border border-slate-200 p-3">
             <label className="flex items-center gap-2 text-sm text-slate-700">
               <input
                 type="checkbox"
                 checked={itemizeCases}
-                onChange={(e) => setItemizeCases(e.target.checked)}
+                onChange={(e) => setTracking(e.target.checked)}
                 className="h-4 w-4 rounded border-slate-300"
               />
               Track individual cases - a description and an amount for each (optional)
@@ -966,6 +989,7 @@ export function NewFindingForm({
             <p className="mt-1 text-xs text-slate-500">
               Lets a future rectification pick specific cases (e.g. &quot;only Case 2&quot;) instead of just a
               count/amount that happens to add up. Give each case a short name or description and its amount.
+              {isEditing && hadTrackedCases && " Unticking this removes the saved cases from the finding when you save."}
             </p>
             {itemizeCases && (
               <div className="mt-3 flex flex-col gap-2">
@@ -1002,6 +1026,17 @@ export function NewFindingForm({
                         }
                       />
                     </div>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      className="shrink-0 px-2 py-1 text-xs"
+                      onClick={() => removeCase(i)}
+                      disabled={caseAmounts.length <= 1}
+                      aria-label={`Remove case ${i + 1}`}
+                      title={caseAmounts.length <= 1 ? "A finding keeps at least one case" : `Remove case ${i + 1}`}
+                    >
+                      Remove
+                    </Button>
                   </div>
                 ))}
                 <p className={`text-xs ${caseAmountsMatch ? "text-slate-500" : "text-red-600"}`}>

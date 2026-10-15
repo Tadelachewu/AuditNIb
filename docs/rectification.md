@@ -42,10 +42,11 @@ On the registration form (`NewFindingForm.tsx`), a create-mode-only "Itemize cas
 of a single lump `amount`. If enabled, the live sum of every per-case amount must match the finding's
 total `amount` field to within 0.01 (`caseAmountsMatch`, `NewFindingForm.tsx:334-335`) — submission is
 blocked otherwise (`NewFindingForm.tsx:489`). On success, the server creates one `FindingCase` row per
-entry, each starting at `status: "OUTSTANDING"` (`src/app/api/findings/route.ts:253-263`). **This choice
-is permanent** — there is no code path that itemizes an already-registered finding, or that converts an
-itemized finding back to plain totals; the doc comment at `NewFindingForm.tsx:319-321` notes the
-itemize toggle is hidden entirely once `isEditing` is true.
+entry, each starting at `status: "OUTSTANDING"` (`src/app/api/findings/route.ts:253-263`). While the
+finding is still a **draft or returned**, its registrant can edit the breakdown (change amounts and names,
+add or remove cases), start tracking cases, or stop tracking them (see [registration.md](registration.md) §5).
+Once it is submitted, the breakdown is fixed; an approved finding's cases change only through an
+adjustment ([revolving-findings.md](revolving-findings.md)).
 
 ### 2.2 Itemized rectification
 

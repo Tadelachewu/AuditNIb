@@ -108,7 +108,7 @@ convenience (trivially bypassable by a raw API call) — the server check is aut
 | `rootCause` | `Textarea` (2 rows), placeholder "Why did this happen? - distinct from the description of what happened" (`:826`) | `requiredFields.rootCause` | same | `""` | — |
 | `recommendation` | `Textarea` (2 rows) | `requiredFields.recommendation` | same | `""` | — |
 | `evidenceNote` | text `Input`, placeholder "e.g. filed in branch cabinet, ref #4 - no file upload yet" (`:846`) | `requiredFields.evidenceNote` | same | `""` | Free text only — no file attached here; see §8 |
-| *(itemized case amounts)* | checkbox + per-case number inputs, shown only when not editing and `caseCount > 1` (`:770`) | client blocks save if sum ≠ amount (`caseAmountsMatch`, `:335`, error at `:489-492`) | `caseAmounts.length === caseCount` and `Σ caseAmounts ≈ amount` (±0.01) re-checked server-side (`route.ts:192-206`) | unchecked / empty | Create-mode only; see §5 |
+| *(itemized case amounts)* | checkbox + per-case number inputs, shown when `caseCount > 1` or tracking is on, on registration and when editing a draft / returned finding | client blocks save if sum ≠ amount (`caseAmountsMatch`, `:335`, error at `:489-492`) | `caseAmounts.length === caseCount` and `Σ caseAmounts ≈ amount` (±0.01) re-checked server-side (`route.ts:192-206`) | unchecked / empty | Editable on a draft / returned finding; see §5 |
 
 ### The "Other (type in)" fallback
 
@@ -233,10 +233,9 @@ the normal district/HO review path.
   `NewFindingForm.tsx:335`) and server (`Math.abs(sum - input.amount) > 0.01`,
   `route.ts:200`) — a defensive allowance for floating-point summation error, not a
   business-rule rounding rule.
-- **Optional per-case itemization** (Document_3 §12/§34, comment at
-  `NewFindingForm.tsx:317-320`): shown only in create mode when `caseCount > 1`
-  (`:770`) — "there's no case-breakdown-edit flow yet, and an already-itemized finding
-  can't have its totals changed via edit at all" (same comment). Checking "Track
+- **Optional per-case itemization** (Document_3 §12/§34): shown when `caseCount > 1`
+  (or when tracking is already on), both when registering and when editing a draft /
+  returned finding. Checking "Track
   individual case amounts" reveals one number input per case (`setCaseCount()` clamps the
   itemized array to `Math.max(0, Math.min(500, caseCount))` entries, `:324-332`, matching
   the server's `z.array(...).max(500)` bound at `route.ts:76`). Each entry must sum
@@ -251,8 +250,19 @@ the normal district/HO review path.
   amount. Sent as `caseDescriptions` (same order and length as `caseAmounts`), stored on
   `FindingCase.description`, kept by draft autosave, and shown wherever cases are listed:
   the finding's **Cases** card and the case picker in **Record Rectification**.
-- Once itemized at creation, the case count/amount can never be changed via edit without
-  a 409 (`[id]/route.ts:194-209`) — itemization is a create-time-only decision.
+- **Editing the cases of a draft / returned finding.** The edit form opens with the
+  saved cases, one row per case. The registrant can change each amount and name,
+  change **Number of cases** (rows are added at the end or removed from the end to
+  match), **Remove** a specific case (the number of cases follows; at least one
+  stays), tick tracking on for a
+  finding that had none, or untick it to remove the saved cases. The breakdown must
+  still add up to the amount involved. `PATCH /api/findings/[id]` takes the whole
+  breakdown as `caseAmounts` (+ `caseDescriptions`) and replaces the finding's
+  `FindingCase` rows (case N keeps case N's record); `caseAmounts: null` removes them.
+  The audit log's `UPDATE` entry records the cases before and after.
+- Without a new breakdown, an itemized finding's case count / amount still can't change
+  (409), so its cases always add up. Once submitted, the breakdown is fixed; after
+  approval it changes only through an adjustment.
 
 ---
 
@@ -602,11 +612,9 @@ observed rather than asserted as a bug.
   true`, forcing every registrant to type a text note describing evidence, while the
   actual evidence file upload (§8) remains a completely separate, separately-permissioned
   action available only after the finding is created.
-- **Itemized case amounts are a create-only, one-way door.** Once a finding has
-  `FindingCase` rows, `PATCH /api/findings/[id]` refuses any change to `caseCount` or
-  `amount` that doesn't exactly match the existing totals (409, `[id]/route.ts:194-209|`)
-  — there is no UI to re-itemize, so the only way to change an itemized finding's totals
-  is presumably a data-layer intervention outside this document's scope.
+- **Itemized case amounts are fixed once submitted.** While a finding is a draft or
+  returned, its breakdown can be edited (§5). After submission there is no edit; an
+  approved finding's cases change only through an adjustment (revolving areas).
 - **`DELETE` cascades `findingCases` too** (`[id]/route.ts:267`) even though a plain draft
   with no itemization has none — defensive/always-correct cleanup rather than a
   conditional check.

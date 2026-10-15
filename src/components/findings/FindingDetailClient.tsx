@@ -600,6 +600,7 @@ export function FindingDetailClient({
           <div className="p-4">
             <NewFindingForm
               finding={finding}
+              findingCases={findingCases}
               sources={editSources}
               departments={editDepartments}
               categories={editCategories}
