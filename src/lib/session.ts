@@ -150,8 +150,11 @@ export async function getSession(): Promise<IronSession<SessionData>> {
  * expiration at the browser level for callers that can write cookies.
  */
 export async function getCurrentUser(): Promise<SessionData | null> {
-  const session = await getSession();
-  if (!session.isLoggedIn || !session.userId) return null;
+  const ironSession = await getSession();
+  if (!ironSession.isLoggedIn || !ironSession.userId) return null;
+  // iron-session types every field as optional (a cookie may be empty);
+  // past the check above this is a signed-in session.
+  const session = ironSession as typeof ironSession & SessionData;
 
   const now = Date.now();
 

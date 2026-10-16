@@ -61,6 +61,10 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // BullMQ (the optional email queue driver) is loaded at run time, not
+  // bundled: its optional Valkey client (@valkey/valkey-glide) isn't
+  // installed and is never used, and bundling it warns "Module not found".
+  serverExternalPackages: ["bullmq"],
   async headers() {
     return [{ source: "/(.*)", headers: securityHeaders }];
   },
