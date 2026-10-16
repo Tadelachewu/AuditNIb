@@ -69,7 +69,8 @@ Edit is allowed in DRAFT, RETURNED and the first review step (DISTRICT_REVIEW or
 - **Finding page**
   - Header figures show **Originally registered** and **Current** when they differ.
   - **Adjust outstanding** button, shown when R1, R2, R8 and R14 hold. If the submission window is closed it still opens and allows **Save draft**, with the reason submit isn't possible.
-  - The dialog shows current → adjustment → result side by side: cases to add, amount change (or, itemized: new case amounts and changed outstanding case amounts), reason; **Save draft** / **Submit**.
+  - The **Adjustments** card shows three figures: **Originally registered**, **Current total** (original + approved adjustments) and **Outstanding** (current total minus what is rectified: what the branch still has to work, the same figure as in Finding Details).
+  - The dialog shows current → adjustment → result side by side, each as total and outstanding: cases to add, amount change (or, itemized: new case amounts and changed outstanding case amounts), reason; **Save draft** / **Submit**.
   - **Adjustments** card: every adjustment with status, figures, reason, requester, reviewers and dates; actions for whoever may act (edit, submit, withdraw, approve, return, reject).
 - **Show My Queue:** reviewers see findings with an adjustment at their step; requesters see their returned adjustments.
 - **Settings → Revolving Findings:** the operation-area checklist (its own Save).

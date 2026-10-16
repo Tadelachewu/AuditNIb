@@ -29,6 +29,15 @@ type FindingFigures = Pick<
   "id" | "currency" | "caseCount" | "amount" | "registeredCaseCount" | "registeredAmount" | "rectifiedCases" | "rectifiedAmount" | "closedCases" | "closedAmount"
 >;
 
+/**
+ * What the branch still has to rectify: the current total minus what is
+ * rectified (awaiting close or closed) - the same "Outstanding" as the
+ * finding's details. An adjustment's result is shown the same way.
+ */
+function outstandingOf(f: Pick<Finding, "caseCount" | "amount" | "rectifiedCases" | "rectifiedAmount">): { cases: number; amount: number } {
+  return { cases: f.caseCount - f.rectifiedCases, amount: Math.round((f.amount - f.rectifiedAmount) * 100) / 100 };
+}
+
 const STATUS_TONE: Record<AdjustmentStatus, "green" | "gray" | "amber" | "red" | "blue"> = {
   DRAFT: "gray",
   DISTRICT_REVIEW: "blue",
@@ -161,7 +170,7 @@ export function AdjustmentsCard({ finding }: { finding: FindingFigures }) {
             </Button>
           )}
         </div>
-        <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <dl className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div>
             <dt className="text-xs text-slate-500">Originally registered</dt>
             <dd className="text-slate-900">
@@ -169,9 +178,15 @@ export function AdjustmentsCard({ finding }: { finding: FindingFigures }) {
             </dd>
           </div>
           <div>
-            <dt className="text-xs text-slate-500">Current (original + approved adjustments)</dt>
+            <dt className="text-xs text-slate-500">Current total (original + approved adjustments)</dt>
             <dd className={original ? "font-semibold text-slate-900" : "text-slate-900"}>
               {finding.currency} {formatCurrency(finding.amount)} ({plural(finding.caseCount, "case")})
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs text-slate-500">Outstanding (current total - rectified)</dt>
+            <dd className="font-semibold text-slate-900">
+              {finding.currency} {formatCurrency(outstandingOf(finding).amount)} ({plural(outstandingOf(finding).cases, "case")})
             </dd>
           </div>
         </dl>
@@ -328,6 +343,7 @@ function AdjustDialog({
 
   const resultCases = finding.caseCount + added;
   const resultAmount = Math.round((finding.amount + change) * 100) / 100;
+  const resultOutstanding = outstandingOf({ ...finding, caseCount: resultCases, amount: resultAmount });
 
   function body(submit: boolean) {
     const payload: Record<string, unknown> = { addedCases: added, reason: reason.trim(), submit };
@@ -390,7 +406,10 @@ function AdjustDialog({
             <div>
               <span className="text-xs text-slate-500">Current</span>
               <div className="text-slate-900">
-                {plural(finding.caseCount, "case")} · {finding.currency} {formatCurrency(finding.amount)}
+                Total {plural(finding.caseCount, "case")} · {finding.currency} {formatCurrency(finding.amount)}
+              </div>
+              <div className="font-medium text-slate-900">
+                Outstanding {plural(outstandingOf(finding).cases, "case")} · {finding.currency} {formatCurrency(outstandingOf(finding).amount)}
               </div>
               <div className="text-xs text-slate-500">
                 Rectified {plural(finding.rectifiedCases, "case")} / {formatCurrency(finding.rectifiedAmount)} · closed {plural(finding.closedCases, "case")} /{" "}
@@ -399,8 +418,11 @@ function AdjustDialog({
             </div>
             <div>
               <span className="text-xs text-slate-500">After this adjustment</span>
+              <div className="text-slate-900">
+                Total {plural(resultCases, "case")} · {finding.currency} {formatCurrency(resultAmount)}
+              </div>
               <div className="font-semibold text-slate-900">
-                {plural(resultCases, "case")} · {finding.currency} {formatCurrency(resultAmount)}
+                Outstanding {plural(resultOutstanding.cases, "case")} · {finding.currency} {formatCurrency(resultOutstanding.amount)}
               </div>
               <div className="text-xs text-slate-500">Change: {changeSummary({ addedCases: added, amountChange: change }, finding.currency)}</div>
             </div>
