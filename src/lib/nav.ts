@@ -21,6 +21,7 @@ import {
   ScrollText,
   LifeBuoy,
   Inbox,
+  Mail,
   type LucideIcon,
 } from "lucide-react";
 import { permissionKey } from "@/lib/permissions/registry";
@@ -68,6 +69,8 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: "Admin Dashboard", href: "/admin", icon: LayoutGrid, color: "#b45309", permission: permissionKey("admin-dashboard", "view") },
       { label: "My Profile", href: "/profile", icon: UserCircle, color: "#0891b2" },
       { label: "Support", href: "/support", icon: LifeBuoy, color: "#db2777", permission: permissionKey("support", "create") },
+      // Never for administrators, whatever their role holds (docs/communications.md).
+      { label: "Communications", href: "/communications", icon: Mail, color: "#0284c7", permission: permissionKey("communications", "view"), hideForRoles: ["ADMIN"] },
     ],
   },
   {

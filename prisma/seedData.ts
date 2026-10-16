@@ -271,7 +271,10 @@ export function buildSeedDatabase(): Database {
   // building every role's access from zero. ADMIN always gets every
   // permission (isSystem protects it from being edited away, see
   // src/app/api/admin/roles/[id]/route.ts).
+  // Communications: every role except the Administrator reads and sends messages.
+  const communicationsPermissions = [permissionKey("communications", "view"), permissionKey("communications", "send")];
   const hoPermissions = [
+    ...communicationsPermissions,
     permissionKey("admin-dashboard", "view"),
     permissionKey("users", "view"),
     permissionKey("districts", "view"),
@@ -300,6 +303,7 @@ export function buildSeedDatabase(): Database {
     permissionKey("ho-dashboard", "view"),
   ];
   const districtControllerPermissions = [
+    ...communicationsPermissions,
     permissionKey("districts", "view"),
     permissionKey("branches", "view"),
     permissionKey("sources", "view"),
@@ -320,6 +324,7 @@ export function buildSeedDatabase(): Database {
     permissionKey("district-dashboard", "view"),
   ];
   const districtDirectorPermissions = [
+    ...communicationsPermissions,
     permissionKey("districts", "view"),
     permissionKey("branches", "view"),
     permissionKey("sources", "view"),
@@ -334,6 +339,7 @@ export function buildSeedDatabase(): Database {
     permissionKey("district-dashboard", "view"),
   ];
   const branchControllerPermissions = [
+    ...communicationsPermissions,
     permissionKey("branch-dashboard", "view"),
     permissionKey("sources", "view"),
     permissionKey("departments", "view"),
@@ -349,6 +355,7 @@ export function buildSeedDatabase(): Database {
     permissionKey("findings", "comment"),
   ];
   const branchManagerPermissions = [
+    ...communicationsPermissions,
     permissionKey("branch-dashboard", "view"),
     permissionKey("categories", "view"),
     permissionKey("reporting-periods", "view"),
@@ -458,7 +465,7 @@ export function buildSeedDatabase(): Database {
       orgScope: "BANK",
       branchSingleton: false,
       isSystem: true,
-      permissions: [...new Set([...ALL_VIEW_PERMISSION_KEYS, ...reportTemplatePermissions])],
+      permissions: [...new Set([...ALL_VIEW_PERMISSION_KEYS, ...reportTemplatePermissions, ...communicationsPermissions])],
       status: "ACTIVE",
       createdAt: now,
       updatedAt: now,

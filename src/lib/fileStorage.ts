@@ -25,7 +25,7 @@ import { logger } from "@/lib/logger";
  * including the old data/uploads/ location) are still read transparently.
  */
 
-export type StorageArea = "evidence" | "imports";
+export type StorageArea = "evidence" | "imports" | "communications";
 
 export const STORAGE_ROOT = process.env.STORAGE_DIR ? path.resolve(process.env.STORAGE_DIR) : path.join(process.cwd(), "storage");
 

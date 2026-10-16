@@ -114,6 +114,16 @@ export const notifications = {
     saveFailed: n("UNCOVERED_NOTE_SAVE_FAILED", "Unable to save the reason. Please try again."),
     bulkSaveFailed: n("UNCOVERED_NOTE_BULK_SAVE_FAILED", "Unable to apply the reason to the selected branches. Please try again."),
   },
+  communications: {
+    sent: n("COMMUNICATION_SENT", "Message sent successfully."),
+    withdrawn: n("COMMUNICATION_WITHDRAWN", "Message withdrawn successfully."),
+    removed: n("COMMUNICATION_REMOVED", "Message removed from your inbox."),
+    loadFailed: n("COMMUNICATION_LOAD_FAILED", "Unable to load the messages. Please try again."),
+    sendFailed: n("COMMUNICATION_SEND_FAILED", "Unable to send the message. Please try again."),
+    uploadFailed: n("COMMUNICATION_UPLOAD_FAILED", "Unable to attach the file. Please try again."),
+    withdrawFailed: n("COMMUNICATION_WITHDRAW_FAILED", "Unable to withdraw the message. Please try again."),
+    removeFailed: n("COMMUNICATION_REMOVE_FAILED", "Unable to remove the message. Please try again."),
+  },
   support: {
     replySent: n("SUPPORT_REPLY_SENT", "Message sent successfully."),
     rated: n("SUPPORT_RATED", "Thank you - your rating was saved."),

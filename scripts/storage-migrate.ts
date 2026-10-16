@@ -60,7 +60,7 @@ if (fs.existsSync(LEGACY_EVIDENCE_DIR)) {
 }
 
 // 2. anything still plain inside the storage folder -> encrypted in place
-for (const area of ["evidence", "imports"] as StorageArea[]) {
+for (const area of ["evidence", "imports", "communications"] as StorageArea[]) {
   for (const name of listStoredFiles(area)) {
     const p = path.join(areaDir(area), name);
     const buf = fs.readFileSync(p);

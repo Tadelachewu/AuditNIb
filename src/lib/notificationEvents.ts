@@ -59,6 +59,13 @@ export const NOTIFICATION_EVENT_GROUPS = [
       { type: "SUPPORT_REPLY", label: "Support reply", hint: "Support replied to the user's thread" },
     ],
   },
+  {
+    group: "Communications",
+    events: [
+      { type: "COMMUNICATION", label: "New message", hint: "A user sent the recipient a message in Communications (the email carries the whole text; attachments stay in the app)" },
+      { type: "COMMUNICATION_REPLY", label: "Reply", hint: "A user replied to a Communications conversation the recipient is part of" },
+    ],
+  },
 ] as const;
 
 export type NotificationEventType = (typeof NOTIFICATION_EVENT_GROUPS)[number]["events"][number]["type"];

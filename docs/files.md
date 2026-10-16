@@ -11,6 +11,7 @@ This page explains which files users can upload, where and how they're kept, how
 | **Finding page → Evidence** | Supporting documents attached to a finding | ✅ encrypted, in `storage/evidence/` | Needs **Findings › Upload Evidence**: Branch Controller, Branch Manager, Branch Sub-Manager, Administrator |
 | **Comments** | ❌ **No files, comments are text only.** Attachments stored on comments before this change still show under their comment and can be downloaded or removed. | n/a | n/a |
 | **Import Findings** (`/findings/import`) | The `.xlsx` sheet of findings to bulk-register | ✅ **the original spreadsheet** of every successful import, encrypted, in `storage/imports/` | Needs **Findings › Bulk Import**: HO Controller, Administrator |
+| **Communications** | PDF / Word / Excel files attached to a message | ✅ encrypted, in `storage/communications/`; downloadable only by the message's sender and recipients ([communications.md](communications.md)) | Needs **Communications › Send**: every role except Administrator |
 
 **Not files, even though the names suggest it:**
 - **Evidence note** is a *text* field on the finding.
@@ -31,6 +32,7 @@ All uploaded files live in **one dedicated folder**, separate from the app's cod
 storage/                      ← STORAGE_DIR (default: "storage" next to the app)
   evidence/<random-id>.<ext>  ← evidence (and older comment attachments)
   imports/<random-id>.xlsx    ← original import spreadsheets
+  communications/<random-id>.<ext>  ← message attachments (Communications)
 ```
 
 - **Location:** set **`STORAGE_DIR`** in `.env` to put it anywhere: a dedicated disk or volume, or a **network share** mounted on every app server if you run more than one. If it's not set, it's `storage/` next to the app.
@@ -56,6 +58,7 @@ If `FILE_ENCRYPTION_KEY` isn't set, uploads are refused with a clear "File stora
 | Table | One row per | Key columns |
 |---|---|---|
 | **`evidence`** | Evidence file (or an older comment attachment) | `finding_id`, `comment_id` (empty for finding-level evidence), `file_name` (**original** name), `mime_type`, `size`, `storage_path` (the random name in `storage/evidence/`), `uploaded_by`, `created_at` |
+| **`communication_attachments`** | Message attachment | `communication_id` (empty while uploaded but not yet sent), `file_name` (original name), `mime_type`, `size`, `storage_path` (the random name in `storage/communications/`), `uploaded_by`, `created_at` |
 | **`import_batches`** | Import run | `file_name` (original name), `stored_file` (the random name in `storage/imports/`; empty for imports made before originals were kept), row counts and outcomes |
 
 The **file** is in the storage folder and its **description** is in the database. A complete backup needs both (§3.4).

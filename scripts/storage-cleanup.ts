@@ -10,6 +10,7 @@
  */
 import "dotenv/config";
 import { readDb } from "../src/lib/db";
+import { prisma } from "../src/lib/prismaClient";
 import { STORAGE_ROOT, listStoredFiles, deleteStoredFile, type StorageArea } from "../src/lib/fileStorage";
 
 async function main() {
@@ -19,11 +20,13 @@ async function main() {
   const referenced: Record<StorageArea, Set<string>> = {
     evidence: new Set(db.evidence.map((e) => e.storagePath)),
     imports: new Set(db.importBatches.map((b) => b.storedFile).filter((f): f is string => Boolean(f))),
+    // Communications attachments live in their own tables (not readDb()).
+    communications: new Set((await prisma.communicationAttachment.findMany({ select: { storagePath: true } })).map((a) => a.storagePath)),
   };
 
   console.log(`Storage folder: ${STORAGE_ROOT}${doDelete ? "  (DELETE mode)" : "  (report only - add --delete to remove orphans)"}`);
   let orphans = 0;
-  for (const area of ["evidence", "imports"] as StorageArea[]) {
+  for (const area of ["evidence", "imports", "communications"] as StorageArea[]) {
     const onDisk = listStoredFiles(area);
     const orphaned = onDisk.filter((n) => !referenced[area].has(n));
     const missing = [...referenced[area]].filter((n) => !onDisk.includes(n));

@@ -12,8 +12,8 @@ A restore is only complete with **all four** of these:
 
 | # | What | Where it is | Why it matters |
 |---|---|---|---|
-| 1 | **PostgreSQL database** | The database in `DATABASE_URL` | Everything except the files: users, roles, findings, periods, settings, audit log, notifications, the email outbox, automatic-transfer and reminder run records |
-| 2 | **Storage folder** | `STORAGE_DIR` in `.env` (default: `storage\` in the app folder) | Evidence, comment attachments and import originals, **encrypted** ([files.md](files.md)) |
+| 1 | **PostgreSQL database** | The database in `DATABASE_URL` | Everything except the files: users, roles, findings, periods, settings, audit log, notifications, Communications messages, the email outbox, automatic-transfer and reminder run records |
+| 2 | **Storage folder** | `STORAGE_DIR` in `.env` (default: `storage\` in the app folder) | Evidence, comment attachments, import originals and Communications attachments, **encrypted** ([files.md](files.md)) |
 | 3 | **`FILE_ENCRYPTION_KEY`** | `.env` | Without this exact key the stored files can't be read by anyone |
 | 4 | **The rest of `.env`** | `.env` in the app folder | Database and Redis addresses, `IRON_SESSION_PASSWORD`, SMTP credentials, `AUTO_TRANSFER_CRON_SECRET`, `APP_BASE_URL`, `APP_ENV` and the other settings |
 

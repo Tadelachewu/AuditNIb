@@ -57,6 +57,8 @@ While the provider is *None*, the Email Events section shows a warning: you can 
 | Comments & support | **Comment** | A comment is posted on a finding | The registrant, the author of the comment replied to |
 | | **New support message** | A user opens or follows up a support thread | Support staff (`support.respond`) |
 | | **Support reply** | Support replies to a thread | The thread's owner |
+| Communications | **New message** | A user sends a message in Communications. The email carries the whole text and the attachment names; the files stay in the app | The message's recipients (never administrators) |
+| | **Reply** | A user replies in a Communications conversation | The people the reply is sent to |
 
 The full recipient rules (scope, permissions, the Administrator exception) are in [notifications.md](notifications.md).
 

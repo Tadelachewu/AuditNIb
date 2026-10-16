@@ -74,6 +74,10 @@ export function NotificationBell() {
         setCommentText("");
         setRespondingTo(n.id);
       }
+    } else if (n.entityType === "Communication") {
+      // A message: open the conversation.
+      setOpen(false);
+      router.push(`/communications/${n.entityId}`);
     } else {
       setOpen(false);
       router.refresh();

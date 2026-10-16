@@ -705,3 +705,65 @@ model ReminderRun {
   @@index([ranAt])
   @@map("reminder_runs")
 }
+
+/// Communications (docs/communications.md): a message from one user to all
+/// users or to selected users - text plus optional PDF / Word / Excel
+/// attachments. Not part of readDb()'s in-memory Database: messages and
+/// recipient rows grow fast, so src/lib/communications queries these tables
+/// directly. Sender / recipient names are snapshotted (no foreign key to
+/// users), so a message keeps reading correctly after a user changes.
+model Communication {
+  id          String                    @id
+  /// The conversation it belongs to: the id of its first message (itself for a new message).
+  threadId    String                    @map("thread_id")
+  /// The message this one replies to (null for a new message).
+  parentId    String?                   @map("parent_id")
+  senderId    String                    @map("sender_id")
+  senderName  String                    @map("sender_name")
+  subject     String
+  body        String
+  /// Sent to "All users" (recipients still hold one row per person).
+  toAll       Boolean                   @default(false) @map("to_all")
+  createdAt   DateTime                  @map("created_at")
+  /// Withdrawn by its sender (within the allowed time, before anyone opened it).
+  withdrawnAt DateTime?                 @map("withdrawn_at")
+  recipients  CommunicationRecipient[]
+  attachments CommunicationAttachment[]
+
+  @@index([threadId])
+  @@index([senderId, createdAt])
+  @@map("communications")
+}
+
+/// One recipient of a message: when they read it, and whether they removed it from their inbox.
+model CommunicationRecipient {
+  id              String        @id
+  communicationId String        @map("communication_id")
+  userId          String        @map("user_id")
+  userName        String        @map("user_name")
+  readAt          DateTime?     @map("read_at")
+  removedAt       DateTime?     @map("removed_at")
+  communication   Communication @relation(fields: [communicationId], references: [id], onDelete: Cascade)
+
+  @@unique([communicationId, userId])
+  @@index([userId, removedAt])
+  @@map("communication_recipients")
+}
+
+/// A file attached to a message, stored encrypted in storage/communications/.
+/// Uploaded before the message is sent (communicationId null until then).
+model CommunicationAttachment {
+  id              String         @id
+  communicationId String?        @map("communication_id")
+  uploadedBy      String         @map("uploaded_by")
+  fileName        String         @map("file_name")
+  mimeType        String         @map("mime_type")
+  size            Int
+  storagePath     String         @map("storage_path")
+  createdAt       DateTime       @map("created_at")
+  communication   Communication? @relation(fields: [communicationId], references: [id], onDelete: Cascade)
+
+  @@index([communicationId])
+  @@index([uploadedBy, communicationId])
+  @@map("communication_attachments")
+}

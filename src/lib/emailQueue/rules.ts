@@ -43,6 +43,7 @@ export function notificationPath(notification: Pick<Notification, "entityType" |
   if (notification.entityType === "Finding") return `/findings/${notification.entityId}`;
   if (notification.entityType === "SupportThread") return notification.type === "SUPPORT_MESSAGE" ? "/admin/support" : "/support";
   if (notification.entityType === "ReportingPeriod") return "/admin/reporting-periods";
+  if (notification.entityType === "Communication") return `/communications/${notification.entityId}`;
   return "/dashboard";
 }
 

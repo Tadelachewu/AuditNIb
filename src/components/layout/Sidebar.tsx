@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { NAV_SECTIONS, isNavItemVisible } from "@/lib/nav";
+import { UnreadCommunicationsBadge } from "@/components/communications/UnreadBadge";
 
 /**
  * Collapsible: SidebarToggle (top bar, or Ctrl+B) shrinks the sidebar to an
@@ -60,7 +61,7 @@ export function Sidebar({ permissions, role }: { permissions: string[]; role: st
                       // Label as tooltip (visible when collapsed) + accessible name.
                       title={item.label}
                       aria-label={item.label}
-                      className={`flex items-center gap-2 rounded-md px-2.5 py-1.5 text-sm transition-colors sidebar-collapsed:justify-center sidebar-collapsed:px-0 sidebar-collapsed:py-2 ${
+                      className={`relative flex items-center gap-2 rounded-md px-2.5 py-1.5 text-sm transition-colors sidebar-collapsed:justify-center sidebar-collapsed:px-0 sidebar-collapsed:py-2 ${
                         isActive ? "bg-brand-gold font-semibold text-on-gold" : "text-chrome-fg hover:bg-chrome-hover"
                       }`}
                     >
@@ -75,6 +76,7 @@ export function Sidebar({ permissions, role }: { permissions: string[]; role: st
                         <Icon className="h-4 w-4" strokeWidth={2} />
                       </span>
                       <span className="truncate sidebar-collapsed:hidden">{item.label}</span>
+                      {item.href === "/communications" && <UnreadCommunicationsBadge />}
                     </Link>
                   );
                 })}

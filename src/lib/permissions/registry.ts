@@ -51,7 +51,8 @@ export type PermissionAction =
   | "category-performance-summary"
   | "mid-month-district-snapshot"
   | "transferred-findings"
-  | "respond";
+  | "respond"
+  | "send";
 
 export interface PageAction {
   action: PermissionAction;
@@ -231,6 +232,10 @@ export const PAGE_REGISTRY: PageDefinition[] = [
   // the one point where the two actions actually diverge, same view/action
   // split used everywhere else in this registry.
   { code: "support", label: "Support", actions: [V, C, { action: "respond", label: "Respond" }] },
+  // Communications (docs/communications.md): View = read messages sent to
+  // you; Send = new messages and replies. Never for administrators, whatever
+  // their role holds (src/lib/communications/rules.ts).
+  { code: "communications", label: "Communications", actions: [V, { action: "send", label: "Send" }] },
 ];
 
 export function permissionKey(pageCode: string, action: PermissionAction | string): string {

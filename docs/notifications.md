@@ -97,6 +97,9 @@ Final approval means: the HO Controller's approval, the bank-wide approver's app
 
 Other than that the role has view-only access and receives no workflow notifications (unless it is also the assigned bank-wide approver).
 
+### Communications, every role except the Administrator
+**New message** and **Reply** go to the people a user chose in Communications: specific people, whole roles, districts, branches, or all users. The bell shows a preview; the email carries the whole text and the names of the attachments (the files stay in the app). See [communications.md](communications.md).
+
 ### Support, for any role
 **Support reply** goes to whoever opened the thread. By default only the Administrator can open support threads (`support.create`). Grant **Support › Create** to other roles in Roles & Permissions and their users can send support messages and get replies.
 
@@ -126,8 +129,10 @@ Other than that the role has view-only access and receives no workflow notificat
 | **Rectification reminder** | A finding waits longer than the reminder threshold with no progress | Branch rectifiers | `findings.rectify` (finding's branch) |
 | **New support message** | A user opens a support thread or follows up | Support staff | `support.respond` (not scoped) |
 | **Support reply** | Support replies in a thread | The thread's owner | none |
+| **New message** (Communications) | A user sends a message | Its recipients: chosen people, roles, districts, branches or all users | `communications.view`; never administrators ([communications.md](communications.md)) |
+| **Reply** (Communications) | A user replies in a conversation | The sender (Reply) or everyone on the message (Reply all) | `communications.view`; never administrators |
 
-**The Administrator exception (rule 3) applies to every row except the last two.**
+**The Administrator exception (rule 3) applies to every row except the two Support rows.** Communications never reaches administrators at all.
 
 ---
 

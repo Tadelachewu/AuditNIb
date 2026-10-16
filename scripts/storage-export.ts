@@ -8,6 +8,7 @@
  * Layout:
  *   <out>/evidence/<finding reference>/<id>_<original name>
  *   <out>/imports/<date>_<id>_<original name>
+ *   <out>/communications/<date>_<subject>/<id>_<original name>
  *
  * Needs FILE_ENCRYPTION_KEY and database access (.env). Treat the output
  * folder as sensitive: its files are no longer encrypted.
@@ -17,6 +18,7 @@ import fs from "fs";
 import path from "path";
 import { readDb } from "../src/lib/db";
 import { readStoredFile } from "../src/lib/fileStorage";
+import { prisma } from "../src/lib/prismaClient";
 
 const safe = (s: string) => s.replace(/[\\/:*?"<>|\x00-\x1f]/g, "_").trim() || "file";
 
@@ -55,6 +57,22 @@ async function main() {
     const dir = path.join(out, "imports");
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, `${b.createdAt.slice(0, 10)}_${b.id.slice(0, 8)}_${safe(b.fileName)}`), buf);
+    written++;
+  }
+
+  // Communications attachments (their own tables, not readDb()); unsent uploads are skipped.
+  const attachments = await prisma.communicationAttachment.findMany({ where: { communicationId: { not: null } }, include: { communication: { select: { subject: true, createdAt: true } } } });
+  for (const a of attachments) {
+    const buf = readStoredFile("communications", a.storagePath);
+    if (!buf) {
+      console.log(`  missing: message attachment ${a.fileName} (${a.storagePath})`);
+      missing++;
+      continue;
+    }
+    const folder = `${a.communication!.createdAt.toISOString().slice(0, 10)}_${safe(a.communication!.subject).slice(0, 80)}`;
+    const dir = path.join(out, "communications", folder);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, `${a.id.slice(0, 8)}_${safe(a.fileName)}`), buf);
     written++;
   }
 
