@@ -1,4 +1,5 @@
 import { StickyBack } from "@/components/ui/StickyBack";
+import { AutoFilterForm } from "@/components/reports/AutoFilterForm";
 import { SESSION_ENDED_PATH } from "@/lib/session";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
@@ -7,7 +8,6 @@ import { hasPermission, permissionKey } from "@/lib/permissions/registry";
 import { formatNumber } from "@/lib/format";
 import { getDistrictSnapshotAsOf, templateSourceNote } from "@/lib/reportTemplates";
 import { Card, CardHeader } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
 import { Select, Input, Label } from "@/components/ui/Field";
 import { PrintButton } from "@/components/reports/PrintButton";
 import { currentPeriod, sortPeriods } from "@/lib/periods";
@@ -56,7 +56,7 @@ export default async function MidMonthDistrictSnapshotPage({
         </div>
       </div>
 
-      <form method="GET" className="no-print flex items-end gap-2">
+      <AutoFilterForm className="no-print flex items-end gap-2">
         <div>
           <Label htmlFor="periodId">Period</Label>
           <Select id="periodId" name="periodId" defaultValue={periodId}>
@@ -71,8 +71,7 @@ export default async function MidMonthDistrictSnapshotPage({
           <Label htmlFor="asOfDate">As of date</Label>
           <Input id="asOfDate" type="date" name="asOfDate" defaultValue={asOfDate} />
         </div>
-        <Button type="submit">View</Button>
-      </form>
+      </AutoFilterForm>
 
       <Card>
         <CardHeader

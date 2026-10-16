@@ -1,4 +1,5 @@
 import { Fragment } from "react";
+import { AutoFilterForm } from "@/components/reports/AutoFilterForm";
 import { SESSION_ENDED_PATH } from "@/lib/session";
 import { ALL_PERIODS_VALUE } from "@/lib/dashboardFilters";
 import { StickyBack } from "@/components/ui/StickyBack";
@@ -9,7 +10,6 @@ import { hasPermission, permissionKey } from "@/lib/permissions/registry";
 import { formatNumber } from "@/lib/format";
 import { getCategoryDetailByDistrict, templateSourceNote } from "@/lib/reportTemplates";
 import { Card, CardHeader } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
 import { Select, Label } from "@/components/ui/Field";
 import { PrintButton } from "@/components/reports/PrintButton";
 import { currentPeriod, sortPeriods } from "@/lib/periods";
@@ -58,7 +58,7 @@ export default async function CategoryDetailByDistrictPage({
         </div>
       </div>
 
-      <form method="GET" className="no-print flex items-end gap-2">
+      <AutoFilterForm className="no-print flex items-end gap-2">
         <div>
           <Label htmlFor="periodId">Period</Label>
           <Select id="periodId" name="periodId" defaultValue={periodId}>
@@ -70,8 +70,7 @@ export default async function CategoryDetailByDistrictPage({
             ))}
           </Select>
         </div>
-        <Button type="submit">View</Button>
-      </form>
+      </AutoFilterForm>
 
       <Card>
         <CardHeader title="Category Detail by District" description={allPeriods ? "All periods" : period ? period.code : "No reporting period"} />

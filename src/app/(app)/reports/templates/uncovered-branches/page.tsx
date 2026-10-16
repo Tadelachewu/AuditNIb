@@ -1,4 +1,5 @@
 import { StickyBack } from "@/components/ui/StickyBack";
+import { AutoFilterForm } from "@/components/reports/AutoFilterForm";
 import { SESSION_ENDED_PATH } from "@/lib/session";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
@@ -6,7 +7,6 @@ import { readDb } from "@/lib/db";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
 import { getUncoveredBranches, templateSourceNote } from "@/lib/reportTemplates";
 import { Card, CardHeader } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
 import { Select, Label } from "@/components/ui/Field";
 import { PrintButton } from "@/components/reports/PrintButton";
 import { UncoveredBranchesTable } from "@/components/reports/UncoveredBranchesTable";
@@ -55,7 +55,7 @@ export default async function UncoveredBranchesPage({
         </div>
       </div>
 
-      <form method="GET" className="no-print flex items-end gap-2">
+      <AutoFilterForm className="no-print flex items-end gap-2">
         <div>
           <Label htmlFor="periodId">Period</Label>
           <Select id="periodId" name="periodId" defaultValue={periodId}>
@@ -66,8 +66,7 @@ export default async function UncoveredBranchesPage({
             ))}
           </Select>
         </div>
-        <Button type="submit">View</Button>
-      </form>
+      </AutoFilterForm>
 
       <Card>
         <CardHeader title="Uncovered Branches" description={period ? `As of ${period.code} - ${rows.length} branch(es)` : "No reporting period"} />

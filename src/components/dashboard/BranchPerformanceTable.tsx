@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { Database, Branch, ReportingPeriod } from "@/types";
-import { computePerformance, computeEligibleCaseCounts, findPreviousPeriod, isHoApproved } from "@/lib/findings";
+import { computePerformance, computeEligibleCaseCounts, findPreviousPeriod, isHoApproved, isOutstandingFinding } from "@/lib/findings";
 import { RankingGrid } from "@/components/dashboard/RankingGrid";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -103,7 +103,7 @@ export function BranchPerformanceTable({
     // yet and shouldn't count toward the "High-Risk Branch" callout (or
     // any other exceptions figure) before it does.
     const highRiskCount = findings.filter(
-      (f) => isHoApproved(f) && !["RECTIFIED", "CLOSED", "REJECTED"].includes(f.status) && highRiskTiers.has(f.riskLevel.toLowerCase())
+      (f) => isHoApproved(f) && isOutstandingFinding(f) && highRiskTiers.has(f.riskLevel.toLowerCase())
     ).length;
     return {
       branch: b,

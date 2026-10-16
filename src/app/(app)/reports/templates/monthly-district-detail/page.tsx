@@ -1,4 +1,5 @@
 import { Fragment } from "react";
+import { AutoFilterForm } from "@/components/reports/AutoFilterForm";
 import { SESSION_ENDED_PATH } from "@/lib/session";
 import { StickyBack } from "@/components/ui/StickyBack";
 import { redirect } from "next/navigation";
@@ -8,7 +9,6 @@ import { hasPermission, permissionKey } from "@/lib/permissions/registry";
 import { formatNumber } from "@/lib/format";
 import { getMonthlyDistrictSeries, type DistrictPeriodRow, type DistrictVariousRow, templateSourceNote } from "@/lib/reportTemplates";
 import { Card, CardHeader } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
 import { Select, Label } from "@/components/ui/Field";
 import { PrintButton } from "@/components/reports/PrintButton";
 
@@ -102,7 +102,7 @@ export default async function MonthlyDistrictDetailPage({
         </div>
       </div>
 
-      <form method="GET" className="no-print flex items-end gap-2">
+      <AutoFilterForm className="no-print flex items-end gap-2">
         <div>
           <Label htmlFor="districtId">District</Label>
           <Select id="districtId" name="districtId" defaultValue={districtId}>
@@ -114,8 +114,7 @@ export default async function MonthlyDistrictDetailPage({
             ))}
           </Select>
         </div>
-        <Button type="submit">View</Button>
-      </form>
+      </AutoFilterForm>
 
       <Card>
         <CardHeader title="Monthly District Detail" description={`${totalRowCount} row(s) across ${groups.length} district(s)`} />

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AutoFilterForm } from "@/components/reports/AutoFilterForm";
 import { StickyBack } from "@/components/ui/StickyBack";
 import { addCurrency, formatCurrencyTotals, type CurrencyTotals } from "@/lib/currency";
 import { SESSION_ENDED_PATH } from "@/lib/session";
@@ -10,7 +11,6 @@ import { formatNumber, formatDateTime, formatCurrency } from "@/lib/format";
 import { getTransferredFindings, templateSourceNote } from "@/lib/reportTemplates";
 import { Card, CardHeader, StatCard } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
 import { Select, Label } from "@/components/ui/Field";
 import { PrintButton } from "@/components/reports/PrintButton";
 import { FindingStatusBadge } from "@/components/findings/FindingStatusBadge";
@@ -72,7 +72,7 @@ export default async function TransferredFindingsPage({
         </div>
       </div>
 
-      <form method="GET" className="no-print flex flex-wrap items-end gap-2">
+      <AutoFilterForm className="no-print flex flex-wrap items-end gap-2">
         <div>
           <Label htmlFor="fromPeriodId">From period (origin)</Label>
           <Select id="fromPeriodId" name="fromPeriodId" defaultValue={fromPeriodId}>
@@ -95,8 +95,7 @@ export default async function TransferredFindingsPage({
             ))}
           </Select>
         </div>
-        <Button type="submit">View</Button>
-      </form>
+      </AutoFilterForm>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatCard label="Transfer Hops" value={rows.length} hint="Matching current filter" />

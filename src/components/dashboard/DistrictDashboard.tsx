@@ -10,6 +10,7 @@ import {
   findingCaseTotalsInPeriod,
   transferTotals,
   isHoApproved,
+  isOutstandingFinding,
 } from "@/lib/findings";
 import { sumAmountByCurrency, sumOutstandingByCurrency, sumAmountByCurrencyInPeriod, sumOutstandingByCurrencyInPeriod, addCurrency, mergeCurrencyTotals, formatCurrencyTotals, type CurrencyTotals } from "@/lib/currency";
 import { formatDateTime } from "@/lib/format";
@@ -124,7 +125,7 @@ export function DistrictDashboard({
   // Outstanding, Category Totals, etc. don't inflate before a finding's
   // actually been approved.
   const approvedPeriodFindings = periodFindings.filter(isHoApproved);
-  const outstandingFindings = approvedPeriodFindings.filter((f) => !["RECTIFIED", "CLOSED", "REJECTED"].includes(f.status)).length;
+  const outstandingFindings = approvedPeriodFindings.filter((f) => isOutstandingFinding(f)).length;
   // A transfer moves periodId forward, so a transferred finding is no
   // longer in periodFindings for its *source* period - counted separately
   // from FindingTransfer records: distinct findings this district

@@ -2,7 +2,7 @@ import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import Link from "next/link";
 import { HO_APPROVED_OR_LATER_STATUSES, type Database } from "@/types";
 import type { SessionData } from "@/lib/session";
-import { computePerformance, computeEligibleCaseCounts, findingCaseTotals, findingCaseTotalsInPeriod, transferTotals, averageCaseAgeDays, isHoApproved } from "@/lib/findings";
+import { computePerformance, computeEligibleCaseCounts, findingCaseTotals, findingCaseTotalsInPeriod, transferTotals, averageCaseAgeDays, isHoApproved, isOutstandingFinding } from "@/lib/findings";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
 import { sumAmountByCurrency, sumOutstandingByCurrency, sumAmountByCurrencyInPeriod, sumOutstandingByCurrencyInPeriod, addCurrency, mergeCurrencyTotals, formatCurrencyTotals, type CurrencyTotals } from "@/lib/currency";
 import { formatDateTime } from "@/lib/format";
@@ -97,7 +97,7 @@ export function HODashboard({
   // Outstanding, Source Comparison, etc. don't inflate before a finding's
   // actually been approved.
   const approvedPeriodFindings = periodFindings.filter(isHoApproved);
-  const outstandingFindings = approvedPeriodFindings.filter((f) => !["RECTIFIED", "CLOSED", "REJECTED"].includes(f.status)).length;
+  const outstandingFindings = approvedPeriodFindings.filter((f) => isOutstandingFinding(f)).length;
   const bankPerformance = hasPeriodScope
     ? computePerformance(db, { periodId: allPeriodsSelected ? undefined : openPeriod?.id })
     : null;
@@ -129,7 +129,7 @@ export function HODashboard({
   // source/category/risk/status/date-range), same as every other stat card
   // here - only the period restriction is deliberately skipped ("all
   // periods" is the point of this one).
-  const avgOutstandingAgeDays = averageCaseAgeDays(allFindingsInRange.filter((f) => !["RECTIFIED", "CLOSED", "REJECTED"].includes(f.status)));
+  const avgOutstandingAgeDays = averageCaseAgeDays(allFindingsInRange.filter((f) => isOutstandingFinding(f)));
 
   // HO Controller also holds findings.create (bank-registered Internal
   // Audit findings - icfms.txt), so the same "MY own drafts/pending
@@ -277,7 +277,7 @@ export function HODashboard({
   // "official" figure on this dashboard already uses.
   const highRiskTiers = new Set(db.settings.riskLevels.slice(-2).map((l) => l.toLowerCase()));
   const highRiskFindings = approvedPeriodFindings.filter(
-    (f) => !["RECTIFIED", "CLOSED", "REJECTED"].includes(f.status) && highRiskTiers.has(f.riskLevel.toLowerCase())
+    (f) => isOutstandingFinding(f) && highRiskTiers.has(f.riskLevel.toLowerCase())
   ).length;
 
   // A transfer moves periodId forward, so a transferred finding is no

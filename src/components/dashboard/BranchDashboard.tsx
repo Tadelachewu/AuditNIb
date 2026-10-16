@@ -10,7 +10,7 @@ import {
   findingCaseTotals,
   findingCaseTotalsInPeriod,
   transferTotals,
-  isHoApproved, awaitingBranchRectification } from "@/lib/findings";
+  isHoApproved, isOutstandingFinding, awaitingBranchRectification } from "@/lib/findings";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
 import { sumAmountByCurrency, sumOutstandingByCurrency, sumAmountByCurrencyInPeriod, sumOutstandingByCurrencyInPeriod, addCurrency, mergeCurrencyTotals, formatCurrencyTotals, type CurrencyTotals } from "@/lib/currency";
 import { formatDateTime } from "@/lib/format";
@@ -126,7 +126,7 @@ export function BranchDashboard({
   // HO_REVIEW doesn't inflate Total Amount, Outstanding, Category Totals,
   // etc. before anyone's actually approved it.
   const approvedPeriodFindings = periodFindings.filter(isHoApproved);
-  const outstandingFindings = approvedPeriodFindings.filter((f) => !["RECTIFIED", "CLOSED", "REJECTED"].includes(f.status)).length;
+  const outstandingFindings = approvedPeriodFindings.filter((f) => isOutstandingFinding(f)).length;
   // periodId: undefined (allPeriodsSelected) is computePerformance()'s own
   // "lifetime, no period filter" mode - exactly what "All periods" means.
   const performanceScope = { branchId: branch.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id };
@@ -213,7 +213,7 @@ export function BranchDashboard({
   // "official" figure on this dashboard already uses.
   const highRiskTiers = new Set(db.settings.riskLevels.slice(-2).map((l) => l.toLowerCase()));
   const highRiskFindings = approvedPeriodFindings.filter(
-    (f) => !["RECTIFIED", "CLOSED", "REJECTED"].includes(f.status) && highRiskTiers.has(f.riskLevel.toLowerCase())
+    (f) => isOutstandingFinding(f) && highRiskTiers.has(f.riskLevel.toLowerCase())
   ).length;
 
   // A transfer moves periodId forward, so a transferred finding is no

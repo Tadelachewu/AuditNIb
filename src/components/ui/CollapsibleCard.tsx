@@ -25,6 +25,14 @@ export function CollapsibleCard({
   disabled = false,
   // Optional leading glyph beside the title.
   icon: Icon,
+  // Optional title weight and colour (default: semibold body text), e.g. a
+  // bold accent that adapts to dark mode such as font-bold text-amber-900.
+  titleClassName = "font-semibold text-slate-900",
+  // Optional header strip background, e.g. a tint that adapts to dark mode
+  // such as bg-amber-50! (the ! wins over a UI template's header colour).
+  headerClassName = "",
+  // Optional colours of the icon's chip (default: the gold brand chip).
+  iconClassName = "bg-brand-gold/20 text-brand-brown",
   // Controlled mode: pass both to own the open state from outside (e.g.
   // closing a section after a successful save). Omit both for the
   // default self-managed toggle.
@@ -38,6 +46,9 @@ export function CollapsibleCard({
   className?: string;
   disabled?: boolean;
   icon?: LucideIcon;
+  titleClassName?: string;
+  headerClassName?: string;
+  iconClassName?: string;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   children: ReactNode;
@@ -52,16 +63,16 @@ export function CollapsibleCard({
         type="button"
         onClick={() => setOpen(!open)}
         aria-expanded={open}
-        className={`app-card-header flex w-full items-start justify-between gap-4 px-4 py-3 text-left ${open ? "rounded-t-lg" : "rounded-lg"}`}
+        className={`app-card-header flex w-full items-start justify-between gap-4 px-4 py-3 text-left ${open ? "rounded-t-lg" : "rounded-lg"} ${headerClassName}`}
       >
         <div className="flex items-start gap-2.5">
           {Icon && (
-            <span className="mt-px flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-brand-gold/20 text-brand-brown">
+            <span className={`mt-px flex h-5 w-5 shrink-0 items-center justify-center rounded-md ${iconClassName}`}>
               <Icon className="h-3.5 w-3.5" strokeWidth={2.5} />
             </span>
           )}
           <div>
-          <h2 className="text-sm font-semibold text-slate-900">{title}</h2>
+          <h2 className={`text-sm ${titleClassName}`}>{title}</h2>
           {description && <p className="mt-0.5 text-xs text-slate-500">{description}</p>}
           </div>
         </div>

@@ -1,4 +1,5 @@
 import { StickyBack } from "@/components/ui/StickyBack";
+import { AutoFilterForm } from "@/components/reports/AutoFilterForm";
 import { SESSION_ENDED_PATH } from "@/lib/session";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
@@ -8,7 +9,6 @@ import { formatNumber } from "@/lib/format";
 import { getMonthlyDistrictSeries, sumDistrictRowsAcrossPeriods, templateSourceNote } from "@/lib/reportTemplates";
 import { ALL_PERIODS_VALUE } from "@/lib/dashboardFilters";
 import { Card, CardHeader } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
 import { Select, Label } from "@/components/ui/Field";
 import { PrintButton } from "@/components/reports/PrintButton";
 import { currentPeriod } from "@/lib/periods";
@@ -64,7 +64,7 @@ export default async function MonthlyDistrictHistoryPage({
         </div>
       </div>
 
-      <form method="GET" className="no-print flex items-end gap-2">
+      <AutoFilterForm className="no-print flex items-end gap-2">
         <div>
           <Label htmlFor="periodId">Period</Label>
           <Select id="periodId" name="periodId" defaultValue={periodId}>
@@ -76,8 +76,7 @@ export default async function MonthlyDistrictHistoryPage({
             ))}
           </Select>
         </div>
-        <Button type="submit">View</Button>
-      </form>
+      </AutoFilterForm>
 
       {!period && !allPeriods && (
         <Card className="p-4">

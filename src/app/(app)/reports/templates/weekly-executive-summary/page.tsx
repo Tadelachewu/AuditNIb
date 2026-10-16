@@ -1,4 +1,5 @@
 import { StickyBack } from "@/components/ui/StickyBack";
+import { AutoFilterForm } from "@/components/reports/AutoFilterForm";
 import { SESSION_ENDED_PATH } from "@/lib/session";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
@@ -8,7 +9,6 @@ import { formatNumber } from "@/lib/format";
 import { getWeeklyExecutiveSummary, weekEndDate, templateSourceNote } from "@/lib/reportTemplates";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
 import { Input, Label } from "@/components/ui/Field";
 import { PrintButton } from "@/components/reports/PrintButton";
 
@@ -73,7 +73,7 @@ export default async function WeeklyExecutiveSummaryPage({
         </div>
       </div>
 
-      <form method="GET" className="no-print flex flex-wrap items-end gap-2">
+      <AutoFilterForm className="no-print flex flex-wrap items-end gap-2">
         <div>
           <Label htmlFor="thisWeekDate">This week (cutoff date)</Label>
           <Input id="thisWeekDate" type="date" name="thisWeekDate" defaultValue={thisWeekDate} />
@@ -82,8 +82,7 @@ export default async function WeeklyExecutiveSummaryPage({
           <Label htmlFor="lastWeekDate">Previous week (cutoff date)</Label>
           <Input id="lastWeekDate" type="date" name="lastWeekDate" defaultValue={lastWeekDate} />
         </div>
-        <Button type="submit">View</Button>
-      </form>
+      </AutoFilterForm>
 
       {sections.length === 0 && (
         <Card className="p-4">

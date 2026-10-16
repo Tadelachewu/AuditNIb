@@ -1,7 +1,7 @@
 import { Card, CardHeader } from "@/components/ui/Card";
 import { StackedBarChart, type StackedBarSegment } from "@/components/dashboard/charts/StackedBarChart";
 import { categoricalColor } from "@/components/dashboard/charts/categoricalPalette";
-import { isHoApproved } from "@/lib/findings";
+import { isHoApproved, isOutstandingFinding } from "@/lib/findings";
 import type { ClassifiedCategory, Finding } from "@/types";
 
 /**
@@ -18,7 +18,7 @@ import type { ClassifiedCategory, Finding } from "@/types";
  * still short of HO approval shouldn't count here yet either.
  */
 export function CategoryDistribution({ findings, categories }: { findings: Finding[]; categories: ClassifiedCategory[] }) {
-  const open = findings.filter((f) => isHoApproved(f) && !["RECTIFIED", "CLOSED", "REJECTED"].includes(f.status));
+  const open = findings.filter((f) => isHoApproved(f) && isOutstandingFinding(f));
   const total = open.length;
 
   const segments: StackedBarSegment[] = categories.map((c, i) => ({

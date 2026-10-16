@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { apiGet, apiSend } from "@/lib/api-client";
 import { notify, notifications } from "@/lib/notify";
 import { formatCurrency, formatDateTime } from "@/lib/format";
+import { SlidersHorizontal } from "lucide-react";
 import { CollapsibleCard } from "@/components/ui/CollapsibleCard";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -157,6 +158,12 @@ export function AdjustmentsCard({ finding }: { finding: FindingFigures }) {
     <>
       <CollapsibleCard
         title={`Adjustments (${view.adjustments.length})`}
+        icon={SlidersHorizontal}
+        // Dark amber on light amber (light mode) / near-white on deep amber
+        // (dark mode): high contrast either way, so the section stands out.
+        titleClassName="font-bold text-amber-900"
+        headerClassName="bg-amber-100!"
+        iconClassName="bg-amber-200 text-amber-900"
         description={summary || "Revolving finding: add cases or increase / decrease the outstanding, each approved like a registration."}
       >
       <div className="flex flex-col gap-3 p-4 text-sm">
@@ -177,14 +184,27 @@ export function AdjustmentsCard({ finding }: { finding: FindingFigures }) {
               {finding.currency} {formatCurrency(finding.registeredAmount)} ({plural(finding.registeredCaseCount, "case")})
             </dd>
           </div>
+          {view.periodStay ? (
+            <div>
+              <dt className="text-xs text-slate-500">
+                In {view.periodStay.periodCode} (transferred from {view.periodStay.fromPeriodCode})
+              </dt>
+              <dd className="text-slate-900">
+                {finding.currency} {formatCurrency(view.periodStay.amount)} ({plural(view.periodStay.cases, "case")})
+              </dd>
+            </div>
+          ) : (
+            <div>
+              <dt className="text-xs text-slate-500">Current total (original + approved adjustments)</dt>
+              <dd className={original ? "font-semibold text-slate-900" : "text-slate-900"}>
+                {finding.currency} {formatCurrency(finding.amount)} ({plural(finding.caseCount, "case")})
+              </dd>
+            </div>
+          )}
           <div>
-            <dt className="text-xs text-slate-500">Current total (original + approved adjustments)</dt>
-            <dd className={original ? "font-semibold text-slate-900" : "text-slate-900"}>
-              {finding.currency} {formatCurrency(finding.amount)} ({plural(finding.caseCount, "case")})
-            </dd>
-          </div>
-          <div>
-            <dt className="text-xs text-slate-500">Outstanding (current total - rectified)</dt>
+            <dt className="text-xs text-slate-500">
+              {view.periodStay ? "Outstanding (transferred + adjustments - rectified)" : "Outstanding (current total - rectified)"}
+            </dt>
             <dd className="font-semibold text-slate-900">
               {finding.currency} {formatCurrency(outstandingOf(finding).amount)} ({plural(outstandingOf(finding).cases, "case")})
             </dd>
@@ -344,6 +364,10 @@ function AdjustDialog({
   const resultCases = finding.caseCount + added;
   const resultAmount = Math.round((finding.amount + change) * 100) / 100;
   const resultOutstanding = outstandingOf({ ...finding, caseCount: resultCases, amount: resultAmount });
+  // A transferred finding: its total in the period it is in now, not its lifetime total.
+  const stayLabel = view.periodStay ? `In ${view.periodStay.periodCode}` : "Total";
+  const stayCases = view.periodStay?.cases ?? finding.caseCount;
+  const stayAmount = view.periodStay?.amount ?? finding.amount;
 
   function body(submit: boolean) {
     const payload: Record<string, unknown> = { addedCases: added, reason: reason.trim(), submit };
@@ -406,7 +430,7 @@ function AdjustDialog({
             <div>
               <span className="text-xs text-slate-500">Current</span>
               <div className="text-slate-900">
-                Total {plural(finding.caseCount, "case")} · {finding.currency} {formatCurrency(finding.amount)}
+                {stayLabel} {plural(stayCases, "case")} · {finding.currency} {formatCurrency(stayAmount)}
               </div>
               <div className="font-medium text-slate-900">
                 Outstanding {plural(outstandingOf(finding).cases, "case")} · {finding.currency} {formatCurrency(outstandingOf(finding).amount)}
@@ -419,7 +443,7 @@ function AdjustDialog({
             <div>
               <span className="text-xs text-slate-500">After this adjustment</span>
               <div className="text-slate-900">
-                Total {plural(resultCases, "case")} · {finding.currency} {formatCurrency(resultAmount)}
+                {stayLabel} {plural(stayCases + added, "case")} · {finding.currency} {formatCurrency(Math.round((stayAmount + change) * 100) / 100)}
               </div>
               <div className="font-semibold text-slate-900">
                 Outstanding {plural(resultOutstanding.cases, "case")} · {finding.currency} {formatCurrency(resultOutstanding.amount)}

@@ -1,4 +1,5 @@
 import { StickyBack } from "@/components/ui/StickyBack";
+import { AutoFilterForm } from "@/components/reports/AutoFilterForm";
 import { currenciesIn, formatCurrencyTotals } from "@/lib/currency";
 import { SESSION_ENDED_PATH } from "@/lib/session";
 import { ALL_PERIODS_VALUE } from "@/lib/dashboardFilters";
@@ -9,7 +10,6 @@ import { hasPermission, permissionKey } from "@/lib/permissions/registry";
 import { formatNumber, formatCurrency } from "@/lib/format";
 import { getMonthlySummaryReport, templateSourceNote } from "@/lib/reportTemplates";
 import { Card, CardHeader } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
 import { Select, Label } from "@/components/ui/Field";
 import { PrintButton } from "@/components/reports/PrintButton";
 import { currentPeriod, sortPeriods } from "@/lib/periods";
@@ -65,7 +65,7 @@ export default async function MonthlySummaryReportPage({
         </div>
       </div>
 
-      <form method="GET" className="no-print flex items-end gap-2">
+      <AutoFilterForm className="no-print flex items-end gap-2">
         <div>
           <Label htmlFor="periodId">Period</Label>
           <Select id="periodId" name="periodId" defaultValue={periodId}>
@@ -77,8 +77,7 @@ export default async function MonthlySummaryReportPage({
             ))}
           </Select>
         </div>
-        <Button type="submit">View</Button>
-      </form>
+      </AutoFilterForm>
 
       <Card>
         <CardHeader

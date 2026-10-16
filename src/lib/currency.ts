@@ -50,11 +50,12 @@ export function sumAmountByCurrency(findings: Finding[], field: "amount" | "rect
   return formatTotals(totals);
 }
 
-/** Same grouping, but for outstanding = amount - rectifiedAmount per finding. */
+/** Same grouping, but for outstanding = amount - closedAmount per finding (still owed until closed). */
 export function sumOutstandingByCurrency(findings: Finding[]): string {
   const totals = new Map<string, number>();
   for (const f of findings) {
-    totals.set(f.currency, (totals.get(f.currency) ?? 0) + (f.amount - f.rectifiedAmount));
+    // Still owed until HO closes it - the same basis as the per-period figure.
+    totals.set(f.currency, (totals.get(f.currency) ?? 0) + (f.amount - f.closedAmount));
   }
   return formatTotals(totals);
 }

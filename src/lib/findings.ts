@@ -229,6 +229,19 @@ export function isHoApproved(f: Finding): boolean {
 }
 
 /**
+ * An approved finding that still counts as outstanding on the dashboards:
+ * everything until HO formally closes it. A finding the Branch Manager has
+ * fully rectified (status Rectified) stays outstanding while the district
+ * verifies and HO closes it - the same "only closing makes it official"
+ * rule as Rectified Findings, Outstanding Cases and Outstanding Amount.
+ * Rejected findings are never outstanding. Pass approved findings
+ * (isHoApproved) - this only looks at the end of the workflow.
+ */
+export function isOutstandingFinding(f: Finding): boolean {
+  return f.status !== "CLOSED" && f.status !== "REJECTED";
+}
+
+/**
  * Dashboards report two different units side by side: "findings" (the
  * record - one per registered irregularity) and "cases" (Finding.caseCount/
  * rectifiedCases - the individual items a finding can bundle, per

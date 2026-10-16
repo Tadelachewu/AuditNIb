@@ -1,7 +1,7 @@
 import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import { HO_APPROVED_OR_LATER_STATUSES, type Database } from "@/types";
 import type { SessionData } from "@/lib/session";
-import { computePerformance, computeEligibleCaseCounts, findingCaseTotals, findingCaseTotalsInPeriod, transferTotals, averageCaseAgeDays, isHoApproved } from "@/lib/findings";
+import { computePerformance, computeEligibleCaseCounts, findingCaseTotals, findingCaseTotalsInPeriod, transferTotals, averageCaseAgeDays, isHoApproved, isOutstandingFinding } from "@/lib/findings";
 import { sumAmountByCurrency, sumOutstandingByCurrency, sumAmountByCurrencyInPeriod, sumOutstandingByCurrencyInPeriod } from "@/lib/currency";
 import { inDateRange, type DateRange } from "@/lib/dateRange";
 import { applyDashboardFilters, dashboardFindingsHref, EMPTY_DASHBOARD_FILTERS, ALL_PERIODS_VALUE, type DashboardFilters } from "@/lib/dashboardFilters";
@@ -126,7 +126,7 @@ export function ExecutiveDashboard({
   // not yet rectified / closed. A finding still waiting for an approval
   // (district review, HO review, bank-wide approval) is not outstanding yet -
   // it's counted under Pending Approval instead; drafts are neither.
-  const outstanding = allFindingsInRange.filter((f) => isHoApproved(f) && !["RECTIFIED", "CLOSED", "REJECTED"].includes(f.status));
+  const outstanding = allFindingsInRange.filter((f) => isHoApproved(f) && isOutstandingFinding(f));
   const pendingApproval = allFindingsInRange.filter((f) => ["SUBMITTED", "DISTRICT_REVIEW", "HO_REVIEW", "PENDING_BANK_APPROVAL"].includes(f.status));
   const pendingBankApproval = pendingApproval.filter((f) => f.status === "PENDING_BANK_APPROVAL").length;
   const avgOutstandingAgeDays = averageCaseAgeDays(outstanding);

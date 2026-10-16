@@ -1,3 +1,4 @@
+import { approvedAdjustmentsOf } from "@/lib/findings";
 import { currentPeriod } from "@/lib/periods";
 import type { SessionData } from "@/lib/session";
 import type { Database, Finding } from "@/types";
@@ -27,6 +28,28 @@ export interface AdjustmentsView {
   submitProblem: string | null;
   itemized: boolean;
   cases: { id: string; seq: number; amount: number; status: "OUTSTANDING" | "RECTIFIED"; description: string | null }[];
+  /**
+   * A transferred finding's stay in the period it is in now: what the last
+   * transfer carried in plus adjustments approved since - its total in this
+   * period (closed work stays with the periods it was closed in). null =
+   * never transferred (its whole total is in this period).
+   */
+  periodStay: { periodCode: string; fromPeriodCode: string; cases: number; amount: number } | null;
+}
+
+function periodStayOf(db: Database, f: Finding): AdjustmentsView["periodStay"] {
+  const last = db.findingTransfers.filter((t) => t.findingId === f.id).sort((a, b) => a.createdAt.localeCompare(b.createdAt)).at(-1);
+  if (!last) return null;
+  // Same rule as the period figures (findingResidencyInPeriod): an adjustment
+  // approved after the transfer joins this stay.
+  const since = approvedAdjustmentsOf(db, f.id).filter((a) => new Date(a.approvedAt!).getTime() >= new Date(last.createdAt).getTime());
+  const code = (id: string) => db.reportingPeriods.find((p) => p.id === id)?.code ?? "";
+  return {
+    periodCode: code(last.toPeriodId),
+    fromPeriodCode: code(last.fromPeriodId),
+    cases: last.casesTransferred + since.reduce((n, a) => n + a.addedCases, 0),
+    amount: Math.round((last.amountTransferred + since.reduce((n, a) => n + a.amountChange, 0)) * 100) / 100,
+  };
 }
 
 function actionsFor(db: Database, session: SessionData, f: Finding, adj: FindingAdjustment): AdjustmentActions {
@@ -56,5 +79,6 @@ export function adjustmentsView(db: Database, config: AdjustmentConfig, session:
     submitProblem: current ? submitProblem(db, current.id) : "There is no current reporting period",
     itemized: rows.length > 0,
     cases: rows.map((c) => ({ id: c.id, seq: c.seq, amount: c.amount, status: c.status, description: c.description?.trim() || null })),
+    periodStay: periodStayOf(db, f),
   };
 }
