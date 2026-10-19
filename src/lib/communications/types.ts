@@ -18,6 +18,8 @@ export const LIMITS = {
   withdrawMinutes: 10,
   /** Bell notification preview of the body (the email carries the whole text). */
   preview: 300,
+  /** The formatted message's HTML (the 5,000-character limit applies to its text). */
+  html: 60_000,
 } as const;
 
 /** Allowed attachment types: PDF, Word (.docx), Excel (.xlsx). */
@@ -81,7 +83,10 @@ export interface MessageView {
   senderId: string;
   senderName: string;
   subject: string;
+  /** Plain text. */
   body: string;
+  /** The formatted message (sanitised HTML), or null for a plain-text message. */
+  bodyHtml: string | null;
   toAll: boolean;
   createdAt: string;
   withdrawnAt: string | null;

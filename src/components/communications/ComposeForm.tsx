@@ -7,10 +7,11 @@ import { Building2, Map as MapIcon, User, Users, X } from "lucide-react";
 import { apiGet, apiSend } from "@/lib/api-client";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { Input, Label, Textarea } from "@/components/ui/Field";
+import { Input, Label } from "@/components/ui/Field";
 import { notify, notifications, presentError } from "@/lib/notify";
 import { LIMITS, type AttachmentInfo, type Directory, type RecipientSelection } from "@/lib/communications/types";
 import { AttachmentPicker } from "./AttachmentPicker";
+import { RichMessageEditor, TextCounter, type RichMessageValue } from "./RichMessageEditor";
 
 type Pick = { kind: "user" | "role" | "district" | "branch"; id: string; label: string; detail?: string };
 
@@ -44,7 +45,7 @@ export function ComposeForm() {
   const [picks, setPicks] = useState<Pick[]>([]);
   const [query, setQuery] = useState("");
   const [subject, setSubject] = useState("");
-  const [body, setBody] = useState("");
+  const [message, setMessage] = useState<RichMessageValue>({ html: "", text: "" });
   const [attachments, setAttachments] = useState<AttachmentInfo[]>([]);
   const [uploading, setUploading] = useState(false);
   const [sending, setSending] = useState(false);
@@ -89,9 +90,9 @@ export function ComposeForm() {
       ? "Choose who the message goes to"
       : !subject.trim()
         ? "Enter a subject"
-        : !body.trim()
+        : !message.text
           ? "Write the message"
-          : body.trim().length > LIMITS.body
+          : message.text.length > LIMITS.body
             ? `The message is longer than ${LIMITS.body} characters`
             : uploading
               ? "Wait for the attachments to finish uploading"
@@ -104,7 +105,8 @@ export function ComposeForm() {
     try {
       const res = await apiSend<{ id: string; recipients: number }>("/api/communications", "POST", {
         subject: subject.trim(),
-        body: body.trim(),
+        body: message.text,
+        bodyHtml: message.html,
         selection,
         attachmentIds: attachments.map((a) => a.id),
       });
@@ -203,10 +205,8 @@ export function ComposeForm() {
 
         <div>
           <Label htmlFor="comm-body">Message</Label>
-          <Textarea id="comm-body" rows={8} maxLength={LIMITS.body} value={body} onChange={(e) => setBody(e.target.value)} placeholder="Write your message (plain text)" />
-          <p className="mt-1 text-right text-xs text-slate-500">
-            {body.length} / {LIMITS.body}
-          </p>
+          <RichMessageEditor id="comm-body" placeholder="Write your message" disabled={sending} onChange={setMessage} />
+          <TextCounter text={message.text} />
         </div>
 
         <AttachmentPicker attachments={attachments} onChange={setAttachments} disabled={sending} onBusyChange={setUploading} />

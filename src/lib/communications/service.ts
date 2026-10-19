@@ -19,6 +19,7 @@ import {
   replySubject,
   resolveRecipients,
 } from "./rules";
+import { emailHtml, htmlToText, sanitizeMessageHtml } from "./richText";
 import { ATTACHMENT_TYPES, LIMITS, type AttachmentInfo, type Directory, type InboxItem, type MessageView, type RecipientSelection, type SentItem, type ThreadView } from "./types";
 
 /**
@@ -47,7 +48,10 @@ const NOT_ALLOWED = "Communications isn't available for your account";
 
 export interface SendInput {
   subject?: string;
+  /** Plain text (used as it is when there is no bodyHtml). */
   body: string;
+  /** The formatted message from the editor; sanitised here, and the plain text is derived from it. */
+  bodyHtml?: string;
   /** A new message: who it goes to. */
   selection?: RecipientSelection;
   /** A reply: the message replied to, and whether to everyone on it. */
@@ -61,7 +65,10 @@ export async function sendMessage(session: Session, input: SendInput): Promise<R
   if (!canSendCommunications(session)) return fail(403, NOT_ALLOWED);
   const senderId = session.userId!;
   const senderName = session.name ?? "";
-  const body = input.body.trim();
+  // A formatted message: only the allowed formatting survives, and the plain
+  // text (search, previews, limits, plain-text email) comes from what's left.
+  const bodyHtml = input.bodyHtml?.trim() ? sanitizeMessageHtml(input.bodyHtml) : null;
+  const body = bodyHtml !== null ? htmlToText(bodyHtml) : input.body.trim();
   const db = await readDb();
 
   let subject: string;
@@ -125,6 +132,7 @@ export async function sendMessage(session: Session, input: SendInput): Promise<R
           entityType: "Communication",
           entityId: id,
           emailMessage: emailText(senderName, body, names),
+          emailHtml: bodyHtml ? emailHtml(senderName, bodyHtml, names) : undefined,
         }
       );
       appendAuditLog(current, {
@@ -140,7 +148,7 @@ export async function sendMessage(session: Session, input: SendInput): Promise<R
       // The message, its recipients and its attachments commit with the notifications and emails.
       alsoWrite: async (tx) => {
         await tx.communication.create({
-          data: { id, threadId, parentId, senderId, senderName, subject, body, toAll, createdAt: now },
+          data: { id, threadId, parentId, senderId, senderName, subject, body, bodyHtml: bodyHtml || null, toAll, createdAt: now },
         });
         await tx.communicationRecipient.createMany({
           data: recipients.map((r) => ({ id: uuid(), communicationId: id, userId: r.id, userName: r.name })),
@@ -303,6 +311,8 @@ export async function openThread(session: Session, messageId: string): Promise<R
       senderName: m.senderName,
       subject: m.subject,
       body: m.body,
+      // Sanitised again on the way out, so nothing stored can ever render unsafely.
+      bodyHtml: m.bodyHtml ? sanitizeMessageHtml(m.bodyHtml) : null,
       toAll: m.toAll,
       createdAt,
       withdrawnAt,

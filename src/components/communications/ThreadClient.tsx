@@ -8,11 +8,12 @@ import { apiGet, apiSend } from "@/lib/api-client";
 import { formatDateTime } from "@/lib/format";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { Label, Textarea } from "@/components/ui/Field";
+import { Label } from "@/components/ui/Field";
 import { Badge } from "@/components/ui/Badge";
 import { notify, notifications, presentError } from "@/lib/notify";
 import { LIMITS, type AttachmentInfo, type MessageView, type ThreadView } from "@/lib/communications/types";
 import { AttachmentPicker, formatBytes } from "./AttachmentPicker";
+import { RichMessageEditor, TextCounter, type RichMessageValue } from "./RichMessageEditor";
 
 /**
  * One conversation (docs/communications.md): every message in it this user
@@ -120,7 +121,12 @@ function MessageCard({ m, highlighted, onChanged, onRemoved }: { m: MessageView;
         </div>
       </div>
       <div className="px-4 py-3">
-        <p className="whitespace-pre-wrap break-words text-sm text-slate-900">{m.body}</p>
+        {m.bodyHtml ? (
+          // Sanitised on the server when saved and again when sent here (src/lib/communications/richText.ts).
+          <div className="comm-rich break-words text-sm text-slate-900" dangerouslySetInnerHTML={{ __html: m.bodyHtml }} />
+        ) : (
+          <p className="whitespace-pre-wrap break-words text-sm text-slate-900">{m.body}</p>
+        )}
         {m.attachments.length > 0 && <Attachments items={m.attachments} />}
       </div>
       {(m.canWithdraw || !m.mine) && (
@@ -161,10 +167,13 @@ function Attachments({ items }: { items: AttachmentInfo[] }) {
 }
 
 function ReplyBox({ message, onSent }: { message: MessageView; onSent: (id: string) => void }) {
-  const [body, setBody] = useState("");
+  const [reply, setReply] = useState<RichMessageValue>({ html: "", text: "" });
+  // Changing it remounts (clears) the editor after a reply is sent.
+  const [editorKey, setEditorKey] = useState(0);
   const [attachments, setAttachments] = useState<AttachmentInfo[]>([]);
   const [uploading, setUploading] = useState(false);
   const [sending, setSending] = useState<"reply" | "all" | null>(null);
+  const empty = !reply.text || reply.text.length > LIMITS.body;
   const [error, setError] = useState<string | null>(null);
   // Reply all = the sender and everyone else on a message you received. Not
   // offered for an "All users" message (it would message everyone again), nor
@@ -172,18 +181,20 @@ function ReplyBox({ message, onSent }: { message: MessageView; onSent: (id: stri
   const canReplyAll = !message.mine && !message.toAll && message.recipientCount > 1;
 
   async function send(all: boolean) {
-    if (!body.trim() || uploading) return;
+    if (empty || uploading) return;
     setSending(all ? "all" : "reply");
     setError(null);
     try {
       const res = await apiSend<{ id: string; recipients: number }>("/api/communications", "POST", {
-        body: body.trim(),
+        body: reply.text,
+        bodyHtml: reply.html,
         replyToId: message.id,
         replyAll: all,
         attachmentIds: attachments.map((a) => a.id),
       });
       notify.success(notifications.communications.sent, { description: `${res.recipients} recipient(s)` });
-      setBody("");
+      setReply({ html: "", text: "" });
+      setEditorKey((k) => k + 1);
       setAttachments([]);
       onSent(res.id);
     } catch (err) {
@@ -199,10 +210,8 @@ function ReplyBox({ message, onSent }: { message: MessageView; onSent: (id: stri
       <div className="flex flex-col gap-3">
         <div>
           <Label htmlFor="comm-reply">{label}</Label>
-          <Textarea id="comm-reply" rows={5} maxLength={LIMITS.body} value={body} onChange={(e) => setBody(e.target.value)} placeholder="Write your reply (plain text)" />
-          <p className="mt-1 text-right text-xs text-slate-500">
-            {body.length} / {LIMITS.body}
-          </p>
+          <RichMessageEditor key={editorKey} id="comm-reply" placeholder="Write your reply" minHeight={120} disabled={sending !== null} onChange={setReply} />
+          <TextCounter text={reply.text} />
         </div>
         <AttachmentPicker attachments={attachments} onChange={setAttachments} disabled={sending !== null} onBusyChange={setUploading} />
         {error && <p className="text-sm text-red-600">{error}</p>}
@@ -212,12 +221,12 @@ function ReplyBox({ message, onSent }: { message: MessageView; onSent: (id: stri
           ) : (
             <>
               {canReplyAll && (
-                <Button variant="secondary" onClick={() => void send(true)} disabled={!body.trim() || uploading || sending !== null}>
+                <Button variant="secondary" onClick={() => void send(true)} disabled={empty || uploading || sending !== null}>
                   <ReplyAll className="h-4 w-4" />
                   {sending === "all" ? "Sending…" : "Reply all"}
                 </Button>
               )}
-              <Button onClick={() => void send(false)} disabled={!body.trim() || uploading || sending !== null}>
+              <Button onClick={() => void send(false)} disabled={empty || uploading || sending !== null}>
                 <Reply className="h-4 w-4" />
                 {sending === "reply" ? "Sending…" : "Reply"}
               </Button>

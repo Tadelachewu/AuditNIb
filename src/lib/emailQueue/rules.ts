@@ -47,16 +47,20 @@ export function notificationPath(notification: Pick<Notification, "entityType" |
   return "/dashboard";
 }
 
-/** The email's text and HTML bodies. User-typed text (reasons, comments) is escaped in the HTML. */
-export function renderNotificationEmail(notification: Notification, baseUrl: string | undefined): { subject: string; text: string; html: string } {
+/**
+ * The email's text and HTML bodies. User-typed text (reasons, comments) is
+ * escaped in the HTML. `htmlBody`, when given, is HTML the caller has already
+ * sanitised (a formatted Communications message) and is used as it is.
+ */
+export function renderNotificationEmail(notification: Notification, baseUrl: string | undefined, htmlBody?: string): { subject: string; text: string; html: string } {
   const base = baseUrl?.trim().replace(/\/+$/, "");
   const link = base ? `${base}${notificationPath(notification)}` : null;
-  const paragraphs = escapeHtml(notification.message).replace(/\r?\n/g, "<br>");
+  const paragraphs = htmlBody ?? `<p>${escapeHtml(notification.message).replace(/\r?\n/g, "<br>")}</p>`;
   return {
     // A header can't contain line breaks.
     subject: notification.title.replace(/[\r\n]+/g, " ").slice(0, 200),
     text: link ? `${notification.message}\n\nOpen in NIB Control360: ${link}` : notification.message,
-    html: link ? `<p>${paragraphs}</p><p><a href="${escapeHtml(link)}">Open in NIB Control360</a></p>` : `<p>${paragraphs}</p>`,
+    html: link ? `${paragraphs}<p><a href="${escapeHtml(link)}">Open in NIB Control360</a></p>` : paragraphs,
   };
 }
 
@@ -80,7 +84,8 @@ export function emailForNotification(
   recipientUserId: string,
   notification: Notification,
   env: Record<string, string | undefined> = process.env,
-  now: number = Date.now()
+  now: number = Date.now(),
+  htmlBody?: string
 ): QueuedEmail | null {
   const settings = db.settings?.notification;
   if (emailConfigProblem(settings, env)) return null;
@@ -89,7 +94,7 @@ export function emailForNotification(
   const toAddress = recipient?.email?.trim();
   if (!toAddress) return null;
 
-  const { subject, text, html } = renderNotificationEmail(notification, env.APP_BASE_URL);
+  const { subject, text, html } = renderNotificationEmail(notification, env.APP_BASE_URL, htmlBody);
   return {
     id: notification.id,
     kind: "NOTIFICATION",

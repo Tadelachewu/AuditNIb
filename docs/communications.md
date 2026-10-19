@@ -27,12 +27,35 @@ Open **Communications** in the sidebar (under My Profile and Support). The numbe
 |---|---|
 | **To** | Tick **All users**, or search and add any mix of **people**, **roles** (e.g. Branch Manager), **districts** and **branches**. A role, district or branch reaches all its active users; a district includes its branches. The line under the field says how many people it reaches |
 | **Subject** | Required, up to 200 characters |
-| **Message** | Required, plain text, up to 5,000 characters |
+| **Message** | Required, up to 5,000 characters of text. A formatting toolbar offers headings 1-6, font family, size, weight and line height, text and highlight colour, alignment, bold, italic, underline, strikethrough, sub- / superscript, lists, quotes, a dividing line and links (see *Formatting* below) |
 | **Attach files** | Optional: **PDF, Word (.docx), Excel (.xlsx)**; up to **5 files, 10 MB each**. Each file uploads as soon as you pick it; remove it with ✕ |
 
 **Send** is enabled once someone is chosen, the subject and text are filled in, and every attachment has finished uploading. If something is missing, the reason shows next to the button.
 
 Never included, whatever you pick: **administrators**, **inactive users** and **yourself**.
+
+### Formatting
+
+The message box is a rich text editor (Tiptap). Its toolbar offers exactly what a message can keep:
+
+| Toolbar | Notes |
+|---|---|
+| Paragraph / **Heading 1-6** | Heading sizes for sections |
+| **Font family** | Arial, Calibri, Cambria, Georgia, Segoe UI, Tahoma, Times New Roman, Trebuchet MS, Verdana, Courier New, and **Nyala** / **Ebrima** for Amharic. A reader without the font sees a similar one |
+| **Font size** | 8 to 48 px |
+| **Weight** | Light, Regular, Medium, Semibold, Bold, Extra bold, Black |
+| **Line height** | 1, 1.15, 1.5, 2, 2.5 |
+| Bold, italic, underline, strikethrough | Also with Ctrl+B / Ctrl+I / Ctrl+U |
+| Subscript, superscript | e.g. H₂O, x² |
+| **Text colour**, **highlight colour** | 18 swatches, or any colour from the picker |
+| **Alignment** | Left, centre, right, justify (paragraphs and headings) |
+| Bulleted list, numbered list, quote, dividing line | |
+| Link | Select text, then the link button; web (`https://`) and email (`mailto:`) addresses only. Links always open in a new tab |
+| Remove formatting, undo, redo | |
+
+**Pasting** from Word or a web page keeps the same kinds of formatting (headings, fonts, sizes, colours, alignment ...) and drops the rest, such as tables, images, borders and spacing. Images and documents go in as **attachments**. The 5,000-character limit counts the text, not the formatting.
+
+**Colours in dark mode:** a colour chosen for the text is kept as chosen, so very dark text can be hard to read for someone using dark mode (and very light text in light mode). Prefer mid-tone colours.
 
 ### Reading and replying
 
@@ -71,7 +94,7 @@ Each recipient gets:
   - **Body:** *From: sender*, the **whole message text**, the **names** of any attachments, and an **Open in NIB Control360** link to the message
   - **No files are attached to the email.** Attachments stay in the app, behind its access control
 
-Typed text is sent as plain text; nothing in it becomes a link or formatting in the email.
+The email is sent **formatted** (as in the app), with a plain-text version for mail programs that show text only. The server keeps only the formatting listed under *Formatting*; anything else a message might contain (scripts, styles, images, unsafe links) is removed before it is saved, shown or emailed.
 
 **Switching email off:** Settings → **Email Events** → group **Communications** → **New message** / **Reply**. The bell notification is never affected.
 
@@ -110,7 +133,7 @@ Older Word / Excel formats (.doc, .xls) and other file types aren't accepted: sa
 
 ## 5. Install
 
-1. `npx prisma migrate deploy` - applies `20261016120000_communications`: the three tables, and **Communications › View / Send for every role except ADMIN**.
+1. `npx prisma migrate deploy` - applies `20261016120000_communications` (the three tables, and **Communications › View / Send for every role except ADMIN**) and `20261019120000_communication_rich_text` (the formatted message, `body_html`).
 2. `npx prisma generate` (or `npm install`), rebuild, restart. Stop `npm run dev` before `prisma generate`.
 3. Optional: Settings → Email Events → Communications, to choose which events are emailed.
 
@@ -122,11 +145,13 @@ Older Word / Excel formats (.doc, .xls) and other file types aren't accepted: sa
 |---|---|
 | Types, limits (client-safe) | `src/lib/communications/types.ts` |
 | Rules (pure): who may use it, recipients, replies, withdrawal, attachment check, email text | `src/lib/communications/rules.ts` |
+| Formatted messages: sanitising, plain-text copy, email HTML (server only, `sanitize-html`) | `src/lib/communications/richText.ts` |
+| Editor (Tiptap 3 + mui-tiptap toolbar) | `src/components/communications/RichMessageEditor.tsx` |
 | Workflow: send, lists, conversation, withdraw, remove, attachments, directory | `src/lib/communications/service.ts` |
 | API | `GET/POST /api/communications`, `GET/DELETE /api/communications/[id]`, `POST /api/communications/[id]/withdraw`, `POST /api/communications/attachments`, `GET/DELETE /api/communications/attachments/[attachmentId]`, `GET /api/communications/unread-count`, `GET /api/communications/directory` |
 | Pages | `src/app/(app)/communications/` (list, `new`, `[id]`) |
 | Components | `src/components/communications/` (list, compose, conversation, attachment picker, sidebar badge) |
-| Tests | `tests/communications.test.ts` |
+| Tests | `tests/communications.test.ts`, `tests/communicationsRichText.test.ts`, `tests/richMessageEditor.test.tsx` |
 
 **Data:** tables `communications` (one per message: thread, parent, sender, subject, body, to-all, withdrawn), `communication_recipients` (one per recipient: read, removed) and `communication_attachments` (one per file; `communication_id` empty until the message is sent). Names are snapshotted; there's no foreign key to users.
 
@@ -134,7 +159,11 @@ Older Word / Excel formats (.doc, .xls) and other file types aren't accepted: sa
 
 **Attachments are uploaded one per request** before sending: the app's request size limit is about 10 MB, so five 10 MB files can't travel in one request. Sending then links the uploaded files to the message.
 
-**Email:** `notifyUsers()` takes an optional `emailMessage`, so the bell shows a preview while the email carries the full text. `notificationPath()` maps entity *Communication* to `/communications/<id>`.
+**Email:** `notifyUsers()` takes an optional `emailMessage` (the full text) and `emailHtml` (the sanitised formatted body), so the bell shows a preview while the email carries the whole message, formatted, with a plain-text part. `notificationPath()` maps entity *Communication* to `/communications/<id>`.
+
+**Formatted messages:** the editor sends HTML; the server never trusts it. `sanitizeMessageHtml()` keeps only `p, br, strong, em, u, s, sub, sup, span, mark, h1-h6, ul, ol, li, blockquote, hr, a`; styles only on `span` / `mark` (colour, background colour, font family, font size up to 72px / 54pt, font weight 100-900, line height) and on paragraphs / headings (text alignment, line height), each value checked against a pattern (colours as `#hex` / `rgb()` only; font names as letters, digits, spaces, quotes, commas and hyphens, so no `url()` or expressions). On links only `http(s):` / `mailto:` addresses, always with `target="_blank" rel="noopener noreferrer nofollow"`. A link with any other address keeps its text and loses the link. The plain text (`body`: search, previews, the limit, the plain-text email) is derived from the sanitised HTML (`body_html`), and the HTML is sanitised again whenever a conversation is returned. Messages without formatting keep `body_html` empty and show as plain text.
+
+**Packages:** `@tiptap/*` 3.31.4 (MIT; including text-style, highlight, text-align, subscript, superscript; font weight is a small extension of its own, `src/components/communications/fontWeight.ts`), `mui-tiptap` 1.31.0 (MIT, the toolbar in Material UI), `sanitize-html` 2.18.0 (MIT). Tests use mui-tiptap's ES-module build (`vitest.config.mts`), like the app's webpack build, so only one copy of ProseMirror is loaded.
 
 ---
 
@@ -148,9 +177,11 @@ Older Word / Excel formats (.doc, .xls) and other file types aren't accepted: sa
 |---|---|---|---|
 | C1 | Sign in as an administrator | No Communications in the sidebar; `/communications` goes to the dashboard | |
 | C2 | Sign in as a Branch Controller | Communications in the sidebar, Inbox empty | |
+| C2a | New message: use Heading 1 and 4, a font, a size, Semibold, a text colour, a highlight, centre alignment, a list and a link; paste a paragraph from Word | Toolbar works; the message shows all of it; pasted text keeps fonts, sizes, colours and alignment but no tables or images | |
 | C3 | New message → add one person, subject, text, a PDF → Send | "Message sent" with 1 recipient; the message opens; Sent shows Read 0/1 | |
 | C4 | Sign in as that recipient | Sidebar shows 1; bell shows "*Sender*: *Subject*"; Inbox row bold | |
-| C5 | Check the recipient's mailbox | Email with the whole text, the attachment name and a link; no file attached | |
+| C5 | Check the recipient's mailbox | Formatted email with the whole text, the attachment name and a link; no file attached | |
+| C5a | Open the message in the app | Shows the same formatting; the link opens in a new tab | |
 | C6 | Open the message, download the PDF | Opens correctly; sidebar count goes to 0; sender's Sent shows Read 1/1 | |
 | C7 | Reply | Sender gets a "replied" notification and email; the conversation shows both messages | |
 | C8 | Send to a **district** | Reaches the district office and every branch's users in it (count shown before sending) | |

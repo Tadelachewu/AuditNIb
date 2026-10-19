@@ -14,6 +14,8 @@ export interface NotifyOptions {
   entityId: string;
   /** The email's text when it should say more than the bell (e.g. a whole Communications message). */
   emailMessage?: string;
+  /** The email's HTML body, already sanitised (a formatted Communications message). Default: the text, escaped. */
+  emailHtml?: string;
 }
 
 /**
@@ -44,9 +46,9 @@ export const ADMIN_NOTIFICATION_TYPES: ReadonlySet<string> = new Set(["SUPPORT_M
  * rolled-back action never emails, and a mail outage loses nothing
  * (docs/email-queue.md). Never throws: email must not break the action.
  */
-function queueNotificationEmail(db: Database, recipientUserId: string, notification: Notification, emailMessage?: string): void {
+function queueNotificationEmail(db: Database, recipientUserId: string, notification: Notification, emailMessage?: string, emailHtml?: string): void {
   try {
-    const email = emailForNotification(db, recipientUserId, emailMessage ? { ...notification, message: emailMessage } : notification);
+    const email = emailForNotification(db, recipientUserId, emailMessage ? { ...notification, message: emailMessage } : notification, process.env, Date.now(), emailHtml);
     if (email) (db.pendingEmails ??= []).push(email);
   } catch {
     // No email for this one; the in-app notification was still created.
@@ -78,7 +80,7 @@ export function notifyUsers(db: Database, recipientUserIds: string[], opts: Noti
       createdAt: now,
     };
     db.notifications.unshift(notification);
-    queueNotificationEmail(db, recipientUserId, notification, opts.emailMessage);
+    queueNotificationEmail(db, recipientUserId, notification, opts.emailMessage, opts.emailHtml);
   }
 }
 

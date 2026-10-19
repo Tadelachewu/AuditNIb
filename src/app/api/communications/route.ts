@@ -28,6 +28,7 @@ const ids = z.array(z.string().min(1).max(100)).max(5000).default([]);
 const sendSchema = z.object({
   subject: z.string().max(LIMITS.subject, `Subject must be at most ${LIMITS.subject} characters`).optional(),
   body: z.string().max(LIMITS.body + 500, `Message text must be at most ${LIMITS.body} characters`),
+  bodyHtml: z.string().max(LIMITS.html, "The formatted message is too long").optional(),
   selection: z.object({ toAll: z.boolean().default(false), userIds: ids, roleCodes: ids, districtIds: ids, branchIds: ids }).optional(),
   replyToId: z.string().min(1).optional(),
   replyAll: z.boolean().optional(),

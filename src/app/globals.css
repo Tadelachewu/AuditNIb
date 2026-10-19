@@ -467,3 +467,88 @@ table.no-row-hover tbody tr:hover > td {
 :root[data-theme="dark"] .quick-link:hover .quick-link-label {
   color: #ffffff;
 }
+
+/* A formatted Communications message (sanitised HTML - docs/communications.md):
+   Tailwind's reset strips list markers, heading sizes and spacing, so they are
+   restored here for the message body only. Colours use the slate / sky
+   palette, which follows light and dark mode. */
+.comm-rich > * + * {
+  margin-top: 0.6em;
+}
+.comm-rich h1 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1.25;
+}
+.comm-rich h2 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+.comm-rich h3 {
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+.comm-rich h4 {
+  font-size: 1rem;
+  font-weight: 600;
+}
+.comm-rich h5 {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.comm-rich h6 {
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.comm-rich mark {
+  background-color: #fde68a;
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+.comm-rich sub,
+.comm-rich sup {
+  font-size: 0.75em;
+}
+.comm-rich ul {
+  list-style: disc;
+  padding-left: 1.4em;
+}
+.comm-rich ol {
+  list-style: decimal;
+  padding-left: 1.4em;
+}
+.comm-rich li + li {
+  margin-top: 0.2em;
+}
+.comm-rich li > p {
+  margin: 0;
+}
+.comm-rich blockquote {
+  border-left: 3px solid var(--color-slate-300);
+  padding-left: 0.8em;
+  color: var(--color-slate-600);
+}
+.comm-rich hr {
+  border: 0;
+  border-top: 1px solid var(--color-slate-200);
+}
+.comm-rich a {
+  color: var(--color-sky-700);
+  text-decoration: underline;
+}
+.comm-rich strong {
+  font-weight: 600;
+}
+/* Links stay readable on the dark card. */
+:root[data-theme="dark"] .comm-rich a {
+  color: #7dd3fc;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .comm-rich a {
+    color: #7dd3fc;
+  }
+}

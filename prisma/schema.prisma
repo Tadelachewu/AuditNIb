@@ -721,7 +721,10 @@ model Communication {
   senderId    String                    @map("sender_id")
   senderName  String                    @map("sender_name")
   subject     String
+  /// The message as plain text: search, previews, the bell and the plain-text email.
   body        String
+  /// The formatted message (rich text editor), sanitised HTML; null for a plain-text message.
+  bodyHtml    String?                   @map("body_html")
   /// Sent to "All users" (recipients still hold one row per person).
   toAll       Boolean                   @default(false) @map("to_all")
   createdAt   DateTime                  @map("created_at")
