@@ -49,7 +49,10 @@ Attachments stored on comments **before** comments became text-only still appear
 | F1 | **A file is present** in the `file` field. | `400` "No file provided" | [route.ts:70](src/app/api/findings/[id]/evidence/route.ts#L70) |
 | F2 | **Allowed type.** The declared type must be one of the six below. Everything else is refused, including HTML, JavaScript, executables, archives (`.zip`), SVG, old Office formats (`.doc`, `.xls`) and plain text other than CSV. | `400` "Unsupported file type. Allowed: PDF, PNG, JPG, XLSX, DOCX, CSV" | [route.ts:73-79](src/app/api/findings/[id]/evidence/route.ts#L73-L79), [evidence.ts:7](src/lib/evidence.ts#L7) |
 | F3 | **Size ≤ 10 MB** (10,485,760 bytes). | `400` "File exceeds the 10 MB limit" | [route.ts:80](src/app/api/findings/[id]/evidence/route.ts#L80), [evidence.ts:5](src/lib/evidence.ts#L5) |
-| F4 | **Real content matches the declared type.** The type a browser reports is only a label the client chose, so the file's actual first bytes are checked against the table below. This catches, for example, an HTML page or an executable renamed to `.pdf`. | `400` "File content doesn't match its declared type. Allowed: PDF, PNG, JPG, XLSX, DOCX, CSV" | [route.ts:89](src/app/api/findings/[id]/evidence/route.ts#L89), [evidence.ts:50-63](src/lib/evidence.ts#L50-L63) |
+| F4 | **Real content matches the declared type.** The type a browser reports is only a label the client chose, so the file's actual first bytes are checked against the table below. This catches, for example, an HTML page or an executable renamed to `.pdf`. | `400` "File content doesn't match its declared type. Allowed: PDF, PNG, JPG, XLSX, DOCX, CSV" | [route.ts](src/app/api/findings/[id]/evidence/route.ts), [evidence.ts:50-63](src/lib/evidence.ts#L50-L63) |
+| F5 | **The file name fits the real type.** Its extension must match the verified type (`.pdf`; `.png`; `.jpg` / `.jpeg`; `.csv`; `.docx`; `.xlsx`, any letter case), and the name must have no folder separators or control characters and be at most 255 characters. A real PDF uploaded as `report.exe` or `report.pdf.exe` is refused, so it can never be downloaded under a program's name. | `400` e.g. "The file name must end in .pdf for this type of file" | [uploadChecks.ts](src/lib/uploadChecks.ts) `uploadNameProblem` |
+| F6 | **Word / Excel: a sane archive with no macros.** A `.docx` / `.xlsx` is a zip archive; its table of contents is read (without unpacking anything) and must have at most 5,000 parts, unpack to at most 100 MB in total, have no part compressed more than 200 : 1 (a "zip bomb"), contain `word/document.xml` / `xl/workbook.xml`, and contain **no macros** (`vbaProject.bin`, i.e. a renamed `.docm` / `.xlsm`). | `400` e.g. "Files with macros can't be uploaded …" | [uploadChecks.ts](src/lib/uploadChecks.ts) `officeFileProblem` |
+| F7 | **Not empty, and the real byte count ≤ 10 MB** (checked again on the received bytes, not only on the size the request declared). | `400` "The file is empty" / "File exceeds the 10 MB limit" | [route.ts](src/app/api/findings/[id]/evidence/route.ts) |
 
 ### 3.1 Allowed types and their content checks (F2 + F4)
 
@@ -67,8 +70,8 @@ Attachments stored on comments **before** comments became text-only still appear
 
 ### 3.2 What is *not* checked
 
-- **Malware / viruses.** Allowed types can still carry malicious content, such as a PDF exploit or a macro-enabled document saved as `.docx`. There's no antivirus scan; see [docs/files.md §8](docs/files.md).
-- **Filename content.** The original name is kept only for display and download. It's never used for storage, so no filename can affect where or how a file is stored.
+- **Malware / viruses.** Allowed types can still carry malicious content, such as a PDF exploit. Macro-enabled Word / Excel files are refused (F6), but there's no antivirus scan; see [docs/files.md §8](docs/files.md).
+- **Filename content beyond F5.** The original name is kept only for display and download. It's never used for storage, so no filename can affect where or how a file is stored.
 - **Duplicates.** Uploading the same file twice stores it twice.
 
 ---

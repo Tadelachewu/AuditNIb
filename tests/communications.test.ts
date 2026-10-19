@@ -13,6 +13,7 @@ import {
 } from "@/lib/communications/rules";
 import { emailForNotification, notificationPath } from "@/lib/emailQueue/rules";
 import type { Database, Notification } from "@/types";
+import { officeZip } from "./helpers/zip";
 
 // Communications (docs/communications.md): who may use it, who a message
 // reaches, replies, withdrawal, attachments and the email.
@@ -101,17 +102,24 @@ describe("message and attachment checks", () => {
     expect(messageProblem("Hi", "Hello")).toBeNull();
   });
   const pdf = Buffer.from("%PDF-1.7\n...");
-  const zip = (part: string) => Buffer.concat([Buffer.from([0x50, 0x4b, 0x03, 0x04]), Buffer.from(`....${part}document.xml`)]);
-  it("PDF, Word and Excel files whose content matches are accepted", () => {
-    expect(attachmentProblem({ type: "application/pdf", size: pdf.length }, pdf)).toBeNull();
-    expect(attachmentProblem({ type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", size: 10 }, zip("word/"))).toBeNull();
-    expect(attachmentProblem({ type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", size: 10 }, zip("xl/"))).toBeNull();
+  const DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  const XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+  const file = (name: string, type: string, content: Buffer) => attachmentProblem({ name, type, size: content.length }, content);
+  it("PDF, Word and Excel files whose content and name match are accepted", () => {
+    expect(file("plan.pdf", "application/pdf", pdf)).toBeNull();
+    expect(file("plan.docx", DOCX, officeZip("docx"))).toBeNull();
+    expect(file("figures.xlsx", XLSX, officeZip("xlsx"))).toBeNull();
   });
   it("other types, a disguised file, an empty or oversized file are refused", () => {
-    expect(attachmentProblem({ type: "image/png", size: 10 }, Buffer.from([0x89, 0x50]))).toMatch(/Only PDF/);
-    expect(attachmentProblem({ type: "application/pdf", size: 20 }, Buffer.from("<html>not a pdf</html>"))).toMatch(/content/);
-    expect(attachmentProblem({ type: "application/pdf", size: 0 }, Buffer.alloc(0))).toMatch(/empty/);
-    expect(attachmentProblem({ type: "application/pdf", size: 11 * 1024 * 1024 }, pdf)).toMatch(/10 MB/);
+    expect(file("a.png", "image/png", Buffer.from([0x89, 0x50]))).toMatch(/Only PDF/);
+    expect(file("a.pdf", "application/pdf", Buffer.from("<html>not a pdf</html>"))).toMatch(/content/);
+    expect(attachmentProblem({ name: "a.pdf", type: "application/pdf", size: 0 }, Buffer.alloc(0))).toMatch(/empty/);
+    expect(attachmentProblem({ name: "a.pdf", type: "application/pdf", size: 11 * 1024 * 1024 }, pdf)).toMatch(/10 MB/);
+  });
+  it("a real PDF named like a program, a macro-enabled or zip-bomb Word / Excel file is refused", () => {
+    expect(file("invoice.exe", "application/pdf", pdf)).toMatch(/\.pdf/);
+    expect(file("plan.docx", DOCX, officeZip("docx", [{ name: "word/vbaProject.bin" }]))).toMatch(/macros/);
+    expect(file("big.xlsx", XLSX, officeZip("xlsx", [{ name: "xl/s.xml", data: "x".repeat(1000), unpacked: 500 * 1024 * 1024 }]))).toMatch(/unpacks/);
   });
 });
 

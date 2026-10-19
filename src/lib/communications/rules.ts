@@ -1,4 +1,5 @@
 import { evidenceContentMatchesType } from "@/lib/evidence";
+import { officeFileProblem, officeKind, uploadNameProblem } from "@/lib/uploadChecks";
 import { ADMIN_ROLE_CODE } from "@/lib/notifications";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
 import type { Database } from "@/types";
@@ -91,14 +92,22 @@ export function messageProblem(subject: string, body: string): string | null {
   return null;
 }
 
-/** Why an uploaded file can't be attached (null = fine): type, size, and its real content. */
-export function attachmentProblem(file: { type: string; size: number }, content: Buffer): string | null {
+/**
+ * Why an uploaded file can't be attached (null = fine). Checked on the server
+ * whatever the browser already checked: the type, the size, the real content
+ * (the bytes must match the claimed type), the name (its extension must match
+ * the type), and for Word / Excel a sane archive with no macros.
+ */
+export function attachmentProblem(file: { name: string; type: string; size: number }, content: Buffer): string | null {
   if (!ATTACHMENT_TYPES[file.type]) return "Only PDF, Word (.docx) and Excel (.xlsx) files can be attached";
-  if (file.size > LIMITS.attachmentBytes) return "A file must be at most 10 MB";
-  if (file.size === 0) return "The file is empty";
+  if (file.size > LIMITS.attachmentBytes || content.length > LIMITS.attachmentBytes) return "A file must be at most 10 MB";
+  if (file.size === 0 || content.length === 0) return "The file is empty";
   // The type the browser claims is not trusted: the bytes must match it (same check as evidence).
   if (!evidenceContentMatchesType(content, file.type)) return "The file's content doesn't match its type - only real PDF, Word (.docx) and Excel (.xlsx) files can be attached";
-  return null;
+  const nameProblem = uploadNameProblem(file.name, file.type);
+  if (nameProblem) return nameProblem;
+  const office = officeKind(file.type);
+  return office ? officeFileProblem(content, office) : null;
 }
 
 /** A sender may withdraw a message within LIMITS.withdrawMinutes, while no recipient has opened it. */

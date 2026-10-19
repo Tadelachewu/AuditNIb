@@ -4,6 +4,8 @@ import { appendAuditLog } from "@/lib/audit";
 import { MAX_IMPORT_ROWS, parseImportWorkbook, validateImportRow, existingSimilarityKeys } from "@/lib/import";
 import { writeStoredFile, deleteStoredFile, newStoredName } from "@/lib/fileStorage";
 import { ApplicationError, ValidationError } from "@/lib/errors";
+import { evidenceContentMatchesType } from "@/lib/evidence";
+import { officeFileProblem, XLSX_MIME } from "@/lib/uploadChecks";
 import { SIMILAR_FINDING_FIELDS } from "@/types";
 import type { Database, ImportBatch, ImportBatchRow } from "@/types";
 
@@ -69,6 +71,14 @@ export async function runImport(
   actor: ImportActor,
   opts: { importDuplicates: boolean; auditAction?: string; reimportOf?: string }
 ): Promise<ImportBatch> {
+  // Checked on the server before the workbook is opened (also for Re-import):
+  // a real .xlsx, a sane archive whose unpacked size can't exhaust memory
+  // (a "zip bomb"), and no macros (src/lib/uploadChecks.ts).
+  if (buffer.length === 0) throw new ValidationError("The file is empty");
+  if (!evidenceContentMatchesType(buffer, XLSX_MIME)) throw new ValidationError("This isn't an Excel (.xlsx) workbook - upload the .xlsx template file");
+  const fileProblem = officeFileProblem(buffer, "xlsx");
+  if (fileProblem) throw new ValidationError(fileProblem);
+
   const parsed = await parseImportWorkbook(buffer);
   if (parsed.error) throw new ValidationError(parsed.error);
   if (parsed.rows.length === 0) throw new ValidationError("No data rows found below the header");

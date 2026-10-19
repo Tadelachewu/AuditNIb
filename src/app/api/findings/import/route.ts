@@ -8,6 +8,7 @@ import { RateLimitError, ValidationError } from "@/lib/errors";
 import { withApiHandler } from "@/lib/api/handler";
 import { listPageJson } from "@/lib/serverList";
 import { isImportBatchInScope } from "@/lib/findings-scope";
+import { uploadNameProblem, XLSX_MIME } from "@/lib/uploadChecks";
 
 // Per-user cap on import attempts (each parses a whole workbook).
 const IMPORT_UPLOAD_LIMIT = { max: 10, windowMs: 10 * 60 * 1000 };
@@ -57,6 +58,10 @@ async function handlePOST(request: Request) {
   const file = formData.get("file");
   if (!file || !(file instanceof File)) throw new ValidationError("No file provided");
   if (file.size > MAX_IMPORT_BYTES) throw new ValidationError("File exceeds the 10 MB limit");
+  // The name must be a .xlsx (whatever type the browser claims); the content
+  // itself is checked in runImport() before the workbook is opened.
+  const nameProblem = uploadNameProblem(file.name, XLSX_MIME);
+  if (nameProblem) throw new ValidationError(nameProblem);
 
   const batch = await runImport(
     Buffer.from(await file.arrayBuffer()),

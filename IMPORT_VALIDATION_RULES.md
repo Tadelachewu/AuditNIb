@@ -61,6 +61,10 @@ Allowed statuses constant: [import.ts#L21-L22](file:///c:/Users/HP/Desktop/Adona
 |-------|-------|----------------|
 | Max bytes | **10 MiB** (`MAX_IMPORT_BYTES = 10 * 1024 * 1024`) | Route handler before ExcelJS load. Exceeded → 413. |
 | Max rows | **2000** (`MAX_IMPORT_ROWS = 2000`) | After parse, before `validateImportRow` loop. Exceeded → 400 *"Too many rows (…). Maximum 2000 rows per import."* |
+| File name | Must end in **`.xlsx`** (any letter case); no folders, control characters, or more than 255 characters | Route handler, on the server, whatever the upload form checked (`uploadNameProblem`, [uploadChecks.ts](src/lib/uploadChecks.ts)) |
+| Real content | Must really be an Excel workbook (a zip package with `xl/`), whatever type the browser claims | `runImport()`, **before** ExcelJS opens it, also for Re-import |
+| Archive limits ("zip bomb") | At most **5,000 parts**, **100 MB unpacked** in total, no part compressed more than **200 : 1**; must contain `xl/workbook.xml` | `runImport()`, before ExcelJS opens it: the table of contents is read without unpacking, so a small file that would unpack to gigabytes is refused instead of exhausting the server's memory |
+| Macros | A workbook with macros (`vbaProject.bin`, i.e. a renamed `.xlsm`) is refused | `runImport()` (`officeFileProblem`) |
 
 See [import.ts#L27-L31](file:///c:/Users/HP/Desktop/AdonayAudit/auditapp/src/lib/import.ts#L27-L31). These are generous ceilings — the intent is to prevent a single `updateDb()` transaction from being larger than the DB writer can commit without stalling other concurrent writers.
 
@@ -506,6 +510,9 @@ Each `ImportBatchRow` in the response is `{ rowNumber, outcome, error?, duplicat
 
 | Symptom | Error text | Where |
 |---------|------------|-------|
+| Name isn't `.xlsx` | `"The file name must end in .xlsx for this type of file"` | route handler |
+| Not a real workbook | `"This isn't an Excel (.xlsx) workbook - upload the .xlsx template file"` | runImport |
+| Zip bomb / too many parts / macros | `"The file unpacks to more than 100 MB …"`, `"… too many parts …"`, `"Files with macros can't be uploaded …"` | runImport |
 | Excel fails to open | `"Could not read this file — upload the .xlsx template file"` | parseImportWorkbook |
 | 0 matched headers | `"No recognized columns found — use the downloaded template's header row unchanged"` | parseImportWorkbook |
 | Too many rows (> 2000) | `"Too many rows (…). Maximum 2000 rows per import."` | route handler |

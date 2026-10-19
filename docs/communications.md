@@ -107,7 +107,7 @@ An All users message to, say, 1,500 people queues 1,500 emails; the queue's rate
 | What | Limit |
 |---|---|
 | Subject / text | 200 / 5,000 characters |
-| Attachments | 5 per message, 10 MB each, PDF / .docx / .xlsx only. The file's real content is checked, not just its name (a renamed file is refused) |
+| Attachments | 5 per message, 10 MB each, PDF / .docx / .xlsx only. Checked **on the server**, whatever the browser checked: the real content must match the type (a renamed file is refused), the name's extension must match the type (a PDF can't be called `.exe`), and Word / Excel files must be sane archives (no "zip bombs") **without macros** ([uploadChecks.ts](../src/lib/uploadChecks.ts)) |
 | Messages sent | 20 per user per 10 minutes |
 | **All users** messages | 3 per user per hour |
 | Uploads | 30 files per user per 10 minutes |

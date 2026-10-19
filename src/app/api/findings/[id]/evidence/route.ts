@@ -8,6 +8,7 @@ import { appendAuditLog } from "@/lib/audit";
 import { isRateLimited, recordAttempt } from "@/lib/rateLimit";
 import { ALLOWED_EVIDENCE_TYPES, MAX_EVIDENCE_BYTES, EVIDENCE_UPLOAD_LIMIT, evidenceContentMatchesType } from "@/lib/evidence";
 import { writeStoredFile, deleteStoredFile, newStoredName } from "@/lib/fileStorage";
+import { officeFileProblem, officeKind, uploadNameProblem } from "@/lib/uploadChecks";
 import { withApiHandler } from "@/lib/api/handler";
 
 // icfms.txt: Branch Controller/Manager "upload optional evidence" for a
@@ -87,12 +88,26 @@ async function handlePOST(request: Request, { params }: { params: Promise<{ id: 
   // what the claimed type should look like before it's ever written to
   // disk or allowed into the allow-listed extension (see evidence.ts).
   const buffer = Buffer.from(await file.arrayBuffer());
+  if (buffer.length > MAX_EVIDENCE_BYTES) {
+    return NextResponse.json({ error: "File exceeds the 10 MB limit" }, { status: 400 });
+  }
+  if (buffer.length === 0) {
+    return NextResponse.json({ error: "The file is empty" }, { status: 400 });
+  }
   if (!evidenceContentMatchesType(buffer, file.type)) {
     return NextResponse.json(
       { error: "File content doesn't match its declared type. Allowed: PDF, PNG, JPG, XLSX, DOCX, CSV" },
       { status: 400 }
     );
   }
+  // The name must fit the real type (a PDF can't be stored as "report.exe"),
+  // and a Word / Excel file must be a sane archive with no macros
+  // (src/lib/uploadChecks.ts) - checked here whatever the upload form checked.
+  const nameProblem = uploadNameProblem(file.name, file.type);
+  if (nameProblem) return NextResponse.json({ error: nameProblem }, { status: 400 });
+  const office = officeKind(file.type);
+  const officeProblem = office ? officeFileProblem(buffer, office) : null;
+  if (officeProblem) return NextResponse.json({ error: officeProblem }, { status: 400 });
 
   // Encrypted at rest in the dedicated storage folder (src/lib/fileStorage.ts).
   const storedFileName = newStoredName(extension);
