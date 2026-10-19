@@ -14,6 +14,7 @@ import {
   type CaseAmountChange,
   type FindingAdjustment,
 } from "./types";
+import { appNow } from "@/lib/clock";
 
 /**
  * Pure rules of revolving-finding adjustments (docs/revolving-findings.md):
@@ -58,7 +59,7 @@ export function requesterProblem(session: SessionData, f: Finding): string | nul
  * R1, R2 (current period, outstanding), R8, R14. Submitting also needs the
  * submission window (submitProblem()).
  */
-export function eligibilityProblem(db: Database, config: AdjustmentConfig, session: SessionData, f: Finding, now = Date.now()): string | null {
+export function eligibilityProblem(db: Database, config: AdjustmentConfig, session: SessionData, f: Finding, now = appNow()): string | null {
   if (!isRevolvingArea(config, f.operationArea)) return `Adjustments aren't enabled for the operation area "${f.operationArea || "(none)"}" (Settings -> Revolving Findings)`;
   const current = currentPeriod(db.reportingPeriods, now);
   if (!current || f.periodId !== current.id) {
@@ -72,7 +73,7 @@ export function eligibilityProblem(db: Database, config: AdjustmentConfig, sessi
 }
 
 /** R10: submitting needs the current period open for submission (not locked, inside the submission window). */
-export function submitProblem(db: Database, periodId: string, now = Date.now()): string | null {
+export function submitProblem(db: Database, periodId: string, now = appNow()): string | null {
   const period = db.reportingPeriods.find((p) => p.id === periodId);
   if (!period) return "Reporting period not found";
   if (period.status === "LOCKED") return `${period.code} is locked - save the adjustment as a draft and submit once it's open`;

@@ -9,6 +9,7 @@ import type { Database, ReportingPeriod } from "@/types";
 import { dueSweeps, planSweep, sweepDueAt } from "./rules";
 import { prismaAutoTransferStore, type AutoTransferStore } from "./store";
 import { SYSTEM_ACTOR, type AutoTransferConfig, type AutoTransferRun, type AutoTransferTrigger } from "./types";
+import { appNow, clockOffsetMs } from "@/lib/clock";
 
 /**
  * Runs the automatic transfer when a period's sweep is due. The app has no
@@ -100,7 +101,7 @@ export function sweepPeriods(
       entityType: "ReportingPeriod",
       entityId: period.id,
       newValue: { from: period.code, to: destination.code, moved: run.movedReferences, kept: run.keptReferences, includedAreaSources: config.includedAreaSources, triggeredBy: trigger },
-      reason: `Automatic transfer out of ${period.code} (started by ${trigger === "scheduler" ? "the scheduler" : "the in-app check"})`,
+      reason: `Automatic transfer out of ${period.code} (started by ${trigger === "scheduler" ? "the scheduler" : "the in-app check"}${clockOffsetMs() !== 0 ? `, on the test clock: ${new Date(now).toISOString()}` : ""})`,
     });
 
     if (toMove.length > 0 || kept.length > 0) {
@@ -177,7 +178,8 @@ export async function runAutoTransferIfDue(
   opts: { now?: number; force?: boolean; trigger?: AutoTransferTrigger; deps?: Partial<AutoTransferDeps> } = {}
 ): Promise<{ ran: boolean; runs: AutoTransferRun[] }> {
   const trigger = opts.trigger ?? "in-app";
-  const now = opts.now ?? Date.now();
+  // The business clock (src/lib/clock.ts): a test server can simulate the date.
+  const now = opts.now ?? appNow();
   if (!opts.force && now - lastCheckAt < CHECK_INTERVAL_MS) return { ran: false, runs: [] };
   lastCheckAt = now;
   const deps = { ...defaultDeps, ...opts.deps };
@@ -203,7 +205,7 @@ export async function runAutoTransferIfDue(
       const { runs } = await deps.updateDb((db) => sweepPeriods(db, stillDue, config, now, previousByPeriod, trigger), {
         alsoWrite: (tx, result) => deps.store.saveRuns(result.runs, tx),
       });
-      logger.info({ event: "auto_transfer.ran", trigger, runs: runs.map((r) => ({ periodId: r.periodId, status: r.status, moved: r.movedCount, kept: r.keptCount })) }, "Automatic transfer ran");
+      logger.info({ event: "auto_transfer.ran", trigger, testClock: clockOffsetMs() !== 0, businessNow: new Date(now).toISOString(), runs: runs.map((r) => ({ periodId: r.periodId, status: r.status, moved: r.movedCount, kept: r.keptCount })) }, "Automatic transfer ran");
       return { ran: true, runs };
     } finally {
       await deps.lock.release();
@@ -230,7 +232,7 @@ export async function rearmIfRescheduled(
     const config = await store.getConfig();
     if (!config) return false;
     const run = (await store.listRuns()).find((r) => r.periodId === period.id);
-    if (!run || sweepDueAt(period, config) <= (opts.now ?? Date.now())) return false;
+    if (!run || sweepDueAt(period, config) <= (opts.now ?? appNow())) return false;
     await store.deleteRuns([period.id]);
     logger.info({ event: "auto_transfer.rearmed", periodId: period.id, period: period.code, previousStatus: run.status }, "Period's sweep is due later - automatic transfer re-armed");
     return true;

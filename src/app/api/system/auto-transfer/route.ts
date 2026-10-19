@@ -5,6 +5,7 @@ import { readDb } from "@/lib/db";
 import { dueSweeps, prismaAutoTransferStore, runAutoTransferIfDue, sweepDueAt } from "@/lib/autoTransfer";
 import { clientIp, isRateLimited, recordAttempt } from "@/lib/rateLimit";
 import { getReminderStatus, runRemindersIfDue } from "@/lib/reminders";
+import { appNow } from "@/lib/clock";
 
 /**
  * For a scheduler (cron, Windows Task Scheduler, systemd, Kubernetes...) -
@@ -82,7 +83,7 @@ async function handleGET(request: Request) {
   const config = await prismaAutoTransferStore.getConfig();
   if (!config) return NextResponse.json({ ready: false, installed: false, reason: "Automatic transfer tables are missing - apply its migration (docs/auto-transfer.md).", reminders });
   const [runs, db] = await Promise.all([prismaAutoTransferStore.listRuns(), readDb()]);
-  const now = Date.now();
+  const now = appNow();
   const runByPeriod = new Map(runs.map((r) => [r.periodId, r]));
   const dueNow = dueSweeps(db.reportingPeriods, runs, config, now).map((p) => p.code);
   const upcoming = db.reportingPeriods

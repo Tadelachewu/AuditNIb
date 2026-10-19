@@ -37,6 +37,7 @@ import type {
   RequirableFindingField,
   OtherValueAllowedField,
 } from "@/types";
+import { appDate } from "@/lib/clock";
 
 // Columns of the Evidence / Comments / Rectification Ledger row by how many of them show.
 const LOWER_GRID_COLS: Record<number, string> = { 1: "", 2: "lg:grid-cols-2", 3: "lg:grid-cols-2 xl:grid-cols-3" };
@@ -1114,7 +1115,7 @@ export function FindingDetailClient({
                     </div>
                     <div className="flex justify-between gap-2">
                       <dt className="text-slate-500">Transfer Date</dt>
-                      <dd className="font-medium text-slate-900">{new Date().toISOString().slice(0, 10)}</dd>
+                      <dd className="font-medium text-slate-900">{appDate().toISOString().slice(0, 10)}</dd>
                     </div>
                     <div className="flex justify-between gap-2">
                       <dt className="text-slate-500">Transferred By</dt>

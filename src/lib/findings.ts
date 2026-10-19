@@ -14,6 +14,7 @@ import type {
   ReportingPeriod,
   RequirableFindingField,
 } from "@/types";
+import { appNow } from "@/lib/clock";
 
 /**
  * A transfer moves the finding forward, it doesn't create a new one
@@ -185,7 +186,7 @@ export function findPreviousPeriod(db: Database, period: ReportingPeriod): Repor
 
 /** Days since the finding was originally registered - unaffected by any transfer, since transferFinding() never touches createdAt (master.txt §8: "track case age from original finding date"). */
 export function caseAgeDays(finding: Finding): number {
-  return Math.floor((Date.now() - new Date(finding.createdAt).getTime()) / 86_400_000);
+  return Math.floor((appNow() - new Date(finding.createdAt).getTime()) / 86_400_000);
 }
 
 /**
@@ -615,7 +616,8 @@ export function assertPeriodOpenForSubmission(db: Database, periodId: string): s
   const period = db.reportingPeriods.find((p) => p.id === periodId);
   if (!period) return "Reporting period not found";
   if (period.status !== "OPEN") return null;
-  const now = Date.now();
+  // The business clock (src/lib/clock.ts): a test server can simulate the date.
+  const now = appNow();
   if (now < new Date(period.submissionStartsAt).getTime() || now > new Date(period.submissionEndsAt).getTime()) {
     return `${period.code}'s submission window has closed - save this as a draft instead, or submit once a period's submission window covering today's date is open`;
   }
@@ -878,7 +880,7 @@ export function queueStatusesForSession(session: SessionData, db: Database): (fi
  * current reporting period (src/lib/periods.ts) or is locked. What puts it
  * in the queue of anyone who can transfer (by default the HO Controller).
  */
-export function needsTransfer(db: Database, f: Finding, now: number = Date.now()): boolean {
+export function needsTransfer(db: Database, f: Finding, now: number = appNow()): boolean {
   if (!AUTO_TRANSFERABLE_STATUSES.includes(f.status)) return false;
   if (f.closedCases >= f.caseCount && f.closedAmount >= f.amount) return false;
   const period = db.reportingPeriods.find((p) => p.id === f.periodId);

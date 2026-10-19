@@ -22,6 +22,7 @@ import type { ReportingPeriod } from "@/types";
 import { AdminTable } from "@/components/ui/AdminTable";
 import { notify, notifications } from "@/lib/notify";
 import { useAutoTransferStatus } from "@/components/admin/useAutoTransferStatus";
+import { appDate } from "@/lib/clock";
 
 type PeriodWithTransferPreview = ReportingPeriod & {
   // Lets "Edit Period" (its own date range) disable itself once anything
@@ -71,7 +72,7 @@ export default function ReportingPeriodsPage() {
   const periods = list.rows;
   // Each period's automatic-transfer status (src/lib/autoTransfer) - its own API.
   const autoTransfer = useAutoTransferStatus(list.rows);
-  const now = new Date();
+  const now = appDate();
   // submissionStartsAt/submissionEndsAt default to exactly the period's
   // own range - most admins never touch them. handleStartsAtChange/
   // handleEndsAtChange below keep them "shadowing" the period's own dates

@@ -2,6 +2,7 @@ import { computeEligibleCaseCounts, caseAgeDays, findingsResidentInPeriod, isHoA
 import { formatNumber } from "@/lib/format";
 import { addCurrency, mergeCurrencyTotals, type CurrencyTotals } from "@/lib/currency";
 import type { Database, Branch, District, ReportingPeriod, ClassifiedCategory, BranchCoverageNote, Finding, Source } from "@/types";
+import { appDate } from "@/lib/clock";
 
 // The 10 named Internal Control Division report templates (see report/*.xlsx,
 // already relabeled with these exact names), plus #11 Transferred Findings
@@ -666,7 +667,7 @@ export interface WeeklyCategorySummary {
 
 /** ISO date for the Monday-start week ending `weeksAgo` weeks before today (0 = this week). Exported so the page can default its two date pickers to the same real calendar week this function itself defaults to. */
 export function weekEndDate(weeksAgo: number): string {
-  const now = new Date();
+  const now = appDate();
   const day = now.getDay();
   const diffToMonday = day === 0 ? 6 : day - 1;
   const monday = new Date(now);

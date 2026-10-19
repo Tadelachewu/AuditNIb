@@ -1,4 +1,5 @@
 import { ALL_PERIODS_VALUE } from "@/lib/dashboardFilters";
+import { appNow } from "@/lib/clock";
 
 /**
  * Reporting-period helpers shared by every period filter (dashboards,
@@ -22,7 +23,7 @@ export function sortPeriods<T extends PeriodLike>(periods: readonly T[]): T[] {
  * most recent period that started before this calendar month; failing that,
  * the earliest one.
  */
-export function currentPeriod<T extends PeriodLike>(periods: readonly T[], now: number = Date.now()): T | undefined {
+export function currentPeriod<T extends PeriodLike>(periods: readonly T[], now: number = appNow()): T | undefined {
   const today = new Date(now);
   const lastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
   const code = `${lastMonth.getFullYear()}-${String(lastMonth.getMonth() + 1).padStart(2, "0")}`;

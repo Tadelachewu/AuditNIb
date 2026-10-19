@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { usernameError } from "@/lib/usernameValidation";
+import { appDate } from "@/lib/clock";
 
 /**
  * Input rules for every text field the app accepts - ONE source for the
@@ -183,7 +184,7 @@ export function localDateOf(iso: string): string {
 
 /** Today's local date as YYYY-MM-DD. */
 export function localToday(): string {
-  const d = new Date();
+  const d = appDate();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 

@@ -7,6 +7,7 @@ import type { Database } from "@/types";
 import { isRunDue, localDateKey, nextRunAt, overdueFindings, resolveConfig } from "./rules";
 import { prismaReminderStore, type ReminderStore } from "./store";
 import type { ReminderConfig, ReminderResult, ReminderRun, ReminderStatus, ReminderTrigger } from "./types";
+import { appNow, clockOffsetMs } from "@/lib/clock";
 
 /**
  * The scheduled rectification reminder (docs/rectification-reminders.md).
@@ -58,7 +59,8 @@ const defaultDeps: ReminderDeps = {
   readDb,
   updateDb,
   lock: { acquire: acquireLock, release: releaseLock },
-  now: Date.now,
+  // The business clock (src/lib/clock.ts): a test server can simulate the date.
+  now: appNow,
 };
 
 /**
@@ -141,7 +143,7 @@ export async function runRemindersIfDue(opts: { trigger?: ReminderTrigger; deps?
           },
         }
       );
-      logger.info({ event: "reminders.ran", trigger, runDate: run.runDate, findings: run.remindedFindings, users: run.notifiedUsers }, "Rectification reminders sent");
+      logger.info({ event: "reminders.ran", trigger, testClock: clockOffsetMs() !== 0, runDate: run.runDate, findings: run.remindedFindings, users: run.notifiedUsers }, "Rectification reminders sent");
       return { ran: true, run };
     } finally {
       await deps.lock.release();

@@ -20,10 +20,11 @@ import { usePermissions } from "@/lib/permissions/PermissionsContext";
 import { hasPermission } from "@/lib/permissions/registry";
 import type { ScoringRule, ClassifiedCategory, Source } from "@/types";
 import { notify, notifications } from "@/lib/notify";
+import { appDate } from "@/lib/clock";
 
 const emptyForm = {
   name: "",
-  effectiveFrom: new Date().toISOString().slice(0, 10),
+  effectiveFrom: appDate().toISOString().slice(0, 10),
   categories: [] as string[],
   sources: [] as string[],
   basis: generateBasisText([]),

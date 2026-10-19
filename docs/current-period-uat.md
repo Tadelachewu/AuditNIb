@@ -5,7 +5,7 @@ Test cases for:
 - **The current period**: the previous calendar month's period is the default everywhere and the only period whose findings can be adjusted
 - **The automatic transfer**: on the 1st of each month at 00:00, outstanding findings move from the period that stops being current into the new current period ([auto-transfer.md](auto-transfer.md))
 
-The tests move the **UAT server's clock** forward, so the month change can be seen today instead of waiting for the real 1st. Run them on the **UAT server only**, never on production: moved findings can't be moved back automatically, and a period is swept only once.
+The tests move the app's **business date** forward with the **test clock** (`APP_TEST_NOW`, [test-clock.md](test-clock.md)), so the month change can be seen today instead of waiting for the real 1st. The Windows clock is **not** changed, so the database, Redis and other apps on the server are unaffected. Run them on the **UAT server only** (the test clock is ignored when `APP_ENV=production`): moved findings can't be moved back automatically, and a period is swept only once.
 
 **Result column:** write Pass / Fail and a note.
 
@@ -20,7 +20,7 @@ The tests move the **UAT server's clock** forward, so the month change can be se
 | App running | Sign in works |
 | Scheduler task installed | `scheduler\windows\check.ps1` shows *Task installed* |
 | Automatic Transfer on | Settings → Automatic Transfer: switched on, **Run after = 0**, the test operation area and source **ticked** |
-| Administrator PowerShell on the server | Needed to change the clock |
+| Access to the server's `.env` and a way to restart the app and the email worker | Needed to set the test clock |
 | Optional: reminders off | Settings → Rectification Reminders off, so the date jumps don't send real reminders |
 
 ### Test users
@@ -61,18 +61,15 @@ Write down each finding's reference number.
 | Audit | Admin → Audit Log, action `PERIOD_AUTO_TRANSFER` |
 | Notifications | The bell of HO and BM |
 
-### Changing the clock (Administrator PowerShell)
+### Setting the test date
 
-```powershell
-# Once, before the first change: stop Windows correcting the time
-Stop-Service w32time
-Set-Service w32time -StartupType Disabled
+In the server's `.env` (with `APP_ENV` set to anything except `production`):
 
-# Each step
-Set-Date "2026-10-31 23:50"
+```
+APP_TEST_NOW=2026-10-31T23:50:00
 ```
 
-After a jump of more than 8 hours everyone is signed out (session limit). Sign in again.
+Then **restart the app and the email worker**. Each page shows a purple **Test clock** bar with the simulated date and time; it keeps ticking from the value set. To change the date, edit the value and restart. Sessions are not affected: nobody is signed out.
 
 ### Running the check at once
 
@@ -84,7 +81,7 @@ Start-ScheduledTask -TaskName "NIB Control360 Auto Transfer"
 
 Then wait about a minute and run `check.ps1`.
 
-**Known message, not a failure:** if the task was already running (Windows often starts a catch-up run right after the clock changes), Windows refuses the second start and `check.ps1` shows:
+**Known message, not a failure:** if the task was already running, Windows refuses the second start and `check.ps1` shows:
 
 ```
 [FAIL] Last run ... - result 2147946720 (see the log)
@@ -108,9 +105,7 @@ That code (`0x800710E0`) means "the request was refused because an instance is a
 
 ## B. The last minutes of October (31 Oct 23:50)
 
-```powershell
-Set-Date "2026-10-31 23:50"
-```
+`APP_TEST_NOW=2026-10-31T23:50:00`, then restart the app and the email worker.
 
 | ID | Steps | Expected | Result |
 |---|---|---|---|
@@ -133,8 +128,9 @@ Expected `check.ps1` (task result may show the known message above):
 
 ## C. The month change (1 Nov 00:05)
 
+`APP_TEST_NOW=2026-11-01T00:05:00`, restart the app and the email worker, then:
+
 ```powershell
-Set-Date "2026-11-01 00:05"
 Start-ScheduledTask -TaskName "NIB Control360 Auto Transfer"
 ```
 
@@ -178,7 +174,7 @@ Wait about a minute, then run the checks.
 
 | ID | Steps | Expected | Result |
 |---|---|---|---|
-| E1 | Do **not** create 2026-11. `Set-Date "2026-12-01 00:05"`, start the task, check | 2026-10 shows **Waiting: no next period**; nothing moves; HO is told once to create the next period | |
+| E1 | Do **not** create 2026-11. `APP_TEST_NOW=2026-12-01T00:05:00`, restart, start the task, check | 2026-10 shows **Waiting: no next period**; nothing moves; HO is told once to create the next period | |
 | E2 | Start the task again | No second "create the next period" notification | |
 | E3 | Create 2026-11 (any status), start the task, check | Outstanding findings in 2026-10 (A, F, E) move to **2026-11**; 2026-10 shows Done | |
 | E4 | Open a dashboard | Opens on **2026-11** | |
@@ -189,7 +185,7 @@ To test a locked destination, create 2026-11 **locked** in E3: the findings stil
 
 | ID | Steps | Expected | Result |
 |---|---|---|---|
-| F1 | Create and open 2026-12. Leave a finding outstanding in 2026-11. Set the clock to **2027-02-01 00:05**, start the task | 2026-11 and 2026-12 are swept oldest first in one run; the finding ends in the period whose 1st has not yet come (2027-01 if it exists, otherwise 2026-12 shows *Waiting: no next period*) | |
+| F1 | Create and open 2026-12. Leave a finding outstanding in 2026-11. Set `APP_TEST_NOW=2027-02-01T00:05:00`, restart, start the task | 2026-11 and 2026-12 are swept oldest first in one run; the finding ends in the period whose 1st has not yet come (2027-01 if it exists, otherwise 2026-12 shows *Waiting: no next period*) | |
 
 ## G. Variations: window not extended, period locked
 
@@ -237,18 +233,14 @@ Run on the real date in October (2026-09 is current). Prepare the findings for �
 | G4.3 | BM rectifies finding A in 2026-10; DC verifies; HO closes | All work | |
 | G4.4 | Unlock 2026-10 (and extend its window), submit again | Accepted | |
 
-## H. Put the clock back
+## H. Switch the test clock off
 
-```powershell
-Set-Service w32time -StartupType Automatic
-Start-Service w32time
-w32tm /resync
-```
+Delete the `APP_TEST_NOW` line from `.env` (or leave it empty) and restart the app and the email worker. The purple bar disappears.
 
 | ID | Steps | Expected | Result |
 |---|---|---|---|
-| H1 | After the clock is back to the real date, open Reporting Periods | Periods swept during the test still show **Done**; moved findings stay where they are | |
-| H2 | To repeat the test: save 2026-09's submission window | 2026-09 shows *Runs after 01/11/2026* again (re-armed) | |
+| H1 | After switching the test clock off, open Reporting Periods | Periods swept during the test still show **Done**; moved findings stay where they are | |
+| H2 | To repeat the test: set `APP_TEST_NOW=2026-10-31T23:50:00`, restart, save 2026-09's submission window | 2026-09 shows *Runs after 01/11/2026* again (re-armed) | |
 
 ---
 
@@ -265,4 +257,4 @@ w32tm /resync
 | G. Window not extended / locked | 22 | | | | |
 | H. Clock back | 2 | | | | |
 
-**Restore after testing:** server clock synchronised, Rectification Reminders and Automatic Transfer settings as intended, submission windows as intended, and delete the test periods and findings (or use Dev Reset on a development server).
+**Restore after testing:** `APP_TEST_NOW` removed and the app restarted, Rectification Reminders and Automatic Transfer settings as intended, submission windows as intended, and delete the test periods and findings (or use Dev Reset on a development server).

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Input, Label } from "@/components/ui/Field";
+import { appDate } from "@/lib/clock";
 
 type Preset = "today" | "week" | "month" | "custom";
 
@@ -12,7 +13,7 @@ function toDateInput(d: Date): string {
 }
 
 function presetRange(preset: Exclude<Preset, "custom">): { from: string; to: string } {
-  const now = new Date();
+  const now = appDate();
   if (preset === "today") {
     const d = toDateInput(now);
     return { from: d, to: d };
@@ -74,7 +75,7 @@ export function TimeRangeFilter() {
 
   const activePreset: Preset | null = (() => {
     if (!urlFrom && !urlTo) return null;
-    if (urlFrom === urlTo && urlFrom === toDateInput(new Date())) return "today";
+    if (urlFrom === urlTo && urlFrom === toDateInput(appDate())) return "today";
     const week = presetRange("week");
     if (urlFrom === week.from && urlTo === week.to) return "week";
     const month = presetRange("month");

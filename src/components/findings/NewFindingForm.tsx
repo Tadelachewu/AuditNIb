@@ -29,6 +29,7 @@ import type {
   OtherValueAllowedField,
 } from "@/types";
 import { REQUIRABLE_FINDING_FIELDS } from "@/types";
+import { appNow } from "@/lib/clock";
 
 interface SimilarFindingMatch {
   id: string;
@@ -568,7 +569,7 @@ export function NewFindingForm({
   // still can't take a submit, so that half of the choice is disabled
   // here rather than hidden, with a reason shown next to the button.
   // Read once when the form opens (render must stay pure); the server re-checks the window on submit.
-  const [pageOpenedAt] = useState(() => Date.now());
+  const [pageOpenedAt] = useState(() => appNow());
   const selectedPeriod = periods.find((p) => p.id === form.periodId);
   // Submitting needs an OPEN period whose submission window covers today
   // (same rules as the API); a draft can always be saved in an open period.

@@ -393,6 +393,7 @@ sudo systemctl restart nib-control360-email    # or: nssm restart NIBControl360E
 
 **Configuration**
 - [ ] `APP_ENV=production`: the login page shows **no** "Demo accounts" panel, and `/dev-reset` says the tool is turned off
+- [ ] No `APP_TEST_NOW` in `.env` (the test clock, [test-clock.md](test-clock.md)): no purple "Test clock" bar on the pages. It is ignored in production anyway, but shouldn't be there
 - [ ] `SESSION_COOKIE_SECURE=true`
 - [ ] `IRON_SESSION_PASSWORD` and `FILE_ENCRYPTION_KEY` freshly generated on this server, and the key backed up in the vault
 - [ ] `HOST=127.0.0.1` (or firewalled so only the proxy can reach the app port)

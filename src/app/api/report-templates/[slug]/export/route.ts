@@ -20,6 +20,7 @@ import {
 } from "@/lib/reportTemplates";
 import type { Database } from "@/types";
 import { withApiHandler } from "@/lib/api/handler";
+import { appDate } from "@/lib/clock";
 
 // One shared text/csv exporter for all report templates - same
 // escaping/header/attachment convention as /api/findings/export, just
@@ -315,7 +316,7 @@ function buildCsv(slug: string, db: Database, params: URLSearchParams): string |
       return toCsv(header, dataRows);
     }
     case "mid-month-district-snapshot": {
-      const asOfDate = params.get("asOfDate") ?? new Date().toISOString().slice(0, 10);
+      const asOfDate = params.get("asOfDate") ?? appDate().toISOString().slice(0, 10);
       const { rows, totalRow } = getDistrictSnapshotAsOf(db, periodId, asOfDate);
       const header = ["SN", "District", "Others Cases", "Unrectified", "Rectified", "rectified percetage"];
       const dataRows = rows.map((r, i) => [i + 1, r.district.name, r.totalCases, r.outstandingCases, r.rectifiedCases, pctRow(r)]);

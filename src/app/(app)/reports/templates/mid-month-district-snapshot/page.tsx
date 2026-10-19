@@ -11,6 +11,7 @@ import { Card, CardHeader } from "@/components/ui/Card";
 import { Select, Input, Label } from "@/components/ui/Field";
 import { PrintButton } from "@/components/reports/PrintButton";
 import { currentPeriod, sortPeriods } from "@/lib/periods";
+import { appDate } from "@/lib/clock";
 
 export default async function MidMonthDistrictSnapshotPage({
   searchParams,
@@ -29,7 +30,7 @@ export default async function MidMonthDistrictSnapshotPage({
   const openPeriod = currentPeriod(db.reportingPeriods);
   const periodId = (typeof params.periodId === "string" && params.periodId) || openPeriod?.id || db.reportingPeriods[0]?.id || "";
   const period = db.reportingPeriods.find((p) => p.id === periodId);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = appDate().toISOString().slice(0, 10);
   const asOfDate = (typeof params.asOfDate === "string" && params.asOfDate) || today;
   const { rows, totalRow } = periodId
     ? getDistrictSnapshotAsOf(db, periodId, asOfDate)

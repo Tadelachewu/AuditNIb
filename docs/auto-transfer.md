@@ -13,7 +13,7 @@ When a reporting period **stops being the current period**, every finding still 
 
 If last month's period doesn't exist (a gap, or the system's first month), the current period is the most recent one that started before this calendar month; failing that, the earliest one.
 
-UAT test cases for this, using the server clock: [current-period-uat.md](current-period-uat.md).
+UAT test cases for this, using the test clock (`APP_TEST_NOW`, [test-clock.md](test-clock.md)) instead of changing the server's Windows clock: [current-period-uat.md](current-period-uat.md).
 
 Replaces the old "transfer outstanding cases when locking a period" option (see `TRANSFER_ON_LOCK.md`, now historical).
 
