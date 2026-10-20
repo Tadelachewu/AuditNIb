@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 import { readDb } from "@/lib/db";
 import { findingsInScope } from "@/lib/findings-scope";
-import { queueStatusesForSession, findingsResidentInPeriod, type FindingPeriodSlice, registeredCasesOf } from "@/lib/findings";
+import { queueStatusesForSession, findingsResidentInPeriod, type FindingPeriodSlice, registeredCasesOf, registeredAmountOf } from "@/lib/findings";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
 import { paginate, parsePage } from "@/lib/pagination";
 import { filterFindingsByText, sortFindings, parseFindingSort, parsePageSize } from "@/lib/findingListQuery";
@@ -90,7 +90,7 @@ export default async function FindingsPage({
   // here, server-side, across every matching finding rather than just the
   // visible page; the CSV export reuses the same helpers so it always
   // matches the list (src/lib/findingListQuery.ts).
-  const names = { districtName, branchName, departmentName, categoryName, sourceName };
+  const names = { districtName, branchName, departmentName, categoryName, sourceName, periodCode };
   const searchText = get("q");
   const sort = parseFindingSort(get("sort"), get("dir"));
   resident = filterFindingsByText(resident, searchText, names);
@@ -123,6 +123,12 @@ export default async function FindingsPage({
   function departmentName(id: string) {
     return db.departments.find((d) => d.id === id)?.name ?? "—";
   }
+  function periodCode(id: string) {
+    return db.reportingPeriods.find((p) => p.id === id)?.code ?? "—";
+  }
+  function userName(id: string) {
+    return db.users.find((u) => u.id === id)?.name ?? "—";
+  }
 
   // What the signed-in session can attempt via the bulk action toolbar -
   // the exact same gates the Finding detail page uses per action, so bulk
@@ -154,8 +160,12 @@ export default async function FindingsPage({
     riskLevel: f.riskLevel,
     currency: f.currency,
     amount: slice ? slice.eligibleAmount : f.amount,
-    reportedCases: registeredCasesOf(f),
+    // Registered in the filtered period - 0 in a period it was only transferred into.
+    reportedCases: slice ? slice.reportedCases : registeredCasesOf(f),
     totalCases: slice ? slice.eligibleCases : f.caseCount,
+    // Cases transferred into / out of the filtered period (no period filter: none to show).
+    casesIn: slice ? slice.casesIn : null,
+    casesOut: slice ? slice.casesOut : null,
     status: f.status,
     updatedAt: f.updatedAt,
     rectifiedCases: f.rectifiedCases,
@@ -172,6 +182,25 @@ export default async function FindingsPage({
     // live current status (which belongs to whatever period it's in now).
     isHistorical: slice ? !slice.isCurrentPeriod : false,
     transferredOutToCode: slice?.transferredOutToCode ?? null,
+    // Optional columns (Show / hide columns).
+    periodCode: periodCode(slice ? periodId : f.periodId),
+    findingDate: f.findingDate ?? "",
+    operationArea: f.operationArea ?? "",
+    irregularityType: f.irregularityType ?? "",
+    priority: f.priority ?? "",
+    reportedAmount: registeredAmountOf(f),
+    outstandingCases: (slice ? slice.eligibleCases : f.caseCount) - (slice ? slice.closedCases : f.closedCases),
+    outstandingAmount: (slice ? slice.eligibleAmount : f.amount) - (slice ? slice.closedAmount : f.closedAmount),
+    description: f.description ?? "",
+    recommendation: f.recommendation ?? "",
+    rootCause: f.rootCause ?? "",
+    evidenceNote: f.evidenceNote ?? "",
+    externalReference: f.externalReference ?? "",
+    registeredByName: userName(f.createdBy),
+    registeredBankWide: Boolean(f.registeredByBankScope),
+    imported: Boolean(f.importBatchId),
+    createdAt: f.createdAt,
+    lastReminderAt: f.lastReminderAt ?? "",
   }));
 
   return (

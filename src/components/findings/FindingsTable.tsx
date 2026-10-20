@@ -28,10 +28,13 @@ export interface FindingRow {
   riskLevel: string;
   currency: string;
   amount: number;
-  /** Originally registered case count - never changed by transfers. */
+  /** Registered in the filtered period (0 where it was only transferred in); the registered count with no period filter. */
   reportedCases: number;
   /** Cases in the filtered period after transfers in/out (= reported when no period filter). */
   totalCases: number;
+  /** Cases transferred into / out of the filtered period (null without a period filter). */
+  casesIn: number | null;
+  casesOut: number | null;
   status: FindingStatus;
   updatedAt: string;
   rectifiedCases: number;
@@ -51,7 +54,48 @@ export interface FindingRow {
   // eligible for a bulk action here.
   isHistorical: boolean;
   transferredOutToCode: string | null;
+  // Optional columns - hidden until shown with Show / hide columns.
+  periodCode: string;
+  findingDate: string;
+  operationArea: string;
+  irregularityType: string;
+  priority: string;
+  reportedAmount: number;
+  outstandingCases: number;
+  outstandingAmount: number;
+  description: string;
+  recommendation: string;
+  rootCause: string;
+  evidenceNote: string;
+  externalReference: string;
+  registeredByName: string;
+  registeredBankWide: boolean;
+  imported: boolean;
+  createdAt: string;
+  lastReminderAt: string;
 }
+
+/** Columns hidden at first (every finding field not shown by default) - tick them in Show / hide columns. */
+const OPTIONAL_COLUMNS = [
+  "period", "findingDate", "operationArea", "irregularityType", "priority", "currency", "reportedAmount",
+  "rectifiedCases", "rectifiedAmount", "verifiedCases", "verifiedAmount", "closedCases", "closedAmount",
+  "outstandingCases", "outstandingAmount", "description", "recommendation", "rootCause", "evidenceNote",
+  "externalReference", "registeredBy", "registeredBankWide", "imported", "createdAt", "lastReminderAt",
+] as const;
+const HIDDEN_BY_DEFAULT = Object.fromEntries(OPTIONAL_COLUMNS.map((id) => [id, false]));
+
+const num = (n: number) => <span className="tabular-nums">{formatNumber(n)}</span>;
+const money = (currency: string, n: number) => (
+  <span className="whitespace-nowrap tabular-nums">
+    {currency} {formatCurrency(n)}
+  </span>
+);
+/** Long free text: one line in the cell, the whole text on hover. */
+const longText = (t: string) => (
+  <span className="block max-w-xs truncate" title={t}>
+    {t || "—"}
+  </span>
+);
 
 export interface BulkPermissions {
   canDistrictReview: boolean;
@@ -337,6 +381,22 @@ export function FindingsTable({
         Cell: ({ row }) => <span className="tabular-nums">{formatNumber(row.original.totalCases)}</span>,
       },
       {
+        id: "casesIn",
+        accessorKey: "casesIn",
+        header: "In",
+        size: 70,
+        muiTableHeadCellProps: { title: "Cases transferred into this period (choose a period to see it)" },
+        Cell: ({ row }) => <span className="tabular-nums">{row.original.casesIn === null ? "—" : formatNumber(row.original.casesIn)}</span>,
+      },
+      {
+        id: "casesOut",
+        accessorKey: "casesOut",
+        header: "Out",
+        size: 70,
+        muiTableHeadCellProps: { title: "Cases transferred out of this period (choose a period to see it)" },
+        Cell: ({ row }) => <span className="tabular-nums">{row.original.casesOut === null ? "—" : formatNumber(row.original.casesOut)}</span>,
+      },
+      {
         id: "status",
         accessorKey: "status",
         header: "Status",
@@ -358,6 +418,32 @@ export function FindingsTable({
         header: "Updated",
         Cell: ({ row }) => <span className="whitespace-nowrap text-xs text-slate-500">{formatDateTime(row.original.updatedAt)}</span>,
       },
+      // Optional columns (hidden at first - Show / hide columns).
+      { id: "period", accessorKey: "periodCode", header: "Period", size: 90 },
+      { id: "findingDate", accessorKey: "findingDate", header: "Finding Date", size: 110 },
+      { id: "operationArea", accessorKey: "operationArea", header: "Operation Area" },
+      { id: "irregularityType", accessorKey: "irregularityType", header: "Type of Irregularity" },
+      { id: "priority", accessorKey: "priority", header: "Priority", size: 90 },
+      { id: "currency", accessorKey: "currency", header: "Currency", size: 80, enableSorting: false },
+      { id: "reportedAmount", accessorKey: "reportedAmount", header: "Registered Amount", Cell: ({ row }) => money(row.original.currency, row.original.reportedAmount) },
+      { id: "rectifiedCases", accessorKey: "rectifiedCases", header: "Rectified Cases (recorded)", size: 110, Cell: ({ row }) => num(row.original.rectifiedCases) },
+      { id: "rectifiedAmount", accessorKey: "rectifiedAmount", header: "Rectified Amount (recorded)", enableSorting: false, Cell: ({ row }) => money(row.original.currency, row.original.rectifiedAmount) },
+      { id: "verifiedCases", accessorKey: "districtVerifiedCases", header: "Verified Cases", size: 100, Cell: ({ row }) => num(row.original.districtVerifiedCases) },
+      { id: "verifiedAmount", accessorKey: "districtVerifiedAmount", header: "Verified Amount", enableSorting: false, Cell: ({ row }) => money(row.original.currency, row.original.districtVerifiedAmount) },
+      { id: "closedCases", accessorKey: "closedCases", header: "Closed Cases", size: 100, Cell: ({ row }) => num(row.original.closedCases) },
+      { id: "closedAmount", accessorKey: "closedAmount", header: "Closed Amount", enableSorting: false, Cell: ({ row }) => money(row.original.currency, row.original.closedAmount) },
+      { id: "outstandingCases", accessorKey: "outstandingCases", header: "Outstanding Cases", size: 110, Cell: ({ row }) => num(row.original.outstandingCases) },
+      { id: "outstandingAmount", accessorKey: "outstandingAmount", header: "Outstanding Amount", Cell: ({ row }) => money(row.original.currency, row.original.outstandingAmount) },
+      { id: "description", accessorKey: "description", header: "Description", enableSorting: false, Cell: ({ row }) => longText(row.original.description) },
+      { id: "recommendation", accessorKey: "recommendation", header: "Recommendation", enableSorting: false, Cell: ({ row }) => longText(row.original.recommendation) },
+      { id: "rootCause", accessorKey: "rootCause", header: "Root Cause", enableSorting: false, Cell: ({ row }) => longText(row.original.rootCause) },
+      { id: "evidenceNote", accessorKey: "evidenceNote", header: "Evidence Note", enableSorting: false, Cell: ({ row }) => longText(row.original.evidenceNote) },
+      { id: "externalReference", accessorKey: "externalReference", header: "External Reference" },
+      { id: "registeredBy", accessorKey: "registeredByName", header: "Registered By", enableSorting: false },
+      { id: "registeredBankWide", accessorKey: "registeredBankWide", header: "Registered Bank-wide", size: 90, enableSorting: false, Cell: ({ row }) => (row.original.registeredBankWide ? "Yes" : "No") },
+      { id: "imported", accessorKey: "imported", header: "Imported", size: 80, enableSorting: false, Cell: ({ row }) => (row.original.imported ? "Yes" : "No") },
+      { id: "createdAt", accessorKey: "createdAt", header: "Registered On", Cell: ({ row }) => <span className="whitespace-nowrap text-xs text-slate-500">{formatDateTime(row.original.createdAt)}</span> },
+      { id: "lastReminderAt", accessorKey: "lastReminderAt", header: "Last Reminder", enableSorting: false, Cell: ({ row }) => <span className="whitespace-nowrap text-xs text-slate-500">{row.original.lastReminderAt ? formatDateTime(row.original.lastReminderAt) : "—"}</span> },
     ],
     []
   );
@@ -403,6 +489,7 @@ export function FindingsTable({
         emptyText={emptyText}
         tableOptions={{
           ...url.tableOptions,
+          initialState: { columnVisibility: HIDDEN_BY_DEFAULT },
           enableColumnFilters: false, // filtering is the FilterBar above
           enableRowSelection: canBulkAct ? (row) => !row.original.isHistorical : false,
           enableSelectAll: canBulkAct,

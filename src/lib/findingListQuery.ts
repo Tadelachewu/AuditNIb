@@ -1,6 +1,6 @@
 import { findingStatusLabel, type Finding } from "@/types";
 import { ALL_ROWS } from "@/lib/pagination";
-import { registeredCasesOf } from "@/lib/findings";
+import { registeredAmountOf, registeredCasesOf } from "@/lib/findings";
 
 /**
  * Text search + column sort for the Findings list (src/app/(app)/findings)
@@ -10,6 +10,8 @@ import { registeredCasesOf } from "@/lib/findings";
  */
 
 export interface FindingNames {
+  /** For the Period column's sort (optional: the code is compared when given). */
+  periodCode?: (id: string) => string;
   districtName: (id: string) => string;
   branchName: (id: string) => string;
   departmentName: (id: string) => string;
@@ -17,7 +19,12 @@ export interface FindingNames {
   sourceName: (id: string) => string;
 }
 
-export const FINDING_SORT_KEYS = ["reference", "title", "district", "branch", "department", "category", "source", "risk", "amount", "reportedCases", "cases", "status", "updatedAt"] as const;
+export const FINDING_SORT_KEYS = [
+  "reference", "title", "district", "branch", "department", "category", "source", "risk", "amount", "reportedCases", "cases", "status", "updatedAt",
+  // Optional columns (hidden until shown with Show / hide columns).
+  "casesIn", "casesOut", "period", "findingDate", "operationArea", "irregularityType", "priority", "reportedAmount",
+  "rectifiedCases", "verifiedCases", "closedCases", "outstandingCases", "outstandingAmount", "externalReference", "createdAt",
+] as const;
 export type FindingSortKey = (typeof FINDING_SORT_KEYS)[number];
 
 export function parseFindingSort(sort: string | null | undefined, dir: string | null | undefined): { key: FindingSortKey; desc: boolean } {
@@ -43,12 +50,18 @@ export function filterFindingsByText<T extends { finding: Finding }>(rows: T[], 
       f.riskLevel,
       f.status,
       findingStatusLabel(f.status),
+      f.operationArea,
+      f.irregularityType,
+      f.priority,
+      f.externalReference ?? "",
     ]
       .join(" ")
       .toLowerCase();
     return words.every((w) => hay.includes(w));
   });
 }
+
+type SliceLike = { eligibleCases: number; reportedCases: number; casesIn: number; casesOut: number; closedCases: number; closedAmount: number; eligibleAmount: number } | null;
 
 export function sortFindings<T extends { finding: Finding; amount?: number }>(
   rows: T[],
@@ -58,6 +71,8 @@ export function sortFindings<T extends { finding: Finding; amount?: number }>(
 ): T[] {
   const value = (r: T): string | number => {
     const f = r.finding;
+    // The filtered period's own share when there's a period filter.
+    const slice = (r as { slice?: SliceLike }).slice ?? null;
     switch (sort.key) {
       case "reference":
         return f.reference;
@@ -77,12 +92,42 @@ export function sortFindings<T extends { finding: Finding; amount?: number }>(
         return f.riskLevel;
       case "amount":
         return amountOf(r);
-      // Originally registered - never changed by transfers or adjustments.
+      // Registered in the filtered period (0 where it was transferred in).
       case "reportedCases":
-        return registeredCasesOf(f);
+        return slice ? slice.reportedCases : registeredCasesOf(f);
       // This period's share after transfers (the whole count with no period filter).
       case "cases":
-        return (r as { slice?: { eligibleCases: number } | null }).slice?.eligibleCases ?? f.caseCount;
+        return slice?.eligibleCases ?? f.caseCount;
+      case "casesIn":
+        return slice?.casesIn ?? 0;
+      case "casesOut":
+        return slice?.casesOut ?? 0;
+      case "period":
+        return names.periodCode ? names.periodCode(f.periodId) : f.periodId;
+      case "findingDate":
+        return f.findingDate ?? "";
+      case "operationArea":
+        return f.operationArea ?? "";
+      case "irregularityType":
+        return f.irregularityType ?? "";
+      case "priority":
+        return f.priority ?? "";
+      case "reportedAmount":
+        return registeredAmountOf(f);
+      case "rectifiedCases":
+        return f.rectifiedCases;
+      case "verifiedCases":
+        return f.districtVerifiedCases;
+      case "closedCases":
+        return slice ? slice.closedCases : f.closedCases;
+      case "outstandingCases":
+        return slice ? slice.eligibleCases - slice.closedCases : f.caseCount - f.closedCases;
+      case "outstandingAmount":
+        return slice ? slice.eligibleAmount - slice.closedAmount : f.amount - f.closedAmount;
+      case "externalReference":
+        return f.externalReference ?? "";
+      case "createdAt":
+        return f.createdAt;
       case "status":
         return f.status;
       case "updatedAt":

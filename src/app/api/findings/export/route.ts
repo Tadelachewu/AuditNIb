@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requirePermission } from "@/lib/guard";
 import { readDb } from "@/lib/db";
 import { findingsInScope } from "@/lib/findings-scope";
-import { findingsResidentInPeriod, queueStatusesForSession, type FindingPeriodSlice, registeredCasesOf } from "@/lib/findings";
+import { findingsResidentInPeriod, queueStatusesForSession, type FindingPeriodSlice, registeredCasesOf, registeredAmountOf } from "@/lib/findings";
 import { findingStatusCode, type Finding } from "@/types";
 import { filterFindingsByText, sortFindings, parseFindingSort } from "@/lib/findingListQuery";
 import { matchesOperationAndIrregularity } from "@/lib/dashboardFilters";
@@ -81,7 +81,8 @@ async function handleGET(request: Request) {
     const isQueued = queueStatusesForSession(auth.session, db);
     resident = resident.filter((r) => (r.slice === null || r.slice.isCurrentPeriod) && isQueued(r.finding));
   }
-  const names = { districtName, branchName, departmentName, categoryName, sourceName };
+  const periodCodeOf = (id: string) => db.reportingPeriods.find((p) => p.id === id)?.code ?? "";
+  const names = { districtName, branchName, departmentName, categoryName, sourceName, periodCode: periodCodeOf };
   resident = filterFindingsByText(resident, url.searchParams.get("q") ?? "", names);
   resident = sortFindings(
     resident,
@@ -105,6 +106,8 @@ async function handleGET(request: Request) {
     "Amount",
     "Currency",
     "Reported Cases",
+    "Cases In",
+    "Cases Out",
     "Total Cases",
     "Rectified Amount",
     "Rectified Cases",
@@ -112,7 +115,25 @@ async function handleGET(request: Request) {
     "Outstanding Cases",
     "Finding Date",
     "Updated At",
+    "Operation Area",
+    "Type of Irregularity",
+    "Priority",
+    "Registered Amount",
+    "Verified Cases",
+    "Verified Amount",
+    "Closed Cases",
+    "Closed Amount",
+    "Description",
+    "Recommendation",
+    "Root Cause",
+    "Evidence Note",
+    "External Reference",
+    "Registered By",
+    "Registered Bank-wide",
+    "Imported",
+    "Registered On",
   ];
+  const userName = (id: string) => db.users.find((u) => u.id === id)?.name ?? "";
 
   const rows = resident.map(({ finding: f, slice }) => {
     // A historical row (this finding transferred out of the filtered
@@ -139,7 +160,10 @@ async function handleGET(request: Request) {
       isHistorical ? `TRANSFERRED_OUT (${slice?.transferredOutToCode ?? ""})` : findingStatusCode(f.status),
       amount,
       f.currency,
-      registeredCasesOf(f),
+      // Registered in the filtered period (0 where it was only transferred in).
+      slice ? slice.reportedCases : registeredCasesOf(f),
+      slice ? slice.casesIn : "",
+      slice ? slice.casesOut : "",
       caseCount,
       rectifiedAmount,
       rectifiedCases,
@@ -147,6 +171,23 @@ async function handleGET(request: Request) {
       caseCount - rectifiedCases,
       f.findingDate,
       f.updatedAt,
+      f.operationArea ?? "",
+      f.irregularityType ?? "",
+      f.priority ?? "",
+      registeredAmountOf(f),
+      f.districtVerifiedCases,
+      f.districtVerifiedAmount,
+      slice ? slice.closedCases : f.closedCases,
+      slice ? slice.closedAmount : f.closedAmount,
+      f.description ?? "",
+      f.recommendation ?? "",
+      f.rootCause ?? "",
+      f.evidenceNote ?? "",
+      f.externalReference ?? "",
+      userName(f.createdBy),
+      f.registeredByBankScope ? "Yes" : "No",
+      f.importBatchId ? "Yes" : "No",
+      f.createdAt,
     ]
       .map(csvCell)
       .join(",");

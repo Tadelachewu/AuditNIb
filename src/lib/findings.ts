@@ -939,13 +939,15 @@ function findingResidencyInPeriod(
   db: Database,
   finding: Finding,
   periodId: string
-): { eligibleCases: number; eligibleAmount: number; exitTransfer: FindingTransfer | null } | null {
+): { eligibleCases: number; eligibleAmount: number; reportedCases: number; casesIn: number; casesOut: number; exitTransfer: FindingTransfer | null } | null {
   const transfers = [...db.findingTransfers]
     .filter((t) => t.findingId === finding.id)
     .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
   if (transfers.length === 0) {
-    return finding.periodId === periodId ? { eligibleCases: finding.caseCount, eligibleAmount: finding.amount, exitTransfer: null } : null;
+    return finding.periodId === periodId
+      ? { eligibleCases: finding.caseCount, eligibleAmount: finding.amount, reportedCases: registeredCasesOf(finding), casesIn: 0, casesOut: 0, exitTransfer: null }
+      : null;
   }
   // Approved adjustments join the stay the finding was in when each was
   // approved (that's where the branch must work the added cases), so a
@@ -975,16 +977,25 @@ function findingResidencyInPeriod(
   }
   let eligibleCases = 0;
   let eligibleAmount = 0;
+  // Reported = registered here (the origin stay only - a period it was
+  // transferred into reports 0); In / Out = cases transferred into / out of
+  // this period. So per period: reported + in + approved adjustments - out = eligible.
+  let reportedCases = 0;
+  let casesIn = 0;
+  let casesOut = 0;
   let lastStay = -1;
   stays.forEach((stay, i) => {
     if (stay.periodId !== periodId) return;
     const leaving = transfers[i];
     eligibleCases += stay.cases - (leaving?.casesTransferred ?? 0);
     eligibleAmount += stay.amount - (leaving?.amountTransferred ?? 0);
+    if (i === 0) reportedCases += registeredCasesOf(finding);
+    else casesIn += transfers[i - 1].casesTransferred;
+    casesOut += leaving?.casesTransferred ?? 0;
     lastStay = i;
   });
   if (lastStay === -1) return null;
-  return { eligibleCases, eligibleAmount, exitTransfer: transfers[lastStay] ?? null };
+  return { eligibleCases, eligibleAmount, reportedCases, casesIn, casesOut, exitTransfer: transfers[lastStay] ?? null };
 }
 
 /** Thin wrapper over findingResidencyInPeriod() for the one existing caller (computeEligibleCaseCounts) that only ever needed the case count. */
@@ -1022,6 +1033,11 @@ function closedInPeriod(db: Database, finding: Finding, periodId: string): { cas
  */
 export interface FindingPeriodSlice {
   eligibleCases: number;
+  /** Registered in this period (0 in a period it was transferred into). */
+  reportedCases: number;
+  /** Cases transferred into / out of this period. */
+  casesIn: number;
+  casesOut: number;
   eligibleAmount: number;
   closedCases: number;
   closedAmount: number;
@@ -1036,6 +1052,9 @@ function findingSliceInPeriod(db: Database, finding: Finding, periodId: string):
   const destination = residency.exitTransfer ? db.reportingPeriods.find((p) => p.id === residency.exitTransfer!.toPeriodId) : undefined;
   return {
     eligibleCases: residency.eligibleCases,
+    reportedCases: residency.reportedCases,
+    casesIn: residency.casesIn,
+    casesOut: residency.casesOut,
     eligibleAmount: residency.eligibleAmount,
     closedCases: closed.cases,
     closedAmount: closed.amount,
