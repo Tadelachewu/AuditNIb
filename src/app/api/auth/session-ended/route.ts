@@ -3,6 +3,7 @@ import { getIronSession } from "iron-session";
 import { cookies } from "next/headers";
 import { sessionOptions, ABSOLUTE_TIMEOUT_MS, IDLE_TIMEOUT_MS, type SessionData } from "@/lib/session";
 import { prisma } from "@/lib/prismaClient";
+import { getCurrentUser } from "@/lib/session";
 
 /**
  * Where pages send a user whose session is no longer valid (signed in on
@@ -16,6 +17,16 @@ import { prisma } from "@/lib/prismaClient";
  */
 export async function GET(request: Request) {
   const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
+
+  // A GET any other site can link to: never let it sign out a session that
+  // is still valid (a forged "log out" link) - only a dead one is cleared.
+  // "Valid" = valid to both the proxy's timeout check (src/proxy.ts) and
+  // getCurrentUser(), so the two can never bounce a user between them.
+  const proxyTimedOut =
+    (session.sessionCreatedAt !== undefined && Date.now() - session.sessionCreatedAt >= ABSOLUTE_TIMEOUT_MS) ||
+    (session.lastActivityAt !== undefined && Date.now() - session.lastActivityAt >= IDLE_TIMEOUT_MS);
+  if (!proxyTimedOut && (await getCurrentUser())) return NextResponse.redirect(new URL("/dashboard", request.url));
+
   const url = new URL("/login", request.url);
   url.searchParams.set("reason", "session-ended");
 

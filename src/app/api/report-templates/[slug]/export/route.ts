@@ -30,12 +30,18 @@ import { appDate } from "@/lib/clock";
 // sheets (down to the exact wording, e.g. "rectified percetage" - not a
 // typo, that's how the source workbook spells it) so a CSV pasted into an
 // existing downstream workflow needs no relabeling.
+//
+// A text cell starting with = + - @ would run as a formula in Excel / Sheets
+// ("CSV injection" - e.g. a user-typed uncovered-branch note); a leading
+// quote keeps it plain text. Plain numbers ("-12.5", "40%") and the "--"
+// placeholder are left as they are.
 function csvCell(value: string | number): string {
-  const s = String(value);
-  return /[",\n]/.test(s) ? `"${s.replaceAll('"', '""')}"` : s;
+  let s = String(value);
+  if (typeof value === "string" && /^[=+\-@\t\r]/.test(s) && !/^(-?\d+(\.\d+)?%?|--)$/.test(s)) s = `'${s}`;
+  return /[",\r\n]/.test(s) ? `"${s.replaceAll('"', '""')}"` : s;
 }
 function toCsv(header: string[], rows: (string | number)[][]): string {
-  return [header.join(","), ...rows.map((r) => r.map(csvCell).join(","))].join("\r\n");
+  return [header.map(csvCell).join(","), ...rows.map((r) => r.map(csvCell).join(","))].join("\r\n");
 }
 function pct(v: number | null): string {
   return v === null ? "--" : v.toFixed(1);

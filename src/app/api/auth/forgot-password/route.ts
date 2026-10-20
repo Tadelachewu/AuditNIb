@@ -28,10 +28,30 @@ const TOKEN_TTL_MS = 30 * 60 * 1000;
 // function trusts those headers FIRST and falls back to what the Node HTTP
 // layer sees. The result is always an absolute origin like
 // "https://nibprocure.nibbank.com.et" (no trailing slash).
+//
+// Reset-link poisoning: the Host / X-Forwarded-Host headers are chosen by
+// whoever sends the request, so trusting them lets an attacker request a
+// reset for someone else with X-Forwarded-Host: their own site - the real
+// user then gets a genuine email whose link hands the token to the
+// attacker. So APP_BASE_URL (env), when set, is always used; without it,
+// X-Forwarded-* is only believed behind TRUST_PROXY=true (same rule as
+// clientIp() in src/lib/rateLimit.ts).
 function buildPublicOrigin(request: Request): string {
+  const configured = process.env.APP_BASE_URL?.trim();
+  if (configured) {
+    try {
+      return new URL(configured).origin;
+    } catch {
+      // Invalid value: fall through (src/lib/env.ts reports it at startup).
+    }
+  }
+  if (process.env.NODE_ENV === "production") {
+    logger.warn({ event: "password_reset.app_base_url_unset" }, "APP_BASE_URL is not set - the password reset link is built from the request's Host header; set APP_BASE_URL to the public https:// address");
+  }
+  const trustProxy = (process.env.TRUST_PROXY ?? "").trim().toLowerCase() === "true";
   try {
-    const xProto = (request.headers.get("x-forwarded-proto") ?? "").toLowerCase();
-    const xHost = request.headers.get("x-forwarded-host");
+    const xProto = trustProxy ? (request.headers.get("x-forwarded-proto") ?? "").toLowerCase() : "";
+    const xHost = trustProxy ? request.headers.get("x-forwarded-host")?.split(",")[0].trim() || null : null;
     const host = xHost ?? request.headers.get("host") ?? "";
 
     let proto = "";
