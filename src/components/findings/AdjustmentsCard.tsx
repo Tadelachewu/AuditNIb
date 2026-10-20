@@ -190,7 +190,8 @@ export function AdjustmentsCard({ finding }: { finding: FindingFigures }) {
                 In {view.periodStay.periodCode} (transferred from {view.periodStay.fromPeriodCode})
               </dt>
               <dd className="text-slate-900">
-                {finding.currency} {formatCurrency(view.periodStay.amount)} ({plural(view.periodStay.cases, "case")})
+                {/* Only what the transfer carried in - approved adjustments are counted in Outstanding. */}
+                {finding.currency} {formatCurrency(view.periodStay.transferredAmount)} ({plural(view.periodStay.transferredCases, "case")})
               </dd>
             </div>
           ) : (

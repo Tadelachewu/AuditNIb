@@ -32,6 +32,13 @@ describe("Adjustments card: the transferred-in stay", () => {
     expect(stay).toMatchObject({ periodCode: "2026-10", fromPeriodCode: "2026-09", cases: 20, amount: 40000 });
   });
 
+  it("an adjustment approved after the transfer: the card shows only what the transfer carried; the dialog total includes it", () => {
+    const d = db([transfer("t1", "sep", "oct", "2026-10-20T07:23:00Z")], "oct");
+    d.findingAdjustments = [{ id: "a1", findingId: "f1", status: "APPROVED", approvedAt: "2026-10-21T00:00:00Z", addedCases: 3, amountChange: 1000 }] as never;
+    const stay = view(d).periodStay;
+    expect(stay).toMatchObject({ transferredCases: 20, transferredAmount: 40000, cases: 23, amount: 41000 });
+  });
+
   it("transferred back Oct -> Sep (its registered period): home again, no 'transferred from' figure", () => {
     const d = db([transfer("t1", "sep", "oct", "2026-10-20T07:23:00Z"), transfer("t2", "oct", "sep", "2026-10-20T07:25:00Z")], "sep");
     expect(view(d).periodStay).toBeNull();

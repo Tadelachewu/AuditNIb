@@ -34,7 +34,13 @@ export interface AdjustmentsView {
    * period (closed work stays with the periods it was closed in). null =
    * never transferred (its whole total is in this period).
    */
-  periodStay: { periodCode: string; fromPeriodCode: string; cases: number; amount: number } | null;
+  /**
+   * A transferred-in finding's figures in the period it is in now:
+   * `transferredCases` / `transferredAmount` = what the transfer carried in
+   * (shown on the card); `cases` / `amount` = that plus adjustments approved
+   * since (the dialog's in-period total before / after an adjustment).
+   */
+  periodStay: { periodCode: string; fromPeriodCode: string; transferredCases: number; transferredAmount: number; cases: number; amount: number } | null;
 }
 
 function periodStayOf(db: Database, f: Finding): AdjustmentsView["periodStay"] {
@@ -51,6 +57,8 @@ function periodStayOf(db: Database, f: Finding): AdjustmentsView["periodStay"] {
   return {
     periodCode: code(last.toPeriodId),
     fromPeriodCode: code(last.fromPeriodId),
+    transferredCases: last.casesTransferred,
+    transferredAmount: last.amountTransferred,
     cases: last.casesTransferred + since.reduce((n, a) => n + a.addedCases, 0),
     amount: Math.round((last.amountTransferred + since.reduce((n, a) => n + a.amountChange, 0)) * 100) / 100,
   };
