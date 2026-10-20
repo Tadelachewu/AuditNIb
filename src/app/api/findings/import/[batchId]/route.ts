@@ -5,6 +5,7 @@ import { appendAuditLog } from "@/lib/audit";
 import { deleteStoredFile } from "@/lib/fileStorage";
 import { BusinessRuleError, NotFoundError } from "@/lib/errors";
 import { withApiHandler } from "@/lib/api/handler";
+import { canManageImportBatch } from "@/lib/findings-scope";
 
 // Delete an import record (Import History → Delete) - only once its findings
 // are gone (reversed, or it never imported any), so this can never remove
@@ -17,7 +18,8 @@ async function handleDELETE(_request: Request, { params }: { params: Promise<{ b
 
   const db = await readDb();
   const batch = db.importBatches.find((b) => b.id === batchId);
-  if (!batch) throw new NotFoundError("import");
+  // Outside the caller's scope answers like a missing batch (no hint that it exists).
+  if (!batch || !canManageImportBatch(db, auth.session, batch)) throw new NotFoundError("import");
   const stillHasFindings = db.findings.some((f) => f.importBatchId === batch.id);
   if (!batch.reversedAt && stillHasFindings) {
     throw new BusinessRuleError("IMPORT_NOT_REVERSIBLE", "Reverse this import first - its findings still exist.");

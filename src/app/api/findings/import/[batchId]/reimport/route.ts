@@ -7,6 +7,7 @@ import { runImport } from "@/lib/importRun";
 import { hasPermission } from "@/lib/permissions/registry";
 import { AuthorizationError, BusinessRuleError, NotFoundError } from "@/lib/errors";
 import { withApiHandler } from "@/lib/api/handler";
+import { canManageImportBatch } from "@/lib/findings-scope";
 
 const bodySchema = z.object({ importDuplicates: z.boolean().optional() }).default({});
 
@@ -23,7 +24,8 @@ async function handlePOST(request: Request, { params }: { params: Promise<{ batc
 
   const db = await readDb();
   const batch = db.importBatches.find((b) => b.id === batchId);
-  if (!batch) throw new NotFoundError("import");
+  // Outside the caller's scope answers like a missing batch (no hint that it exists).
+  if (!batch || !canManageImportBatch(db, auth.session, batch)) throw new NotFoundError("import");
   if (!batch.reversedAt) throw new BusinessRuleError("IMPORT_NOT_REVERSIBLE", "Only a reversed import can be re-imported.");
   if (!batch.storedFile) throw new BusinessRuleError("IMPORT_NOT_REVERSIBLE", "The original file wasn't kept for this import - upload it again instead.");
   const buffer = readStoredFile("imports", batch.storedFile);

@@ -44,6 +44,18 @@ export function assertFindingInScope(session: SessionData, finding: Finding): st
  * districts, or whose findings no longer exist (a reversed import, which
  * can't be checked), stays bank-level.
  */
+/**
+ * May this user re-import or delete this import batch? Bank-wide users: any
+ * batch. Everyone else: a batch they imported themselves, or one whose
+ * findings are all within their scope. (A reversed batch has no findings
+ * left to judge it by, so the importer is what decides then.)
+ */
+export function canManageImportBatch(db: Database, session: SessionData, batch: { importedBy: string; rows: { findingId?: string }[] }): boolean {
+  if (session.orgScope === "BANK") return true;
+  if (batch.importedBy === session.userId) return true;
+  return isImportBatchInScope(db, session, batch);
+}
+
 export function isImportBatchInScope(db: Database, session: SessionData, batch: { rows: { findingId?: string }[] }): boolean {
   if (session.orgScope === "BANK") return true;
   const ids = new Set(batch.rows.map((r) => r.findingId).filter((id): id is string => Boolean(id)));

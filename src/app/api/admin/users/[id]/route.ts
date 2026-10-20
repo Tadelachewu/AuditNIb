@@ -273,6 +273,16 @@ async function handleDELETE(_request: Request, { params }: { params: Promise<{ i
   const db = await readDb();
   const existing = db.users.find((u) => u.id === id);
   if (!existing) return NextResponse.json({ error: "User not found" }, { status: 404 });
+  // Same org-scope defense-in-depth as PATCH above: a DISTRICT / BRANCH-scoped
+  // role that is ever granted Users > Delete can only delete users inside its
+  // own district / branch, and never a bank-wide user.
+  if (auth.session.orgScope !== "BANK") {
+    const inScope = auth.session.orgScope === "BRANCH" ? existing.branchId === auth.session.branchId : existing.districtId === auth.session.districtId;
+    const existingRole = db.roles.find((r) => r.code === existing.role);
+    if (!inScope || existingRole?.orgScope === "BANK") {
+      return NextResponse.json({ error: "Outside your organizational scope" }, { status: 403 });
+    }
+  }
   // Same lock-out protection as deactivation (see PATCH above).
   if (existing.id === auth.session.userId) {
     return NextResponse.json({ error: "You can't delete your own account." }, { status: 409 });
