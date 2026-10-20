@@ -4,6 +4,7 @@ import { SESSION_ENDED_PATH } from "@/lib/session";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 import { readDb } from "@/lib/db";
+import { reportTemplateDb, reportTemplateScopeNote } from "@/lib/reportTemplateScope";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
 import { formatNumber } from "@/lib/format";
 import { getDistrictSnapshotAsOf, templateSourceNote } from "@/lib/reportTemplates";
@@ -22,7 +23,9 @@ export default async function MidMonthDistrictSnapshotPage({
   if (!user) redirect(SESSION_ENDED_PATH);
   if (!hasPermission(user.permissions, permissionKey("report-templates", "mid-month-district-snapshot"))) redirect("/reports/templates");
 
-  const db = await readDb();
+  // Bank-wide, or only the viewer's own district / branch (Settings - src/lib/reportTemplateScope).
+  const db = reportTemplateDb(await readDb(), user);
+  const scopeNote = reportTemplateScopeNote(db, user);
   // Shown when Settings limits this template to certain sources, so its
   // counts are never mistaken for the bank-wide totals.
   const sourceNote = templateSourceNote(db, "mid-month-district-snapshot");
@@ -46,6 +49,7 @@ export default async function MidMonthDistrictSnapshotPage({
           <h1 className="text-lg font-semibold text-slate-900">Mid-Month District Snapshot</h1>
           <p className="mt-1 text-sm text-slate-600">District performance as of any chosen cutoff date within a period.</p>
           {sourceNote && <p className="mt-1 text-xs font-medium text-amber-800">{sourceNote}</p>}
+          {scopeNote && <p className="mt-1 text-xs font-medium text-amber-800">{scopeNote}</p>}
         </div>
         <div className="flex shrink-0 gap-2">
           <a href={`/api/report-templates/mid-month-district-snapshot/export?periodId=${periodId}&asOfDate=${asOfDate}`}>

@@ -362,6 +362,11 @@ export interface Settings {
   rankingVisibility: {
     branches: boolean;
     districts: boolean;
+    // Report templates: "BANK" (missing = the default) shows every user
+    // every district's figures; "OWN_SCOPE" limits district / branch users
+    // to their own district / branch (src/lib/reportTemplateScope). Kept
+    // in this JSON column so turning it on needs no database migration.
+    reportTemplates?: "BANK" | "OWN_SCOPE";
   };
   // Drives the Top/Bottom Performers widgets on HO/District/Executive
   // dashboards: a district/branch qualifies as a "top performer" at or

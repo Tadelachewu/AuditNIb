@@ -321,6 +321,34 @@ export default function SettingsPage() {
       </CollapsibleCard>
 
       <CollapsibleCard disabled={!canEdit}
+        title="Report Template Visibility"
+        description="Bank-wide figures for everyone, or each district / branch user's own only."
+      >
+        <div className="flex flex-col gap-3 p-4">
+          {(
+            [
+              ["BANK", "Bank-wide (default)", "Every user who can open a report template sees all districts' figures - for comparisons and district rankings."],
+              ["OWN_SCOPE", "Own district / branch only", "District users see only their own district and branch users only their own branch, on screen, in the filters and in the CSV download. Rankings then list just their own district. Bank-wide users (HO, Admin) still see everything."],
+            ] as const
+          ).map(([value, label, help]) => (
+            <label key={value} className="flex items-start gap-2 text-sm text-slate-700">
+              <input
+                type="radio"
+                name="reportTemplates"
+                checked={(settings.rankingVisibility.reportTemplates ?? "BANK") === value}
+                onChange={() => setSettings({ ...settings, rankingVisibility: { ...settings.rankingVisibility, reportTemplates: value } })}
+                className="mt-0.5 h-4 w-4 border-slate-300"
+              />
+              <span>
+                <span className="font-medium">{label}</span>
+                <span className="block text-xs text-slate-500">{help}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+      </CollapsibleCard>
+
+      <CollapsibleCard disabled={!canEdit}
         title="Rectification Reminders"
         description="A time-based nudge for findings sitting too long awaiting rectification."
       >

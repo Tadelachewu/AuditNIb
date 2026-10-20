@@ -267,6 +267,15 @@ This is **not** proxy-middleware-gated (unlike `/admin/*` routes) — there is n
 
 So by default, report templates are a **Head Office / District oversight / Executive** feature — branch-level roles (Controller, Manager, Sub-Manager) have no access out of the box, consistent with those roles being scoped to operating a single branch rather than reviewing bank-wide or district-wide aggregates. This is only the **seed default**; actual grants are fully dynamic per `RoleDefinition.permissions`, editable at `/admin/roles` (`registry.ts:1-14`).
 
+### Who sees which districts — Settings › Report Template Visibility
+
+| Setting | District / branch users | Bank-wide users (HO, Admin, Executive) |
+|---|---|---|
+| **Bank-wide (default)** — unchanged behaviour | Every district's figures; any district can be picked in a filter | Everything |
+| **Own district / branch only** | Only their own district (branch users: their own branch), on screen, in every filter and in the CSV download. Rankings list just their own district. The page shows "Showing your district only." | Everything |
+
+The setting is stored as `rankingVisibility.reportTemplates` (`"BANK"` / `"OWN_SCOPE"`; missing = bank-wide), so it needs no database migration. Every template page and `/api/report-templates/[slug]/export` compute from `reportTemplateDb(db, session)` (`src/lib/reportTemplateScope.ts`), which returns the whole database for the default or for a bank-wide user, and otherwise a copy holding only the user's own findings (and their transfers, closures, adjustments, cases), districts, branches and coverage notes. Tests: `tests/reportTemplateScope.test.ts`.
+
 ---
 
 ## 8. Data scope & correctness rules

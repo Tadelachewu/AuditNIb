@@ -42,6 +42,7 @@ const updateSchema = z.object({
   rankingVisibility: z.object({
     branches: z.boolean(),
     districts: z.boolean(),
+    reportTemplates: z.enum(["BANK", "OWN_SCOPE"]).optional(),
   }),
   rectificationReminders: z.object({
     enabled: z.boolean(),

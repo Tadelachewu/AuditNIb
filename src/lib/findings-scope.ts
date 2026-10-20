@@ -37,14 +37,6 @@ export function assertFindingInScope(session: SessionData, finding: Finding): st
 }
 
 /**
- * Whether an import (its history entry and stored Excel file) is within the
- * caller's scope (security review M4). Bank-wide users see every import.
- * Anyone else only sees an import whose findings all lie within their own
- * branch / district - an import that also covers other branches or
- * districts, or whose findings no longer exist (a reversed import, which
- * can't be checked), stays bank-level.
- */
-/**
  * May this user re-import or delete this import batch? Bank-wide users: any
  * batch. Everyone else: a batch they imported themselves, or one whose
  * findings are all within their scope. (A reversed batch has no findings
@@ -56,6 +48,14 @@ export function canManageImportBatch(db: Database, session: SessionData, batch: 
   return isImportBatchInScope(db, session, batch);
 }
 
+/**
+ * Whether an import (its history entry and stored Excel file) is within the
+ * caller's scope (security review M4). Bank-wide users see every import.
+ * Anyone else only sees an import whose findings all lie within their own
+ * branch / district - an import that also covers other branches or
+ * districts, or whose findings no longer exist (a reversed import, which
+ * can't be checked), stays bank-level.
+ */
 export function isImportBatchInScope(db: Database, session: SessionData, batch: { rows: { findingId?: string }[] }): boolean {
   if (session.orgScope === "BANK") return true;
   const ids = new Set(batch.rows.map((r) => r.findingId).filter((id): id is string => Boolean(id)));

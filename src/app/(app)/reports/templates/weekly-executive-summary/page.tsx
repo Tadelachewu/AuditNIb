@@ -4,6 +4,7 @@ import { SESSION_ENDED_PATH } from "@/lib/session";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 import { readDb } from "@/lib/db";
+import { reportTemplateDb, reportTemplateScopeNote } from "@/lib/reportTemplateScope";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
 import { formatNumber } from "@/lib/format";
 import { getWeeklyExecutiveSummary, weekEndDate, templateSourceNote } from "@/lib/reportTemplates";
@@ -39,7 +40,9 @@ export default async function WeeklyExecutiveSummaryPage({
   if (!user) redirect(SESSION_ENDED_PATH);
   if (!hasPermission(user.permissions, permissionKey("report-templates", "weekly-executive-summary"))) redirect("/reports/templates");
 
-  const db = await readDb();
+  // Bank-wide, or only the viewer's own district / branch (Settings - src/lib/reportTemplateScope).
+  const db = reportTemplateDb(await readDb(), user);
+  const scopeNote = reportTemplateScopeNote(db, user);
   // Shown when Settings limits this template to certain sources, so its
   // counts are never mistaken for the bank-wide totals.
   const sourceNote = templateSourceNote(db, "weekly-executive-summary");
@@ -62,6 +65,7 @@ export default async function WeeklyExecutiveSummaryPage({
             By default the two dates are the Sundays ending this week and last week; any two dates can be chosen.
           </p>
           {sourceNote && <p className="mt-1 text-xs font-medium text-amber-800">{sourceNote}</p>}
+          {scopeNote && <p className="mt-1 text-xs font-medium text-amber-800">{scopeNote}</p>}
         </div>
         <div className="flex shrink-0 gap-2">
           <a href={`/api/report-templates/weekly-executive-summary/export?thisWeekDate=${thisWeekDate}&lastWeekDate=${lastWeekDate}`}>

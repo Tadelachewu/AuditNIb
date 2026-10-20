@@ -3,6 +3,7 @@ import { currenciesIn } from "@/lib/currency";
 import { ALL_PERIODS_VALUE } from "@/lib/dashboardFilters";
 import { requirePermission } from "@/lib/guard";
 import { readDb } from "@/lib/db";
+import { reportTemplateDb } from "@/lib/reportTemplateScope";
 import {
   REPORT_TEMPLATES,
   getUncoveredBranches,
@@ -399,7 +400,7 @@ async function handleGET(request: Request, { params }: { params: Promise<{ slug:
   const auth = await requirePermission(`report-templates.${action}`);
   if (!auth.ok) return auth.response;
 
-  const db = await readDb();
+  const db = reportTemplateDb(await readDb(), auth.session);
   const url = new URL(request.url);
   const csv = buildCsv(slug, db, url.searchParams);
   if (csv === null) return NextResponse.json({ error: "Unknown report template" }, { status: 404 });

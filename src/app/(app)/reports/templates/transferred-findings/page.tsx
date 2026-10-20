@@ -6,6 +6,7 @@ import { SESSION_ENDED_PATH } from "@/lib/session";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 import { readDb } from "@/lib/db";
+import { reportTemplateDb, reportTemplateScopeNote } from "@/lib/reportTemplateScope";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
 import { formatNumber, formatDateTime, formatCurrency } from "@/lib/format";
 import { getTransferredFindings, templateSourceNote } from "@/lib/reportTemplates";
@@ -30,7 +31,9 @@ export default async function TransferredFindingsPage({
   if (!user) redirect(SESSION_ENDED_PATH);
   if (!hasPermission(user.permissions, permissionKey("report-templates", "transferred-findings"))) redirect("/reports/templates");
 
-  const db = await readDb();
+  // Bank-wide, or only the viewer's own district / branch (Settings - src/lib/reportTemplateScope).
+  const db = reportTemplateDb(await readDb(), user);
+  const scopeNote = reportTemplateScopeNote(db, user);
   // Shown when Settings limits this template to certain sources, so its
   // counts are never mistaken for the bank-wide totals.
   const sourceNote = templateSourceNote(db, "transferred-findings");
@@ -61,6 +64,7 @@ export default async function TransferredFindingsPage({
             Every transfer hop, bank-wide: original-period detail, what happened before it left, where it went, and its status today.
           </p>
           {sourceNote && <p className="mt-1 text-xs font-medium text-amber-800">{sourceNote}</p>}
+          {scopeNote && <p className="mt-1 text-xs font-medium text-amber-800">{scopeNote}</p>}
         </div>
         <div className="flex shrink-0 gap-2">
           <a href={`/api/report-templates/transferred-findings/export?fromPeriodId=${fromPeriodId}&toPeriodId=${toPeriodId}`}>
