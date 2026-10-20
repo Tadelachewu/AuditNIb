@@ -12,6 +12,7 @@ import { notifyFindingSubmitted, notifyHighRiskApproved } from "@/lib/notificati
 import type { Finding, FindingCase } from "@/types";
 import { matchesOperationAndIrregularity } from "@/lib/dashboardFilters";
 import { withApiHandler } from "@/lib/api/handler";
+import { appendAuditLog } from "@/lib/audit";
 
 /** Longest name / description of one itemized case. */
 const CASE_DESCRIPTION_MAX = 200;
@@ -287,6 +288,16 @@ async function handlePOST(request: Request) {
       }));
       current.findingCases.push(...cases);
     }
+    // Registration is in the audit log like every later step (draft or
+    // submitted straight away - submitting adds its own transition entry).
+    appendAuditLog(current, {
+      userId: session.userId!,
+      userName: session.name!,
+      action: "CREATE",
+      entityType: "Finding",
+      entityId: finding.id,
+      newValue: { ...finding, ...(input.caseAmounts ? { cases: input.caseAmounts.length } : {}) },
+    });
     if (input.submit) {
       // Re-resolve the pushed record from `current` (not the outer
       // `finding` closure) so submitFinding mutates the copy that's

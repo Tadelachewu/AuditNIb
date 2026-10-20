@@ -32,6 +32,10 @@ export const ERROR_CODES = {
   // Security / request integrity
   CROSS_ORIGIN_REJECTED: { status: 403, message: "Cross-origin request rejected." },
   SESSION_EXPIRED: { status: 401, message: "Your session has expired. Please sign in again." },
+  // Idempotency-Key (src/lib/idempotency.ts)
+  REQUEST_IN_PROGRESS: { status: 409, message: "This request is still being processed. Please wait a moment." },
+  REQUEST_ALREADY_PROCESSED: { status: 409, message: "This was already done. Reload the page to see the result." },
+  IDEMPOTENCY_KEY_REUSED: { status: 422, message: "This request key was already used for a different request." },
 
   // Business rules (meaningful, specific)
   BUSINESS_RULE_VIOLATION: { status: 409, message: "This action isn't allowed in the current state." },

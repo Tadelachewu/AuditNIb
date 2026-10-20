@@ -80,8 +80,88 @@ async function send(url: string, init: RequestInit): Promise<Response> {
   }
 }
 
+/**
+ * Idempotency-Key (src/lib/idempotency.ts, docs/data-integrity.md): every
+ * POST / PATCH / DELETE carries a random key, and a retry of the SAME
+ * request (same method, address and body) carries the same key - so the
+ * server answers a repeat instead of doing it twice:
+ * - a dropped connection is retried automatically (twice), once the server
+ *   has shown it supports keys (otherwise a retry could do it twice);
+ * - "still processing" (REQUEST_IN_PROGRESS) is asked again a few times;
+ * - after a failure with no answer, clicking again within 10 minutes reuses
+ *   the key, so the first attempt's result is returned if it did get saved.
+ */
+let serverSupportsIdempotency = false;
+const unansweredKeys = new Map<string, { key: string; at: number }>();
+const KEY_REUSE_MS = 10 * 60 * 1000;
+
+function newIdempotencyKey(): string {
+  // getRandomValues works on plain http too (randomUUID needs https).
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/** Identifies "the same request" for reusing its key; null when the body can't be compared. */
+function requestFingerprint(url: string, init: RequestInit): string | null {
+  const body = init.body;
+  let text = "";
+  if (typeof body === "string") text = body;
+  else if (typeof FormData !== "undefined" && body instanceof FormData) {
+    text = [...body.entries()].map(([k, v]) => (typeof v === "string" ? `${k}=${v}` : `${k}=file:${v.name}:${v.size}:${v.lastModified}`)).join("&");
+  } else if (body != null) return null;
+  return `${init.method} ${url} ${text}`;
+}
+
+const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+async function errorCodeOf(res: Response): Promise<string | undefined> {
+  const body = (await res.clone().json().catch(() => null)) as { error?: { code?: unknown } } | null;
+  return typeof body?.error?.code === "string" ? body.error.code : undefined;
+}
+
+/** send() with the Idempotency-Key and its safe retries. */
+async function sendWithKey(url: string, init: RequestInit): Promise<{ res: Response; init: RequestInit }> {
+  const method = (init.method ?? "GET").toUpperCase();
+  if (method === "GET") return { res: await send(url, init), init };
+
+  const fingerprint = requestFingerprint(url, init);
+  const earlier = fingerprint ? unansweredKeys.get(fingerprint) : undefined;
+  const key = earlier && Date.now() - earlier.at < KEY_REUSE_MS ? earlier.key : newIdempotencyKey();
+  if (fingerprint) unansweredKeys.set(fingerprint, { key, at: earlier?.key === key ? earlier.at : Date.now() });
+  const keyed: RequestInit = { ...init, headers: { ...(init.headers as Record<string, string> | undefined), "Idempotency-Key": key } };
+
+  for (let attempt = 0; ; attempt++) {
+    let res: Response;
+    try {
+      res = await send(url, keyed);
+    } catch (err) {
+      // No answer: the server may or may not have done it. Retrying with the
+      // same key is safe only when the server handles keys.
+      if (serverSupportsIdempotency && err instanceof ApiError && err.code === "NETWORK_ERROR" && attempt < 2) {
+        await wait(1000 * (attempt + 1));
+        continue;
+      }
+      throw err; // the key stays remembered for a manual retry
+    }
+    if (res.headers.get("x-idempotency") === "on") serverSupportsIdempotency = true;
+    if (res.status === 409 && (await errorCodeOf(res)) === "REQUEST_IN_PROGRESS") {
+      if (attempt < 5) {
+        await wait(1500);
+        continue;
+      }
+      return { res, init: keyed }; // still running: keep the key for a manual retry
+    }
+    if (fingerprint) unansweredKeys.delete(fingerprint);
+    return { res, init: keyed };
+  }
+}
+
 async function request<T>(url: string, init: RequestInit): Promise<T> {
-  let res = await send(url, init);
+  const sent = await sendWithKey(url, init);
+  let res = sent.res;
+  // The repeat below (after confirming the password) is the same request: same key.
+  init = sent.init;
   if (!res.ok) {
     let err = await toApiError(res);
     // The server wants the password confirmed first: ask, then repeat the

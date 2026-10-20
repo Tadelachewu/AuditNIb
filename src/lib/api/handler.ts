@@ -4,6 +4,7 @@ import { toApplicationError } from "@/lib/errors/normalize";
 import "@/lib/errors/zodMessages";
 import { logger } from "@/lib/logger";
 import { captureServerException } from "@/lib/monitoring";
+import { withIdempotency } from "@/lib/idempotency";
 import { REQUEST_ID_HEADER, getRequestContext, resolveRequestId, runWithRequestContext } from "@/lib/requestContext";
 
 /**
@@ -21,6 +22,8 @@ import { REQUEST_ID_HEADER, getRequestContext, resolveRequestId, runWithRequestC
  *   stack, reported to monitoring, and answered with a generic 500 - the
  *   raw exception never reaches the browser.
  * - One access-log line per request (status, duration, error code).
+ * - Idempotency-Key: a repeated POST / PATCH / DELETE gets the first one's
+ *   reply instead of being processed again (src/lib/idempotency.ts).
  *
  * Handlers therefore need no try/catch of their own for error reporting.
  */
@@ -40,7 +43,7 @@ export function withApiHandler<C = RouteContext>(handler: Handler<C>): (request:
       let response: Response;
       let errorCode: string | undefined;
       try {
-        response = await handler(request, context);
+        response = await withIdempotency(request, async () => handler(request, context));
         if (response.status >= 400) {
           const normalized = await normalizeLegacyErrorResponse(response, requestId);
           response = normalized.response;

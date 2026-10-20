@@ -156,7 +156,7 @@ export interface AutoTransferDeps {
   store: AutoTransferStore;
   readDb: () => Promise<Database>;
   /** Must commit `alsoWrite` in the same transaction as the mutator's changes. */
-  updateDb: <T>(mutator: (db: Database) => T, opts?: { alsoWrite?: (tx: unknown, result: T) => Promise<void> }) => Promise<T>;
+  updateDb: <T>(mutator: (db: Database) => T, opts?: { alsoWrite?: (tx: unknown, result: T) => Promise<void>; staleCheck?: boolean }) => Promise<T>;
   lock: { acquire: () => Promise<boolean>; release: () => Promise<void> };
 }
 
@@ -204,6 +204,8 @@ export async function runAutoTransferIfDue(
       // recorded (which could sweep it twice) or recorded without moving.
       const { runs } = await deps.updateDb((db) => sweepPeriods(db, stillDue, config, now, previousByPeriod, trigger), {
         alsoWrite: (tx, result) => deps.store.saveRuns(result.runs, tx),
+        // Decides everything from the data it reads under the write lock.
+        staleCheck: false,
       });
       logger.info({ event: "auto_transfer.ran", trigger, testClock: clockOffsetMs() !== 0, businessNow: new Date(now).toISOString(), runs: runs.map((r) => ({ periodId: r.periodId, status: r.status, moved: r.movedCount, kept: r.keptCount })) }, "Automatic transfer ran");
       return { ran: true, runs };

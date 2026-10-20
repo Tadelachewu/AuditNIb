@@ -706,6 +706,30 @@ model ReminderRun {
   @@map("reminder_runs")
 }
 
+/// Idempotency-Key (docs/data-integrity.md, src/lib/idempotency.ts): a repeated
+/// POST / PATCH / DELETE gets the stored reply instead of running again.
+/// Used through raw SQL; kept 24 hours.
+model IdempotencyKey {
+  /// sha256 of user, method, path and key.
+  id             String    @id
+  userId         String    @map("user_id")
+  method         String
+  path           String
+  /// sha256 of the request body - the same key with another body is refused.
+  requestHash    String    @map("request_hash")
+  /// "IN_PROGRESS" | "COMPLETED"
+  status         String
+  /// Set inside the change's own transaction.
+  committed      Boolean   @default(false)
+  responseStatus Int?      @map("response_status")
+  responseBody   String?   @map("response_body")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  completedAt    DateTime? @map("completed_at") @db.Timestamptz(3)
+
+  @@index([createdAt])
+  @@map("idempotency_keys")
+}
+
 /// Communications (docs/communications.md): a message from one user to all
 /// users or to selected users - text plus optional PDF / Word / Excel
 /// attachments. Not part of readDb()'s in-memory Database: messages and

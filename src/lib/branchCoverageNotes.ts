@@ -15,6 +15,7 @@ export function upsertBranchCoverageNote(
   const now = new Date().toISOString();
   const existing = current.branchCoverageNotes.find((n) => n.branchId === branchId && n.periodId === periodId);
   if (existing) {
+    const oldValue = { reason: existing.reason, reasonId: existing.reasonId, recordedBy: existing.recordedByName };
     existing.reason = reason;
     existing.reasonId = reasonId;
     existing.recordedBy = userId;
@@ -26,7 +27,8 @@ export function upsertBranchCoverageNote(
       action: "UPDATE",
       entityType: "BranchCoverageNote",
       entityId: existing.id,
-      newValue: { reason, reasonId },
+      oldValue,
+      newValue: { reason, reasonId, recordedBy: userName },
     });
     return existing;
   }

@@ -11,6 +11,12 @@ export interface RequestContext {
   method?: string;
   path?: string;
   userId?: string;
+  /**
+   * Extra work inside the database transaction of every change this request
+   * commits (updateDb() calls it) - the Idempotency-Key's "committed" mark
+   * (src/lib/idempotency.ts).
+   */
+  inTransaction?: (tx: unknown) => Promise<void>;
 }
 
 const storage = new AsyncLocalStorage<RequestContext>();

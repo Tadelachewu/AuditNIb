@@ -3,6 +3,9 @@ import { packCaseDetail, unpackCaseDetail } from "@/lib/adjustments/storage";
 import { Prisma } from "@/generated/prisma/client";
 import { ALL_PERMISSION_KEYS } from "@/lib/permissions/registry";
 import { prepareQueuedEmails } from "@/lib/emailQueue/service";
+import { ConflictError } from "@/lib/errors";
+import { getRequestContext } from "@/lib/requestContext";
+import { assertAuditLogAppendOnly, auditFindingFieldChanges } from "@/lib/auditCompleteness";
 import type {
   Database,
   User,
@@ -543,7 +546,7 @@ const SETTINGS_ID = "singleton";
 // permissionRegistrySyncedKeys (on Settings) tracks which keys have
 // already been granted this way, so a key an admin deliberately revoked
 // from ADMIN doesn't get silently re-added on the next read.
-async function syncAdminPermissions(db: Database): Promise<void> {
+async function syncAdminPermissions(db: Database, client: DbClient): Promise<void> {
   const admin = db.roles.find((r) => r.code === "ADMIN");
   if (!admin) return;
   const synced = new Set(db.permissionRegistrySyncedKeys);
@@ -559,13 +562,22 @@ async function syncAdminPermissions(db: Database): Promise<void> {
   // would call readDb() again, recursing) - this is the one place in the
   // app allowed to write outside that diff-sync path, for exactly this
   // self-contained reason.
+  // Inside updateDb()'s transaction it's written through that transaction.
+  if (client !== prisma) {
+    await client.roleDefinition.update({ where: { id: admin.id }, data: { permissions: admin.permissions } });
+    await client.settings.update({ where: { id: SETTINGS_ID }, data: { permissionRegistrySyncedKeys: db.permissionRegistrySyncedKeys } });
+    return;
+  }
   await prisma.$transaction([
     prisma.roleDefinition.update({ where: { id: admin.id }, data: { permissions: admin.permissions } }),
     prisma.settings.update({ where: { id: SETTINGS_ID }, data: { permissionRegistrySyncedKeys: db.permissionRegistrySyncedKeys } }),
   ]);
 }
 
-export async function readDb(): Promise<Database> {
+/** The global client, or updateDb()'s transaction (so its read sees - and is locked with - its write). */
+type DbClient = Prisma.TransactionClient;
+
+export async function readDb(client: DbClient = prisma): Promise<Database> {
   const [
     roles,
     users,
@@ -594,32 +606,32 @@ export async function readDb(): Promise<Database> {
     supportMessages,
     settingsRow,
   ] = await Promise.all([
-    prisma.roleDefinition.findMany(),
-    prisma.user.findMany(),
-    prisma.district.findMany(),
-    prisma.branch.findMany(),
-    prisma.source.findMany(),
-    prisma.department.findMany(),
-    prisma.classifiedCategory.findMany(),
-    prisma.uncoveredReason.findMany(),
-    prisma.scoringRule.findMany(),
-    prisma.reportingPeriod.findMany(),
-    prisma.finding.findMany(),
-    prisma.findingTransition.findMany(),
-    prisma.rectificationEntry.findMany(),
-    prisma.findingCase.findMany(),
-    prisma.findingTransfer.findMany(),
-    prisma.findingClosure.findMany(),
-    prisma.findingAdjustment.findMany(),
-    prisma.importBatch.findMany(),
-    prisma.evidence.findMany(),
-    prisma.comment.findMany(),
-    prisma.notification.findMany(),
-    prisma.auditLogEntry.findMany(),
-    prisma.branchCoverageNote.findMany(),
-    prisma.supportThread.findMany(),
-    prisma.supportMessage.findMany(),
-    prisma.settings.findUnique({ where: { id: SETTINGS_ID } }),
+    client.roleDefinition.findMany(),
+    client.user.findMany(),
+    client.district.findMany(),
+    client.branch.findMany(),
+    client.source.findMany(),
+    client.department.findMany(),
+    client.classifiedCategory.findMany(),
+    client.uncoveredReason.findMany(),
+    client.scoringRule.findMany(),
+    client.reportingPeriod.findMany(),
+    client.finding.findMany(),
+    client.findingTransition.findMany(),
+    client.rectificationEntry.findMany(),
+    client.findingCase.findMany(),
+    client.findingTransfer.findMany(),
+    client.findingClosure.findMany(),
+    client.findingAdjustment.findMany(),
+    client.importBatch.findMany(),
+    client.evidence.findMany(),
+    client.comment.findMany(),
+    client.notification.findMany(),
+    client.auditLogEntry.findMany(),
+    client.branchCoverageNote.findMany(),
+    client.supportThread.findMany(),
+    client.supportMessage.findMany(),
+    client.settings.findUnique({ where: { id: SETTINGS_ID } }),
   ]);
 
   if (!settingsRow) {
@@ -658,7 +670,10 @@ export async function readDb(): Promise<Database> {
     permissionRegistrySyncedKeys: settingsRow.permissionRegistrySyncedKeys,
   };
 
-  await syncAdminPermissions(db);
+  await syncAdminPermissions(db, client);
+  // A write request's own read (not updateDb()'s): remembered so its
+  // updateDb() can tell whether anything it checked changed since.
+  if (client === prisma) rememberCheckedState(db);
   return db;
 }
 
@@ -1092,109 +1107,228 @@ function supportMessageToData(r: SupportMessage) {
   };
 }
 
-async function persistChanges(before: Database, after: Database, alsoWrite?: (tx: Prisma.TransactionClient) => Promise<void>): Promise<void> {
-  await prisma.$transaction(
-    async (tx) => {
-      // Reference/org data first (nothing meaningful depends on ordering
-      // beyond what foreign keys already enforce at the database level -
-      // this order just keeps parents ahead of children for clarity).
-      await syncCollection(tx.roleDefinition, before.roles, after.roles, roleToData);
-      await syncCollection(tx.district, before.districts, after.districts, districtToData);
-      await syncCollection(tx.branch, before.branches, after.branches, branchToData);
-      await syncCollection(tx.source, before.sources, after.sources, sourceToData);
-      await syncCollection(tx.department, before.departments, after.departments, departmentToData);
-      await syncCollection(tx.classifiedCategory, before.categories, after.categories, categoryToData);
-      await syncCollection(tx.uncoveredReason, before.uncoveredReasons, after.uncoveredReasons, uncoveredReasonToData);
-      await syncCollection(tx.user, before.users, after.users, userToData);
-      await syncCollection(tx.scoringRule, before.scoringRules, after.scoringRules, scoringRuleToData);
-      await syncCollection(tx.reportingPeriod, before.reportingPeriods, after.reportingPeriods, periodToData);
-      await syncCollection(tx.importBatch, before.importBatches, after.importBatches, importBatchToData);
-      await syncCollection(tx.finding, before.findings, after.findings, findingToData);
-      await syncCollection(tx.findingTransition, before.findingTransitions, after.findingTransitions, transitionToData);
-      await syncCollection(tx.rectificationEntry, before.rectifications, after.rectifications, rectificationToData);
-      await syncCollection(tx.findingCase, before.findingCases, after.findingCases, findingCaseToData);
-      await syncCollection(tx.findingTransfer, before.findingTransfers, after.findingTransfers, transferToData);
-      await syncCollection(tx.findingClosure, before.findingClosures, after.findingClosures, closureToData);
-      await syncCollection(tx.findingAdjustment, before.findingAdjustments, after.findingAdjustments, adjustmentToData);
-      await syncCollection(tx.comment, before.comments, after.comments, commentToData);
-      await syncCollection(tx.evidence, before.evidence, after.evidence, evidenceToData);
-      await syncCollection(tx.notification, before.notifications, after.notifications, notificationToData);
-      await syncCollection(tx.auditLogEntry, before.auditLogs, after.auditLogs, auditLogToData);
-      await syncCollection(tx.branchCoverageNote, before.branchCoverageNotes, after.branchCoverageNotes, coverageNoteToData);
-      // Threads before messages - a message's threadId FK needs its parent
-      // thread to already exist.
-      await syncCollection(tx.supportThread, before.supportThreads, after.supportThreads, supportThreadToData);
-      await syncCollection(tx.supportMessage, before.supportMessages, after.supportMessages, supportMessageToData);
+async function writeChanges(tx: Prisma.TransactionClient, before: Database, after: Database, alsoWrite?: (tx: Prisma.TransactionClient) => Promise<void>): Promise<void> {
+  // Reference/org data first (nothing meaningful depends on ordering
+  // beyond what foreign keys already enforce at the database level -
+  // this order just keeps parents ahead of children for clarity).
+  await syncCollection(tx.roleDefinition, before.roles, after.roles, roleToData);
+  await syncCollection(tx.district, before.districts, after.districts, districtToData);
+  await syncCollection(tx.branch, before.branches, after.branches, branchToData);
+  await syncCollection(tx.source, before.sources, after.sources, sourceToData);
+  await syncCollection(tx.department, before.departments, after.departments, departmentToData);
+  await syncCollection(tx.classifiedCategory, before.categories, after.categories, categoryToData);
+  await syncCollection(tx.uncoveredReason, before.uncoveredReasons, after.uncoveredReasons, uncoveredReasonToData);
+  await syncCollection(tx.user, before.users, after.users, userToData);
+  await syncCollection(tx.scoringRule, before.scoringRules, after.scoringRules, scoringRuleToData);
+  await syncCollection(tx.reportingPeriod, before.reportingPeriods, after.reportingPeriods, periodToData);
+  await syncCollection(tx.importBatch, before.importBatches, after.importBatches, importBatchToData);
+  await syncCollection(tx.finding, before.findings, after.findings, findingToData);
+  await syncCollection(tx.findingTransition, before.findingTransitions, after.findingTransitions, transitionToData);
+  await syncCollection(tx.rectificationEntry, before.rectifications, after.rectifications, rectificationToData);
+  await syncCollection(tx.findingCase, before.findingCases, after.findingCases, findingCaseToData);
+  await syncCollection(tx.findingTransfer, before.findingTransfers, after.findingTransfers, transferToData);
+  await syncCollection(tx.findingClosure, before.findingClosures, after.findingClosures, closureToData);
+  await syncCollection(tx.findingAdjustment, before.findingAdjustments, after.findingAdjustments, adjustmentToData);
+  await syncCollection(tx.comment, before.comments, after.comments, commentToData);
+  await syncCollection(tx.evidence, before.evidence, after.evidence, evidenceToData);
+  await syncCollection(tx.notification, before.notifications, after.notifications, notificationToData);
+  await syncCollection(tx.auditLogEntry, before.auditLogs, after.auditLogs, auditLogToData);
+  await syncCollection(tx.branchCoverageNote, before.branchCoverageNotes, after.branchCoverageNotes, coverageNoteToData);
+  // Threads before messages - a message's threadId FK needs its parent
+  // thread to already exist.
+  await syncCollection(tx.supportThread, before.supportThreads, after.supportThreads, supportThreadToData);
+  await syncCollection(tx.supportMessage, before.supportMessages, after.supportMessages, supportMessageToData);
 
-      // Settings is a genuine singleton (always id="singleton") plus
-      // permissionRegistrySyncedKeys, which the Database shape carries as
-      // its own top-level array but which lives on the same row in
-      // Postgres - always upserted together, only when either changed.
-      const settingsChanged =
-        JSON.stringify(before.settings) !== JSON.stringify(after.settings) ||
-        JSON.stringify(before.permissionRegistrySyncedKeys) !== JSON.stringify(after.permissionRegistrySyncedKeys);
-      if (settingsChanged) {
-        const s = after.settings;
-        const data = {
-          currencies: s.currencies,
-          riskLevels: s.riskLevels,
-          operationAreas: s.operationAreas,
-          priorityLevels: s.priorityLevels,
-          irregularityTypes: s.irregularityTypes,
-          notification: s.notification as object,
-          rankingVisibility: s.rankingVisibility as object,
-          performanceThresholds: s.performanceThresholds as object,
-          hoApproval: s.hoApproval as object,
-          rectificationReminders: s.rectificationReminders as object,
-          similarFindingFields: s.similarFindingFields,
-          requiredFindingFields: s.requiredFindingFields as object,
-          allowOtherValueFields: s.allowOtherValueFields as object,
-          reportTemplateSources: s.reportTemplateSources as object,
-          permissionRegistrySyncedKeys: after.permissionRegistrySyncedKeys,
-          updatedAt: toDate(s.updatedAt),
-          updatedBy: s.updatedBy ?? null,
-        };
-        await tx.settings.upsert({ where: { id: SETTINGS_ID }, create: { id: SETTINGS_ID, ...data }, update: data });
-      }
+  // Settings is a genuine singleton (always id="singleton") plus
+  // permissionRegistrySyncedKeys, which the Database shape carries as
+  // its own top-level array but which lives on the same row in
+  // Postgres - always upserted together, only when either changed.
+  const settingsChanged =
+    JSON.stringify(before.settings) !== JSON.stringify(after.settings) ||
+    JSON.stringify(before.permissionRegistrySyncedKeys) !== JSON.stringify(after.permissionRegistrySyncedKeys);
+  if (settingsChanged) {
+    const s = after.settings;
+    const data = {
+      currencies: s.currencies,
+      riskLevels: s.riskLevels,
+      operationAreas: s.operationAreas,
+      priorityLevels: s.priorityLevels,
+      irregularityTypes: s.irregularityTypes,
+      notification: s.notification as object,
+      rankingVisibility: s.rankingVisibility as object,
+      performanceThresholds: s.performanceThresholds as object,
+      hoApproval: s.hoApproval as object,
+      rectificationReminders: s.rectificationReminders as object,
+      similarFindingFields: s.similarFindingFields,
+      requiredFindingFields: s.requiredFindingFields as object,
+      allowOtherValueFields: s.allowOtherValueFields as object,
+      reportTemplateSources: s.reportTemplateSources as object,
+      permissionRegistrySyncedKeys: after.permissionRegistrySyncedKeys,
+      updatedAt: toDate(s.updatedAt),
+      updatedBy: s.updatedBy ?? null,
+    };
+    await tx.settings.upsert({ where: { id: SETTINGS_ID }, create: { id: SETTINGS_ID, ...data }, update: data });
+  }
 
-      // A caller's own writes outside the Database model (e.g. the
-      // automatic transfer's run record), committed or rolled back together
-      // with everything above.
-      if (alsoWrite) await alsoWrite(tx);
-    },
-    // Historical-import and bulk-registration routes touch many rows in
-    // one call; Prisma's interactive-transaction default timeout (5s) is
-    // too tight for that under the row-by-row diff strategy above.
-    { timeout: 30_000 }
-  );
+  // A caller's own writes outside the Database model (e.g. the
+  // automatic transfer's run record), committed or rolled back together
+  // with everything above.
+  if (alsoWrite) await alsoWrite(tx);
+}
+
+// =============================================================================
+// CONCURRENCY (race conditions / TOCTOU) - docs/data-integrity.md
+//
+// 1. One change at a time. updateDb() waits for this process's previous
+//    change (writeQueue), then opens the transaction, takes a Postgres
+//    advisory lock (shared by every process and server) and only THEN reads.
+//    So each change is computed from the state the previous one committed -
+//    two simultaneous approvals, rectifications or closes can't both be
+//    computed from the same "before".
+// 2. Stale checks are refused. A route usually checks its rules (status,
+//    what's still outstanding, ownership) on its own readDb() before
+//    calling updateDb(). A write request remembers that read; if any row the
+//    change modifies or deletes was changed by someone else since, the
+//    change is refused with 409 CONFLICT instead of being applied on top -
+//    e.g. the second of two "Approve" clicks, or a rectification of cases
+//    another user has just rectified.
+// =============================================================================
+
+/** pg_advisory_xact_lock key shared by every updateDb() (any fixed, app-specific number). */
+const WRITE_LOCK_KEY = 7_360_002_026;
+
+/** Collections a change's rows are compared on (the audit log is append-only and never re-checked). */
+const CHECKED_COLLECTIONS = [
+  "roles", "users", "districts", "branches", "sources", "departments", "categories", "uncoveredReasons", "scoringRules",
+  "reportingPeriods", "findings", "findingTransitions", "rectifications", "findingCases", "findingTransfers", "findingClosures",
+  "findingAdjustments", "importBatches", "evidence", "comments", "notifications", "branchCoverageNotes", "supportThreads", "supportMessages",
+] as const satisfies readonly (keyof Database)[];
+/** collection -> row id -> the row as JSON text. */
+export type CheckedState = Map<string, Map<string, string>>;
+const STATE_CHANGING = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
+function rowsOf(db: Database, collection: (typeof CHECKED_COLLECTIONS)[number]): { id: string }[] {
+  return (db[collection] as { id: string }[] | undefined) ?? [];
+}
+
+/** What a read saw, as text - so later edits to the objects themselves don't matter. */
+export function snapshotState(db: Database): CheckedState {
+  const state: CheckedState = new Map();
+  for (const c of CHECKED_COLLECTIONS) state.set(c, new Map(rowsOf(db, c).map((r) => [r.id, JSON.stringify(r)])));
+  state.set("settings", new Map([["settings", JSON.stringify(db.settings)]]));
+  return state;
+}
+
+type ContextWithState = { method?: string; userId?: string; checkedState?: CheckedState; inTransaction?: (tx: unknown) => Promise<void> };
+
+/** Called by readDb(): inside a POST / PATCH / DELETE request, keep what it read. */
+function rememberCheckedState(db: Database): void {
+  const ctx = getRequestContext() as ContextWithState | undefined;
+  if (!ctx || !STATE_CHANGING.has(ctx.method ?? "")) return;
+  ctx.checkedState = snapshotState(db);
 }
 
 /**
- * Read-modify-write helper to avoid repeating the read/mutate/write dance.
+ * The first row this change modifies or deletes that someone else changed
+ * after the request read it, or null. Rows the request never saw (created
+ * since) and rows the change only adds are not conflicts.
+ */
+export function staleRow(checked: CheckedState, fresh: Database, after: Database): { collection: string; id: string } | null {
+  for (const c of CHECKED_COLLECTIONS) {
+    const seen = checked.get(c);
+    if (!seen) continue;
+    const afterById = new Map(rowsOf(after, c).map((r) => [r.id, r]));
+    for (const row of rowsOf(fresh, c)) {
+      const was = seen.get(row.id);
+      if (was === undefined) continue;
+      const now = JSON.stringify(row);
+      if (now === was) continue;
+      const next = afterById.get(row.id);
+      if (next === undefined || JSON.stringify(next) !== now) return { collection: c, id: row.id };
+    }
+  }
+  const settingsWas = checked.get("settings")?.get("settings");
+  const settingsNow = JSON.stringify(fresh.settings);
+  if (settingsWas !== undefined && settingsNow !== settingsWas && JSON.stringify(after.settings) !== settingsNow) {
+    return { collection: "settings", id: "settings" };
+  }
+  return null;
+}
+
+let writeQueue: Promise<unknown> = Promise.resolve();
+
+type UpdateOptions<T> = {
+  alsoWrite?: (tx: Prisma.TransactionClient, result: T) => Promise<void>;
+  staleCheck?: boolean;
+  /** Dev Reset only (APP_ENV=development): it removes finding audit entries along with the findings. */
+  allowAuditLogRemoval?: boolean;
+};
+
+/** Who a change is by, for the automatic audit entries: the signed-in user, or the system (jobs). */
+function changeActor(db: Database, userId: string | undefined): { userId: string; userName: string } {
+  const user = userId ? db.users.find((u) => u.id === userId) : undefined;
+  return user ? { userId: user.id, userName: user.name } : { userId: "system", userName: "System" };
+}
+
+/**
+ * Read-modify-write: the one way the app changes data (see CONCURRENCY above).
  * `opts.alsoWrite` adds the caller's own writes (tables outside the Database
  * model) to the same transaction, given the mutator's result - all or nothing.
+ * `opts.staleCheck: false` is for jobs that decide everything from the
+ * current data inside the mutator (automatic transfer, reminders), so a
+ * request's earlier read doesn't matter to them.
+ *
+ * Every change is also made audit-complete before it's saved
+ * (src/lib/auditCompleteness.ts): each changed finding field is logged with
+ * its old and new value, and existing audit entries can't be edited or removed.
  */
-export async function updateDb<T>(
-  mutator: (db: Database) => T,
-  opts: { alsoWrite?: (tx: Prisma.TransactionClient, result: T) => Promise<void> } = {}
-): Promise<T> {
-  const before = await readDb();
-  const after: Database = JSON.parse(JSON.stringify(before));
-  const result = mutator(after);
-  // Emails queued by notifyUsers() during the mutator: saved in the same
-  // transaction as the notifications, delivered after it commits.
-  const emails = await prepareQueuedEmails(after.pendingEmails ?? []);
-  delete after.pendingEmails;
-  await persistChanges(
-    before,
-    after,
-    emails.insert || opts.alsoWrite
-      ? async (tx) => {
-          if (emails.insert) await emails.insert(tx);
-          if (opts.alsoWrite) await opts.alsoWrite(tx, result);
+export async function updateDb<T>(mutator: (db: Database) => T, opts: UpdateOptions<T> = {}): Promise<T> {
+  const run = writeQueue.then(() => runUpdate(mutator, opts));
+  // The next change waits for this one, whether it succeeds or fails.
+  writeQueue = run.catch(() => undefined);
+  return run;
+}
+
+async function runUpdate<T>(mutator: (db: Database) => T, opts: UpdateOptions<T>): Promise<T> {
+  const ctx = getRequestContext() as ContextWithState | undefined;
+  const checked = opts.staleCheck === false ? undefined : ctx?.checkedState;
+  let afterCommit: () => void = () => {};
+  let committed: Database | null = null;
+  const result = await prisma.$transaction(
+    async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(${WRITE_LOCK_KEY}::bigint)`;
+      const before = await readDb(tx);
+      const after: Database = JSON.parse(JSON.stringify(before));
+      const value = mutator(after);
+      if (checked) {
+        const stale = staleRow(checked, before, after);
+        if (stale) {
+          throw new ConflictError("Someone else changed this just now. Reload the page to see the latest, then try again.", { changed: stale.collection });
         }
-      : undefined
+      }
+      if (!opts.allowAuditLogRemoval) assertAuditLogAppendOnly(before, after);
+      auditFindingFieldChanges(before, after, changeActor(after, ctx?.userId));
+      // Emails queued by notifyUsers() during the mutator: saved in the same
+      // transaction as the notifications, delivered after it commits.
+      const emails = await prepareQueuedEmails(after.pendingEmails ?? []);
+      delete after.pendingEmails;
+      await writeChanges(tx, before, after, async (t) => {
+        if (emails.insert) await emails.insert(t);
+        if (opts.alsoWrite) await opts.alsoWrite(t, value);
+        // e.g. the request's Idempotency-Key marked committed with the change.
+        if (ctx?.inTransaction) await ctx.inTransaction(t);
+      });
+      afterCommit = emails.afterCommit;
+      committed = after;
+      return value;
+    },
+    // Waiting for the lock counts toward the timeout; historical-import and
+    // bulk-registration changes touch many rows under the row-by-row diff.
+    { timeout: 60_000, maxWait: 30_000 }
   );
-  emails.afterCommit();
+  afterCommit();
+  // A second updateDb() in the same request is checked against what this
+  // one committed, not against the request's older read.
+  if (ctx?.checkedState && committed) ctx.checkedState = snapshotState(committed);
   return result;
 }

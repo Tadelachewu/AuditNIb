@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { z } from "zod";
 import { v4 as uuid } from "uuid";
 import { readDb, updateDb } from "@/lib/db";
@@ -10,6 +10,7 @@ import { prisma } from "@/lib/prismaClient";
 import { withApiHandler } from "@/lib/api/handler";
 import { logger } from "@/lib/logger";
 import { hashResetToken } from "@/lib/resetToken";
+import { escapeHtml } from "@/lib/emailQueue/rules";
 
 const schema = z.object({
   identifier: z.string().min(1, "Enter your username or email address"),
@@ -69,6 +70,21 @@ function buildPublicOrigin(request: Request): string {
       return "";
     }
   }
+}
+
+/**
+ * The one reply every request gets - matched, unmatched, no usable email or
+ * a failed send alike - so it never reveals whether an account exists or
+ * what its address is. (Undeliverable addresses and SMTP failures are in the
+ * server log for admins.) smtpConfigured is a bank-wide setting, the same for
+ * every request, so it says nothing about any account.
+ */
+function sameReply(smtpConfigured: boolean): NextResponse {
+  return NextResponse.json({
+    ok: true,
+    smtpConfigured,
+    message: "If an active account matches that username or email, a password reset link has been sent.",
+  });
 }
 
 function isValidEmailForSending(email: string): boolean {
@@ -132,29 +148,15 @@ async function handlePOST(request: Request) {
   const transporter = getTransporter(db.settings.notification);
   const smtpConfigured = Boolean(transporter);
 
-  // User-enumeration-blind: always return the same success message whether
-  // or not a match was found. Matchers that DO hit can tell what happened
-  // from extra flags: smtpConfigured=false + noEmailOnFile (rare after the
-  // mandatory migration) vs the normal 200 success.
-  if (!user) {
-    return NextResponse.json({
-      ok: true,
-      smtpConfigured,
-      message:
-        "If an active account matches that username or email, a password reset link has been sent.",
-    });
-  }
+  // User-enumeration-blind: every outcome gets sameReply(), and everything
+  // done for a matched account (token, audit entry, email) runs after the
+  // reply, so neither the body nor the response time shows a match.
+  if (!user) return sameReply(smtpConfigured);
 
   const hasUsableEmail = Boolean(user.email) && isValidEmailForSending(user.email);
   if (!hasUsableEmail) {
     logger.warn({ event: "password_reset.undeliverable_email", targetUserId: user.id }, "Password reset matched a user whose email is not deliverable - an admin must correct it in Admin -> Users");
-    return NextResponse.json({
-      ok: true,
-      smtpConfigured,
-      noDeliverableEmail: true,
-      message:
-        "If an active account matches that username or email, a password reset link has been sent.",
-    });
+    return sameReply(smtpConfigured);
   }
 
   if (!smtpConfigured) {
@@ -166,111 +168,97 @@ async function handlePOST(request: Request) {
   const publicOrigin = buildPublicOrigin(request);
   const resetUrl = `${publicOrigin}/reset-password?token=${encodeURIComponent(tokenRaw)}`;
 
-  try {
-    await prisma.$transaction(async (tx) => {
-      await tx.passwordResetToken.updateMany({
-        where: { userId: user.id, usedAt: null },
-        data: { usedAt: new Date() },
-      });
-      await tx.passwordResetToken.create({
-        data: {
-          id: uuid(),
-          userId: user.id,
-          // Only a SHA-256 hash is stored (security review M2): someone who can
-          // read this table (a backup, a query) can't use a live link.
-          token: hashResetToken(tokenRaw),
-          expiresAt,
-          issuedIp: ip,
-          issuedUa: request.headers.get("user-agent") ?? null,
-        },
-      });
-    });
-  } catch (err) {
-    logger.error({ err, event: "password_reset.persist_failed" }, "Failed to persist reset token row");
-    return NextResponse.json({ error: "Failed to process request" }, { status: 500 });
-  }
-
-  await updateDb((current) => {
-    appendAuditLog(current, {
-      userId: user.id,
-      userName: user.name,
-      action: "PASSWORD_RESET_REQUESTED",
-      entityType: "User",
-      entityId: user.id,
-      newValue: { emailTarget: user.email, smtpConfigured },
-    });
-  });
-
-  let emailSentSuccessfully = false;
-  let smtpErrorMessage: string | null = null;
-  if (transporter && publicOrigin) {
-    const fromAddress =
-      db.settings.notification.fromAddress?.trim() ||
-      (publicOrigin.includes("localhost")
-        ? `"NIB Control360" <no-reply@localhost>`
-        : `"NIB Control360" <no-reply@${publicOrigin.replace(/^https?:\/\//, "").split("/")[0]}>`);
+  const issuedUa = request.headers.get("user-agent") ?? null;
+  after(async () => {
     try {
-      const info = await transporter.sendMail({
-        from: fromAddress,
-        to: user.email,
-        replyTo: fromAddress,
-        subject: "Reset your NIB Control360 password",
-        text: [
-          `Hi ${user.name},`,
-          "",
-          "You (or someone using your username/email) requested a password reset for your NIB Control360 account.",
-          "",
-          "Click or copy this link into your browser to set a new password:",
-          resetUrl,
-          "",
-          "This link is valid for 30 minutes and can only be used once. If you didn't request this, you can safely ignore this email — your password won't be changed and no one else can access your account.",
-          "",
-          "Thanks,",
-          "NIB Control360",
-        ].join("\n"),
-        html: `
-          <div style="font-family: system-ui, Arial, sans-serif; line-height: 1.5; max-width: 560px;">
-            <p>Hi ${user.name},</p>
-            <p>You (or someone using your username/email) requested a password reset for your NIB Control360 account.</p>
-            <p>Click the button below to set a new password, or copy the link into your browser:</p>
-            <p style="margin: 1.25rem 0;">
-              <a href="${resetUrl}"
-                 style="display:inline-block; padding: 0.6rem 1.1rem; border-radius: 0.375rem; background: #1e3a8a; color: #fff; text-decoration: none; font-weight: 600;">
-                Reset my password
-              </a>
-            </p>
-            <p style="word-break: break-all; color: #475569; font-size: 0.875rem;">${resetUrl}</p>
-            <p>This link is valid for <strong>30 minutes</strong> and can only be used <strong>once</strong>.</p>
-            <p>If you didn&apos;t request this, you can safely ignore this email &mdash; your password won&apos;t be changed and no one else can access your account.</p>
-            <p>Thanks,<br/>NIB Control360</p>
-          </div>`,
+      await prisma.$transaction(async (tx) => {
+        await tx.passwordResetToken.updateMany({
+          where: { userId: user.id, usedAt: null },
+          data: { usedAt: new Date() },
+        });
+        await tx.passwordResetToken.create({
+          data: {
+            id: uuid(),
+            userId: user.id,
+            // Only a SHA-256 hash is stored (security review M2): someone who can
+            // read this table (a backup, a query) can't use a live link.
+            token: hashResetToken(tokenRaw),
+            expiresAt,
+            issuedIp: ip,
+            issuedUa,
+          },
+        });
       });
-      emailSentSuccessfully = true;
-      const accepted: string[] = (info as unknown as { accepted?: string[] })?.accepted ?? [];
-      logger.info(
-        { event: "password_reset.email_queued", targetUserId: user.id, accepted: accepted.includes(user.email) },
-        "Password reset email queued via SMTP relay"
-      );
     } catch (err) {
-      logger.error({ err, event: "password_reset.email_failed", targetUserId: user.id }, "Failed to send password reset email - check Admin -> Settings -> Notification Delivery");
-      smtpErrorMessage =
-        "The password reset link could not be emailed right now. Ask your NIB Control360 administrator to check the outbound SMTP configuration in Admin → Settings → Notification Delivery.";
+      logger.error({ err, event: "password_reset.persist_failed" }, "Failed to persist reset token row");
+      return;
     }
-  }
 
-  // NOTE: even when SMTP isn't configured, we still return the user-blind
-  // success message - but tack on extra machine-readable flags so the
-  // forgot-password page UI can alert an admin who lands here that the
-  // reset link didn't leave the server.
-  return NextResponse.json({
-    ok: true,
-    message:
-      "If an active account matches that username or email, a password reset link has been sent.",
-    smtpConfigured,
-    emailSent: emailSentSuccessfully,
-    smtpError: smtpErrorMessage,
-    sentTo: emailSentSuccessfully ? user.email : undefined,
+    await updateDb((current) => {
+      appendAuditLog(current, {
+        userId: user.id,
+        userName: user.name,
+        action: "PASSWORD_RESET_REQUESTED",
+        entityType: "User",
+        entityId: user.id,
+        newValue: { emailTarget: user.email, smtpConfigured },
+      });
+    });
+
+    if (transporter && publicOrigin) {
+      const fromAddress =
+        db.settings.notification.fromAddress?.trim() ||
+        (publicOrigin.includes("localhost")
+          ? `"NIB Control360" <no-reply@localhost>`
+          : `"NIB Control360" <no-reply@${publicOrigin.replace(/^https?:\/\//, "").split("/")[0]}>`);
+      try {
+        const info = await transporter.sendMail({
+          from: fromAddress,
+          to: user.email,
+          replyTo: fromAddress,
+          subject: "Reset your NIB Control360 password",
+          text: [
+            `Hi ${user.name},`,
+            "",
+            "You (or someone using your username/email) requested a password reset for your NIB Control360 account.",
+            "",
+            "Click or copy this link into your browser to set a new password:",
+            resetUrl,
+            "",
+            "This link is valid for 30 minutes and can only be used once. If you didn't request this, you can safely ignore this email — your password won't be changed and no one else can access your account.",
+            "",
+            "Thanks,",
+            "NIB Control360",
+          ].join("\n"),
+          html: `
+            <div style="font-family: system-ui, Arial, sans-serif; line-height: 1.5; max-width: 560px;">
+              <p>Hi ${escapeHtml(user.name)},</p>
+              <p>You (or someone using your username/email) requested a password reset for your NIB Control360 account.</p>
+              <p>Click the button below to set a new password, or copy the link into your browser:</p>
+              <p style="margin: 1.25rem 0;">
+                <a href="${resetUrl}"
+                   style="display:inline-block; padding: 0.6rem 1.1rem; border-radius: 0.375rem; background: #1e3a8a; color: #fff; text-decoration: none; font-weight: 600;">
+                  Reset my password
+                </a>
+              </p>
+              <p style="word-break: break-all; color: #475569; font-size: 0.875rem;">${resetUrl}</p>
+              <p>This link is valid for <strong>30 minutes</strong> and can only be used <strong>once</strong>.</p>
+              <p>If you didn&apos;t request this, you can safely ignore this email &mdash; your password won&apos;t be changed and no one else can access your account.</p>
+              <p>Thanks,<br/>NIB Control360</p>
+            </div>`,
+        });
+        const accepted: string[] = (info as unknown as { accepted?: string[] })?.accepted ?? [];
+        logger.info(
+          { event: "password_reset.email_queued", targetUserId: user.id, accepted: accepted.includes(user.email) },
+          "Password reset email queued via SMTP relay"
+        );
+      } catch (err) {
+        logger.error({ err, event: "password_reset.email_failed", targetUserId: user.id }, "Failed to send password reset email - check Admin -> Settings -> Notification Delivery");
+      }
+    }
   });
+
+  return sameReply(smtpConfigured);
 }
 
 // Central error handling, request ID and access logging: src/lib/api/handler.ts

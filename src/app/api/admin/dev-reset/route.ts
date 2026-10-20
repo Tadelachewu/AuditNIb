@@ -85,6 +85,8 @@ async function handlePOST(request: Request) {
       await forgetAllRuns(tx);
       await forgetReminderRuns(tx);
     },
+    // The reset deliberately drops finding audit entries (src/lib/auditCompleteness.ts).
+    allowAuditLogRemoval: true,
   });
 
   return NextResponse.json({ summary });

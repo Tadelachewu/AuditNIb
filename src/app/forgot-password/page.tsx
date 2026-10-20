@@ -13,13 +13,9 @@ export default function ForgotPasswordPage() {
   const [identifier, setIdentifier] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [response, setResponse] = useState<null | {
-    smtpConfigured: boolean;
-    emailSent?: boolean;
-    smtpError?: string | null;
-    sentTo?: string;
-    noDeliverableEmail?: boolean;
-  }>(null);
+  // The server answers every request the same way (no account details), so
+  // there's nothing per-account to show - only whether email is set up at all.
+  const [response, setResponse] = useState<null | { smtpConfigured: boolean }>(null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -27,21 +23,8 @@ export default function ForgotPasswordPage() {
     setResponse(null);
     setLoading(true);
     try {
-      const r = await apiSend<{
-        ok: boolean;
-        smtpConfigured?: boolean;
-        emailSent?: boolean;
-        smtpError?: string | null;
-        sentTo?: string;
-        noDeliverableEmail?: boolean;
-      }>("/api/auth/forgot-password", "POST", { identifier });
-      setResponse({
-        smtpConfigured: r.smtpConfigured ?? false,
-        emailSent: r.emailSent,
-        smtpError: r.smtpError ?? null,
-        sentTo: r.sentTo,
-        noDeliverableEmail: r.noDeliverableEmail,
-      });
+      const r = await apiSend<{ ok: boolean; smtpConfigured?: boolean }>("/api/auth/forgot-password", "POST", { identifier });
+      setResponse({ smtpConfigured: r.smtpConfigured ?? false });
     } catch (err) {
       setError(notify.formError(err, notifications.auth.resetLinkFailed));
     } finally {
@@ -70,11 +53,6 @@ export default function ForgotPasswordPage() {
                 If an active account matches that username or email address, you&apos;ll receive an email with a link to
                 reset your password. The link is valid for 30 minutes and can only be used once.
               </p>
-              {response.sentTo && response.emailSent ? (
-                <p className="mt-3 text-green-700">
-                  Sent to <span className="font-mono">{response.sentTo}</span>.
-                </p>
-              ) : null}
               <p className="mt-3 text-green-700">
                 Didn&apos;t receive it? Check your spam/junk folder, or{" "}
                 <button
@@ -91,16 +69,6 @@ export default function ForgotPasswordPage() {
               </p>
             </div>
 
-            {response.noDeliverableEmail ? (
-              <div className="rounded-lg border border-amber-200 bg-amber-50 p-5 text-sm text-amber-800">
-                <p className="font-medium">This account has no deliverable email on file</p>
-                <p className="mt-2 text-amber-700">
-                  The matched account carries a placeholder or invalid email address. Ask an NIB Control360
-                  administrator to open <strong>Admin → Users → Edit</strong> for that username and correct the email
-                  address before requesting another reset link.
-                </p>
-              </div>
-            ) : null}
 
             {!response.smtpConfigured ? (
               <div className="rounded-lg border border-amber-300 bg-amber-50 p-5 text-sm text-amber-900">
@@ -108,8 +76,7 @@ export default function ForgotPasswordPage() {
                   ⚠️ Outbound email is <em>not configured</em> on this NIB Control360 instance.
                 </p>
                 <p className="mt-2 text-amber-800">
-                  A password reset token was created for the matching account, but no SMTP relay is configured so the
-                  reset email can&apos;t be delivered.
+                  No SMTP relay is configured, so reset emails can&apos;t be delivered.
                 </p>
                 <p className="mt-2 text-amber-800">
                   <strong className="font-semibold">Action for an administrator:</strong> sign in, open{" "}
@@ -122,16 +89,6 @@ export default function ForgotPasswordPage() {
               </div>
             ) : null}
 
-            {response.smtpError ? (
-              <div className="rounded-lg border border-red-200 bg-red-50 p-5 text-sm text-red-800">
-                <p className="font-medium">Email delivery failed</p>
-                <p className="mt-2 text-red-700">{response.smtpError}</p>
-                <p className="mt-2 text-red-700">
-                  The reset token itself was saved, so an administrator can also check the server logs for the
-                  underlying SMTP error.
-                </p>
-              </div>
-            ) : null}
 
             <Link
               href="/login"

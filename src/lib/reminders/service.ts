@@ -49,7 +49,7 @@ export interface ReminderDeps {
   store: ReminderStore;
   readDb: () => Promise<Database>;
   /** Must commit `alsoWrite` in the same transaction as the mutator's changes. */
-  updateDb: <T>(mutator: (db: Database) => T, opts?: { alsoWrite?: (tx: unknown, result: T) => Promise<void> }) => Promise<T>;
+  updateDb: <T>(mutator: (db: Database) => T, opts?: { alsoWrite?: (tx: unknown, result: T) => Promise<void>; staleCheck?: boolean }) => Promise<T>;
   lock: { acquire: () => Promise<boolean>; release: () => Promise<void> };
   now: () => number;
 }
@@ -141,6 +141,8 @@ export async function runRemindersIfDue(opts: { trigger?: ReminderTrigger; deps?
           alsoWrite: async (tx, result) => {
             if (!(await deps.store.saveRun(result, tx))) throw new AlreadyRanError();
           },
+          // Decides everything from the data it reads under the write lock.
+          staleCheck: false,
         }
       );
       logger.info({ event: "reminders.ran", trigger, testClock: clockOffsetMs() !== 0, runDate: run.runDate, findings: run.remindedFindings, users: run.notifiedUsers }, "Rectification reminders sent");
