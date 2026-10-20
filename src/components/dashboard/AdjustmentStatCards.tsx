@@ -25,7 +25,9 @@ const cases = (n: number) => `+${n} case${n === 1 ? "" : "s"}`;
  * Adjustments Pending (headline: the ones waiting on this user - their review
  * step or their returned ones; total in review below) and Adjustment Diff
  * (approved, reported in the selected period). `findings` = the dashboard's
- * scoped, filtered findings.
+ * scoped, filtered findings. `only` renders just one of them, so a dashboard
+ * can put "Awaiting You" with the other awaiting-action cards (at the end)
+ * and the Diff with the other figures.
  */
 export function AdjustmentStatCards({
   user,
@@ -34,6 +36,7 @@ export function AdjustmentStatCards({
   periodId,
   periodLabel,
   hasPeriodScope,
+  only,
 }: {
   user: SessionData;
   db: Database;
@@ -42,13 +45,14 @@ export function AdjustmentStatCards({
   periodId: string | undefined;
   periodLabel: string;
   hasPeriodScope: boolean;
+  only?: "awaiting" | "diff";
 }) {
   const { pending, awaitingYou, diff } = adjustmentDashboardTotals(db, findings, periodId, user);
   const steps = (Object.entries(pending.byStep) as [keyof typeof pending.byStep, number][]).filter(([, n]) => n > 0);
 
   return (
     <>
-      <StatCard
+      {only !== "diff" && <StatCard
         icon={ICON.adjustmentsPending}
         label="Adjustments Awaiting You"
         value={awaitingYou.total}
@@ -71,8 +75,8 @@ export function AdjustmentStatCards({
             </ul>
           ) : undefined
         }
-      />
-      <StatCard
+      />}
+      {only !== "awaiting" && <StatCard
         icon={ICON.adjustmentDiff}
         label="Adjustment Diff"
         value={hasPeriodScope ? cases(diff.addedCases) : "--"}
@@ -90,7 +94,7 @@ export function AdjustmentStatCards({
             </ul>
           ) : undefined
         }
-      />
+      />}
     </>
   );
 }

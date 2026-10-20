@@ -13,7 +13,6 @@ import {
   isHoApproved, isOutstandingFinding, awaitingBranchRectification } from "@/lib/findings";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
 import { sumAmountByCurrency, sumOutstandingByCurrency, sumAmountByCurrencyInPeriod, sumOutstandingByCurrencyInPeriod, addCurrency, mergeCurrencyTotals, formatCurrencyTotals, type CurrencyTotals } from "@/lib/currency";
-import { formatDateTime } from "@/lib/format";
 import { inDateRange, type DateRange } from "@/lib/dateRange";
 import { applyDashboardFilters, dashboardFindingsHref, EMPTY_DASHBOARD_FILTERS, ALL_PERIODS_VALUE, type DashboardFilters } from "@/lib/dashboardFilters";
 import { Card, CardHeader, StatCard } from "@/components/ui/Card";
@@ -32,6 +31,7 @@ import { SourcePerformanceSummary } from "@/components/dashboard/SourcePerforman
 import { PerformanceCalculation } from "@/components/dashboard/PerformanceMath";
 import { DashboardGrid } from "@/components/dashboard/DashboardGrid";
 import { currentPeriod, sortPeriods } from "@/lib/periods";
+import { DashboardFooter } from "@/components/dashboard/DashboardFooter";
 
 // Per master.txt §10: "Selected month; category totals; total/rectified/
 // outstanding; Other Case summary; performance; monthly trend; risk
@@ -127,6 +127,8 @@ export function BranchDashboard({
   // etc. before anyone's actually approved it.
   const approvedPeriodFindings = periodFindings.filter(isHoApproved);
   const outstandingFindings = approvedPeriodFindings.filter((f) => isOutstandingFinding(f)).length;
+  // Rejected findings of the period, this branch (same rule as HO / District).
+  const rejectedFindings = periodFindings.filter((f) => f.status === "REJECTED").length;
   // periodId: undefined (allPeriodsSelected) is computePerformance()'s own
   // "lifetime, no period filter" mode - exactly what "All periods" means.
   const performanceScope = { branchId: branch.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id };
@@ -332,17 +334,6 @@ export function BranchDashboard({
         <StatCard icon={ICON.rectified} label="Rectified Cases" value={hasPeriodScope ? rectifiedCases : "--"} hint="Closed, this period" />
         <StatCard icon={ICON.outstandingCases} label="Outstanding Cases" value={hasPeriodScope ? totalCases - rectifiedCases : "--"} hint="Total minus rectified" />
         <StatCard icon={ICON.outstanding} label="Outstanding" value={hasPeriodScope ? outstandingFindings : "--"} hint="Findings" />
-        <StatCard icon={ICON.transferred} label="Transferred Findings" value={hasPeriodScope ? transferredFindings : "--"} hint="Out of this period" />
-        <StatCard icon={ICON.transferred} label="Transferred Cases" value={hasPeriodScope ? transferredCases : "--"} hint="Out of this period" />
-        <AdjustmentStatCards
-          user={user}
-          db={db}
-          findings={branchAllFindings}
-          periodId={allPeriodsSelected ? undefined : openPeriod?.id}
-          periodLabel={allPeriodsSelected ? "All periods" : (openPeriod?.code ?? "")}
-          hasPeriodScope={hasPeriodScope}
-        />
-        <StatCard icon={ICON.highRisk} label="High-Risk Findings" value={hasPeriodScope ? highRiskFindings : "--"} hint="Open, top risk tiers" />
         <StatCard
           icon={ICON.performance}
           label="Branch Performance"
@@ -360,17 +351,53 @@ export function BranchDashboard({
             )
           }
         />
+        <StatCard icon={ICON.rejected} label="Rejected" value={hasPeriodScope ? rejectedFindings : "--"} hint="Findings" />
+        <StatCard icon={ICON.highRisk} label="High-Risk Findings" value={hasPeriodScope ? highRiskFindings : "--"} hint="Open, top risk tiers" />
+        <StatCard icon={ICON.transferred} label="Transferred Findings" value={hasPeriodScope ? transferredFindings : "--"} hint="Out of this period" />
+        <StatCard icon={ICON.transferred} label="Transferred Cases" value={hasPeriodScope ? transferredCases : "--"} hint="Out of this period" />
+        <AdjustmentStatCards
+          user={user}
+          db={db}
+          findings={branchAllFindings}
+          periodId={allPeriodsSelected ? undefined : openPeriod?.id}
+          periodLabel={allPeriodsSelected ? "All periods" : (openPeriod?.code ?? "")}
+          hasPeriodScope={hasPeriodScope}
+          only="diff"
+        />
         <StatCard icon={ICON.totalAmount} label="Total Amount" value={hasPeriodScope ? totalAmount : "--"} hint="All findings" />
         <StatCard icon={ICON.resolvedAmount} label="Resolved Amount" value={hasPeriodScope ? resolvedAmount : "--"} hint="Cumulative closed only" />
         <StatCard icon={ICON.outstandingAmount} label="Outstanding Amount" value={hasPeriodScope ? outstandingAmount : "--"} hint="Still owed" />
-        {canRegister && <StatCard icon={ICON.draft} label="Draft" value={draftFindings} hint="Not yet submitted" />}
         {canRegister && (
           <StatCard icon={ICON.pendingApproval} label="Pending Approval" value={pendingApprovalFindings} hint="District/HO review, your registrations" />
         )}
+        <AdjustmentStatCards
+          user={user}
+          db={db}
+          findings={branchAllFindings}
+          periodId={allPeriodsSelected ? undefined : openPeriod?.id}
+          periodLabel={allPeriodsSelected ? "All periods" : (openPeriod?.code ?? "")}
+          hasPeriodScope={hasPeriodScope}
+          only="awaiting"
+        />
+        {canRegister && <StatCard icon={ICON.draft} label="Draft" value={draftFindings} hint="Not yet submitted" />}
         {(canRegister || canRectify) && (
           <StatCard icon={ICON.pendingRectification} label="Pending Rectification" value={pendingRectificationFindings} hint="Awaiting rectification" />
         )}
       </div>
+
+      {/* Needs you: right under the figures, as on the HO / District dashboards. */}
+      <Card>
+        <CardHeader title="Work Queue" description="Findings awaiting your action" />
+        <div className="divide-y divide-slate-100">
+          {workQueue.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-500">Nothing pending.</p>}
+          {workQueue.map((f) => (
+            <Link key={f.id} href={`/findings/${f.id}`} className="flex items-center justify-between px-4 py-2 text-sm hover:bg-slate-50">
+              <span className="font-mono text-xs text-blue-800">{f.reference}</span>
+              <FindingStatusBadge status={f.status} />
+            </Link>
+          ))}
+        </div>
+      </Card>
 
       <CaseBasedPerformance db={db} scope={{ branchId: branch.id }} openPeriod={openPeriod} allPeriods={allPeriodsSelected} />
 
@@ -405,6 +432,14 @@ export function BranchDashboard({
           <p className="p-4 text-sm text-slate-500">Branch ranking visibility is disabled by your administrator.</p>
         </Card>
       )}
+
+      <SourcePerformanceSummary
+        db={db}
+        sources={sourcesInScope}
+        scope={{ branchId: branch.id }}
+        openPeriod={openPeriod}
+        allPeriods={allPeriodsSelected}
+      />
 
       <Card>
         <CardHeader
@@ -458,13 +493,7 @@ export function BranchDashboard({
 
       <FindingsByCategoryChart findings={approvedPeriodFindings} categories={categoriesInScope} openPeriod={periodDisplayMarker} />
 
-      <SourcePerformanceSummary
-        db={db}
-        sources={sourcesInScope}
-        scope={{ branchId: branch.id }}
-        openPeriod={openPeriod}
-        allPeriods={allPeriodsSelected}
-      />
+      <CategoryDistribution findings={periodFindings} categories={categoriesInScope} />
 
       <MonthlyTrend db={db} scope={{ branchId: branch.id }} />
 
@@ -473,37 +502,11 @@ export function BranchDashboard({
         <RiskDistribution findings={periodFindings} riskLevels={db.settings.riskLevels} hrefFor={chartHref} />
       </div>
 
-      <CategoryDistribution findings={branchAllFindings} categories={categoriesInScope} />
-
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader title="Work Queue" description="Findings awaiting your action" />
-          <div className="divide-y divide-slate-100">
-            {workQueue.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-500">Nothing pending.</p>}
-            {workQueue.map((f) => (
-              <Link key={f.id} href={`/findings/${f.id}`} className="flex items-center justify-between px-4 py-2 text-sm hover:bg-slate-50">
-                <span className="font-mono text-xs text-blue-800">{f.reference}</span>
-                <FindingStatusBadge status={f.status} />
-              </Link>
-            ))}
-          </div>
-        </Card>
-
-        <Card>
-          <CardHeader title="Recent Activity" description="Submit, approve, return, and rectification events for this branch" />
-          <div className="divide-y divide-slate-100">
-            {recentActivity.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-500">No activity yet.</p>}
-            {recentActivity.map((t) => (
-              <div key={t.id} className="flex items-center justify-between px-4 py-2 text-sm">
-                <span className="text-slate-600">
-                  <span className="font-medium text-slate-900">{t.userName}</span> {t.action.replaceAll("_", " ").toLowerCase()}
-                </span>
-                <span className="text-xs text-slate-500">{formatDateTime(t.createdAt)}</span>
-              </div>
-            ))}
-          </div>
-        </Card>
-      </div>
+      <DashboardFooter
+        periods={db.reportingPeriods}
+        activity={recentActivity}
+        activityDescription="Submit, approve, return, and rectification events for this branch"
+      />
     </div>
   );
 }

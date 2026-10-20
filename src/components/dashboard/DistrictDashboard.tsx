@@ -13,7 +13,6 @@ import {
   isOutstandingFinding,
 } from "@/lib/findings";
 import { sumAmountByCurrency, sumOutstandingByCurrency, sumAmountByCurrencyInPeriod, sumOutstandingByCurrencyInPeriod, addCurrency, mergeCurrencyTotals, formatCurrencyTotals, type CurrencyTotals } from "@/lib/currency";
-import { formatDateTime } from "@/lib/format";
 import { inDateRange, type DateRange } from "@/lib/dateRange";
 import { applyDashboardFilters, dashboardFindingsHref, EMPTY_DASHBOARD_FILTERS, ALL_PERIODS_VALUE, type DashboardFilters } from "@/lib/dashboardFilters";
 import { Card, CardHeader, StatCard } from "@/components/ui/Card";
@@ -36,6 +35,7 @@ import { FindingsByCategoryChart } from "@/components/dashboard/FindingsByCatego
 import { PerformanceCalculation, PerformancePct } from "@/components/dashboard/PerformanceMath";
 import { DashboardGrid } from "@/components/dashboard/DashboardGrid";
 import { currentPeriod, sortPeriods } from "@/lib/periods";
+import { DashboardFooter } from "@/components/dashboard/DashboardFooter";
 
 // master.txt §10: district-level aggregate, branch-by-branch ranking,
 // category totals, risk distribution, recent activity, work queue -
@@ -126,6 +126,10 @@ export function DistrictDashboard({
   // actually been approved.
   const approvedPeriodFindings = periodFindings.filter(isHoApproved);
   const outstandingFindings = approvedPeriodFindings.filter((f) => isOutstandingFinding(f)).length;
+  // High-risk = the top two tiers of Settings.riskLevels (case-insensitive),
+  // open and approved - same rule as the HO and Branch dashboards.
+  const highRiskTiers = new Set(db.settings.riskLevels.slice(-2).map((l) => l.toLowerCase()));
+  const highRiskFindings = approvedPeriodFindings.filter((f) => isOutstandingFinding(f) && highRiskTiers.has(f.riskLevel.toLowerCase())).length;
   // A transfer moves periodId forward, so a transferred finding is no
   // longer in periodFindings for its *source* period - counted separately
   // from FindingTransfer records: distinct findings this district
@@ -294,24 +298,10 @@ export function DistrictDashboard({
         />
         <StatCard icon={ICON.totalCases} label="Reported Cases" value={hasPeriodScope ? reportedCases : "--"} hint="Originally registered - not changed by transfers" />
         <StatCard icon={ICON.totalCases} label="Total Cases" value={hasPeriodScope ? totalCases : "--"} hint="In this period, after transfers in / out" />
-        <StatCard icon={ICON.requiringReview} label="Requiring Review" value={hasPeriodScope ? requiringReviewFindings : "--"} hint="Awaiting district decision" />
-        <StatCard icon={ICON.approved} label="Approved" value={hasPeriodScope ? approvedFindings : "--"} hint="Passed district review" />
-        <StatCard icon={ICON.outstanding} label="Outstanding" value={hasPeriodScope ? outstandingFindings : "--"} hint="Findings" />
-        <StatCard icon={ICON.rejected} label="Rejected" value={hasPeriodScope ? rejectedFindings : "--"} hint="Findings" />
-        <StatCard icon={ICON.returned} label="Returned" value={hasPeriodScope ? returnedFindings : "--"} hint="Findings" />
         <StatCard icon={ICON.rectified} label="Rectified Findings" value={hasPeriodScope ? rectifiedFindings : "--"} hint="Formally closed" />
         <StatCard icon={ICON.rectified} label="Rectified Cases" value={hasPeriodScope ? rectifiedCases : "--"} hint="Closed, this period" />
         <StatCard icon={ICON.outstandingCases} label="Outstanding Cases" value={hasPeriodScope ? totalCases - rectifiedCases : "--"} hint="Total minus rectified" />
-        <StatCard icon={ICON.transferred} label="Transferred Findings" value={hasPeriodScope ? transferredFindings : "--"} hint="Out of this period" />
-        <StatCard icon={ICON.transferred} label="Transferred Cases" value={hasPeriodScope ? transferredCases : "--"} hint="Out of this period" />
-        <AdjustmentStatCards
-          user={user}
-          db={db}
-          findings={districtFindingsInRange}
-          periodId={allPeriodsSelected ? undefined : openPeriod?.id}
-          periodLabel={allPeriodsSelected ? "All periods" : (openPeriod?.code ?? "")}
-          hasPeriodScope={hasPeriodScope}
-        />
+        <StatCard icon={ICON.outstanding} label="Outstanding" value={hasPeriodScope ? outstandingFindings : "--"} hint="Findings" />
         <StatCard
           icon={ICON.performance}
           label="District Performance"
@@ -325,26 +315,67 @@ export function DistrictDashboard({
             )
           }
         />
+        <StatCard icon={ICON.approved} label="Approved" value={hasPeriodScope ? approvedFindings : "--"} hint="Passed district review" />
+        <StatCard icon={ICON.rejected} label="Rejected" value={hasPeriodScope ? rejectedFindings : "--"} hint="Findings" />
+        <StatCard icon={ICON.returned} label="Returned" value={hasPeriodScope ? returnedFindings : "--"} hint="Findings" />
+        <StatCard icon={ICON.highRisk} label="High-Risk Findings" value={hasPeriodScope ? highRiskFindings : "--"} hint="Open, top risk tiers" />
+        <StatCard icon={ICON.transferred} label="Transferred Findings" value={hasPeriodScope ? transferredFindings : "--"} hint="Out of this period" />
+        <StatCard icon={ICON.transferred} label="Transferred Cases" value={hasPeriodScope ? transferredCases : "--"} hint="Out of this period" />
+        <AdjustmentStatCards
+          user={user}
+          db={db}
+          findings={districtFindingsInRange}
+          periodId={allPeriodsSelected ? undefined : openPeriod?.id}
+          periodLabel={allPeriodsSelected ? "All periods" : (openPeriod?.code ?? "")}
+          hasPeriodScope={hasPeriodScope}
+          only="diff"
+        />
         <StatCard icon={ICON.totalAmount} label="Total Amount" value={hasPeriodScope ? totalAmount : "--"} hint="All findings" />
         <StatCard icon={ICON.resolvedAmount} label="Resolved Amount" value={hasPeriodScope ? resolvedAmount : "--"} hint="Cumulative closed only" />
         <StatCard icon={ICON.outstandingAmount} label="Outstanding Amount" value={hasPeriodScope ? outstandingAmount : "--"} hint="Still owed" />
+        <StatCard icon={ICON.requiringReview} label="Requiring Review" value={hasPeriodScope ? requiringReviewFindings : "--"} hint="Awaiting district decision" />
+        <AdjustmentStatCards
+          user={user}
+          db={db}
+          findings={districtFindingsInRange}
+          periodId={allPeriodsSelected ? undefined : openPeriod?.id}
+          periodLabel={allPeriodsSelected ? "All periods" : (openPeriod?.code ?? "")}
+          hasPeriodScope={hasPeriodScope}
+          only="awaiting"
+        />
       </div>
 
-      <Card>
-        <CardHeader title="Pending Verify" description={`${pendingVerifyFindings.length} rectified, awaiting your verification`} />
-        <div className="divide-y divide-slate-100">
-          {pendingVerifyFindings.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-500">Nothing pending.</p>}
-          {pendingVerifyFindings
-            .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
-            .slice(0, 8)
-            .map((f) => (
+      {/* Needs you: what to verify, and everything else awaiting your action. */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader title="Pending Verify" description={`${pendingVerifyFindings.length} rectified, awaiting your verification`} />
+          <div className="divide-y divide-slate-100">
+            {pendingVerifyFindings.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-500">Nothing pending.</p>}
+            {pendingVerifyFindings
+              .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+              .slice(0, 8)
+              .map((f) => (
+                <Link key={f.id} href={`/findings/${f.id}`} className="flex items-center justify-between px-4 py-2 text-sm hover:bg-slate-50">
+                  <span className="font-mono text-xs text-blue-800">{f.reference}</span>
+                  <FindingStatusBadge status={f.status} />
+                </Link>
+              ))}
+          </div>
+        </Card>
+
+        <Card>
+          <CardHeader title="Work Queue" description="Every finding awaiting your action, all categories" />
+          <div className="divide-y divide-slate-100">
+            {workQueue.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-500">Nothing pending.</p>}
+            {workQueue.map((f) => (
               <Link key={f.id} href={`/findings/${f.id}`} className="flex items-center justify-between px-4 py-2 text-sm hover:bg-slate-50">
                 <span className="font-mono text-xs text-blue-800">{f.reference}</span>
                 <FindingStatusBadge status={f.status} />
               </Link>
             ))}
-        </div>
-      </Card>
+          </div>
+        </Card>
+      </div>
 
       <CaseBasedPerformance
         db={db}
@@ -352,42 +383,6 @@ export function DistrictDashboard({
         openPeriod={openPeriod}
         allPeriods={allPeriodsSelected}
       />
-
-      {db.settings.rankingVisibility.branches && (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <Card>
-            <CardHeader title="Top Performers" description={`Branches at or above ${topPercent}% this period`} />
-            <div className="divide-y divide-slate-100">
-              {topBranches.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-500">No performance data yet.</p>}
-              {topBranches.map((row, i) => (
-                <div key={row.branch.id} className="flex items-start justify-between gap-3 px-4 py-2.5 text-sm hover:bg-slate-50">
-                  <Link href={`/findings?branchId=${row.branch.id}`} className="flex items-center gap-2">
-                    <Badge tone={i === 0 ? "green" : "gray"}>#{i + 1}</Badge>
-                    <span className="text-slate-900">{row.branch.name}</span>
-                  </Link>
-                  <PerformancePct counts={computeEligibleCaseCounts(db, { branchId: row.branch.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id })} />
-                </div>
-              ))}
-            </div>
-          </Card>
-
-          <Card>
-            <CardHeader title="Bottom Performers" description={`Branches at or below ${bottomPercent}% this period`} />
-            <div className="divide-y divide-slate-100">
-              {bottomBranches.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-500">No performance data yet.</p>}
-              {bottomBranches.map((row) => (
-                <div key={row.branch.id} className="flex items-start justify-between gap-3 px-4 py-2.5 text-sm hover:bg-slate-50">
-                  <Link href={`/findings?branchId=${row.branch.id}`} className="flex items-center gap-2">
-                    <Badge tone="red">Rank #{branchRanking.findIndex((r) => r.branch.id === row.branch.id) + 1}</Badge>
-                    <span className="text-slate-900">{row.branch.name}</span>
-                  </Link>
-                  <PerformancePct counts={computeEligibleCaseCounts(db, { branchId: row.branch.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id })} />
-                </div>
-              ))}
-            </div>
-          </Card>
-        </div>
-      )}
 
       {db.settings.rankingVisibility.districts ? (
         <>
@@ -420,6 +415,42 @@ export function DistrictDashboard({
         </Card>
       )}
 
+      {db.settings.rankingVisibility.branches && (
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <Card>
+            <CardHeader title="Top-Performing Branches" description={`Performance at or above ${topPercent}% this period, this district`} />
+            <div className="divide-y divide-slate-100">
+              {topBranches.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-500">No performance data yet.</p>}
+              {topBranches.map((row, i) => (
+                <div key={row.branch.id} className="flex items-start justify-between gap-3 px-4 py-2.5 text-sm hover:bg-slate-50">
+                  <Link href={`/findings?branchId=${row.branch.id}`} className="flex items-center gap-2">
+                    <Badge tone={i === 0 ? "green" : "gray"}>#{i + 1}</Badge>
+                    <span className="text-slate-900">{row.branch.name}</span>
+                  </Link>
+                  <PerformancePct counts={computeEligibleCaseCounts(db, { branchId: row.branch.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id })} />
+                </div>
+              ))}
+            </div>
+          </Card>
+
+          <Card>
+            <CardHeader title="Bottom-Performing Branches" description={`Performance at or below ${bottomPercent}% this period, this district`} />
+            <div className="divide-y divide-slate-100">
+              {bottomBranches.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-500">No performance data yet.</p>}
+              {bottomBranches.map((row) => (
+                <div key={row.branch.id} className="flex items-start justify-between gap-3 px-4 py-2.5 text-sm hover:bg-slate-50">
+                  <Link href={`/findings?branchId=${row.branch.id}`} className="flex items-center gap-2">
+                    <Badge tone="red">Rank #{branchRanking.findIndex((r) => r.branch.id === row.branch.id) + 1}</Badge>
+                    <span className="text-slate-900">{row.branch.name}</span>
+                  </Link>
+                  <PerformancePct counts={computeEligibleCaseCounts(db, { branchId: row.branch.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id })} />
+                </div>
+              ))}
+            </div>
+          </Card>
+        </div>
+      )}
+
       {db.settings.rankingVisibility.branches ? (
         <BranchPerformanceTable
           db={db}
@@ -431,7 +462,7 @@ export function DistrictDashboard({
         />
       ) : (
         <Card>
-          <CardHeader title="Branch Ranking" />
+          <CardHeader title="Branch Performance" />
           <p className="p-4 text-sm text-slate-500">Branch ranking visibility is disabled by your administrator.</p>
         </Card>
       )}
@@ -488,35 +519,11 @@ export function DistrictDashboard({
         <RiskDistribution findings={periodFindings} riskLevels={db.settings.riskLevels} hrefFor={chartHref} />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader title="Work Queue" description="Every finding awaiting your action, all categories" />
-          <div className="divide-y divide-slate-100">
-            {workQueue.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-500">Nothing pending.</p>}
-            {workQueue.map((f) => (
-              <Link key={f.id} href={`/findings/${f.id}`} className="flex items-center justify-between px-4 py-2 text-sm hover:bg-slate-50">
-                <span className="font-mono text-xs text-blue-800">{f.reference}</span>
-                <FindingStatusBadge status={f.status} />
-              </Link>
-            ))}
-          </div>
-        </Card>
-
-        <Card>
-          <CardHeader title="Recent Activity" description="Submit, approve, return, and rectification events for this district" />
-          <div className="divide-y divide-slate-100">
-            {recentActivity.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-500">No activity yet.</p>}
-            {recentActivity.map((t) => (
-              <div key={t.id} className="flex items-center justify-between px-4 py-2 text-sm">
-                <span className="text-slate-600">
-                  <span className="font-medium text-slate-900">{t.userName}</span> {t.action.replaceAll("_", " ").toLowerCase()}
-                </span>
-                <span className="text-xs text-slate-500">{formatDateTime(t.createdAt)}</span>
-              </div>
-            ))}
-          </div>
-        </Card>
-      </div>
+      <DashboardFooter
+        periods={db.reportingPeriods}
+        activity={recentActivity}
+        activityDescription="Submit, approve, return, and rectification events for this district"
+      />
     </div>
   );
 }

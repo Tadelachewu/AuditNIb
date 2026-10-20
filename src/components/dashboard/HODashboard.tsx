@@ -5,7 +5,6 @@ import type { SessionData } from "@/lib/session";
 import { computePerformance, computeEligibleCaseCounts, findingCaseTotals, findingCaseTotalsInPeriod, transferTotals, averageCaseAgeDays, isHoApproved, isOutstandingFinding } from "@/lib/findings";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
 import { sumAmountByCurrency, sumOutstandingByCurrency, sumAmountByCurrencyInPeriod, sumOutstandingByCurrencyInPeriod, addCurrency, mergeCurrencyTotals, formatCurrencyTotals, type CurrencyTotals } from "@/lib/currency";
-import { formatDateTime } from "@/lib/format";
 import { inDateRange, type DateRange } from "@/lib/dateRange";
 import { applyDashboardFilters, dashboardFindingsHref, EMPTY_DASHBOARD_FILTERS, ALL_PERIODS_VALUE, type DashboardFilters } from "@/lib/dashboardFilters";
 import { Card, CardHeader, StatCard } from "@/components/ui/Card";
@@ -29,6 +28,7 @@ import { FindingsByCategoryChart } from "@/components/dashboard/FindingsByCatego
 import { PerformanceCalculation, PerformancePct } from "@/components/dashboard/PerformanceMath";
 import { DashboardGrid } from "@/components/dashboard/DashboardGrid";
 import { currentPeriod, sortPeriods } from "@/lib/periods";
+import { DashboardFooter } from "@/components/dashboard/DashboardFooter";
 
 // master.txt §10: bank + district aggregates, district ranking, IC-vs-IA
 // source comparison, reporting-period status, work queue - the Head
@@ -357,7 +357,6 @@ export function HODashboard({
         <StatCard icon={ICON.rectified} label="Rectified Cases" value={hasPeriodScope ? rectifiedCases : "--"} hint="Closed, this period" />
         <StatCard icon={ICON.outstandingCases} label="Outstanding Cases" value={hasPeriodScope ? totalCases - rectifiedCases : "--"} hint="Total minus rectified, bank-wide" />
         <StatCard icon={ICON.outstanding} label="Outstanding" value={hasPeriodScope ? outstandingFindings : "--"} hint="Findings" />
-        <StatCard icon={ICON.rejected} label="Rejected" value={hasPeriodScope ? rejectedFindings : "--"} hint="Findings, bank-wide" />
         <StatCard
           icon={ICON.performance}
           label="Bank-wide Performance"
@@ -371,6 +370,7 @@ export function HODashboard({
             )
           }
         />
+        <StatCard icon={ICON.rejected} label="Rejected" value={hasPeriodScope ? rejectedFindings : "--"} hint="Findings, bank-wide" />
         <StatCard icon={ICON.highRisk} label="High-Risk Findings" value={hasPeriodScope ? highRiskFindings : "--"} hint="Open, top risk tiers" />
         <StatCard icon={ICON.transferred} label="Transferred Findings" value={hasPeriodScope ? transferredFindings : "--"} hint="Out of this period" />
         <StatCard icon={ICON.transferred} label="Transferred Cases" value={hasPeriodScope ? transferredCases : "--"} hint="Out of this period" />
@@ -381,6 +381,7 @@ export function HODashboard({
           periodId={allPeriodsSelected ? undefined : openPeriod?.id}
           periodLabel={allPeriodsSelected ? "All periods" : (openPeriod?.code ?? "")}
           hasPeriodScope={hasPeriodScope}
+          only="diff"
         />
         <StatCard icon={ICON.totalAmount} label="Total Amount" value={hasPeriodScope ? totalAmount : "--"} hint="All findings, bank-wide" />
         <StatCard icon={ICON.resolvedAmount} label="Resolved Amount" value={hasPeriodScope ? resolvedAmount : "--"} hint="Cumulative closed only" />
@@ -391,10 +392,19 @@ export function HODashboard({
           value={avgOutstandingAgeDays !== null ? `${avgOutstandingAgeDays}d` : "--"}
           hint="Outstanding findings, all periods"
         />
-        {canRegister && <StatCard icon={ICON.draft} label="Draft" value={ownDraftFindings} hint="Your own, not yet submitted" />}
         {canRegister && (
           <StatCard icon={ICON.pendingApproval} label="Pending Approval" value={ownPendingApprovalFindings} hint="Review pending, your registrations" />
         )}
+        <AdjustmentStatCards
+          user={user}
+          db={db}
+          findings={allFindingsInRange}
+          periodId={allPeriodsSelected ? undefined : openPeriod?.id}
+          periodLabel={allPeriodsSelected ? "All periods" : (openPeriod?.code ?? "")}
+          hasPeriodScope={hasPeriodScope}
+          only="awaiting"
+        />
+        {canRegister && <StatCard icon={ICON.draft} label="Draft" value={ownDraftFindings} hint="Your own, not yet submitted" />}
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -567,13 +577,6 @@ export function HODashboard({
       />
 
       <Card>
-        <CardHeader title="Findings by District" description="Top districts by finding count, current period" />
-        <div className="p-4">
-          <ColumnChart items={findingsByDistrict.map((r) => ({ id: r.district.id, label: r.district.name, value: r.total }))} />
-        </div>
-      </Card>
-
-      <Card>
         <CardHeader
           title="Source Comparison"
           description={`Internal Control vs. Internal Audit (and any other active source), current period${activeScoringRule ? ` — "Eligible Cases" = v${activeScoringRule.version}'s scored categories` : ""
@@ -636,6 +639,13 @@ export function HODashboard({
       </Card>
 
       <Card>
+        <CardHeader title="Findings by District" description="Top districts by finding count, current period" />
+        <div className="p-4">
+          <ColumnChart items={findingsByDistrict.map((r) => ({ id: r.district.id, label: r.district.name, value: r.total }))} />
+        </div>
+      </Card>
+
+      <Card>
         <CardHeader title="Category Totals" description="Every active classified case category, bank-wide, current period" />
         <DashboardGrid
           id="categoryTotals"
@@ -672,34 +682,11 @@ export function HODashboard({
         <RiskDistribution findings={periodFindings} riskLevels={db.settings.riskLevels} hrefFor={chartHref} />
       </div>
 
-      <Card>
-        <CardHeader title="Reporting Period Status" />
-        <div className="divide-y divide-slate-100">
-          {sortPeriods(db.reportingPeriods).map((p) => (
-            <div key={p.id} className="flex items-center justify-between px-4 py-2 text-sm">
-              <span className="font-mono text-slate-900">{p.code}</span>
-              <Badge tone={p.status === "OPEN" ? "green" : "gray"}>{p.status}</Badge>
-            </div>
-          ))}
-        </div>
-      </Card>
-
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader title="Recent Activity" description="Submit, approve, return, and rectification events bank-wide" />
-          <div className="divide-y divide-slate-100">
-            {recentActivity.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-500">No activity yet.</p>}
-            {recentActivity.map((t) => (
-              <div key={t.id} className="flex items-center justify-between px-4 py-2 text-sm">
-                <span className="text-slate-600">
-                  <span className="font-medium text-slate-900">{t.userName}</span> {t.action.replaceAll("_", " ").toLowerCase()}
-                </span>
-                <span className="text-xs text-slate-500">{formatDateTime(t.createdAt)}</span>
-              </div>
-            ))}
-          </div>
-        </Card>
-      </div>
+      <DashboardFooter
+        periods={db.reportingPeriods}
+        activity={recentActivity}
+        activityDescription="Submit, approve, return, and rectification events bank-wide"
+      />
     </div>
   );
 }

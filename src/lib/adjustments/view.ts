@@ -1,4 +1,4 @@
-import { approvedAdjustmentsOf } from "@/lib/findings";
+import { approvedAdjustmentsOf, originalPeriodId } from "@/lib/findings";
 import { currentPeriod } from "@/lib/periods";
 import type { SessionData } from "@/lib/session";
 import type { Database, Finding } from "@/types";
@@ -40,6 +40,10 @@ export interface AdjustmentsView {
 function periodStayOf(db: Database, f: Finding): AdjustmentsView["periodStay"] {
   const last = db.findingTransfers.filter((t) => t.findingId === f.id).sort((a, b) => a.createdAt.localeCompare(b.createdAt)).at(-1);
   if (!last) return null;
+  // Transferred back to the period it was registered in: it's home again, not
+  // a transferred-in stay - the card shows its current total (original +
+  // approved adjustments), as for a finding that never moved.
+  if (last.toPeriodId === originalPeriodId(db, f)) return null;
   // Same rule as the period figures (findingResidencyInPeriod): an adjustment
   // approved after the transfer joins this stay.
   const since = approvedAdjustmentsOf(db, f.id).filter((a) => new Date(a.approvedAt!).getTime() >= new Date(last.createdAt).getTime());

@@ -39,8 +39,37 @@ The routing logic lives entirely in `src/app/(app)/dashboard/page.tsx:24-97`, a 
 - **BranchDashboard** (`src/components/dashboard/BranchDashboard.tsx:37-527`) is the operational, day-to-day view for one branch: total/rectified/outstanding findings and cases, Branch Performance %, Total/Resolved/Outstanding Amount, an "Other Case Summary" (the scored category), a Category Totals table, a Branch Ranking table against peer branches in the same district, a work queue, and recent activity — implementing master.txt §10's requirement list quoted verbatim in the file's own comment (`BranchDashboard.tsx:34-36`).
 - **DistrictDashboard** (`src/components/dashboard/DistrictDashboard.tsx:37-515`) is "the same widget set as BranchDashboard, one org level up" (comment at `DistrictDashboard.tsx:34-36`): district-wide totals, a workflow-progress breakdown (Requiring Review / Approved / Rejected / Returned), District Performance %, a "Pending Verify" queue (the district's distinctive second-stage gate — verifying a self-reported rectification before it can be closed), Top/Bottom Performer branch callouts, District Ranking (bank-wide, for competitive visibility), Branch Performance table, Findings-by-Branch chart, Category Totals, and the same work queue/recent-activity pair as Branch.
 - **HODashboard** (`src/components/dashboard/HODashboard.tsx:31-696`) is the bank-wide operational view for the Head Office Internal Controller: master.txt §10's "bank + district aggregates, district ranking, IC-vs-IA source comparison, reporting-period status, work queue" (comment at `HODashboard.tsx:28-30`). It replaces the generic work queue with two dedicated queues (Pending Approval / Pending Close-Accept) specific to HO's own two review gates, adds an Average Backlog Age stat, a Source Comparison table (Internal Control vs Internal Audit), District/Branch Ranking with Top/Bottom callouts, and a Reporting Period Status list.
-- **ExecutiveDashboard** (`src/components/dashboard/ExecutiveDashboard.tsx:28-409`) is deliberately "concise" — fewer *operational* widgets (no work queue, no per-branch edit links, matching the view-only `EXECUTIVE_READONLY` permission set) but the same bank-wide financial/comparative context leadership needs: Bank-wide Performance, High/Critical Exceptions count, Total/Resolved/Outstanding Amount, Top/Bottom District and Branch callouts, Source Comparison, and Reporting Period Status (comment at `ExecutiveDashboard.tsx:20-27`).
+- **ExecutiveDashboard** (`src/components/dashboard/ExecutiveDashboard.tsx:28-409`) is deliberately "concise" — fewer *operational* widgets (no work queue, no per-branch edit links, matching the view-only `EXECUTIVE_READONLY` permission set) but the same bank-wide financial/comparative context leadership needs: Bank-wide Performance, High-Risk Findings count, Total/Resolved/Outstanding Amount, Top/Bottom District and Branch callouts, Source Comparison, and Reporting Period Status (comment at `ExecutiveDashboard.tsx:20-27`).
 - **AdminDashboard** (`src/components/dashboard/AdminDashboard.tsx:34-129`) shows no findings data at all — it is a system-configuration summary: Active Users/Districts/Branches/Open Periods/Active Scoring Rule counts, a data-integrity warning banner for branches missing a Manager/Controller, Users-by-Role, Quick Links to every admin page the user can access, and Recent (audit log) Activity. It is shared verbatim between `/dashboard` (an Admin's fallthrough) and `/admin` (comment at `AdminDashboard.tsx:25-33`).
+
+### 1.3 One layout for every findings dashboard
+
+HO, District, Branch and Executive use the **same order**. Each one leaves out the blocks its role doesn't have. Every period-based figure follows the selected period; the one deliberate exception is **Avg. Backlog Age**, which spans all periods.
+
+**Stat cards, in this order:**
+
+| # | Group | Cards |
+|---|---|---|
+| 1 | Volume | Total Findings · Reported Cases · Total Cases |
+| 2 | Progress | Rectified Findings · Rectified Cases · Outstanding Cases · Outstanding |
+| 3 | Performance | Bank-wide / District / Branch Performance |
+| 4 | Outcomes | Approved (District) · Rejected · Returned (District) |
+| 5 | Risk | High-Risk Findings (open, top two risk tiers) |
+| 6 | Movement | Transferred Findings · Transferred Cases · Adjustment Diff |
+| 7 | Money | Total · Resolved · Outstanding Amount · Avg. Backlog Age (HO, Executive) |
+| 8 | **Awaiting action (always last)** | Requiring Review (District) · Pending Approval · Adjustments Awaiting You · Draft · Pending Rectification |
+
+**Sections below the cards, in this order:**
+
+| # | Block | HO | District | Branch | Executive |
+|---|---|---|---|---|---|
+| 1 | Needs you | Pending Approval · Pending Close / Accept | Pending Verify · Work Queue | Work Queue | — (read-only) |
+| 2 | Case-Based Performance | ✓ | ✓ | ✓ | ✓ |
+| 3 | Rankings, districts then branches | Top/Bottom-Performing Districts · District Ranking · Top/Bottom-Performing Branches · Branch Performance | District Ranking · Top/Bottom-Performing Branches · Branch Performance | Branch Ranking (peer branches) | Top/Bottom-Performing Districts · Top/Bottom-Performing Branches |
+| 4 | Sources | Source Performance · Source Comparison · Findings by District | Source Performance · Findings by Branch | Source Performance | Source Performance · Source Comparison |
+| 5 | Categories | Category Totals · Findings by Category | Category Totals · Findings by Category | Other Case Summary · Category Totals · Findings by Category · Category Distribution | Category Totals · Findings by Category |
+| 6 | Trend and distribution | Monthly Trend · Status · Risk | same | same | same |
+| 7 | Footer (`DashboardFooter.tsx`) | Reporting Period Status · Recent Activity | same | same | same |
 
 ---
 
@@ -168,14 +197,15 @@ Same bank-wide, unscoped findings base as HODashboard (`ExecutiveDashboard.tsx:5
 |---|---|---|---|
 | Bank-wide Performance | `computePerformance(db, {periodId})` (`ExecutiveDashboard.tsx:65-67,209-214`) | Bank-wide | gold |
 | Total Findings / Total Cases | `findingCaseTotals`/`InPeriod` (`ExecutiveDashboard.tsx:74-75,215-221`) | Bank-wide | blue |
-| Outstanding (in scope) | `allFindingsInRange` not in `RECTIFIED/CLOSED/REJECTED` — **not** gated by `hasPeriodScope` like every other card (always shows a live count) (`ExecutiveDashboard.tsx:111,222`) | Bank-wide, current filters | amber |
-| High/Critical Exceptions | `outstanding` filtered to `isHoApproved` + top-2 risk tiers (`ExecutiveDashboard.tsx:113-123,223`) | Bank-wide | `criticalExceptions` → red |
+| Outstanding | approved findings of the **selected period** still outstanding (`isOutstandingFinding`), same as HO; "--" without a period | Bank-wide, current filters | amber |
+| Pending Approval | findings of the selected period in Submitted / District review / HO review / Bank-wide approval | Bank-wide, current filters | blue |
+| High-Risk Findings | outstanding findings of the selected period in the top two risk tiers, same as HO | Bank-wide | red |
 | Rectified Findings / Cases, Outstanding Cases | closed-only definitions, same as HO (`ExecutiveDashboard.tsx:224-226`) | Bank-wide | emerald / amber |
 | Transferred Findings / Cases | `transferTotals(bankTransfers)` (`ExecutiveDashboard.tsx:84-89,227-228`) | Bank-wide | blue |
 | Total / Resolved / Outstanding Amount | same currency functions (`ExecutiveDashboard.tsx:95-109,229-231`) | Bank-wide | slate / emerald / red |
 | Avg. Backlog Age | `averageCaseAgeDays(outstanding)` (`ExecutiveDashboard.tsx:111-112,232-237`) | Bank-wide, current filters | amber |
 
-Other widgets: Case-Based Performance; Top/Bottom Districts and Branches (plain `<div>` rows, **not** links — read-only, no navigation into `/findings`, unlike every other dashboard's equivalent callouts); Source Comparison (case-count only, no amount breakdown, no Amount columns in its table — a smaller version of HO's); FindingsByCategoryChart; MonthlyTrend; FindingStatusDistribution; RiskDistribution; Reporting Period Status. No Work Queue, no Recent Activity, no per-branch/district edit links anywhere (comment `ExecutiveDashboard.tsx:20-27` explains this is intentional to match the view-only permission set).
+Other widgets, in the shared order (§1.3): Case-Based Performance; Top/Bottom-Performing Districts and Branches (plain `<div>` rows, **not** links — read-only, no navigation into `/findings`); Source Comparison (case-count only — a smaller version of HO's); Category Totals; FindingsByCategoryChart; MonthlyTrend; FindingStatusDistribution; RiskDistribution; Reporting Period Status and Recent Activity. No Work Queue and no per-branch/district edit links (view-only role).
 
 ### 2.5 AdminDashboard — `src/components/dashboard/AdminDashboard.tsx`
 

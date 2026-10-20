@@ -2,7 +2,7 @@ import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import { HO_APPROVED_OR_LATER_STATUSES, type Database } from "@/types";
 import type { SessionData } from "@/lib/session";
 import { computePerformance, computeEligibleCaseCounts, findingCaseTotals, findingCaseTotalsInPeriod, transferTotals, averageCaseAgeDays, isHoApproved, isOutstandingFinding } from "@/lib/findings";
-import { sumAmountByCurrency, sumOutstandingByCurrency, sumAmountByCurrencyInPeriod, sumOutstandingByCurrencyInPeriod } from "@/lib/currency";
+import { sumAmountByCurrency, sumOutstandingByCurrency, sumAmountByCurrencyInPeriod, sumOutstandingByCurrencyInPeriod, addCurrency, mergeCurrencyTotals, formatCurrencyTotals, type CurrencyTotals } from "@/lib/currency";
 import { inDateRange, type DateRange } from "@/lib/dateRange";
 import { applyDashboardFilters, dashboardFindingsHref, EMPTY_DASHBOARD_FILTERS, ALL_PERIODS_VALUE, type DashboardFilters } from "@/lib/dashboardFilters";
 import { Card, CardHeader, StatCard } from "@/components/ui/Card";
@@ -21,6 +21,7 @@ import { FindingsByCategoryChart } from "@/components/dashboard/FindingsByCatego
 import { PerformanceCalculation, PerformancePct } from "@/components/dashboard/PerformanceMath";
 import { DashboardGrid } from "@/components/dashboard/DashboardGrid";
 import { currentPeriod, sortPeriods } from "@/lib/periods";
+import { DashboardFooter } from "@/components/dashboard/DashboardFooter";
 
 // master.txt §10: a concise, read-only bank-wide summary for Executive
 // Management - KPIs, top-performer rankings, and an exceptions count
@@ -126,10 +127,13 @@ export function ExecutiveDashboard({
   // not yet rectified / closed. A finding still waiting for an approval
   // (district review, HO review, bank-wide approval) is not outstanding yet -
   // it's counted under Pending Approval instead; drafts are neither.
-  const outstanding = allFindingsInRange.filter((f) => isHoApproved(f) && isOutstandingFinding(f));
-  const pendingApproval = allFindingsInRange.filter((f) => ["SUBMITTED", "DISTRICT_REVIEW", "HO_REVIEW", "PENDING_BANK_APPROVAL"].includes(f.status));
+  // The selected period, like the same cards on the HO / District / Branch
+  // dashboards (these used to count every period in the date range).
+  const outstanding = approvedPeriodFindings.filter((f) => isOutstandingFinding(f));
+  const pendingApproval = periodFindings.filter((f) => ["SUBMITTED", "DISTRICT_REVIEW", "HO_REVIEW", "PENDING_BANK_APPROVAL"].includes(f.status));
   const pendingBankApproval = pendingApproval.filter((f) => f.status === "PENDING_BANK_APPROVAL").length;
-  const avgOutstandingAgeDays = averageCaseAgeDays(outstanding);
+  // "How stale is our backlog?" - all periods on purpose, same as HO.
+  const avgOutstandingAgeDays = averageCaseAgeDays(allFindingsInRange.filter((f) => isOutstandingFinding(f)));
   // Top two tiers of Settings.riskLevels, matched case-insensitively -
   // same convention as HODashboard/BranchDashboard's own High-Risk stat.
   // Previously hard-coded to "HIGH"/"CRITICAL" (uppercase), which never
@@ -140,7 +144,7 @@ export function ExecutiveDashboard({
   // exception before it does, same rule every other "official" figure on
   // this dashboard already follows.
   const highRiskTiers = new Set(db.settings.riskLevels.slice(-2).map((l) => l.toLowerCase()));
-  const exceptions = outstanding.filter((f) => highRiskTiers.has(f.riskLevel.toLowerCase()));
+  const highRiskFindings = outstanding.filter((f) => highRiskTiers.has(f.riskLevel.toLowerCase())).length;
 
   const { topPercent, bottomPercent } = db.settings.performanceThresholds;
 
@@ -204,6 +208,20 @@ export function ExecutiveDashboard({
     return { source: s, total, rectified, outstanding: total - rectified, eligibleCases };
   });
 
+  // Per-category breakdown, same as the HO dashboard's Category Totals.
+  const categoryTotals = categoriesInScope.map((c) => {
+    const findings = approvedPeriodFindings.filter((f) => f.categoryId === c.id);
+    const total = findings.reduce((sum, f) => sum + f.caseCount, 0);
+    const rectified = findings.reduce((sum, f) => sum + f.closedCases, 0);
+    // Per currency for display (never added across currencies).
+    const amountCur = findings.reduce((t, f) => addCurrency(t, f.currency, f.amount), {} as CurrencyTotals);
+    const closedCur = findings.reduce((t, f) => addCurrency(t, f.currency, f.closedAmount), {} as CurrencyTotals);
+    const outstandingCur = findings.reduce((t, f) => addCurrency(t, f.currency, f.amount - f.closedAmount), {} as CurrencyTotals);
+    return { category: c, total, rectified, outstanding: total - rectified, amountCur, closedCur, outstandingCur };
+  });
+
+  const recentActivity = [...db.findingTransitions].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 8);
+
   return (
     <div className="flex flex-col gap-5">
       <DashboardHeader title="Executive Dashboard" scope="Bank-wide · View-only summary" user={user} />
@@ -226,6 +244,18 @@ export function ExecutiveDashboard({
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatCard
+          icon={ICON.totalFindings}
+          label="Total Findings"
+          value={hasPeriodScope ? totalFindings : "--"}
+          hint={allPeriodsSelected ? "All periods" : (openPeriod?.code ?? "No open period")}
+        />
+        <StatCard icon={ICON.totalCases} label="Reported Cases" value={hasPeriodScope ? reportedCases : "--"} hint="Originally registered - not changed by transfers" />
+        <StatCard icon={ICON.totalCases} label="Total Cases" value={hasPeriodScope ? totalCases : "--"} hint="In this period, after transfers in / out" />
+        <StatCard icon={ICON.rectified} label="Rectified Findings" value={hasPeriodScope ? rectifiedFindings : "--"} hint="Formally closed" />
+        <StatCard icon={ICON.rectified} label="Rectified Cases" value={hasPeriodScope ? rectifiedCases : "--"} hint="Closed, this period" />
+        <StatCard icon={ICON.outstandingCases} label="Outstanding Cases" value={hasPeriodScope ? totalCases - rectifiedCases : "--"} hint="Total minus rectified, bank-wide" />
+        <StatCard icon={ICON.outstanding} label="Outstanding" value={hasPeriodScope ? outstanding.length : "--"} hint="Findings" />
+        <StatCard
           icon={ICON.performance}
           label="Bank-wide Performance"
           value={bankPerformance !== null ? `${bankPerformance.toFixed(1)}%` : "--"}
@@ -238,26 +268,8 @@ export function ExecutiveDashboard({
             )
           }
         />
-        <StatCard
-          icon={ICON.totalFindings}
-          label="Total Findings"
-          value={hasPeriodScope ? totalFindings : "--"}
-          hint={allPeriodsSelected ? "All periods" : (openPeriod?.code ?? "No open period")}
-        />
-        <StatCard icon={ICON.totalCases} label="Reported Cases" value={hasPeriodScope ? reportedCases : "--"} hint="Originally registered - not changed by transfers" />
-        <StatCard icon={ICON.totalCases} label="Total Cases" value={hasPeriodScope ? totalCases : "--"} hint="In this period, after transfers in / out" />
-        <StatCard icon={ICON.outstanding} label="Outstanding (in scope)" value={outstanding.length} hint="Approved findings not yet rectified" />
         <StatCard icon={ICON.rejected} label="Rejected" value={hasPeriodScope ? rejectedFindings : "--"} hint="Findings, bank-wide" />
-        <StatCard
-          icon={ICON.totalFindings}
-          label="Pending Approval"
-          value={pendingApproval.length}
-          hint={pendingBankApproval > 0 ? `Awaiting review / approval - ${pendingBankApproval} bank-wide` : "Awaiting district / HO review or bank-wide approval"}
-        />
-        <StatCard icon={ICON.criticalExceptions} label="High/Critical Exceptions" value={exceptions.length} hint="Outstanding, high or critical risk" />
-        <StatCard icon={ICON.rectified} label="Rectified Findings" value={hasPeriodScope ? rectifiedFindings : "--"} hint="Formally closed" />
-        <StatCard icon={ICON.rectified} label="Rectified Cases" value={hasPeriodScope ? rectifiedCases : "--"} hint="Closed, this period" />
-        <StatCard icon={ICON.outstandingCases} label="Outstanding Cases" value={hasPeriodScope ? totalCases - rectifiedCases : "--"} hint="Total minus rectified, bank-wide" />
+        <StatCard icon={ICON.highRisk} label="High-Risk Findings" value={hasPeriodScope ? highRiskFindings : "--"} hint="Open, top risk tiers" />
         <StatCard icon={ICON.transferred} label="Transferred Findings" value={hasPeriodScope ? transferredFindings : "--"} hint="Out of this period" />
         <StatCard icon={ICON.transferred} label="Transferred Cases" value={hasPeriodScope ? transferredCases : "--"} hint="Out of this period" />
         <AdjustmentStatCards
@@ -267,6 +279,7 @@ export function ExecutiveDashboard({
           periodId={allPeriodsSelected ? undefined : openPeriod?.id}
           periodLabel={allPeriodsSelected ? "All periods" : (openPeriod?.code ?? "")}
           hasPeriodScope={hasPeriodScope}
+          only="diff"
         />
         <StatCard icon={ICON.totalAmount} label="Total Amount" value={hasPeriodScope ? totalAmount : "--"} hint="All findings, bank-wide" />
         <StatCard icon={ICON.resolvedAmount} label="Resolved Amount" value={hasPeriodScope ? resolvedAmount : "--"} hint="Cumulative closed only" />
@@ -275,7 +288,22 @@ export function ExecutiveDashboard({
           icon={ICON.backlogAge}
           label="Avg. Backlog Age"
           value={avgOutstandingAgeDays !== null ? `${avgOutstandingAgeDays}d` : "--"}
-          hint="Outstanding findings in scope"
+          hint="Outstanding findings, all periods"
+        />
+        <StatCard
+          icon={ICON.totalFindings}
+          label="Pending Approval"
+          value={hasPeriodScope ? pendingApproval.length : "--"}
+          hint={pendingBankApproval > 0 ? `Awaiting review / approval - ${pendingBankApproval} bank-wide` : "Awaiting district / HO review or bank-wide approval"}
+        />
+        <AdjustmentStatCards
+          user={user}
+          db={db}
+          findings={allFindingsInRange}
+          periodId={allPeriodsSelected ? undefined : openPeriod?.id}
+          periodLabel={allPeriodsSelected ? "All periods" : (openPeriod?.code ?? "")}
+          hasPeriodScope={hasPeriodScope}
+          only="awaiting"
         />
       </div>
 
@@ -289,7 +317,7 @@ export function ExecutiveDashboard({
       {db.settings.rankingVisibility.districts ? (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <Card>
-            <CardHeader title="Top Districts" description={`At or above ${topPercent}%, current period`} />
+            <CardHeader title="Top-Performing Districts" description={`Performance at or above ${topPercent}% this period, bank-wide`} />
             <div className="divide-y divide-slate-100">
               {topDistricts.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-500">No data yet.</p>}
               {topDistricts.map((row, i) => (
@@ -305,7 +333,7 @@ export function ExecutiveDashboard({
           </Card>
 
           <Card>
-            <CardHeader title="Bottom Districts" description={`At or below ${bottomPercent}%, current period`} />
+            <CardHeader title="Bottom-Performing Districts" description={`Performance at or below ${bottomPercent}% this period, bank-wide`} />
             <div className="divide-y divide-slate-100">
               {bottomDistricts.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-500">No data yet.</p>}
               {bottomDistricts.map((row) => (
@@ -322,7 +350,7 @@ export function ExecutiveDashboard({
         </div>
       ) : (
         <Card>
-          <CardHeader title="District Performance Comparison" />
+          <CardHeader title="District Ranking" />
           <p className="p-4 text-sm text-slate-500">District ranking visibility is disabled by your administrator.</p>
         </Card>
       )}
@@ -330,7 +358,7 @@ export function ExecutiveDashboard({
       {db.settings.rankingVisibility.branches ? (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <Card>
-            <CardHeader title="Top Branches" description={`At or above ${topPercent}%, current period`} />
+            <CardHeader title="Top-Performing Branches" description={`Performance at or above ${topPercent}% this period, bank-wide`} />
             <div className="divide-y divide-slate-100">
               {topBranches.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-500">No data yet.</p>}
               {topBranches.map((row, i) => (
@@ -346,7 +374,7 @@ export function ExecutiveDashboard({
           </Card>
 
           <Card>
-            <CardHeader title="Bottom Branches" description={`At or below ${bottomPercent}%, current period`} />
+            <CardHeader title="Bottom-Performing Branches" description={`Performance at or below ${bottomPercent}% this period, bank-wide`} />
             <div className="divide-y divide-slate-100">
               {bottomBranches.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-500">No data yet.</p>}
               {bottomBranches.map((row) => (
@@ -363,7 +391,7 @@ export function ExecutiveDashboard({
         </div>
       ) : (
         <Card>
-          <CardHeader title="Branch Performance Comparison" />
+          <CardHeader title="Branch Performance" />
           <p className="p-4 text-sm text-slate-500">Branch ranking visibility is disabled by your administrator.</p>
         </Card>
       )}
@@ -416,6 +444,34 @@ export function ExecutiveDashboard({
         />
       </Card>
 
+      <Card>
+        <CardHeader title="Category Totals" description="Every active classified case category, bank-wide, current period" />
+        <DashboardGrid
+          id="categoryTotals"
+          exportFileName="executive-category-totals"
+          columns={[
+            { key: "category", header: "Category", badgeWhen: "scored", badgeLabel: "Scored" },
+            { key: "total", header: "Total Cases", type: "number", total: true },
+            { key: "rectified", header: "Rectified Cases", type: "number", total: true },
+            { key: "outstanding", header: "Outstanding Cases", type: "number", total: true },
+            { key: "amount", header: "Amount", footer: hasPeriodScope ? formatCurrencyTotals(mergeCurrencyTotals(categoryTotals.map((x) => x.amountCur))) : "--" },
+            { key: "rectifiedAmount", header: "Rectified Amount", footer: hasPeriodScope ? formatCurrencyTotals(mergeCurrencyTotals(categoryTotals.map((x) => x.closedCur))) : "--" },
+            { key: "outstandingAmount", header: "Outstanding Amount", footer: hasPeriodScope ? formatCurrencyTotals(mergeCurrencyTotals(categoryTotals.map((x) => x.outstandingCur))) : "--" },
+          ]}
+          rows={categoryTotals.map(({ category: c, total, rectified, outstanding: open, amountCur, closedCur, outstandingCur }) => ({
+            category: c.name,
+            // "Scored" = counted toward performance by the active scoring rule.
+            scored: activeScoringRule?.categories.includes(c.id) ?? false,
+            total: hasPeriodScope ? total : null,
+            rectified: hasPeriodScope ? rectified : null,
+            outstanding: hasPeriodScope ? open : null,
+            amount: hasPeriodScope ? formatCurrencyTotals(amountCur) : null,
+            rectifiedAmount: hasPeriodScope ? formatCurrencyTotals(closedCur) : null,
+            outstandingAmount: hasPeriodScope ? formatCurrencyTotals(outstandingCur) : null,
+          }))}
+        />
+      </Card>
+
       <FindingsByCategoryChart
         findings={approvedPeriodFindings}
         categories={categoriesInScope}
@@ -429,17 +485,11 @@ export function ExecutiveDashboard({
         <RiskDistribution findings={periodFindings} riskLevels={db.settings.riskLevels} hrefFor={chartHref} />
       </div>
 
-      <Card>
-        <CardHeader title="Reporting Period Status" />
-        <div className="divide-y divide-slate-100">
-          {sortPeriods(db.reportingPeriods).map((p) => (
-            <div key={p.id} className="flex items-center justify-between px-4 py-2 text-sm">
-              <span className="font-mono text-slate-900">{p.code}</span>
-              <Badge tone={p.status === "OPEN" ? "green" : "gray"}>{p.status}</Badge>
-            </div>
-          ))}
-        </div>
-      </Card>
+      <DashboardFooter
+        periods={db.reportingPeriods}
+        activity={recentActivity}
+        activityDescription="Submit, approve, return, and rectification events bank-wide"
+      />
     </div>
   );
 }
