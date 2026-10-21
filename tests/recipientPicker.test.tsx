@@ -67,10 +67,34 @@ function Harness() {
 const tick = (label: string) => fireEvent.click(within(screen.getByRole("list", { name: /list$/ })).getByText(label).closest("label")!.querySelector("input")!);
 const openTab = (name: string) => fireEvent.click(screen.getByRole("tab", { name: new RegExp(name) }));
 const reach = () => screen.queryByText(/→ \d+/)?.textContent ?? "Nobody";
+/** The picker is a dropdown: open it from its button. */
+const openPicker = () => fireEvent.click(screen.getByRole("button", { expanded: false }));
+function renderOpen() {
+  render(<Harness />);
+  openPicker();
+}
 
 describe("Communications To picker", () => {
-  it("tick a role, then a district: that role IN that district", () => {
+  it("is a dropdown: closed at first, opens from its button, Done closes it and the button sums up the choice", () => {
     render(<Harness />);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByRole("button", { name: /Choose recipients/ })).toBeTruthy();
+    openPicker();
+    expect(screen.getByRole("dialog", { name: "Choose recipients" })).toBeTruthy();
+    tick("Branch Manager");
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByRole("button", { name: /3 people · Branch Manager/ })).toBeTruthy();
+  });
+
+  it("Escape closes it", () => {
+    renderOpen();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("tick a role, then a district: that role IN that district", () => {
+    renderOpen();
     tick("Branch Manager");
     expect(reach()).toMatch(/→ 3 people/);
     openTab("Districts");
@@ -80,7 +104,7 @@ describe("Communications To picker", () => {
   });
 
   it("the Branches tab lists only the ticked districts' branches; a ticked branch narrows to it", () => {
-    render(<Harness />);
+    renderOpen();
     openTab("Districts");
     tick("Addis");
     openTab("Branches");
@@ -91,7 +115,7 @@ describe("Communications To picker", () => {
   });
 
   it("People: untick someone to leave them out, tick anyone to add them", () => {
-    render(<Harness />);
+    renderOpen();
     tick("Branch Manager");
     openTab("People");
     tick("BM2"); // was included via the role - now excluded
@@ -102,7 +126,7 @@ describe("Communications To picker", () => {
   });
 
   it("filter box + Select all (shown); Everyone; the reach list by branch", () => {
-    render(<Harness />);
+    renderOpen();
     fireEvent.change(screen.getByLabelText("Filter roles"), { target: { value: "branch" } });
     fireEvent.click(screen.getByLabelText(/Select all \(2\)/));
     expect(seen.value.roleCodes.sort()).toEqual(["BC", "BM"]);

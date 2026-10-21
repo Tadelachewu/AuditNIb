@@ -93,11 +93,6 @@ export function ComposeForm() {
           void send();
         }}
       >
-        <div className="flex flex-col gap-2">
-          <Label>To</Label>
-          <RecipientPicker dir={dir} value={selection} onChange={setSelection} />
-        </div>
-
         <div>
           <Label htmlFor="comm-subject">Subject</Label>
           <Input id="comm-subject" maxLength={LIMITS.subject} value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="What is it about?" />
@@ -109,7 +104,14 @@ export function ComposeForm() {
           <TextCounter text={message.text} />
         </div>
 
-        <AttachmentPicker attachments={attachments} onChange={setAttachments} disabled={sending} onBusyChange={setUploading} />
+        {/* Under the message: To at the bottom-left, attachments at the bottom-right. */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
+            <Label>To</Label>
+            <RecipientPicker dir={dir} value={selection} onChange={setSelection} />
+          </div>
+          <AttachmentPicker attachments={attachments} onChange={setAttachments} disabled={sending} onBusyChange={setUploading} align="end" />
+        </div>
 
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex flex-wrap items-center justify-end gap-2">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Building2, ChevronDown, ChevronUp, Map as MapIcon, User, Users, X } from "lucide-react";
 import { Input } from "@/components/ui/Field";
 import { selectionMatcher, type Directory, type DirectoryUser, type RecipientSelection } from "@/lib/communications/types";
@@ -18,7 +18,8 @@ export const EMPTY_SELECTION: RecipientSelection = { toAll: false, userIds: [], 
 type Item = { id: string; label: string; detail?: string; count?: number };
 
 /**
- * The "To" picker (docs/communications.md): Everyone, or ticks in four
+ * The "To" picker (docs/communications.md): one button showing the choice,
+ * opening a dropdown with Everyone, or ticks in four
  * category lists - Roles, Districts, Branches, People - each with its own
  * filter box. Ticks within a category add up; categories narrow each other
  * (roles IN the ticked places); people ticked one by one are always added and
@@ -29,6 +30,22 @@ export function RecipientPicker({ dir, value, onChange }: { dir: Directory; valu
   const [tab, setTab] = useState<Tab>("roles");
   const [filter, setFilter] = useState("");
   const [showList, setShowList] = useState(false);
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+  // Closes on a click outside or Escape (like the other dropdowns).
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (box.current && !box.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
 
   const districtOfBranch = useMemo(() => new Map(dir.branches.map((b) => [b.id, b.districtId])), [dir]);
   const matcher = useMemo(() => selectionMatcher(value, (id) => districtOfBranch.get(id)), [value, districtOfBranch]);
@@ -115,8 +132,28 @@ export function RecipientPicker({ dir, value, onChange }: { dir: Directory; valu
     return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0]));
   }, [reached]);
 
+  const chosen = summary.filter((s) => s.ids.length > 0 && s.label !== "Except").flatMap((s) => s.names);
+  const buttonText = value.toAll
+    ? `Everyone (${dir.users.length})`
+    : reached.length === 0
+      ? "Choose recipients…"
+      : `${reached.length} ${reached.length === 1 ? "person" : "people"} · ${chosen.join(", ")}`;
+
   return (
-    <div className="flex flex-col gap-2">
+    <div ref={box} className="relative">
+      <button
+        type="button"
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full max-w-md items-center justify-between gap-2 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-left text-sm text-slate-900 hover:bg-slate-50"
+      >
+        <span className={`truncate ${reached.length === 0 && !value.toAll ? "text-slate-500" : ""}`}>{buttonText}</span>
+        <ChevronDown className={`h-4 w-4 shrink-0 text-slate-500 transition-transform ${open ? "rotate-180" : ""}`} aria-hidden="true" />
+      </button>
+
+      {open && (
+    <div role="dialog" aria-label="Choose recipients" className="absolute bottom-full left-0 z-30 mb-1 flex w-[min(36rem,calc(100vw-3rem))] flex-col gap-2 rounded-md border border-slate-200 bg-white p-3 shadow-lg">
       <div className="flex flex-wrap items-center gap-4 text-sm text-slate-700">
         <label className="flex items-center gap-2">
           <input type="radio" name="comm-to" checked={value.toAll} onChange={() => set({ toAll: true })} className="h-4 w-4" />
@@ -174,7 +211,7 @@ export function RecipientPicker({ dir, value, onChange }: { dir: Directory; valu
             <p className="px-3 pb-1 text-xs text-slate-500">Ticked = receives it. Untick someone to leave them out; tick anyone else to add them.</p>
           )}
 
-          <ul className="max-h-64 overflow-y-auto border-t border-slate-100" aria-label={`${tab} list`}>
+          <ul className="max-h-48 overflow-y-auto border-t border-slate-100" aria-label={`${tab} list`}>
             {shown.length === 0 && <li className="px-3 py-4 text-center text-sm text-slate-500">Nothing matches.</li>}
             {shown.map((i) => (
               <li key={i.id}>
@@ -236,7 +273,7 @@ export function RecipientPicker({ dir, value, onChange }: { dir: Directory; valu
         <span className="ml-1 text-slate-500">Administrators never receive messages; inactive users are skipped.</span>
       </div>
       {showList && reached.length > 0 && (
-        <div className="max-h-60 overflow-y-auto rounded-md border border-slate-200 p-2 text-xs">
+        <div className="max-h-40 overflow-y-auto rounded-md border border-slate-200 p-2 text-xs">
           {grouped.map(([group, people]) => (
             <div key={group} className="mb-1.5">
               <p className="font-medium text-slate-700">
@@ -246,6 +283,13 @@ export function RecipientPicker({ dir, value, onChange }: { dir: Directory; valu
             </div>
           ))}
         </div>
+      )}
+      <div className="flex justify-end">
+        <button type="button" onClick={() => setOpen(false)} className="rounded-md bg-sky-700 px-3 py-1 text-sm font-medium text-white hover:bg-sky-800">
+          Done
+        </button>
+      </div>
+    </div>
       )}
     </div>
   );

@@ -23,11 +23,14 @@ export function AttachmentPicker({
   onChange,
   disabled = false,
   onBusyChange,
+  align = "start",
 }: {
   attachments: AttachmentInfo[];
   onChange: (next: AttachmentInfo[]) => void;
   disabled?: boolean;
   onBusyChange?: (busy: boolean) => void;
+  /** "end": the button and the files sit at the right (the compose form's bottom-right). */
+  align?: "start" | "end";
 }) {
   const input = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState<string[]>([]);
@@ -82,8 +85,8 @@ export function AttachmentPicker({
   }
 
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex flex-wrap items-center gap-2">
+    <div className={`flex flex-col gap-2 ${align === "end" ? "items-stretch sm:items-end" : ""}`}>
+      <div className={`flex flex-wrap items-center gap-2 ${align === "end" ? "sm:flex-row-reverse sm:text-right" : ""}`}>
         <input
           ref={input}
           type="file"
@@ -105,7 +108,7 @@ export function AttachmentPicker({
         <span className="text-xs text-slate-500">PDF, Word (.docx) or Excel (.xlsx) - up to {LIMITS.attachments} files, 10 MB each</span>
       </div>
       {(attachments.length > 0 || uploading.length > 0) && (
-        <ul className="flex flex-col gap-1">
+        <ul className={`flex flex-col gap-1 ${align === "end" ? "w-full sm:w-80" : ""}`}>
           {attachments.map((a) => (
             <li key={a.id} className="flex items-center gap-2 rounded-md border border-slate-200 px-2 py-1 text-sm">
               <FileText className="h-4 w-4 shrink-0 text-sky-600" />

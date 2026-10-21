@@ -2,7 +2,7 @@ import { v4 as uuid } from "uuid";
 import { prisma } from "@/lib/prismaClient";
 import { readDb, updateDb } from "@/lib/db";
 import { appendAuditLog } from "@/lib/audit";
-import { notifyUsers } from "@/lib/notifications";
+import { ADMIN_ROLE_CODE, notifyUsers } from "@/lib/notifications";
 import { isRateLimited, recordAttempt } from "@/lib/rateLimit";
 import { deleteStoredFile, newStoredName, readStoredFile, writeStoredFile } from "@/lib/fileStorage";
 import type { SessionData } from "@/lib/session";
@@ -464,7 +464,6 @@ export async function directory(session: Session): Promise<Result<Directory>> {
   const roleName = new Map(db.roles.map((r) => [r.code, r.name]));
   const districtName = new Map(db.districts.map((d) => [d.id, d.name]));
   const branchName = new Map(db.branches.map((b) => [b.id, b.name]));
-  const usedRoles = new Set(users.map((u) => u.role));
   return {
     ok: true,
     value: {
@@ -480,7 +479,12 @@ export async function directory(session: Session): Promise<Result<Directory>> {
           branchName: u.branchId ? (branchName.get(u.branchId) ?? null) : null,
         }))
         .sort((a, b) => a.name.localeCompare(b.name)),
-      roles: db.roles.filter((r) => usedRoles.has(r.code)).map((r) => ({ code: r.code, name: r.name })).sort((a, b) => a.name.localeCompare(b.name)),
+      // Every active role except Administrator (administrators never receive
+      // messages) - including a role nobody holds yet, which shows 0 people.
+      roles: db.roles
+        .filter((r) => r.status === "ACTIVE" && r.code !== ADMIN_ROLE_CODE)
+        .map((r) => ({ code: r.code, name: r.name }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
       districts: db.districts.filter((d) => d.status === "ACTIVE").map((d) => ({ id: d.id, name: d.name })).sort((a, b) => a.name.localeCompare(b.name)),
       branches: db.branches.filter((b) => b.status === "ACTIVE").map((b) => ({ id: b.id, name: b.name, districtId: b.districtId })).sort((a, b) => a.name.localeCompare(b.name)),
     },
