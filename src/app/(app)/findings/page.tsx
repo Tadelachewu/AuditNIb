@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 import { readDb } from "@/lib/db";
 import { findingsInScope } from "@/lib/findings-scope";
-import { queueStatusesForSession, findingsResidentInPeriod, type FindingPeriodSlice, registeredCasesOf, registeredAmountOf } from "@/lib/findings";
+import { queueStatusesForSession, findingsResidentInPeriod, type FindingPeriodSlice, registeredAmountOf } from "@/lib/findings";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
 import { paginate, parsePage } from "@/lib/pagination";
 import { filterFindingsByText, sortFindings, parseFindingSort, parsePageSize } from "@/lib/findingListQuery";
@@ -160,8 +160,9 @@ export default async function FindingsPage({
     riskLevel: f.riskLevel,
     currency: f.currency,
     amount: slice ? slice.eligibleAmount : f.amount,
-    // Registered in the filtered period - 0 in a period it was only transferred into.
-    reportedCases: slice ? slice.reportedCases : registeredCasesOf(f),
+    // Registered + adjustments approved in the filtered period (0 where it was only
+    // transferred in); with no period, everything reported (= its current case count).
+    reportedCases: slice ? slice.reportedCases : f.caseCount,
     totalCases: slice ? slice.eligibleCases : f.caseCount,
     // Cases transferred into / out of the filtered period (no period filter: none to show).
     casesIn: slice ? slice.casesIn : null,

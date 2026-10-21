@@ -1,4 +1,5 @@
 import { addCurrency, type CurrencyTotals } from "@/lib/currency";
+import { adjustmentPeriodOf } from "@/lib/findings";
 import type { SessionData } from "@/lib/session";
 import type { Database, Finding } from "@/types";
 import { reviewerProblem } from "./rules";
@@ -52,7 +53,7 @@ export function adjustmentDashboardTotals(db: Database, findings: Finding[], per
       if (session && reviewerProblem(db, session, a, f) === null) totals.awaitingYou.review += 1;
     } else if (a.status === "RETURNED") {
       if (session && a.requestedBy === session.userId) totals.awaitingYou.returned += 1;
-    } else if (a.status === "APPROVED" && (periodId === undefined || a.periodId === periodId)) {
+    } else if (a.status === "APPROVED" && (periodId === undefined || adjustmentPeriodOf(db, f, a) === periodId)) {
       totals.diff.count += 1;
       totals.diff.addedCases += a.addedCases;
       addCurrency(totals.diff.amountChange, f.currency, a.amountChange);

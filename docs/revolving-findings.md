@@ -26,7 +26,7 @@ This document is both the business specification (§1–§6) and the implementat
 | R13a | **Delete:** a **rejected, returned or withdrawn** adjustment can be deleted by its requester. A rejected one can also be deleted by anyone with *Findings › Delete Rejected*. It was never applied, so the figures don't change; the audit log keeps a copy (`FINDING_ADJUSTMENT_DELETED`). **Approved** adjustments (part of the finding's figures) and ones in review can't be deleted |
 | R14 | **One open adjustment per finding:** at most one adjustment that is a draft, in review or returned. Approved, rejected and withdrawn ones are history |
 | R15 | **While pending:** the finding keeps working: rectify, verify, close, transfer, reverse. The adjustment applies on top when approved, re-checked against the finding as it is then (R2-closed / R5 / R7). A finding that became fully closed meanwhile can't take it (the approver rejects it) |
-| R16 | **Reported period:** an adjustment belongs to the period it was **submitted** in, even if approved after the finding was transferred |
+| R16 | **Reported period:** an approved adjustment is reported in the period the finding was in when it was **approved**: the same period its added cases are worked in. Usually that is the period it was submitted in; if the finding was transferred between submission and approval, it is the period it moved to. So per period, Reported + In − Out = Total (`adjustmentPeriodOf()` in `src/lib/findings.ts`) |
 | R17 | **De-listing an area:** pending adjustments can still finish; no new ones can be started |
 | R18 | **Bulk:** one finding at a time (bulk via Excel may come later) |
 
@@ -55,10 +55,10 @@ Edit is allowed in DRAFT, RETURNED and the first review step (DISTRICT_REVIEW or
 | Area | Rule |
 |---|---|
 | **Period split** (dashboards, Performance %, Reports with a period filter, Findings list per period) | Added cases/amount join the finding's **stay in the period where it is when the adjustment is approved** (that's where the branch must work them), so a period never closes more than it holds. Totals across periods always equal the current case count |
-| **Monthly Summary, Category Detail by District, Uncovered Branches** (original-period reports) | Original cases/amount in the original month; each approved adjustment's cases/amount in **the month it was submitted** (R16). Closed cases are allocated first to the original cases, then to adjustments in order, so no month shows more rectified than cases. A decrease shows as a negative amount in its month (the totals stay right) |
+| **Monthly Summary, Category Detail by District, Uncovered Branches** (original-period reports) | Original cases/amount in the original month; each approved adjustment's cases/amount in **the month it was approved in** (R16). Closed cases are allocated first to the original cases, then to adjustments in order, so no month shows more rectified than cases. A decrease shows as a negative amount in its month (the totals stay right) |
 | **Weekly Executive Summary** (by date) | Cases as of a date = original cases + cases of adjustments **approved on or before** that date → added cases appear as **Additional** in the week they were approved |
-| **Reported Cases** (HO / Executive dashboards) | Cases reported in the period: original cases of findings reported then + cases added by adjustments submitted then |
-| **Dashboards** (Branch, District, HO, Executive) | **Adjustments Awaiting You**: the adjustments **this user** must act on: ones at a review step they can decide (never their own, the same check as the review API), plus their own returned ones to correct. Underneath: the total in review with its cases and amount. On click: the split (to review / returned to you), the count at each step, and a link to Show My Queue. **Adjustment Diff**: approved adjustments reported (submitted) in the selected period, as cases added plus net amount change per currency; increases and decreases on click. Both follow the dashboard's scope and filters (`src/lib/adjustments/dashboard.ts`) |
+| **Reported Cases** (HO / Executive dashboards) | Cases reported in the period: original cases of findings registered then + cases added by adjustments approved then. The Findings list's **Reported Cases** column uses the same rule, next to **In / Out** (cases transferred in / out) and **Total** |
+| **Dashboards** (Branch, District, HO, Executive) | **Adjustments Awaiting You**: the adjustments **this user** must act on: ones at a review step they can decide (never their own, the same check as the review API), plus their own returned ones to correct. Underneath: the total in review with its cases and amount. On click: the split (to review / returned to you), the count at each step, and a link to Show My Queue. **Adjustment Diff**: approved adjustments reported (approved) in the selected period, as cases added plus net amount change per currency; increases and decreases on click. Both follow the dashboard's scope and filters (`src/lib/adjustments/dashboard.ts`) |
 | **Rectification reminders** | An **approved** adjustment restarts the finding's "days without progress" count; one still in review doesn't ([rectification-reminders.md](rectification-reminders.md)) |
 | **Transfers** | Carry the current outstanding (adjustments included) |
 | **Reverse** | Undoes closures only; adjustments stay |
@@ -156,7 +156,7 @@ Until step 1, the app can't load data: it reads the new columns.
 4. Separation of duties: requester can't review own.
 5. Apply: current cases/amount change, originals unchanged; itemized rows added; Rectified → Partially Rectified when cases added; history + audit.
 6. Re-check on approval: finding closed meanwhile → refused.
-7. Figures: residency split (added cases in the approval stay; totals = current), original-period report (added in submitted month, FIFO closures), weekly summary (Additional on approval date).
+7. Figures: residency split (added cases in the approval stay; totals = current), original-period report (added in the approval month, FIFO closures), weekly summary (Additional on approval date).
 8. Settings list round-trip; de-listed area: pending can finish, new refused.
 
 **Manual**

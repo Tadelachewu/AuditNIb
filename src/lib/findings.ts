@@ -339,15 +339,30 @@ export function approvedAdjustmentsOf(db: Pick<Database, "findingAdjustments">, 
 }
 
 /**
+ * The period an approved adjustment counts in: the one the finding was in
+ * when it was APPROVED (rule R16) - also where its added cases are worked, so
+ * per period Reported + In - Out = Total. Derived from the transfer history,
+ * so it holds for every adjustment, old or new.
+ */
+export function adjustmentPeriodOf(db: Pick<Database, "findingTransfers">, f: Finding, a: Pick<FindingAdjustment, "approvedAt" | "periodId">): string {
+  if (!a.approvedAt) return a.periodId;
+  const at = new Date(a.approvedAt).getTime();
+  const transfers = db.findingTransfers.filter((t) => t.findingId === f.id).sort((x, y) => x.createdAt.localeCompare(y.createdAt));
+  const before = transfers.filter((t) => new Date(t.createdAt).getTime() <= at);
+  if (before.length > 0) return before[before.length - 1].toPeriodId;
+  return transfers[0]?.fromPeriodId ?? f.periodId;
+}
+
+/**
  * Cases / amount a finding REPORTED in a period: its original figures if it
- * was registered there, plus adjustments submitted there (rule R16).
+ * was registered there, plus adjustments approved there (rule R16).
  */
 export function reportedInPeriod(db: Database, f: Finding, periodId: string): { cases: number; amount: number } {
   const original = originPeriodId(db, f) === periodId;
   let cases = original ? registeredCasesOf(f) : 0;
   let amount = original ? registeredAmountOf(f) : 0;
   for (const a of approvedAdjustmentsOf(db, f.id)) {
-    if (a.periodId !== periodId) continue;
+    if (adjustmentPeriodOf(db, f, a) !== periodId) continue;
     cases += a.addedCases;
     amount += a.amountChange;
   }
@@ -364,7 +379,7 @@ export function reportedInPeriod(db: Database, f: Finding, periodId: string): { 
 export function originalPeriodShare(db: Database, f: Finding, periodId: string): { cases: number; closed: number; amount: number } {
   const portions = [
     { periodId: originPeriodId(db, f), cases: registeredCasesOf(f), amount: registeredAmountOf(f) },
-    ...approvedAdjustmentsOf(db, f.id).map((a) => ({ periodId: a.periodId, cases: a.addedCases, amount: a.amountChange })),
+    ...approvedAdjustmentsOf(db, f.id).map((a) => ({ periodId: adjustmentPeriodOf(db, f, a), cases: a.addedCases, amount: a.amountChange })),
   ];
   let remainingClosed = f.closedCases;
   const share = { cases: 0, closed: 0, amount: 0 };
@@ -946,7 +961,7 @@ function findingResidencyInPeriod(
 
   if (transfers.length === 0) {
     return finding.periodId === periodId
-      ? { eligibleCases: finding.caseCount, eligibleAmount: finding.amount, reportedCases: registeredCasesOf(finding), casesIn: 0, casesOut: 0, exitTransfer: null }
+      ? { eligibleCases: finding.caseCount, eligibleAmount: finding.amount, reportedCases: finding.caseCount, casesIn: 0, casesOut: 0, exitTransfer: null }
       : null;
   }
   // Approved adjustments join the stay the finding was in when each was
@@ -970,16 +985,18 @@ function findingResidencyInPeriod(
     { periodId: transfers[0].fromPeriodId, cases: registeredCasesOf(finding), amount: registeredAmountOf(finding) },
     ...transfers.map((t) => ({ periodId: t.toPeriodId, cases: t.casesTransferred, amount: t.amountTransferred })),
   ];
+  const adjustedCases = stays.map(() => 0);
   for (const a of adjustments) {
-    const stay = stays[stayOf(a.approvedAt!)];
-    stay.cases += a.addedCases;
-    stay.amount += a.amountChange;
+    const i = stayOf(a.approvedAt!);
+    stays[i].cases += a.addedCases;
+    stays[i].amount += a.amountChange;
+    adjustedCases[i] += a.addedCases;
   }
   let eligibleCases = 0;
   let eligibleAmount = 0;
-  // Reported = registered here (the origin stay only - a period it was
-  // transferred into reports 0); In / Out = cases transferred into / out of
-  // this period. So per period: reported + in + approved adjustments - out = eligible.
+  // Reported = registered here (the origin stay) plus cases added by
+  // adjustments approved while it was here; In / Out = cases transferred into
+  // / out of this period. So per period: reported + in - out = eligible.
   let reportedCases = 0;
   let casesIn = 0;
   let casesOut = 0;
@@ -991,6 +1008,7 @@ function findingResidencyInPeriod(
     eligibleAmount += stay.amount - (leaving?.amountTransferred ?? 0);
     if (i === 0) reportedCases += registeredCasesOf(finding);
     else casesIn += transfers[i - 1].casesTransferred;
+    reportedCases += adjustedCases[i];
     casesOut += leaving?.casesTransferred ?? 0;
     lastStay = i;
   });
@@ -1033,7 +1051,7 @@ function closedInPeriod(db: Database, finding: Finding, periodId: string): { cas
  */
 export interface FindingPeriodSlice {
   eligibleCases: number;
-  /** Registered in this period (0 in a period it was transferred into). */
+  /** Registered in this period plus cases added by adjustments approved here (0 where it was only transferred in). */
   reportedCases: number;
   /** Cases transferred into / out of this period. */
   casesIn: number;

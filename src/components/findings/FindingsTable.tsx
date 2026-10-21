@@ -369,7 +369,7 @@ export function FindingsTable({
         accessorKey: "reportedCases",
         header: "Reported Cases",
         size: 110,
-        muiTableHeadCellProps: { title: "Originally registered - not changed by transfers" },
+        muiTableHeadCellProps: { title: "Registered in this period, plus cases added by adjustments approved in it - not changed by transfers" },
         Cell: ({ row }) => <span className="tabular-nums">{formatNumber(row.original.reportedCases)}</span>,
       },
       {

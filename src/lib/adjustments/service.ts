@@ -139,7 +139,9 @@ function submitInto(db: Database, f: Finding, adj: FindingAdjustment, actor: Act
     throw new BusinessRuleError("BUSINESS_RULE_VIOLATION", "Only a finding in the current period can be adjusted - transfer it there first");
   }
   rule(submitProblem(db, current.id));
-  adj.periodId = current.id; // R16: reported in the period it was submitted in
+  // The period it was submitted in. It's REPORTED in the period it is approved in
+  // (adjustmentPeriodOf() in src/lib/findings.ts) - usually the same one.
+  adj.periodId = current.id;
   adj.submittedAt = new Date().toISOString();
   record(adj, "SUBMIT", actor);
   adj.status = firstStep(db, adj.requesterScope);

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requirePermission } from "@/lib/guard";
 import { readDb } from "@/lib/db";
 import { findingsInScope } from "@/lib/findings-scope";
-import { findingsResidentInPeriod, queueStatusesForSession, type FindingPeriodSlice, registeredCasesOf, registeredAmountOf } from "@/lib/findings";
+import { findingsResidentInPeriod, queueStatusesForSession, type FindingPeriodSlice, registeredAmountOf } from "@/lib/findings";
 import { findingStatusCode, type Finding } from "@/types";
 import { filterFindingsByText, sortFindings, parseFindingSort } from "@/lib/findingListQuery";
 import { matchesOperationAndIrregularity } from "@/lib/dashboardFilters";
@@ -160,8 +160,8 @@ async function handleGET(request: Request) {
       isHistorical ? `TRANSFERRED_OUT (${slice?.transferredOutToCode ?? ""})` : findingStatusCode(f.status),
       amount,
       f.currency,
-      // Registered in the filtered period (0 where it was only transferred in).
-      slice ? slice.reportedCases : registeredCasesOf(f),
+      // Registered + adjustments approved in the filtered period (0 where it was only transferred in).
+      slice ? slice.reportedCases : f.caseCount,
       slice ? slice.casesIn : "",
       slice ? slice.casesOut : "",
       caseCount,
