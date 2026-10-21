@@ -30,13 +30,56 @@ export const ATTACHMENT_TYPES: Record<string, { extension: string; label: string
 };
 export const ATTACHMENT_ACCEPT = ".pdf,.docx,.xlsx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
-/** Who a new message goes to. Groups are expanded to their active, non-admin users when sent. */
+/**
+ * Who a new message goes to (selectionMatcher() below). Groups are expanded
+ * to their active, non-admin users when sent.
+ */
 export interface RecipientSelection {
   toAll: boolean;
+  /** People ticked one by one - always included. */
   userIds: string[];
   roleCodes: string[];
   districtIds: string[];
   branchIds: string[];
+  /** People unticked from the ticked groups. */
+  excludedUserIds?: string[];
+}
+
+/** What a recipient is matched on. */
+export interface RecipientFacts {
+  id: string;
+  roleCode: string;
+  districtId: string | null;
+  branchId: string | null;
+}
+
+/**
+ * Does this user receive the message? The one rule for the server
+ * (resolveRecipients) and the "To" picker's live count, so they always agree:
+ * - ticks within one category add up (Branch Manager OR District Controller);
+ * - ticks across categories narrow (those roles IN the ticked districts /
+ *   branches). A ticked branch refines its district: once a branch of a
+ *   ticked district is ticked, only the ticked branches of it count;
+ * - people ticked one by one are always included; people unticked from the
+ *   groups are left out.
+ */
+export function selectionMatcher(selection: RecipientSelection, districtOfBranch: (branchId: string) => string | null | undefined): (u: RecipientFacts) => boolean {
+  const users = new Set(selection.userIds);
+  const excluded = new Set(selection.excludedUserIds ?? []);
+  const roles = new Set(selection.roleCodes);
+  const districts = new Set(selection.districtIds);
+  const branches = new Set(selection.branchIds);
+  const refined = new Set(selection.branchIds.map(districtOfBranch).filter((d): d is string => Boolean(d)));
+  const anyGroup = roles.size + districts.size + branches.size > 0;
+  const anyPlace = districts.size + branches.size > 0;
+  return (u) => {
+    if (selection.toAll || users.has(u.id)) return true;
+    if (!anyGroup || excluded.has(u.id)) return false;
+    if (roles.size > 0 && !roles.has(u.roleCode)) return false;
+    if (!anyPlace) return true;
+    if (u.branchId && branches.has(u.branchId)) return true;
+    return u.districtId != null && districts.has(u.districtId) && !refined.has(u.districtId);
+  };
 }
 
 export interface AttachmentInfo {
@@ -110,8 +153,7 @@ export interface ThreadView {
   openedId: string;
 }
 
-export interface DirectoryUser {
-  id: string;
+export interface DirectoryUser extends RecipientFacts {
   name: string;
   roleName: string;
   districtName: string | null;

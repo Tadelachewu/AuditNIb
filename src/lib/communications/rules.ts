@@ -3,7 +3,7 @@ import { officeFileProblem, officeKind, uploadNameProblem } from "@/lib/uploadCh
 import { ADMIN_ROLE_CODE } from "@/lib/notifications";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
 import type { Database } from "@/types";
-import { ATTACHMENT_TYPES, COMMUNICATIONS_PAGE, LIMITS, type RecipientSelection } from "./types";
+import { ATTACHMENT_TYPES, COMMUNICATIONS_PAGE, LIMITS, selectionMatcher, type RecipientSelection } from "./types";
 
 /**
  * Pure rules of Communications (docs/communications.md): who may use it, who
@@ -29,21 +29,18 @@ export function eligibleRecipients(db: Pick<Database, "users">, senderId: string
 }
 
 /**
- * Who a new message goes to: "All users", or the union of the picked users,
- * roles, districts and branches - each expanded to its active, non-admin
- * users (never the sender). Sorted by name.
+ * Who a new message goes to: "All users", or the ticked roles narrowed to the
+ * ticked districts / branches, plus people ticked one by one, minus people
+ * unticked (selectionMatcher() in ./types) - only active, non-admin users,
+ * never the sender. Sorted by name.
  */
-export function resolveRecipients(db: Pick<Database, "users">, selection: RecipientSelection, senderId: string): { id: string; name: string }[] {
+export function resolveRecipients(db: Pick<Database, "users"> & Partial<Pick<Database, "branches">>, selection: RecipientSelection, senderId: string): { id: string; name: string }[] {
   const pool = eligibleRecipients(db, senderId);
-  const picked = selection.toAll
-    ? pool
-    : pool.filter(
-        (u) =>
-          selection.userIds.includes(u.id) ||
-          selection.roleCodes.includes(u.role) ||
-          (u.districtId != null && selection.districtIds.includes(u.districtId)) ||
-          (u.branchId != null && selection.branchIds.includes(u.branchId))
-      );
+  const districtOf = new Map((db.branches ?? []).map((b) => [b.id, b.districtId]));
+  // A branch the branches list doesn't know: take its district from its users.
+  for (const u of db.users) if (u.branchId && u.districtId && !districtOf.has(u.branchId)) districtOf.set(u.branchId, u.districtId);
+  const matches = selectionMatcher(selection, (id) => districtOf.get(id));
+  const picked = pool.filter((u) => matches({ id: u.id, roleCode: u.role, districtId: u.districtId ?? null, branchId: u.branchId ?? null }));
   return picked.map((u) => ({ id: u.id, name: u.name })).sort((a, b) => a.name.localeCompare(b.name));
 }
 

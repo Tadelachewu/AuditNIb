@@ -472,6 +472,9 @@ export async function directory(session: Session): Promise<Result<Directory>> {
         .map((u) => ({
           id: u.id,
           name: u.name,
+          roleCode: u.role,
+          districtId: u.districtId ?? null,
+          branchId: u.branchId ?? null,
           roleName: roleName.get(u.role) ?? u.role,
           districtName: u.districtId ? (districtName.get(u.districtId) ?? null) : null,
           branchName: u.branchId ? (branchName.get(u.branchId) ?? null) : null,

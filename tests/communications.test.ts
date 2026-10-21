@@ -12,6 +12,7 @@ import {
   resolveRecipients,
 } from "@/lib/communications/rules";
 import { emailForNotification, notificationPath } from "@/lib/emailQueue/rules";
+import { selectionMatcher, type RecipientSelection } from "@/lib/communications/types";
 import type { Database, Notification } from "@/types";
 import { officeZip } from "./helpers/zip";
 
@@ -67,6 +68,35 @@ describe("who a new message reaches", () => {
   });
   it("the Administrator role can't be picked as a group", () => {
     expect(resolveRecipients(db, { ...none, roleCodes: ["ADMIN"] }, "ho")).toEqual([]);
+  });
+});
+
+describe("ticks narrow across categories (the To picker)", () => {
+  const withBranches = { ...db, branches: [{ id: "b1", districtId: "d1" }, { id: "b2", districtId: "d2" }, { id: "b3", districtId: "d1" }] } as unknown as Pick<Database, "users" | "branches">;
+  const send = (sel: Partial<RecipientSelection>) => ids(resolveRecipients(withBranches, { ...none, ...sel }, "ho"));
+
+  it("a role + a district = that role IN that district (not everyone in both)", () => {
+    expect(send({ roleCodes: ["BRANCH_MANAGER"], districtIds: ["d1"] })).toEqual(["bm"]);
+  });
+  it("two roles add up, then narrow to the place", () => {
+    expect(send({ roleCodes: ["BRANCH_MANAGER", "DISTRICT_CONTROLLER"], districtIds: ["d1"] })).toEqual(["bm", "dc"]);
+  });
+  it("a ticked branch refines its district: only that branch of it (other districts stay whole)", () => {
+    expect(send({ districtIds: ["d1", "d2"], branchIds: ["b1"] })).toEqual(["bc", "bm", "bm2"]);
+    expect(send({ districtIds: ["d1"], branchIds: ["b3"] })).toEqual([]);
+  });
+  it("a branch on its own, with a role", () => {
+    expect(send({ roleCodes: ["BRANCH_CONTROLLER"], branchIds: ["b1"] })).toEqual(["bc"]);
+  });
+  it("people ticked one by one are always added; people unticked are left out", () => {
+    expect(send({ roleCodes: ["BRANCH_MANAGER"], districtIds: ["d1"], userIds: ["bm2"] })).toEqual(["bm", "bm2"]);
+    expect(send({ districtIds: ["d1"], excludedUserIds: ["bc"] })).toEqual(["bm", "dc"]);
+  });
+  it("the live count uses the very same rule as the server", () => {
+    const sel = { ...none, roleCodes: ["BRANCH_MANAGER"], districtIds: ["d1"], excludedUserIds: [] };
+    const districtOf = new Map([["b1", "d1"], ["b2", "d2"]]);
+    const facts = users.filter((u) => u.status === "ACTIVE" && u.role !== "ADMIN" && u.id !== "ho").map((u) => ({ id: u.id, roleCode: u.role, districtId: u.districtId ?? null, branchId: u.branchId ?? null }));
+    expect(facts.filter(selectionMatcher(sel, (id) => districtOf.get(id))).map((u) => u.id)).toEqual(send(sel));
   });
 });
 

@@ -25,7 +25,7 @@ Open **Communications** in the sidebar (under My Profile and Support). The numbe
 
 | Field | Rule |
 |---|---|
-| **To** | Tick **All users**, or search and add any mix of **people**, **roles** (e.g. Branch Manager), **districts** and **branches**. A role, district or branch reaches all its active users; a district includes its branches. The line under the field says how many people it reaches |
+| **To** | **Everyone**, or **Choose**: four tabs - **Roles**, **Districts**, **Branches**, **People** - each a tick list with a count per item, a filter box and *Select all (shown)*. Ticks within a tab add up; **tabs narrow each other**: ticked roles *in* the ticked districts / branches (Branch Manager + Addis = Addis's branch managers, not every manager plus all of Addis). The Branches tab lists the ticked districts' branches; ticking a branch sends to that branch only, not its whole district. In **People**, ticked = receives it: untick someone to leave them out, tick anyone to add them. The selection shows under the tabs (× removes); **→ N people** opens the list of names by branch. The server applies the same rule (`selectionMatcher()` in `src/lib/communications/types.ts`), so the count is exactly who receives it |
 | **Subject** | Required, up to 200 characters |
 | **Message** | Required, up to 5,000 characters of text. A formatting toolbar offers headings 1-6, font family, size, weight and line height, text and highlight colour, alignment, bold, italic, underline, strikethrough, sub- / superscript, lists, quotes, a dividing line and links (see *Formatting* below) |
 | **Attach files** | Optional: **PDF, Word (.docx), Excel (.xlsx)**; up to **5 files, 10 MB each**. Each file uploads as soon as you pick it; remove it with ✕ |
@@ -169,7 +169,7 @@ Older Word / Excel formats (.doc, .xls) and other file types aren't accepted: sa
 
 ## 7. Test cases
 
-**Automated:** `tests/communications.test.ts` covers who may use it (administrators excluded), recipient expansion (all users, people, roles, districts with their branches, branches; admins, inactive users and the sender left out), replies and Reply all, "Re:" subjects, subject and text limits, attachment type / content / size checks, withdrawal rules, and the email (full text, attachment names, link, HTML-escaped text, the Email Events switch).
+**Automated:** `tests/communications.test.ts` covers who may use it (administrators excluded), recipient expansion (all users, people, roles, districts with their branches, branches; roles narrowed to the ticked places, a ticked branch refining its district, people added and excluded; admins, inactive users and the sender left out); `tests/recipientPicker.test.tsx` covers the To picker (tabs, linked branch list, live count, People untick / add, Select all, the reach list), replies and Reply all, "Re:" subjects, subject and text limits, attachment type / content / size checks, withdrawal rules, and the email (full text, attachment names, link, HTML-escaped text, the Email Events switch).
 
 **Manual (UAT)**
 
