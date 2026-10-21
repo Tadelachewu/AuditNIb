@@ -2,6 +2,7 @@ import Link from "next/link";
 import { AutoFilterForm } from "@/components/reports/AutoFilterForm";
 import { StickyBack } from "@/components/ui/StickyBack";
 import { addCurrency, formatCurrencyTotals, type CurrencyTotals } from "@/lib/currency";
+import { netTransferMovement } from "@/lib/findings";
 import { SESSION_ENDED_PATH } from "@/lib/session";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
@@ -46,9 +47,14 @@ export default async function TransferredFindingsPage({
     toPeriodId: toPeriodId || undefined,
   });
 
-  const totalCasesTransferred = rows.reduce((sum, r) => sum + r.transfer.casesTransferred, 0);
+  // What really moved: each finding once, a return cancelling the transfer it
+  // undoes (netTransferMovement()) - not the sum of every hop listed below.
+  const moved = netTransferMovement(rows.map((r) => r.transfer));
+  const findingsTransferred = new Set(rows.map((r) => r.finding.id)).size;
+  const currencyOf = new Map(rows.map((r) => [r.finding.id, r.finding.currency]));
+  const totalCasesTransferred = [...moved.values()].reduce((sum, m) => sum + m.cases, 0);
   // Per currency - never added across currencies.
-  const totalAmountTransferred = rows.reduce((t, r) => addCurrency(t, r.finding.currency, r.transfer.amountTransferred), {} as CurrencyTotals);
+  const totalAmountTransferred = [...moved.entries()].reduce((t, [id, m]) => addCurrency(t, currencyOf.get(id) ?? "", m.amount), {} as CurrencyTotals);
   const stillOutstandingCount = rows.filter((r) => r.isLatestHop && r.currentOutstandingCases > 0 && r.currentStatus !== "CLOSED").length;
   const periodsSorted = [...db.reportingPeriods].sort((a, b) => b.code.localeCompare(a.code));
 
@@ -78,7 +84,7 @@ export default async function TransferredFindingsPage({
 
       <AutoFilterForm className="no-print flex flex-wrap items-end gap-2">
         <div>
-          <Label htmlFor="fromPeriodId">From period (origin)</Label>
+          <Label htmlFor="fromPeriodId">Transferred out of</Label>
           <Select id="fromPeriodId" name="fromPeriodId" defaultValue={fromPeriodId}>
             <option value="">All periods</option>
             {periodsSorted.map((p) => (
@@ -89,7 +95,7 @@ export default async function TransferredFindingsPage({
           </Select>
         </div>
         <div>
-          <Label htmlFor="toPeriodId">To period (destination)</Label>
+          <Label htmlFor="toPeriodId">Transferred into</Label>
           <Select id="toPeriodId" name="toPeriodId" defaultValue={toPeriodId}>
             <option value="">All periods</option>
             {periodsSorted.map((p) => (
@@ -102,9 +108,9 @@ export default async function TransferredFindingsPage({
       </AutoFilterForm>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatCard label="Transfer Hops" value={rows.length} hint="Matching current filter" />
-        <StatCard label="Cases Transferred" value={formatNumber(totalCasesTransferred)} hint="Sum of outstanding cases moved" />
-        <StatCard label="Amount Transferred" value={formatCurrencyTotals(totalAmountTransferred)} hint="Sum of outstanding amount moved" />
+        <StatCard label="Findings Transferred" value={findingsTransferred} hint={`${rows.length} transfer hop(s) - each finding once`} />
+        <StatCard label="Net Cases Moved" value={formatNumber(totalCasesTransferred)} hint="Each finding once; a return cancels the transfer it undoes" />
+        <StatCard label="Net Amount Moved" value={formatCurrencyTotals(totalAmountTransferred)} hint="Each finding once; a return cancels the transfer it undoes" />
         <StatCard label="Still Outstanding" value={stillOutstandingCount} hint="Latest hop, not yet closed" />
       </div>
 

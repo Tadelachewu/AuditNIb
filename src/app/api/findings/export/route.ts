@@ -4,7 +4,7 @@ import { readDb } from "@/lib/db";
 import { findingsInScope } from "@/lib/findings-scope";
 import { findingsResidentInPeriod, queueStatusesForSession, type FindingPeriodSlice, registeredAmountOf } from "@/lib/findings";
 import { findingStatusCode, type Finding } from "@/types";
-import { filterFindingsByText, sortFindings, parseFindingSort } from "@/lib/findingListQuery";
+import { filterFindingsByStatus, filterFindingsByText, sortFindings, parseFindingSort } from "@/lib/findingListQuery";
 import { matchesOperationAndIrregularity } from "@/lib/dashboardFilters";
 import { withApiHandler } from "@/lib/api/handler";
 import { resolvePeriodFilter } from "@/lib/periods";
@@ -52,11 +52,7 @@ async function handleGET(request: Request) {
   if (categoryId) findings = findings.filter((f) => f.categoryId === categoryId);
   if (risk) findings = findings.filter((f) => f.riskLevel === risk);
   if (operationArea || irregularityType) findings = findings.filter((f) => matchesOperationAndIrregularity(f, { operationArea, irregularityType }));
-  // Comma-separated, same as the Findings list (e.g. a status-donut bucket).
-  if (status) {
-    const statuses = new Set(status.split(","));
-    findings = findings.filter((f) => statuses.has(f.status));
-  }
+  // Status is matched per row after the period (filterFindingsByStatus), as on the list.
   if (dateFrom) findings = findings.filter((f) => f.findingDate >= dateFrom);
   if (dateTo) findings = findings.filter((f) => f.findingDate <= dateTo);
 
@@ -75,8 +71,10 @@ async function handleGET(request: Request) {
     ? findingsResidentInPeriod(db, periodId, findings)
     : findings.map((f) => ({ finding: f, slice: null }));
 
-  // Same "My Queue" / search / sort as the Findings list
-  // (src/lib/findingListQuery.ts), so an export matches what's on screen.
+  // Same Status / chart "current" / "My Queue" / search / sort as the Findings
+  // list (src/lib/findingListQuery.ts), so an export matches what's on screen.
+  resident = filterFindingsByStatus(resident, status ?? "");
+  if (periodId && url.searchParams.get("current") === "1") resident = resident.filter((r) => r.slice === null || r.slice.isCurrentPeriod);
   if (url.searchParams.get("queue") === "1") {
     const isQueued = queueStatusesForSession(auth.session, db);
     resident = resident.filter((r) => (r.slice === null || r.slice.isCurrentPeriod) && isQueued(r.finding));
@@ -109,8 +107,8 @@ async function handleGET(request: Request) {
     "Cases In",
     "Cases Out",
     "Total Cases",
-    "Rectified Amount",
-    "Rectified Cases",
+    "Rectified Amount (recorded)",
+    "Rectified Cases (recorded)",
     "Outstanding Amount",
     "Outstanding Cases",
     "Finding Date",
@@ -144,8 +142,12 @@ async function handleGET(request: Request) {
     // DRAFT in a period it left long ago.
     const amount = slice ? slice.eligibleAmount : f.amount;
     const caseCount = slice ? slice.eligibleCases : f.caseCount;
-    const rectifiedAmount = slice ? slice.closedAmount : f.rectifiedAmount;
-    const rectifiedCases = slice ? slice.closedCases : f.rectifiedCases;
+    // Recorded rectifications (in the filtered period when there is one), and
+    // Outstanding = not yet formally closed - the same meaning as the list's columns.
+    const rectifiedAmount = slice ? slice.rectifiedAmount : f.rectifiedAmount;
+    const rectifiedCases = slice ? slice.rectifiedCases : f.rectifiedCases;
+    const closedAmount = slice ? slice.closedAmount : f.closedAmount;
+    const closedCases = slice ? slice.closedCases : f.closedCases;
     const isHistorical = slice ? !slice.isCurrentPeriod : false;
     return [
       f.reference,
@@ -167,18 +169,18 @@ async function handleGET(request: Request) {
       caseCount,
       rectifiedAmount,
       rectifiedCases,
-      amount - rectifiedAmount,
-      caseCount - rectifiedCases,
+      amount - closedAmount,
+      caseCount - closedCases,
       f.findingDate,
       f.updatedAt,
       f.operationArea ?? "",
       f.irregularityType ?? "",
       f.priority ?? "",
-      registeredAmountOf(f),
-      f.districtVerifiedCases,
-      f.districtVerifiedAmount,
-      slice ? slice.closedCases : f.closedCases,
-      slice ? slice.closedAmount : f.closedAmount,
+      slice ? slice.reportedAmount : registeredAmountOf(f),
+      slice ? slice.verifiedCases : f.districtVerifiedCases,
+      slice ? slice.verifiedAmount : f.districtVerifiedAmount,
+      closedCases,
+      closedAmount,
       f.description ?? "",
       f.recommendation ?? "",
       f.rootCause ?? "",

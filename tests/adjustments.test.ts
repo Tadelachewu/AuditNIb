@@ -5,7 +5,7 @@ vi.mock("@/lib/mail", () => ({ sendNotificationEmail: vi.fn() }));
 import { createAdjustment, deleteAdjustment, editAdjustment, reviewAdjustment, submitAdjustment, withdrawAdjustment } from "@/lib/adjustments/service";
 import { eligibilityProblem, isRevolvingArea, resolveChange, type AdjustmentInput } from "@/lib/adjustments/rules";
 import type { AdjustmentConfig, FindingAdjustment } from "@/lib/adjustments/types";
-import { findingsResidentInPeriod, originalPeriodShare, queueStatusesForSession, reportedInPeriod } from "@/lib/findings";
+import { findingsResidentInPeriod, queueStatusesForSession, reportedInPeriod } from "@/lib/findings";
 import { adjustmentDashboardTotals } from "@/lib/adjustments/dashboard";
 import { packCaseDetail, unpackCaseDetail } from "@/lib/adjustments/storage";
 import type { Database, Finding, FindingCase } from "@/types";
@@ -279,13 +279,11 @@ describe("apply (§3)", () => {
 });
 
 describe("figures (§4)", () => {
-  it("original-period report: added cases in the submitted month, closures FIFO", () => {
+  it("reported period: the added cases are reported in the month the adjustment was approved in", () => {
     const f = finding({ periodId: "p10", caseCount: 5, amount: 500, closedCases: 4, closedAmount: 400 });
     const db = makeDb(f);
     db.findingTransfers.push({ id: "t1", findingId: "f1", fromPeriodId: "p9", toPeriodId: "p10", casesTransferred: 3, amountTransferred: 300, createdAt: "2026-10-01T00:00:00Z" } as never);
     db.findingAdjustments.push({ id: "a1", findingId: "f1", periodId: "p10", status: "APPROVED", addedCases: 2, amountChange: 200, approvedAt: "2026-10-12T00:00:00Z" } as FindingAdjustment);
-    expect(originalPeriodShare(db, f, "p9")).toEqual({ cases: 3, closed: 3, amount: 300 });
-    expect(originalPeriodShare(db, f, "p10")).toEqual({ cases: 2, closed: 1, amount: 200 });
     expect(reportedInPeriod(db, f, "p10")).toEqual({ cases: 2, amount: 200 });
   });
 

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type { MRT_ColumnDef, MRT_RowSelectionState } from "material-react-table";
+import type { MRT_ColumnDef, MRT_RowSelectionState, MRT_Updater, MRT_VisibilityState } from "material-react-table";
 import { AdminTable } from "@/components/ui/AdminTable";
 import { useGridUrlState } from "@/lib/useGridUrlState";
 import { pagedList } from "@/lib/gridPage";
@@ -229,6 +229,7 @@ export function FindingsTable({
   paging,
   sort,
   searchText,
+  savedColumns = null,
 }: {
   rows: FindingRow[];
   permissions: BulkPermissions;
@@ -236,12 +237,24 @@ export function FindingsTable({
   paging: { page: number; pageSize: number; total: number };
   sort: { id: string; desc: boolean };
   searchText: string;
+  /** The user's saved shown / hidden columns (src/lib/userPreferences.ts), or null for the defaults. */
+  savedColumns?: Record<string, boolean> | null;
 }) {
   const router = useRouter();
   const { confirm, dialog } = useConfirm();
   const [rowSelection, setRowSelection] = useState<MRT_RowSelectionState>({});
   const [busy, setBusy] = useState(false);
   const [summary, setSummary] = useState<string | null>(null);
+  // Shown / hidden columns: the user's saved choice, kept until they change it
+  // (saved to their account at once - any browser, any computer).
+  const [columnVisibility, setColumnVisibility] = useState<MRT_VisibilityState>(() => ({ ...HIDDEN_BY_DEFAULT, ...(savedColumns ?? {}) }));
+  function changeColumnVisibility(updater: MRT_Updater<MRT_VisibilityState>) {
+    const next = typeof updater === "function" ? updater(columnVisibility) : updater;
+    setColumnVisibility(next);
+    void apiSend("/api/preferences/findings.columns", "PATCH", { value: next }).catch(() => {
+      // Not saved (offline, or the preference table isn't installed yet): it still applies on this page.
+    });
+  }
   const grid = useMemo(() => pagedList(rows, paging, sort, searchText), [rows, paging, sort, searchText]);
 
   // A new page of data (navigation) clears the selection.
@@ -489,13 +502,13 @@ export function FindingsTable({
         emptyText={emptyText}
         tableOptions={{
           ...url.tableOptions,
-          initialState: { columnVisibility: HIDDEN_BY_DEFAULT },
+          onColumnVisibilityChange: changeColumnVisibility,
           enableColumnFilters: false, // filtering is the FilterBar above
           enableRowSelection: canBulkAct ? (row) => !row.original.isHistorical : false,
           enableSelectAll: canBulkAct,
           selectAllMode: "page",
           onRowSelectionChange: setRowSelection,
-          state: { ...url.tableOptions.state, rowSelection },
+          state: { ...url.tableOptions.state, rowSelection, columnVisibility },
           muiSearchTextFieldProps: { placeholder: "Search reference, title, branch, category...", size: "small", variant: "outlined" },
           muiTableBodyRowProps: ({ row }) => ({
             onClick: (e) => openFromRow(e, row.original.id),

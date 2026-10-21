@@ -60,6 +60,7 @@ model User {
   phone               String?
   passwordResetTokens PasswordResetToken[]
   supportThreads      SupportThread[]
+  preferences         UserPreference[]
   branch              Branch?              @relation(fields: [branchId], references: [id], onDelete: Restrict)
   department          Department?          @relation(fields: [departmentId], references: [id], onDelete: Restrict)
   district            District?            @relation(fields: [districtId], references: [id], onDelete: Restrict)
@@ -704,6 +705,19 @@ model ReminderRun {
 
   @@index([ranAt])
   @@map("reminder_runs")
+}
+
+/// Per-user settings that outlast a session (src/lib/userPreferences.ts), e.g.
+/// the Findings table's shown / hidden columns. Used through raw SQL.
+model UserPreference {
+  userId    String   @map("user_id")
+  key       String
+  value     Json
+  updatedAt DateTime @default(now()) @map("updated_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, key])
+  @@map("user_preferences")
 }
 
 /// Idempotency-Key (docs/data-integrity.md, src/lib/idempotency.ts): a repeated

@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { transferTotals } from "@/lib/findings";
 import type { Database, FindingTransfer } from "@/types";
 
-// Dashboards' "Transferred Findings / Transferred Cases": what is currently
-// out of the period, not every transfer event.
+// Dashboards' "Transferred Findings / Transferred Cases": the NET movement -
+// a return cancels the transfer it undoes, several hops count once.
 
 let n = 0;
 function t(findingId: string, from: string, to: string, cases: number): FindingTransfer {
@@ -27,20 +27,27 @@ describe("transferred counts = currently out of the period", () => {
     expect(transferTotals(db({ f1: "oct" }), transfers, "oct").transferredFindings).toBe(0);
   });
 
-  it("Sep -> Oct -> back to Sep: Sep shows 0; Oct shows 1 / 2 (it left Oct)", () => {
+  it("Sep -> Oct -> back to Sep: the return cancels - 0 in Sep and in Oct", () => {
     const transfers = [t("f1", "sep", "oct", 2), t("f1", "oct", "sep", 2)];
     expect(transferTotals(db({ f1: "sep" }), transfers, "sep")).toEqual({ transferredFindings: 0, transferredCases: 0, transferredAmount: 0 });
-    expect(transferTotals(db({ f1: "sep" }), transfers, "oct")).toEqual({ transferredFindings: 1, transferredCases: 2, transferredAmount: 200 });
+    expect(transferTotals(db({ f1: "sep" }), transfers, "oct")).toEqual({ transferredFindings: 0, transferredCases: 0, transferredAmount: 0 });
+  });
+
+  it("partial return (20 out, 15 back): 5 net out of Sep", () => {
+    const transfers = [t("f1", "sep", "oct", 20), t("f1", "oct", "sep", 15)];
+    expect(transferTotals(db({ f1: "sep" }), transfers, "sep")).toEqual({ transferredFindings: 1, transferredCases: 5, transferredAmount: 500 });
+    expect(transferTotals(db({ f1: "sep" }), transfers, undefined).transferredCases).toBe(5);
   });
 
   it("All periods: moved back and forth to its origin = 0; never double-counted", () => {
     const back = [t("f1", "sep", "oct", 2), t("f1", "oct", "sep", 2)];
     expect(transferTotals(db({ f1: "sep" }), back, undefined).transferredCases).toBe(0);
+    // 5 left Sep (2 were closed in Oct, 3 moved on): the 5 count, once - not 5 + 3.
     const onward = [t("f2", "sep", "oct", 5), t("f2", "oct", "nov", 3)];
-    expect(transferTotals(db({ f2: "nov" }), onward, undefined)).toEqual({ transferredFindings: 1, transferredCases: 3, transferredAmount: 300 });
+    expect(transferTotals(db({ f2: "nov" }), onward, undefined)).toEqual({ transferredFindings: 1, transferredCases: 5, transferredAmount: 500 });
   });
 
-  it("left the period twice: the last departure's cases count", () => {
+  it("left the period twice: net of what came back in between", () => {
     const transfers = [t("f1", "sep", "oct", 4), t("f1", "oct", "sep", 4), t("f1", "sep", "nov", 3)];
     expect(transferTotals(db({ f1: "nov" }), transfers, "sep")).toEqual({ transferredFindings: 1, transferredCases: 3, transferredAmount: 300 });
   });

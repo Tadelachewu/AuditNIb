@@ -7,13 +7,14 @@ import { findingsInScope } from "@/lib/findings-scope";
 import { queueStatusesForSession, findingsResidentInPeriod, type FindingPeriodSlice, registeredAmountOf } from "@/lib/findings";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
 import { paginate, parsePage } from "@/lib/pagination";
-import { filterFindingsByText, sortFindings, parseFindingSort, parsePageSize } from "@/lib/findingListQuery";
+import { filterFindingsByStatus, filterFindingsByText, sortFindings, parseFindingSort, parsePageSize } from "@/lib/findingListQuery";
 import { inDateRange } from "@/lib/dateRange";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { TimeRangeFilter } from "@/components/reports/TimeRangeFilter";
 import { FilterBar } from "@/components/dashboard/FilterBar";
 import { FindingsTable, type FindingRow } from "@/components/findings/FindingsTable";
+import { getPreference } from "@/lib/userPreferences";
 import { FILTERABLE_FINDING_STATUSES, type Finding } from "@/types";
 import { matchesOperationAndIrregularity } from "@/lib/dashboardFilters";
 import { currentPeriod, resolvePeriodFilter, sortPeriods } from "@/lib/periods";
@@ -60,10 +61,8 @@ export default async function FindingsPage({
   // buckets (e.g. "Draft / In Review" spans 6 statuses) linking here with
   // one query param - a single status value still works unchanged since
   // split(",") on a value with no comma just returns that one value.
-  if (status) {
-    const statuses = new Set(status.split(","));
-    findings = findings.filter((f) => statuses.has(f.status));
-  }
+  // Status is matched per row, after the period is applied (filterFindingsByStatus):
+  // in a period the finding has left, its status there is Transferred.
   // Optional Today/This Week/This Month/Custom filter (TimeRangeFilter) -
   // by each finding's own findingDate, same convention as the Reports page.
   if (dateFrom || dateTo) findings = findings.filter((f) => inDateRange({ from: dateFrom || undefined, to: dateTo || undefined }, f.findingDate));
@@ -78,6 +77,8 @@ export default async function FindingsPage({
   let resident: ResidentFinding[] = periodId
     ? findingsResidentInPeriod(db, periodId, findings)
     : findings.map((f) => ({ finding: f, slice: null }));
+
+  resident = filterFindingsByStatus(resident, status);
 
   // current=1 (from a dashboard chart click): only findings currently in the
   // period - the same set the dashboard counted, not ones that moved on.
@@ -148,6 +149,9 @@ export default async function FindingsPage({
     canDeleteRejected: hasPermission(user.permissions, permissionKey("findings", "delete-rejected")),
   };
 
+  // The user's own shown / hidden columns, kept until they change them.
+  const savedColumns = await getPreference(user.userId!, "findings.columns");
+
   const rows: FindingRow[] = pageResident.map(({ finding: f, slice }) => ({
     id: f.id,
     reference: f.reference,
@@ -169,10 +173,11 @@ export default async function FindingsPage({
     casesOut: slice ? slice.casesOut : null,
     status: f.status,
     updatedAt: f.updatedAt,
-    rectifiedCases: f.rectifiedCases,
-    rectifiedAmount: f.rectifiedAmount,
-    districtVerifiedCases: f.districtVerifiedCases,
-    districtVerifiedAmount: f.districtVerifiedAmount,
+    // With a period chosen: what was rectified / verified IN that period.
+    rectifiedCases: slice ? slice.rectifiedCases : f.rectifiedCases,
+    rectifiedAmount: slice ? slice.rectifiedAmount : f.rectifiedAmount,
+    districtVerifiedCases: slice ? slice.verifiedCases : f.districtVerifiedCases,
+    districtVerifiedAmount: slice ? slice.verifiedAmount : f.districtVerifiedAmount,
     closedCases: slice ? slice.closedCases : f.closedCases,
     closedAmount: slice ? slice.closedAmount : f.closedAmount,
     createdBy: f.createdBy,
@@ -189,7 +194,8 @@ export default async function FindingsPage({
     operationArea: f.operationArea ?? "",
     irregularityType: f.irregularityType ?? "",
     priority: f.priority ?? "",
-    reportedAmount: registeredAmountOf(f),
+    // Registered (+ approved adjustments) in the filtered period - 0 where it was only transferred in.
+    reportedAmount: slice ? slice.reportedAmount : registeredAmountOf(f),
     outstandingCases: (slice ? slice.eligibleCases : f.caseCount) - (slice ? slice.closedCases : f.closedCases),
     outstandingAmount: (slice ? slice.eligibleAmount : f.amount) - (slice ? slice.closedAmount : f.closedAmount),
     description: f.description ?? "",
@@ -257,6 +263,7 @@ export default async function FindingsPage({
           paging={{ page, pageSize, total }}
           sort={{ id: sort.key, desc: sort.desc }}
           searchText={searchText}
+          savedColumns={savedColumns}
         />
       </Card>
     </div>

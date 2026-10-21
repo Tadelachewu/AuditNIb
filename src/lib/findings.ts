@@ -369,31 +369,6 @@ export function reportedInPeriod(db: Database, f: Finding, periodId: string): { 
   return { cases, amount };
 }
 
-/**
- * For reports that ignore transfers (by ORIGINAL period): a finding's share
- * of one period - its original cases / amount if it was registered there,
- * plus approved adjustments submitted there. Closed cases are allocated to
- * the original cases first, then to adjustments in approval order, so no
- * period shows more closed than cases.
- */
-export function originalPeriodShare(db: Database, f: Finding, periodId: string): { cases: number; closed: number; amount: number } {
-  const portions = [
-    { periodId: originPeriodId(db, f), cases: registeredCasesOf(f), amount: registeredAmountOf(f) },
-    ...approvedAdjustmentsOf(db, f.id).map((a) => ({ periodId: adjustmentPeriodOf(db, f, a), cases: a.addedCases, amount: a.amountChange })),
-  ];
-  let remainingClosed = f.closedCases;
-  const share = { cases: 0, closed: 0, amount: 0 };
-  for (const portion of portions) {
-    const closed = Math.min(Math.max(remainingClosed, 0), portion.cases);
-    remainingClosed -= closed;
-    if (portion.periodId !== periodId) continue;
-    share.cases += portion.cases;
-    share.closed += closed;
-    share.amount += portion.amount;
-  }
-  return share;
-}
-
 /** The period a finding was originally registered in (before any transfer). */
 export function originPeriodId(db: Database, finding: Finding): string {
   const first = db.findingTransfers
@@ -423,23 +398,57 @@ export function findingCaseTotalsInPeriod(
 }
 
 /**
- * "Transferred Findings / Transferred Cases" on the dashboards: what is
- * CURRENTLY out of the period, not every transfer event ever made from it.
- * `transfers` = the transfers to consider (already narrowed to the caller's
- * scope); `periodId` = the period shown, or undefined for "All periods".
- *
- * - One period: a finding counts if it left that period and is not back in
- *   it now; its cases / amount are what it carried on its LAST departure
- *   from there. A finding moved Sep -> Oct -> Sep counts 0 for Sep.
- * - All periods: a finding counts once if it is not in its original period
- *   now, with what its latest transfer carried - a finding moved back and
- *   forth is never counted twice.
- *
- * The full transfer log (Reports -> Transfers, the finding's history) still
- * lists every move.
+ * Net movement of each finding by these transfers - what really moved, a
+ * return cancelling the transfer it undoes. Per period, a finding's net
+ * outflow is (cases carried out) - (cases carried back in); only positive
+ * outflows count, so:
+ * - Sep -> Oct (20):               20 moved
+ * - Sep -> Oct -> Nov (20, 20):    20 moved (once, not per hop)
+ * - Sep -> Oct -> back to Sep:      0 moved
+ * - Sep -> Oct 20, 15 back to Sep:  5 moved (the 5 closed in Oct)
+ * `periodId` given: only what moved out of that period (net).
+ */
+export function netTransferMovement(transfers: FindingTransfer[], periodId?: string): Map<string, { cases: number; amount: number }> {
+  const flows = new Map<string, Map<string, { cases: number; amount: number }>>();
+  const flow = (findingId: string, period: string) => {
+    const byPeriod = flows.get(findingId) ?? new Map<string, { cases: number; amount: number }>();
+    flows.set(findingId, byPeriod);
+    const f = byPeriod.get(period) ?? { cases: 0, amount: 0 };
+    byPeriod.set(period, f);
+    return f;
+  };
+  for (const t of transfers) {
+    const out = flow(t.findingId, t.fromPeriodId);
+    out.cases += t.casesTransferred;
+    out.amount += t.amountTransferred;
+    const back = flow(t.findingId, t.toPeriodId);
+    back.cases -= t.casesTransferred;
+    back.amount -= t.amountTransferred;
+  }
+  const result = new Map<string, { cases: number; amount: number }>();
+  for (const [findingId, byPeriod] of flows) {
+    let cases = 0;
+    let amount = 0;
+    for (const [period, f] of byPeriod) {
+      if (periodId && period !== periodId) continue;
+      cases += Math.max(f.cases, 0);
+      amount += Math.max(f.amount, 0);
+    }
+    if (cases > 0 || amount > 0) result.set(findingId, { cases, amount: Math.round(amount * 100) / 100 });
+  }
+  return result;
+}
+
+/**
+ * "Transferred Findings / Transferred Cases" on the dashboards: what really
+ * moved out (netTransferMovement() - a return cancels, several hops count
+ * once). `transfers` = the transfers to consider (already narrowed to the
+ * caller's scope); `periodId` = the period shown (net out of it), or
+ * undefined for "All periods". The full transfer log (Reports -> Transferred
+ * Findings, the finding's history) still lists every move.
  */
 export function transferTotals(
-  db: Database,
+  _db: Database,
   transfers: FindingTransfer[],
   periodId: string | undefined
 ): {
@@ -447,30 +456,14 @@ export function transferTotals(
   transferredCases: number;
   transferredAmount: number;
 } {
-  const byFinding = new Map<string, FindingTransfer[]>();
-  for (const t of transfers) byFinding.set(t.findingId, [...(byFinding.get(t.findingId) ?? []), t]);
-  const currentPeriod = new Map(db.findings.map((f) => [f.id, f.periodId]));
-
-  let transferredFindings = 0;
+  const moved = netTransferMovement(transfers, periodId);
   let transferredCases = 0;
   let transferredAmount = 0;
-  for (const [findingId, list] of byFinding) {
-    const sorted = [...list].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-    const nowIn = currentPeriod.get(findingId);
-    let last: FindingTransfer | undefined;
-    if (periodId) {
-      const departures = sorted.filter((t) => t.fromPeriodId === periodId);
-      if (departures.length === 0 || nowIn === periodId) continue;
-      last = departures[departures.length - 1];
-    } else {
-      if (nowIn === sorted[0].fromPeriodId) continue; // back in its original period
-      last = sorted[sorted.length - 1];
-    }
-    transferredFindings += 1;
-    transferredCases += last.casesTransferred;
-    transferredAmount += last.amountTransferred;
+  for (const m of moved.values()) {
+    transferredCases += m.cases;
+    transferredAmount += m.amount;
   }
-  return { transferredFindings, transferredCases, transferredAmount };
+  return { transferredFindings: moved.size, transferredCases, transferredAmount: Math.round(transferredAmount * 100) / 100 };
 }
 
 /**
@@ -954,14 +947,14 @@ function findingResidencyInPeriod(
   db: Database,
   finding: Finding,
   periodId: string
-): { eligibleCases: number; eligibleAmount: number; reportedCases: number; casesIn: number; casesOut: number; exitTransfer: FindingTransfer | null } | null {
+): { eligibleCases: number; eligibleAmount: number; reportedCases: number; reportedAmount: number; casesIn: number; casesOut: number; exitTransfer: FindingTransfer | null } | null {
   const transfers = [...db.findingTransfers]
     .filter((t) => t.findingId === finding.id)
     .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
   if (transfers.length === 0) {
     return finding.periodId === periodId
-      ? { eligibleCases: finding.caseCount, eligibleAmount: finding.amount, reportedCases: finding.caseCount, casesIn: 0, casesOut: 0, exitTransfer: null }
+      ? { eligibleCases: finding.caseCount, eligibleAmount: finding.amount, reportedCases: finding.caseCount, reportedAmount: finding.amount, casesIn: 0, casesOut: 0, exitTransfer: null }
       : null;
   }
   // Approved adjustments join the stay the finding was in when each was
@@ -986,18 +979,21 @@ function findingResidencyInPeriod(
     ...transfers.map((t) => ({ periodId: t.toPeriodId, cases: t.casesTransferred, amount: t.amountTransferred })),
   ];
   const adjustedCases = stays.map(() => 0);
+  const adjustedAmount = stays.map(() => 0);
   for (const a of adjustments) {
     const i = stayOf(a.approvedAt!);
     stays[i].cases += a.addedCases;
     stays[i].amount += a.amountChange;
     adjustedCases[i] += a.addedCases;
+    adjustedAmount[i] += a.amountChange;
   }
   let eligibleCases = 0;
   let eligibleAmount = 0;
-  // Reported = registered here (the origin stay) plus cases added by
-  // adjustments approved while it was here; In / Out = cases transferred into
-  // / out of this period. So per period: reported + in - out = eligible.
+  // Reported = registered here (the origin stay) plus what adjustments approved
+  // while it was here added; In / Out = cases transferred into / out of this
+  // period. So per period: reported + in - out = eligible.
   let reportedCases = 0;
+  let reportedAmount = 0;
   let casesIn = 0;
   let casesOut = 0;
   let lastStay = -1;
@@ -1006,14 +1002,21 @@ function findingResidencyInPeriod(
     const leaving = transfers[i];
     eligibleCases += stay.cases - (leaving?.casesTransferred ?? 0);
     eligibleAmount += stay.amount - (leaving?.amountTransferred ?? 0);
-    if (i === 0) reportedCases += registeredCasesOf(finding);
-    else casesIn += transfers[i - 1].casesTransferred;
+    if (i === 0) {
+      reportedCases += registeredCasesOf(finding);
+      reportedAmount += registeredAmountOf(finding);
+    } else casesIn += transfers[i - 1].casesTransferred;
     reportedCases += adjustedCases[i];
+    reportedAmount += adjustedAmount[i];
     casesOut += leaving?.casesTransferred ?? 0;
     lastStay = i;
   });
   if (lastStay === -1) return null;
-  return { eligibleCases, eligibleAmount, reportedCases, casesIn, casesOut, exitTransfer: transfers[lastStay] ?? null };
+  // Net movement: cases that went out and came back cancel (2026-09 -> 2026-10
+  // -> back to 2026-09 moves nothing: In 0 / Out 0 in both). Netting keeps
+  // reported + in - out = eligible.
+  const net = casesIn - casesOut;
+  return { eligibleCases, eligibleAmount, reportedCases, reportedAmount, casesIn: Math.max(net, 0), casesOut: Math.max(-net, 0), exitTransfer: transfers[lastStay] ?? null };
 }
 
 /** Thin wrapper over findingResidencyInPeriod() for the one existing caller (computeEligibleCaseCounts) that only ever needed the case count. */
@@ -1042,6 +1045,44 @@ function closedInPeriod(db: Database, finding: Finding, periodId: string): { cas
 }
 
 /**
+ * Rectified (recorded by the branch) and district-verified cases / amount that
+ * belong to one period. Rectification entries carry the period they were
+ * recorded in; the finding's CURRENT totals (a returned or reversed
+ * rectification lowers them) are shared out over its entries oldest first,
+ * and verification over those portions in the same order - so the periods
+ * always add up to the finding's own totals. Anything no entry explains
+ * (older data) counts in the finding's current period.
+ */
+function rectifiedInPeriod(db: Database, finding: Finding, periodId: string): { rectifiedCases: number; rectifiedAmount: number; verifiedCases: number; verifiedAmount: number } {
+  const entries = (db.rectifications ?? []).filter((r) => r.findingId === finding.id).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  let restCases = finding.rectifiedCases;
+  let restAmount = finding.rectifiedAmount;
+  let restVerifiedCases = finding.districtVerifiedCases;
+  let restVerifiedAmount = finding.districtVerifiedAmount;
+  const out = { rectifiedCases: 0, rectifiedAmount: 0, verifiedCases: 0, verifiedAmount: 0 };
+  const take = (period: string, cases: number, amount: number) => {
+    const c = Math.max(0, Math.min(cases, restCases));
+    const a = Math.max(0, Math.min(amount, restAmount));
+    const vc = Math.max(0, Math.min(c, restVerifiedCases));
+    const va = Math.max(0, Math.min(a, restVerifiedAmount));
+    restCases -= c;
+    restAmount -= a;
+    restVerifiedCases -= vc;
+    restVerifiedAmount -= va;
+    if (period !== periodId) return;
+    out.rectifiedCases += c;
+    out.rectifiedAmount += a;
+    out.verifiedCases += vc;
+    out.verifiedAmount += va;
+  };
+  for (const e of entries) take(e.periodId, e.rectifiedCases, e.rectifiedAmount);
+  take(finding.periodId, restCases, restAmount);
+  out.rectifiedAmount = Math.round(out.rectifiedAmount * 100) / 100;
+  out.verifiedAmount = Math.round(out.verifiedAmount * 100) / 100;
+  return out;
+}
+
+/**
  * One finding's own slice of one period - what browsing/reporting/exporting
  * *that period* should show for this finding, instead of its live/current
  * aggregate fields. `isCurrentPeriod` false means this period is now
@@ -1053,9 +1094,16 @@ export interface FindingPeriodSlice {
   eligibleCases: number;
   /** Registered in this period plus cases added by adjustments approved here (0 where it was only transferred in). */
   reportedCases: number;
-  /** Cases transferred into / out of this period. */
+  /** The same for the amount. */
+  reportedAmount: number;
+  /** Net cases transferred into / out of this period (a round trip cancels). */
   casesIn: number;
   casesOut: number;
+  /** Rectified (recorded) and district-verified in this period (rectifiedInPeriod()). */
+  rectifiedCases: number;
+  rectifiedAmount: number;
+  verifiedCases: number;
+  verifiedAmount: number;
   eligibleAmount: number;
   closedCases: number;
   closedAmount: number;
@@ -1067,12 +1115,15 @@ function findingSliceInPeriod(db: Database, finding: Finding, periodId: string):
   const residency = findingResidencyInPeriod(db, finding, periodId);
   if (residency === null) return null;
   const closed = closedInPeriod(db, finding, periodId);
+  const rectified = rectifiedInPeriod(db, finding, periodId);
   const destination = residency.exitTransfer ? db.reportingPeriods.find((p) => p.id === residency.exitTransfer!.toPeriodId) : undefined;
   return {
     eligibleCases: residency.eligibleCases,
     reportedCases: residency.reportedCases,
+    reportedAmount: residency.reportedAmount,
     casesIn: residency.casesIn,
     casesOut: residency.casesOut,
+    ...rectified,
     eligibleAmount: residency.eligibleAmount,
     closedCases: closed.cases,
     closedAmount: closed.amount,

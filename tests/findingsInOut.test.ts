@@ -27,10 +27,17 @@ describe("Reported / In / Out per period", () => {
     expect(slice(d, "sep")).toEqual({ reported: 5, in: 0, out: 0, total: 5 });
   });
 
-  it("2026-09 -> 2026-10 -> back to 2026-09: 2026-09 has reported 5, in 5, out 5", () => {
+  it("2026-09 -> 2026-10 -> back to 2026-09: the return cancels - In 0 / Out 0 in both", () => {
     const d = db([t("t1", "sep", "oct", "2026-10-01T00:00:00Z"), t("t2", "oct", "sep", "2026-10-02T00:00:00Z")], "sep");
-    expect(slice(d, "sep")).toEqual({ reported: 5, in: 5, out: 5, total: 5 });
-    expect(slice(d, "oct")).toEqual({ reported: 0, in: 5, out: 5, total: 0 });
+    expect(slice(d, "sep")).toEqual({ reported: 5, in: 0, out: 0, total: 5 });
+    expect(slice(d, "oct")).toEqual({ reported: 0, in: 0, out: 0, total: 0 });
+  });
+
+  it("partial return (20 out, 5 closed in Oct, 15 back): net Out 5 from Sep, net In 5 to Oct", () => {
+    const d = db([t("t1", "sep", "oct", "2026-10-01T00:00:00Z", 20), t("t2", "oct", "sep", "2026-10-09T00:00:00Z", 15)], "sep");
+    d.findings[0] = { ...d.findings[0], caseCount: 20, registeredCaseCount: 20 } as never;
+    expect(slice(d, "sep")).toEqual({ reported: 20, in: 0, out: 5, total: 15 });
+    expect(slice(d, "oct")).toEqual({ reported: 0, in: 5, out: 0, total: 5 });
   });
 
   describe("with an approved adjustment (+3 cases): reported in the period it was APPROVED in", () => {
@@ -55,7 +62,7 @@ describe("Reported / In / Out per period", () => {
     it("edge case - submitted in Oct, transferred to Nov, approved in Nov: reported in Nov, not Oct", () => {
       const d = db([t("t1", "sep", "oct", "2026-10-01T00:00:00Z"), t("t2", "oct", "nov", "2026-11-01T00:00:00Z")], "nov");
       d.findingAdjustments = [adj("oct", "2026-11-03T00:00:00Z")] as never;
-      expect(slice(d, "oct")).toEqual({ reported: 0, in: 5, out: 5, total: 0 });
+      expect(slice(d, "oct")).toEqual({ reported: 0, in: 0, out: 0, total: 0 }); // passed straight through
       expect(slice(d, "nov")).toEqual({ reported: 3, in: 5, out: 0, total: 8 });
       expect(adjustmentPeriodOf(d, d.findings[0], d.findingAdjustments[0])).toBe("nov");
       expect(reportedInPeriod(d, d.findings[0], "oct").cases).toBe(0);

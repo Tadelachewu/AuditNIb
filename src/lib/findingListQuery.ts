@@ -34,6 +34,22 @@ export function parseFindingSort(sort: string | null | undefined, dir: string | 
   return { key, desc };
 }
 
+/**
+ * A row's status in the filtered period: a period the finding has since left
+ * shows it as Transferred (that's what it was there), not its live status
+ * elsewhere.
+ */
+export function statusInPeriod(row: { finding: Finding; slice?: { isCurrentPeriod: boolean } | null }): Finding["status"] {
+  return row.slice && !row.slice.isCurrentPeriod ? "TRANSFERRED" : row.finding.status;
+}
+
+/** The Status filter (comma-separated, e.g. a status-donut bucket), on each row's status in the filtered period. */
+export function filterFindingsByStatus<T extends { finding: Finding; slice?: { isCurrentPeriod: boolean } | null }>(rows: T[], status: string): T[] {
+  if (!status) return rows;
+  const statuses = new Set(status.split(","));
+  return rows.filter((r) => statuses.has(statusInPeriod(r)));
+}
+
 /** Every word must appear in reference, title, branch, department, category, source, risk or status. */
 export function filterFindingsByText<T extends { finding: Finding }>(rows: T[], q: string, names: FindingNames): T[] {
   const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
@@ -61,7 +77,19 @@ export function filterFindingsByText<T extends { finding: Finding }>(rows: T[], 
   });
 }
 
-type SliceLike = { eligibleCases: number; reportedCases: number; casesIn: number; casesOut: number; closedCases: number; closedAmount: number; eligibleAmount: number } | null;
+type SliceLike = {
+  eligibleCases: number;
+  reportedCases: number;
+  reportedAmount: number;
+  casesIn: number;
+  casesOut: number;
+  closedCases: number;
+  closedAmount: number;
+  eligibleAmount: number;
+  rectifiedCases: number;
+  verifiedCases: number;
+  isCurrentPeriod: boolean;
+} | null;
 
 export function sortFindings<T extends { finding: Finding; amount?: number }>(
   rows: T[],
@@ -113,11 +141,11 @@ export function sortFindings<T extends { finding: Finding; amount?: number }>(
       case "priority":
         return f.priority ?? "";
       case "reportedAmount":
-        return registeredAmountOf(f);
+        return slice ? slice.reportedAmount : registeredAmountOf(f);
       case "rectifiedCases":
-        return f.rectifiedCases;
+        return slice ? slice.rectifiedCases : f.rectifiedCases;
       case "verifiedCases":
-        return f.districtVerifiedCases;
+        return slice ? slice.verifiedCases : f.districtVerifiedCases;
       case "closedCases":
         return slice ? slice.closedCases : f.closedCases;
       case "outstandingCases":
@@ -129,7 +157,7 @@ export function sortFindings<T extends { finding: Finding; amount?: number }>(
       case "createdAt":
         return f.createdAt;
       case "status":
-        return f.status;
+        return statusInPeriod({ finding: f, slice });
       case "updatedAt":
         return f.updatedAt;
     }

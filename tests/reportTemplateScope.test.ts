@@ -42,7 +42,8 @@ describe("report template visibility setting", () => {
   it("bank-wide (setting missing - today's behaviour): a district user sees every district", () => {
     const d = db();
     expect(reportTemplateDb(d, session("DISTRICT"))).toBe(d);
-    expect(getCategoryDetailByDistrict(reportTemplateDb(d, session("DISTRICT")), "sep").totalRow.totalCases).toBe(15);
+    // 15 cases, minus the 1 of Hawassa's that was transferred to October.
+    expect(getCategoryDetailByDistrict(reportTemplateDb(d, session("DISTRICT")), "sep").totalRow.totalCases).toBe(14);
     expect(reportTemplateScopeNote(d, session("DISTRICT"))).toBeNull();
     expect(reportTemplateDb(db("BANK"), session("DISTRICT")).findings).toHaveLength(3);
   });
