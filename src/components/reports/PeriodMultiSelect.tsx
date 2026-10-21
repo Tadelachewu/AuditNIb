@@ -17,6 +17,21 @@ export function PeriodMultiSelect({ periods, selectedIds, id = "periodIds" }: { 
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<string[]>(selectedIds);
   const ref = useRef<HTMLDivElement>(null);
+  // Set by a tick; the form is applied once the hidden fields below hold the
+  // new choice. (Letting the tick's own change event reach the auto-applying
+  // form sent the PREVIOUS choice: React writes the new hidden fields only
+  // after that event.)
+  const changed = useRef(false);
+  useEffect(() => {
+    if (!changed.current) return;
+    changed.current = false;
+    ref.current?.closest("form")?.requestSubmit();
+  }, [selected]);
+  const choose = (next: (s: string[]) => string[]) => (e: React.ChangeEvent<HTMLInputElement>) => {
+    e.stopPropagation();
+    changed.current = true;
+    setSelected(next);
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -40,7 +55,7 @@ export function PeriodMultiSelect({ periods, selectedIds, id = "periodIds" }: { 
       : selected.length === 1
         ? (periods.find((p) => p.id === selected[0])?.code ?? "1 period")
         : `${selected.length} periods`;
-  const toggle = (pid: string) => setSelected((s) => (s.includes(pid) ? s.filter((x) => x !== pid) : [...s, pid]));
+  const toggle = (pid: string) => choose((s) => (s.includes(pid) ? s.filter((x) => x !== pid) : [...s, pid]));
 
   return (
     <div ref={ref} className="relative">
@@ -62,7 +77,7 @@ export function PeriodMultiSelect({ periods, selectedIds, id = "periodIds" }: { 
       {open && (
         <div role="listbox" aria-multiselectable="true" className="absolute left-0 z-30 mt-1 max-h-72 w-56 overflow-y-auto rounded-md border border-slate-200 bg-white py-1 shadow-lg">
           <label className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50">
-            <input type="checkbox" checked={selected.length === 0} onChange={() => setSelected([])} />
+            <input type="checkbox" checked={selected.length === 0} onChange={choose(() => [])} />
             All periods (cumulative)
           </label>
           {years.map((year) => (
@@ -72,7 +87,7 @@ export function PeriodMultiSelect({ periods, selectedIds, id = "periodIds" }: { 
                 .filter((p) => p.year === year)
                 .map((p) => (
                   <label key={p.id} className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50">
-                    <input type="checkbox" checked={selected.includes(p.id)} onChange={() => toggle(p.id)} />
+                    <input type="checkbox" checked={selected.includes(p.id)} onChange={toggle(p.id)} />
                     {p.code}
                     {p.status === "LOCKED" && <span className="text-xs text-slate-500">(locked)</span>}
                   </label>

@@ -563,6 +563,8 @@ export function getDistrictRankingOtherCases(
   db: Database,
   periodIds?: string[]
 ): { rows: DistrictRankingRow[]; totalRow: Omit<DistrictRankingRow, "district">; narrative: string } {
+  // A period listed twice (a hand-edited address) still counts once.
+  if (periodIds) periodIds = [...new Set(periodIds)];
   const templateSourceIds = getTemplateSourceIds(db, "district-ranking-other-cases");
   const rows: DistrictRankingRow[] = reportDistricts(db)
     .map((district) => {
@@ -743,6 +745,8 @@ export function getWeeklyExecutiveSummary(
 // ---------------------------------------------------------------------------
 
 export function getDistrictRankingAllCases(db: Database, periodIds?: string[]): { rows: DistrictRankingRow[]; totalRow: Omit<DistrictRankingRow, "district"> } {
+  // A period listed twice (a hand-edited address) still counts once.
+  if (periodIds) periodIds = [...new Set(periodIds)];
   const sourceFilteredFindings = applySourceFilter(db, "district-ranking-all-cases", db.findings);
   const rows = reportDistricts(db)
     .map((district) => {
