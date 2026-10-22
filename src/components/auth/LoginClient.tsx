@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { Eye, EyeOff } from "lucide-react";
 import { apiSend } from "@/lib/api-client";
 import { formatDateTime } from "@/lib/format";
 import { notify, notifications } from "@/lib/notify";
@@ -51,6 +52,8 @@ export function LoginClient({
   const [autofilled, setAutofilled] = useState({ username: false, password: false });
   const usernameRef = useRef<HTMLInputElement>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
+  // The eye button in the password field: show the typed password to check it.
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     const isAutofilled = (el: HTMLInputElement | null) => {
@@ -176,10 +179,11 @@ export function LoginClient({
           </div>
           <div className="mb-4">
             <Label htmlFor="password" brand>Password</Label>
+            <div className="relative">
             <Input
               id="password"
               ref={passwordRef}
-              type="password"
+              type={showPassword ? "text" : "password"}
               autoComplete="current-password"
               value={password}
               onChange={(e) => {
@@ -190,9 +194,21 @@ export function LoginClient({
               onBlur={() => setTouched((t) => ({ ...t, password: true }))}
               aria-invalid={error || (touched.password && passwordMissing) ? true : undefined}
               aria-describedby={touched.password && passwordMissing ? "password-error" : undefined}
-              className={error || (touched.password && passwordMissing) ? "border-red-400" : undefined}
+              className={`pr-10 ${error || (touched.password && passwordMissing) ? "border-red-400" : ""}`}
               required
             />
+            <button
+              type="button"
+              onClick={() => setShowPassword((v) => !v)}
+              aria-label={showPassword ? "Hide password" : "Show password"}
+              aria-pressed={showPassword}
+              aria-controls="password"
+              title={showPassword ? "Hide password" : "Show password"}
+              className="absolute inset-y-0 right-0 flex items-center px-3 text-slate-500 hover:text-slate-800 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-sky-600"
+            >
+              {showPassword ? <EyeOff className="h-4 w-4" aria-hidden="true" /> : <Eye className="h-4 w-4" aria-hidden="true" />}
+            </button>
+            </div>
             {touched.password && passwordMissing && (
               <p id="password-error" className="mt-1 text-xs text-red-600">
                 {passwordProblem}

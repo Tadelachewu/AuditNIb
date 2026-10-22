@@ -81,3 +81,19 @@ describe("sign-in form validation", () => {
     await vi.waitFor(() => expect(apiSend).toHaveBeenCalledWith("/api/auth/login", "POST", { username: "ho.controller", password: "Secret@123" }));
   });
 });
+
+describe("show password", () => {
+  it("the eye button shows the typed password and hides it again, without changing it", () => {
+    fireEvent.change(password(), { target: { value: "Secret@123" } });
+    expect((password() as HTMLInputElement).type).toBe("password");
+    fireEvent.click(screen.getByRole("button", { name: "Show password" }));
+    expect((password() as HTMLInputElement).type).toBe("text");
+    expect((password() as HTMLInputElement).value).toBe("Secret@123");
+    fireEvent.click(screen.getByRole("button", { name: "Hide password" }));
+    expect((password() as HTMLInputElement).type).toBe("password");
+  });
+  it("it never submits the form", () => {
+    fireEvent.click(screen.getByRole("button", { name: "Show password" }));
+    expect(apiSend).not.toHaveBeenCalled();
+  });
+});
