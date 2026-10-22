@@ -1,6 +1,7 @@
 import nodemailer, { type Transporter } from "nodemailer";
 import type { NotificationSettings } from "@/types";
 import { logger } from "@/lib/logger";
+import { smtpTlsOptions } from "@/lib/smtpTls";
 
 /**
  * For the two emails sent synchronously, where the user needs the result at
@@ -34,6 +35,8 @@ export function getTransporter(settings: NotificationSettings): Transporter | nu
     port,
     secure: port === 465,
     auth: { user, pass },
+    // SMTP_ALLOW_SELF_SIGNED (src/lib/smtpTls.ts).
+    tls: smtpTlsOptions(),
     // Bounded waits: a slow or unreachable SMTP server fails fast instead of
     // holding sockets open (sending is fire-and-forget for notifications).
     connectionTimeout: 10_000,

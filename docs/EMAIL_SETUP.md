@@ -108,6 +108,30 @@ There is one provider, **SMTP relay**. To send through Microsoft, point it at Mi
 
 (An "Outlook / Graph API" provider used to be listed in the dropdown but was never built; it has been removed.)
 
+### The bank's Exchange server (mail.nibbank.com.et)
+
+**Settings:**
+
+| Where | Value |
+|---|---|
+| Admin → Settings → Notification Delivery | Provider **SMTP**, host **`mail.nibbank.com.et`**, port **587**, From **no-reply@nibbank.com.et** |
+| `.env` | `SMTP_USER=no-reply@nibbank.com.et`, `SMTP_PASSWORD="…"`, **`SMTP_ALLOW_SELF_SIGNED=true`** |
+
+**Why `SMTP_ALLOW_SELF_SIGNED` is needed:** `mail.nibbank.com.et` is answered by two Exchange servers.
+- **NIB-MBX002** uses a self-signed certificate.
+- **NIB-MBX001** uses one from the bank's own authority.
+- **Neither** lists `mail.nibbank.com.et`.
+
+So with the normal certificate check every email fails, with *"self-signed certificate"* / *"unable to verify the first certificate"*.
+
+**What `SMTP_ALLOW_SELF_SIGNED=true` does:**
+- **It skips that check.** The connection stays **encrypted** (STARTTLS) and no certificate file or renewal dates need tracking.
+- **The risk:** the server isn't verified, so someone able to impersonate it on the internal network could read the no-reply password. Use it only for the internal mail server.
+
+**Better, when IT can:** issue both servers certificates from the bank's authority that list `mail.nibbank.com.et`. Then remove the setting and the normal check works, with `NODE_EXTRA_CA_CERTS` pointing at the bank root certificate if Node doesn't already trust it.
+
+`.env` is read at start-up: restart the app and the email worker after changing it.
+
 ## How it works, briefly
 
 - **Notification emails are queued, then delivered.** Each one is saved in the

@@ -1,5 +1,6 @@
 import nodemailer, { type Transporter } from "nodemailer";
 import { logger } from "@/lib/logger";
+import { smtpAllowSelfSigned, smtpTlsOptions } from "@/lib/smtpTls";
 import type { NotificationSettings } from "@/types";
 import { classifyError, emailConfigProblem } from "./rules";
 import type { OutboxRow, SendOutcome } from "./types";
@@ -26,7 +27,7 @@ let pooled: { key: string; transporter: Transporter } | null = null;
 
 function pooledTransporter(settings: NotificationSettings): Transporter {
   const user = process.env.SMTP_USER!;
-  const key = [settings.smtpHost, settings.smtpPort, user, POOL_SIZE(), RATE_PER_SECOND()].join("|");
+  const key = [settings.smtpHost, settings.smtpPort, user, POOL_SIZE(), RATE_PER_SECOND(), smtpAllowSelfSigned()].join("|");
   if (pooled?.key === key) return pooled.transporter;
   pooled?.transporter.close();
   const transporter = nodemailer.createTransport({
@@ -34,6 +35,8 @@ function pooledTransporter(settings: NotificationSettings): Transporter {
     port: settings.smtpPort,
     secure: settings.smtpPort === 465,
     auth: { user, pass: process.env.SMTP_PASSWORD! },
+    // SMTP_ALLOW_SELF_SIGNED (src/lib/smtpTls.ts).
+    tls: smtpTlsOptions(),
     pool: true,
     maxConnections: POOL_SIZE(),
     maxMessages: 100,

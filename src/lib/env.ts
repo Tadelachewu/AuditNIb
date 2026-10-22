@@ -26,6 +26,7 @@ export const envSchema = z.object({
   STORAGE_DIR: z.string().optional(),
   SMTP_USER: z.string().optional(),
   SMTP_PASSWORD: z.string().optional(),
+  SMTP_ALLOW_SELF_SIGNED: z.string().optional(),
   APP_BASE_URL: optionalUrl,
   PORT: z.coerce.number().int().min(1).max(65535).optional(),
   HOST: z.string().optional(),
