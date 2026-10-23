@@ -9,7 +9,7 @@ import { apiSend } from "@/lib/api-client";
 import { formatDateTime } from "@/lib/format";
 import { notify, notifications } from "@/lib/notify";
 import { Button } from "@/components/ui/Button";
-import { Input, Label } from "@/components/ui/Field";
+import { Input } from "@/components/ui/Field";
 import { PASSWORD_MIN_LENGTH } from "@/lib/passwordValidation";
 import { USERNAME_MIN_LENGTH } from "@/lib/usernameValidation";
 import { AuthBackdrop, AUTH_PANEL_CLASS } from "@/components/auth/AuthBackdrop";
@@ -153,7 +153,7 @@ export function LoginClient({
         )}
         <form onSubmit={handleSubmit}>
           <div className="mb-4">
-            <Label htmlFor="username" brand>Username</Label>
+            <Label htmlFor="username">Username</Label>
             <Input
               id="username"
               ref={usernameRef}
@@ -178,7 +178,7 @@ export function LoginClient({
             )}
           </div>
           <div className="mb-4">
-            <Label htmlFor="password" brand>Password</Label>
+            <Label htmlFor="password">Password</Label>
             <div className="relative">
             <Input
               id="password"
@@ -256,5 +256,14 @@ export function LoginClient({
         )}
       </div>
     </AuthBackdrop>
+  );
+}
+
+/** Semi-bold brand-coloured field label (the login's own - the shared Label stays as is). */
+function Label({ htmlFor, children }: { htmlFor: string; children: React.ReactNode }) {
+  return (
+    <label htmlFor={htmlFor} className="mb-1 block text-xs font-semibold text-brand-ink">
+      {children}
+    </label>
   );
 }
