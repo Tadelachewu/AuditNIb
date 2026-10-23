@@ -1,5 +1,6 @@
 "use client";
 
+import { FieldLabel } from "./FieldLabel";
 import { messageChars } from "@/lib/communications/plainText";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
@@ -9,7 +10,6 @@ import { apiGet, apiSend } from "@/lib/api-client";
 import { formatDateTime } from "@/lib/format";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { Label } from "@/components/ui/Field";
 import { Badge } from "@/components/ui/Badge";
 import { notify, notifications, presentError } from "@/lib/notify";
 import { LIMITS, type AttachmentInfo, type MessageView, type ThreadView } from "@/lib/communications/types";
@@ -113,8 +113,8 @@ function MessageCard({ m, canForward, highlighted, onChanged, onRemoved }: { m: 
       <div className="flex flex-wrap items-start gap-2 border-b border-slate-200 px-4 py-3">
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-slate-900">{m.senderName}</p>
-          <p className="text-xs text-slate-500">To: {to}</p>
-          {cc && <p className="text-xs text-slate-500">Cc: {cc}</p>}
+          <p className="text-xs text-slate-500"><span className="font-semibold text-slate-600">To:</span> {to}</p>
+          {cc && <p className="text-xs text-slate-500"><span className="font-semibold text-slate-600">Cc:</span> {cc}</p>}
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1">
           <span className="text-xs text-slate-500">{formatDateTime(m.createdAt)}</span>
@@ -224,7 +224,7 @@ function ReplyBox({ message, onSent }: { message: MessageView; onSent: (id: stri
     <Card className="p-4">
       <div className="flex flex-col gap-3">
         <div>
-          <Label htmlFor="comm-reply">{label}</Label>
+          <FieldLabel htmlFor="comm-reply">{label}</FieldLabel>
           <RichMessageEditor key={editorKey} id="comm-reply" placeholder="Write your reply" minHeight={120} disabled={sending !== null} onChange={setReply} />
           <TextCounter value={reply} />
         </div>

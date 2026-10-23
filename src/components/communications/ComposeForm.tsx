@@ -7,10 +7,11 @@ import Link from "next/link";
 import { apiGet, apiSend } from "@/lib/api-client";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { Input, Label } from "@/components/ui/Field";
+import { Input } from "@/components/ui/Field";
 import { notify, notifications, presentError } from "@/lib/notify";
 import { LIMITS, selectionMatcher, type AttachmentInfo, type Directory, type RecipientSelection } from "@/lib/communications/types";
 import { AttachmentPicker } from "./AttachmentPicker";
+import { FieldLabel } from "./FieldLabel";
 import { RichMessageEditor, TextCounter, type RichMessageValue } from "./RichMessageEditor";
 import { EMPTY_SELECTION, RecipientPicker } from "./RecipientPicker";
 
@@ -186,11 +187,11 @@ export function ComposeForm({ forwardId }: { forwardId?: string } = {}) {
         {/* To and Cc at the top, side by side. */}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="flex min-w-0 flex-col gap-1">
-            <Label>To</Label>
+            <FieldLabel>To</FieldLabel>
             <RecipientPicker dir={dir} value={selection} onChange={setSelection} label="To" />
           </div>
           <div className="flex min-w-0 flex-col gap-1">
-            <Label>Cc</Label>
+            <FieldLabel>Cc</FieldLabel>
             {selection.toAll ? (
               <p className="py-1.5 text-sm text-slate-500">Not needed - everyone receives it.</p>
             ) : (
@@ -200,12 +201,12 @@ export function ComposeForm({ forwardId }: { forwardId?: string } = {}) {
         </div>
 
         <div>
-          <Label htmlFor="comm-subject">Subject</Label>
+          <FieldLabel htmlFor="comm-subject">Subject</FieldLabel>
           <Input id="comm-subject" maxLength={LIMITS.subject} value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="What is it about?" />
         </div>
 
         <div>
-          <Label htmlFor="comm-body">Message</Label>
+          <FieldLabel htmlFor="comm-body">Message</FieldLabel>
           <RichMessageEditor key={editorKey} id="comm-body" placeholder="Write your message" disabled={sending} onChange={setMessage} initialHtml={initialHtml} />
           <TextCounter value={message} />
         </div>

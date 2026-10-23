@@ -68,7 +68,7 @@ export function CommunicationsClient({ canSend }: { canSend: boolean }) {
         setPage(1);
         setData(null);
       }}
-      className={`rounded-md px-3 py-1.5 text-sm font-medium ${box === b ? "bg-sky-100 text-sky-900" : "text-slate-600 hover:bg-slate-100"}`}
+      className={`rounded-md px-3 py-1.5 text-sm font-semibold ${box === b ? "bg-sky-100 text-sky-900" : "text-slate-600 hover:bg-slate-100"}`}
       aria-pressed={box === b}
     >
       {label}
@@ -134,7 +134,9 @@ function InboxRow({ m }: { m: InboxItem }) {
         <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${unread ? "bg-brand-gold-dark" : "bg-transparent"}`} aria-hidden="true" />
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline gap-2">
-            <span className={`truncate text-sm ${unread ? "font-semibold text-slate-900" : "text-slate-700"}`}>{m.senderName}</span>
+            <span className={`truncate text-sm ${unread ? "font-semibold text-slate-900" : "text-slate-700"}`}>
+              <span className="text-xs font-semibold text-slate-600">From:</span> {m.senderName}
+            </span>
             <span className="ml-auto shrink-0 text-xs text-slate-500">{formatDateTime(m.createdAt)}</span>
           </div>
           <p className={`truncate text-sm ${unread ? "font-semibold text-slate-900" : "text-slate-800"}`}>
@@ -156,7 +158,9 @@ function SentRow({ m }: { m: SentItem }) {
       <Link href={`/communications/${m.id}`} className={`${ROW} ${READ_ROW}`}>
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline gap-2">
-            <span className="truncate text-sm text-slate-700">To: {to}</span>
+            <span className="truncate text-sm text-slate-700">
+              <span className="text-xs font-semibold text-slate-600">To:</span> {to}
+            </span>
             <span className="ml-auto shrink-0 text-xs text-slate-500">{formatDateTime(m.createdAt)}</span>
           </div>
           <p className="truncate text-sm text-slate-900">
