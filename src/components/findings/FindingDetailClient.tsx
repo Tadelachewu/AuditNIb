@@ -650,75 +650,75 @@ export function FindingDetailClient({
         ) : (
           <dl className="grid grid-cols-1 gap-x-6 gap-y-3 p-4 text-sm sm:grid-cols-2">
             <div>
-              <dt className="text-xs text-slate-500">Source</dt>
+              <dt className="text-xs font-semibold text-slate-600">Source</dt>
               <dd className="text-slate-900">{lookups.sourceName}</dd>
             </div>
             <div>
-              <dt className="text-xs text-slate-500">Department</dt>
+              <dt className="text-xs font-semibold text-slate-600">Department</dt>
               <dd className="text-slate-900">{lookups.departmentName}</dd>
             </div>
             <div>
-              <dt className="text-xs text-slate-500">Classified case</dt>
+              <dt className="text-xs font-semibold text-slate-600">Classified case</dt>
               <dd className="text-slate-900">{lookups.categoryName}</dd>
             </div>
             <div>
-              <dt className="text-xs text-slate-500">Finding date</dt>
+              <dt className="text-xs font-semibold text-slate-600">Finding date</dt>
               <dd className="text-slate-900">{finding.findingDate}</dd>
             </div>
             {/* Case ages (src/lib/caseAge.ts): an import is submitted and approved at once - one age. */}
             {caseAges.imported ? (
               <div>
-                <dt className="text-xs text-slate-500">Case age (submit / approved)</dt>
+                <dt className="text-xs font-semibold text-slate-600">Case age (submit / approved)</dt>
                 <dd className="text-slate-900">{formatAge(caseAges.approved)}</dd>
               </div>
             ) : (
               <>
                 <div>
-                  <dt className="text-xs text-slate-500">Case age (submit){caseAges.estimated ? " (est.)" : ""}</dt>
+                  <dt className="text-xs font-semibold text-slate-600">Case age (submit){caseAges.estimated ? " (est.)" : ""}</dt>
                   <dd className="text-slate-900">{formatAge(caseAges.submit)}</dd>
                 </div>
                 <div>
-                  <dt className="text-xs text-slate-500">Case age (approved){caseAges.estimated ? " (est.)" : ""}</dt>
+                  <dt className="text-xs font-semibold text-slate-600">Case age (approved){caseAges.estimated ? " (est.)" : ""}</dt>
                   <dd className="text-slate-900">{formatAge(caseAges.approved)}</dd>
                 </div>
               </>
             )}
             <div>
-              <dt className="text-xs text-slate-500">Case age (finding date)</dt>
+              <dt className="text-xs font-semibold text-slate-600">Case age (finding date)</dt>
               <dd className="text-slate-900">{formatAge(caseAges.findingDate)}</dd>
             </div>
             {/* Imported findings only: the source system's own id for it
                 (Excel import's "External Reference" column). */}
             {(finding.importBatchId || finding.externalReference) && (
               <div>
-                <dt className="text-xs text-slate-500">External reference</dt>
+                <dt className="text-xs font-semibold text-slate-600">External reference</dt>
                 <dd className={finding.externalReference ? "font-mono text-slate-900" : "italic text-slate-500"}>
                   {finding.externalReference || "Not provided"}
                 </dd>
               </div>
             )}
             <div>
-              <dt className="text-xs text-slate-500">Risk level</dt>
+              <dt className="text-xs font-semibold text-slate-600">Risk level</dt>
               <dd className="text-slate-900">{finding.riskLevel}</dd>
             </div>
             <div>
-              <dt className="text-xs text-slate-500">Priority</dt>
+              <dt className="text-xs font-semibold text-slate-600">Priority</dt>
               <dd className="text-slate-900">{finding.priority}</dd>
             </div>
             <div>
-              <dt className="text-xs text-slate-500">Operation area</dt>
+              <dt className="text-xs font-semibold text-slate-600">Operation area</dt>
               <dd className="text-slate-900">{finding.operationArea}</dd>
             </div>
             <div>
-              <dt className="text-xs text-slate-500">Type of irregularity</dt>
+              <dt className="text-xs font-semibold text-slate-600">Type of irregularity</dt>
               <dd className="text-slate-900">{finding.irregularityType}</dd>
             </div>
             <div>
-              <dt className="text-xs text-slate-500">Currency</dt>
+              <dt className="text-xs font-semibold text-slate-600">Currency</dt>
               <dd className="text-slate-900">{finding.currency}</dd>
             </div>
             <div>
-              <dt className="text-xs text-slate-500">Amount involved</dt>
+              <dt className="text-xs font-semibold text-slate-600">Amount involved</dt>
               <dd className="text-slate-900">
                 {finding.currency} {formatCurrency(finding.amount)} ({finding.caseCount} case
                 {finding.caseCount === 1 ? "" : "s"})
@@ -727,14 +727,15 @@ export function FindingDetailClient({
             {/* Outstanding only drops when HO accepts (closes); what the branch
                 rectified but District hasn't verified yet shows as pending. */}
             <div>
-              <dt className="text-xs text-slate-500">Outstanding (until accepted)</dt>
+              <dt className="text-xs font-semibold text-slate-600">Outstanding (until accepted)</dt>
               <dd className="text-slate-900">
                 {finding.currency} {formatCurrency(finding.amount - finding.closedAmount)} ({finding.caseCount - finding.closedCases} case
                 {finding.caseCount - finding.closedCases === 1 ? "" : "s"})
               </dd>
             </div>
+            {/* Its label in amber: rectified by the branch, waiting for District to verify. */}
             <div>
-              <dt className="text-xs text-slate-500">Pending verification</dt>
+              <dt className="text-xs font-semibold text-amber-700">Pending verification</dt>
               <dd className="text-slate-900">
                 {finding.currency} {formatCurrency(Math.max(finding.rectifiedAmount - finding.districtVerifiedAmount, 0))} (
                 {Math.max(finding.rectifiedCases - finding.districtVerifiedCases, 0)} case
@@ -742,21 +743,21 @@ export function FindingDetailClient({
               </dd>
             </div>
             <div>
-              <dt className="text-xs text-slate-500">District Verified</dt>
+              <dt className="text-xs font-semibold text-slate-600">District Verified</dt>
               <dd className="text-slate-900">
                 {finding.currency} {formatCurrency(finding.districtVerifiedAmount)} ({finding.districtVerifiedCases} case
                 {finding.districtVerifiedCases === 1 ? "" : "s"})
               </dd>
             </div>
             <div>
-              <dt className="text-xs text-slate-500">Closed</dt>
+              <dt className="text-xs font-semibold text-slate-600">Closed</dt>
               <dd className="text-slate-900">
                 {finding.currency} {formatCurrency(finding.closedAmount)} ({finding.closedCases} case
                 {finding.closedCases === 1 ? "" : "s"})
               </dd>
             </div>
             <div className="sm:col-span-2">
-              <dt className="text-xs text-slate-500">Description</dt>
+              <dt className="text-xs font-semibold text-slate-600">Description</dt>
               <dd className="text-slate-900">{finding.description}</dd>
             </div>
             {/* Always shown (optional fields) - "Not provided" rather than
@@ -769,7 +770,7 @@ export function FindingDetailClient({
               ] as const
             ).map(([label, value]) => (
               <div key={label} className="sm:col-span-2">
-                <dt className="text-xs text-slate-500">{label}</dt>
+                <dt className="text-xs font-semibold text-slate-600">{label}</dt>
                 <dd className={value ? "whitespace-pre-wrap text-slate-900" : "italic text-slate-500"}>{value || "Not provided"}</dd>
               </div>
             ))}

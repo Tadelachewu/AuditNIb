@@ -179,7 +179,7 @@ export function AdjustmentsCard({ finding }: { finding: FindingFigures }) {
         </div>
         <dl className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div>
-            <dt className="text-xs text-slate-500">Originally registered</dt>
+            <dt className="text-xs font-semibold text-slate-600">Originally registered</dt>
             <dd className="text-slate-900">
               {finding.currency} {formatCurrency(finding.registeredAmount)} ({plural(finding.registeredCaseCount, "case")})
             </dd>
@@ -187,7 +187,7 @@ export function AdjustmentsCard({ finding }: { finding: FindingFigures }) {
           {/* The same two boxes for every finding: what was transferred into this
               period (0 when it wasn't transferred), and the outstanding. */}
           <div>
-            <dt className="text-xs text-slate-500">
+            <dt className="text-xs font-semibold text-slate-600">
               In this period (transferred){view.periodStay ? ` - from ${view.periodStay.fromPeriodCode}` : ""}
             </dt>
             <dd className="text-slate-900">
@@ -195,8 +195,8 @@ export function AdjustmentsCard({ finding }: { finding: FindingFigures }) {
             </dd>
           </div>
           <div>
-            <dt className="text-xs text-slate-500">Outstanding (outstanding + adjustments - rectified)</dt>
-            <dd className="font-semibold text-slate-900">
+            <dt className="text-xs font-semibold text-slate-600">Outstanding (outstanding + adjustments - rectified)</dt>
+            <dd className="text-slate-900">
               {finding.currency} {formatCurrency(outstandingOf(finding).amount)} ({plural(outstandingOf(finding).cases, "case")})
             </dd>
           </div>
