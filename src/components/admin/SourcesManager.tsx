@@ -7,7 +7,7 @@ import { useServerList } from "@/lib/useServerList";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { StickyActions } from "@/components/ui/StickyActions";
-import { Label } from "@/components/ui/Field";
+import { Label } from "@/components/admin/AdminLabel";
 import { INPUT_FILTERS, codeError, entityNameError, LIMITS } from "@/lib/inputRules";
 import { RuleInput } from "@/components/ui/RuleInput";
 import { Badge } from "@/components/ui/Badge";

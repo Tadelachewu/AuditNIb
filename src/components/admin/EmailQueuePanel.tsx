@@ -104,7 +104,7 @@ export function EmailQueuePanel({ canEdit }: { canEdit: boolean }) {
       <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {tiles.map((t) => (
           <div key={t.label} className="rounded-md border border-slate-200 px-3 py-2">
-            <dt className="text-xs text-slate-500">{t.label}</dt>
+            <dt className="text-xs font-semibold text-slate-600">{t.label}</dt>
             <dd className="mt-0.5 flex items-center gap-2">
               <span className="text-xl font-semibold tabular-nums text-slate-900">{t.value}</span>
               {t.value > 0 && t.tone !== "gray" && <Badge tone={t.tone}>{t.label}</Badge>}

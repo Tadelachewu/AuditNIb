@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { apiGet, apiSend } from "@/lib/api-client";
 import { Button } from "@/components/ui/Button";
-import { CheckboxField, Input, Label } from "@/components/ui/Field";
+import { CheckboxField, Input } from "@/components/ui/Field";
+import { Label } from "@/components/admin/AdminLabel";
 import { notify, notifications, presentError } from "@/lib/notify";
 import type { AreaSources, AutoTransferConfig } from "@/lib/autoTransfer/types";
 

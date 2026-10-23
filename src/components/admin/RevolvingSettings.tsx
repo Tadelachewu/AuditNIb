@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { apiGet, apiSend } from "@/lib/api-client";
 import { Button } from "@/components/ui/Button";
-import { Label } from "@/components/ui/Field";
+import { Label } from "@/components/admin/AdminLabel";
 import { notify, notifications, presentError } from "@/lib/notify";
 import type { AdjustmentConfig } from "@/lib/adjustments/types";
 
