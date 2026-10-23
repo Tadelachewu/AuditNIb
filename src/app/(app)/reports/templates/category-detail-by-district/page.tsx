@@ -103,11 +103,11 @@ export default async function CategoryDetailByDistrictPage({
               <tr>
                 {categories.map((c) => (
                   <Fragment key={c.id}>
-                    <th className="px-2 py-1 font-normal">Reported Case</th>
+                    <th className="px-2 py-1 font-normal">Total Case</th>
                     <th className="px-2 py-1 font-normal">Rectified</th>
                   </Fragment>
                 ))}
-                <th className="px-2 py-1 font-normal">Total Reported Case</th>
+                <th className="px-2 py-1 font-normal">Total Case</th>
                 <th className="px-2 py-1 font-normal">Rectified</th>
                 <th className="px-2 py-1 font-normal">Outstanding Case</th>
                 <th className="px-2 py-1 font-normal">Rectified %</th>

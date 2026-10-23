@@ -9,6 +9,7 @@ import { transitionFinding } from "@/lib/findings";
 import { notifyFindingsPermissionHolders, notifyUsers, usersWithFindingsPermission } from "@/lib/notifications";
 import type { FindingStatus, RectificationEntry, FindingCase } from "@/types";
 import { withApiHandler } from "@/lib/api/handler";
+import { rectificationStatus } from "@/lib/rectificationResubmit";
 
 // TRANSFERRED is included because a finding that's had its outstanding
 // balance carried into a new (open) period by the Transfer Engine
@@ -16,9 +17,9 @@ import { withApiHandler } from "@/lib/api/handler";
 // there - transfer moves the finding forward, it doesn't pause its
 // workflow. RECTIFICATION_RETURNED is included so a Branch Manager who
 // got sent back for correction (return-rectification/route.ts) can
-// address it by recording more rectification directly - the usual
-// fullyRectified computation below naturally moves it back to
-// PARTIALLY_RECTIFIED/RECTIFIED, out of the returned state.
+// keep working - recording more rectification while returned. It stays
+// RECTIFICATION_RETURNED until resubmitted (resubmit-rectification), so the
+// returned part is corrected and verified again, never silently cleared.
 const RECTIFIABLE_STATUSES = ["SENT_TO_BRANCH_MANAGER", "REVERSED", "PARTIALLY_RECTIFIED", "TRANSFERRED", "RECTIFICATION_RETURNED"];
 
 // rectifiedCases/rectifiedAmount are used for a plain (non-itemized)
@@ -217,9 +218,11 @@ async function handlePOST(request: Request, { params }: { params: Promise<{ id: 
     f.rectifiedCases += rectifiedCases;
     f.rectifiedAmount += rectifiedAmount;
 
+    // New rectification goes to District as usual. A returned part (if any)
+    // stays returned, out of the workflow, until the manager resubmits it
+    // (src/lib/rectificationResubmit.ts) - it's never cleared by this.
     const fullyRectified = f.rectifiedCases >= f.caseCount && f.rectifiedAmount >= f.amount;
-    const toStatus: FindingStatus = fullyRectified ? "RECTIFIED" : "PARTIALLY_RECTIFIED";
-    transitionFinding(current, f, { toStatus, action: "RECTIFY", userId: auth.session.userId!, userName: auth.session.name! });
+    transitionFinding(current, f, { toStatus: rectificationStatus(f), action: "RECTIFY", userId: auth.session.userId!, userName: auth.session.name! });
 
     // Every rectification entry - partial or full - notifies the other
     // findings.rectify holder(s) at this same branch (Branch Manager and

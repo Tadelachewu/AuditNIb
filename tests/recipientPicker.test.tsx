@@ -136,3 +136,12 @@ describe("Communications To picker", () => {
     expect(seen.value.toAll).toBe(true);
   });
 });
+
+describe("Cc picker", () => {
+  it("has no Everyone option and its own button text", () => {
+    render(<RecipientPicker dir={dir} value={EMPTY_SELECTION} onChange={() => {}} label="Cc" allowEveryone={false} />);
+    fireEvent.click(screen.getByRole("button", { name: /Add people to Cc/ }));
+    expect(screen.getByRole("dialog", { name: "Choose Cc recipients" })).toBeTruthy();
+    expect(screen.queryByLabelText(/Everyone/)).toBeNull();
+  });
+});

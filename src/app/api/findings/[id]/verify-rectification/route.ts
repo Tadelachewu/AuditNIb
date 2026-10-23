@@ -5,6 +5,7 @@ import { assertFindingInScope } from "@/lib/findings-scope";
 import { appendAuditLog } from "@/lib/audit";
 import { notifyFindingsPermissionHolders } from "@/lib/notifications";
 import { withApiHandler } from "@/lib/api/handler";
+import { awaitingDistrict } from "@/lib/rectificationResubmit";
 
 // The District Controller's gate on a Branch Manager's recorded
 // rectification, before any of it is closable by anyone (including HO) -
@@ -29,11 +30,11 @@ async function handlePOST(_request: Request, { params }: { params: Promise<{ id:
   const scopeError = assertFindingInScope(auth.session, existing);
   if (scopeError) return NextResponse.json({ error: scopeError }, { status: 403 });
 
-  if (existing.status === "RECTIFICATION_RETURNED" || existing.status === "CLOSED") {
+  if (existing.status === "CLOSED") {
     return NextResponse.json({ error: "This finding has no recorded rectification awaiting verification" }, { status: 409 });
   }
-  const verifiableCases = existing.rectifiedCases - existing.districtVerifiedCases;
-  const verifiableAmount = existing.rectifiedAmount - existing.districtVerifiedAmount;
+  // What awaits District: rectified, not returned (that waits for resubmission), not yet verified.
+  const { cases: verifiableCases, amount: verifiableAmount } = awaitingDistrict(existing);
   if (verifiableCases <= 0 && verifiableAmount <= 0) {
     return NextResponse.json({ error: "Nothing rectified is awaiting verification yet" }, { status: 409 });
   }

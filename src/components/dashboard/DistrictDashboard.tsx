@@ -36,6 +36,7 @@ import { PerformanceCalculation, PerformancePct } from "@/components/dashboard/P
 import { DashboardGrid } from "@/components/dashboard/DashboardGrid";
 import { currentPeriod, sortPeriods } from "@/lib/periods";
 import { DashboardFooter } from "@/components/dashboard/DashboardFooter";
+import { isAwaitingDistrict } from "@/lib/rectificationResubmit";
 
 // master.txt §10: district-level aggregate, branch-by-branch ranking,
 // category totals, risk distribution, recent activity, work queue -
@@ -258,9 +259,8 @@ export function DistrictDashboard({
   const pendingVerifyFindings = db.findings.filter(
     (f) =>
       f.districtId === district.id &&
-      f.status !== "RECTIFICATION_RETURNED" &&
       f.status !== "CLOSED" &&
-      (f.rectifiedCases > f.districtVerifiedCases || f.rectifiedAmount > f.districtVerifiedAmount)
+      isAwaitingDistrict(f)
   );
 
   const recentActivity = db.findingTransitions

@@ -8,6 +8,7 @@ import { caseAgeDays, userPerformedApprovalOrVerifyAction, hasRectificationAfter
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
 import { Card } from "@/components/ui/Card";
 import { FindingDetailClient } from "@/components/findings/FindingDetailClient";
+import { hasReturned, isAwaitingDistrict } from "@/lib/rectificationResubmit";
 
 export default async function FindingDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
@@ -264,12 +265,13 @@ export default async function FindingDetailPage({ params }: { params: Promise<{ 
         canVerifyRectification:
           has("verify-rectification") &&
           ["PARTIALLY_RECTIFIED", "RECTIFIED", "TRANSFERRED"].includes(finding.status) &&
-          (finding.rectifiedCases > finding.districtVerifiedCases || finding.rectifiedAmount > finding.districtVerifiedAmount),
+          isAwaitingDistrict(finding),
         // Split return-for-correction matrix. See computation above.
         canReturnRectification,
         canDistrictReturnRectification,
         canHoReturnRectification,
-        canResubmitRectification: has("rectify") && finding.status === "RECTIFICATION_RETURNED",
+        // Something returned for correction and not resubmitted yet (any status).
+        canResubmitRectification: has("rectify") && finding.status !== "CLOSED" && hasReturned(finding),
         // Settings.hoApproval's single approval step for a bank-registered
         // finding - both gates required, matching bank-approval/route.ts's
         // own server-side check: the permission (an eligible role) and the

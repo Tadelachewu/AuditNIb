@@ -25,10 +25,11 @@ Open **Communications** in the sidebar (under My Profile and Support). The numbe
 
 | Field | Rule |
 |---|---|
-| **To** | **Everyone**, or **Choose**: four tabs - **Roles**, **Districts**, **Branches**, **People** - each a tick list with a count per item, a filter box and *Select all (shown)*. Ticks within a tab add up; **tabs narrow each other**: ticked roles *in* the ticked districts / branches (Branch Manager + Addis = Addis's branch managers, not every manager plus all of Addis). The Branches tab lists the ticked districts' branches; ticking a branch sends to that branch only, not its whole district. In **People**, ticked = receives it: untick someone to leave them out, tick anyone to add them. The selection shows under the tabs (× removes); **→ N people** opens the list of names by branch. The server applies the same rule (`selectionMatcher()` in `src/lib/communications/types.ts`), so the count is exactly who receives it |
+| **To** (top left) | **Everyone**, or **Choose**: four tabs - **Roles**, **Districts**, **Branches**, **People** - each a tick list with a count per item, a filter box and *Select all (shown)*. Ticks within a tab add up; **tabs narrow each other**: ticked roles *in* the ticked districts / branches (Branch Manager + Addis = Addis's branch managers, not every manager plus all of Addis). The Branches tab lists the ticked districts' branches; ticking a branch sends to that branch only, not its whole district. In **People**, ticked = receives it: untick someone to leave them out, tick anyone to add them. The selection shows under the tabs (× removes); **→ N people** opens the list of names by branch. The server applies the same rule (`selectionMatcher()` in `src/lib/communications/types.ts`), so the count is exactly who receives it |
+| **Cc** (top right, next to To) | Optional: people who get a **copy**, picked the same way (no *Everyone*). They receive the message, the notification and the email like To recipients, and the message shows a separate **Cc:** line. Someone in both To and Cc counts once, as To. Not offered when To is *Everyone*. **Reply all** includes them. Stored as `communication_recipients.is_cc` (migration `20261023120000_communication_cc`) |
 | **Subject** | Required, up to 200 characters |
-| **Message** | Required, up to 5,000 characters of text. A formatting toolbar offers headings 1-6, font family, size, weight and line height, text and highlight colour, alignment, bold, italic, underline, strikethrough, sub- / superscript, lists, quotes, a dividing line and links (see *Formatting* below) |
-| **Attach files** | Optional: **PDF, Word (.docx), Excel (.xlsx)**; up to **5 files, 10 MB each**. Each file uploads as soon as you pick it; remove it with ✕ |
+| **Message** | Required, up to 10,000 characters of text. A formatting toolbar offers headings 1-6, font family, size, weight and line height, text and highlight colour, alignment, bold, italic, underline, strikethrough, sub- / superscript, lists, quotes, a dividing line and links (see *Formatting* below) |
+| **Attach files** | Optional: **PDF, Word (.docx), Excel (.xlsx)**; up to **10 files, 25 MB each**. The picker sits at the bottom right, under the message. Each file uploads as soon as you pick it; remove it with ✕ |
 
 **Send** is enabled once someone is chosen, the subject and text are filled in, and every attachment has finished uploading. If something is missing, the reason shows next to the button.
 
@@ -53,7 +54,7 @@ The message box is a rich text editor (Tiptap). Its toolbar offers exactly what 
 | Link | Select text, then the link button; web (`https://`) and email (`mailto:`) addresses only. Links always open in a new tab |
 | Remove formatting, undo, redo | |
 
-**Pasting** from Word or a web page keeps the same kinds of formatting (headings, fonts, sizes, colours, alignment ...) and drops the rest, such as tables, images, borders and spacing. Images and documents go in as **attachments**. The 5,000-character limit counts the text, not the formatting.
+**Pasting** from Word or a web page keeps the same kinds of formatting (headings, fonts, sizes, colours, alignment ...) and drops the rest, such as tables, images, borders and spacing. Images and documents go in as **attachments**. The 10,000-character limit counts the text, not the formatting.
 
 **Colours in dark mode:** a colour chosen for the text is kept as chosen, so very dark text can be hard to read for someone using dark mode (and very light text in light mode). Prefer mid-tone colours.
 
@@ -106,8 +107,8 @@ An All users message to, say, 1,500 people queues 1,500 emails; the queue's rate
 
 | What | Limit |
 |---|---|
-| Subject / text | 200 / 5,000 characters |
-| Attachments | 5 per message, 10 MB each, PDF / .docx / .xlsx only. Checked **on the server**, whatever the browser checked: the real content must match the type (a renamed file is refused), the name's extension must match the type (a PDF can't be called `.exe`), and Word / Excel files must be sane archives (no "zip bombs") **without macros** ([uploadChecks.ts](../src/lib/uploadChecks.ts)) |
+| Subject / text | 200 / 10,000 characters |
+| Attachments | 10 per message, 25 MB each, PDF / .docx / .xlsx only. Checked **on the server**, whatever the browser checked: the real content must match the type (a renamed file is refused), the name's extension must match the type (a PDF can't be called `.exe`), and Word / Excel files must be sane archives (no "zip bombs") **without macros** ([uploadChecks.ts](../src/lib/uploadChecks.ts)) |
 | Messages sent | 20 per user per 10 minutes |
 | **All users** messages | 3 per user per hour |
 | Uploads | 30 files per user per 10 minutes |
@@ -157,7 +158,7 @@ Older Word / Excel formats (.doc, .xls) and other file types aren't accepted: sa
 
 **Not in `readDb()`:** messages grow fast, so the module queries its own tables with Prisma instead of joining the app's in-memory `Database`. Sending goes through `updateDb()` only for the notifications, emails and audit entry, with the message rows written in the **same transaction** (`alsoWrite`), so a message is never saved without its notifications or the other way round.
 
-**Attachments are uploaded one per request** before sending: the app's request size limit is about 10 MB, so five 10 MB files can't travel in one request. Sending then links the uploaded files to the message.
+**Attachments are uploaded one per request** before sending: ten 25 MB files can't travel in one request. The upload address is the one request allowed up to 26 MB (`src/proxy.ts`; everything else stays at 11 MB), and `next.config.ts` must allow the same (`experimental.proxyClientMaxBodySize: "26mb"`). Sending then links the uploaded files to the message.
 
 **Email:** `notifyUsers()` takes an optional `emailMessage` (the full text) and `emailHtml` (the sanitised formatted body), so the bell shows a preview while the email carries the whole message, formatted, with a plain-text part. `notificationPath()` maps entity *Communication* to `/communications/<id>`.
 

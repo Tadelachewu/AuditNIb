@@ -52,7 +52,7 @@ export function AttachmentPicker({
         continue;
       }
       if (f.size > LIMITS.attachmentBytes) {
-        setError(`${f.name} is larger than 10 MB`);
+        setError(`${f.name} is larger than ${LIMITS.attachmentBytes / (1024 * 1024)} MB`);
         continue;
       }
       local.push(f.name);
@@ -105,7 +105,7 @@ export function AttachmentPicker({
           <Paperclip className="h-4 w-4" />
           Attach files
         </button>
-        <span className="text-xs text-slate-500">PDF, Word (.docx) or Excel (.xlsx) - up to {LIMITS.attachments} files, 10 MB each</span>
+        <span className="text-xs text-slate-500">PDF, Word (.docx) or Excel (.xlsx) - up to {LIMITS.attachments} files, {LIMITS.attachmentBytes / (1024 * 1024)} MB each</span>
       </div>
       {(attachments.length > 0 || uploading.length > 0) && (
         <ul className={`flex flex-col gap-1 ${align === "end" ? "w-full sm:w-80" : ""}`}>

@@ -671,10 +671,74 @@ export async function readDb(client: DbClient = prisma): Promise<Database> {
   };
 
   await syncAdminPermissions(db, client);
+  await readReturnedParts(db, client);
   // A write request's own read (not updateDb()'s): remembered so its
   // updateDb() can tell whether anything it checked changed since.
   if (client === prisma) rememberCheckedState(db);
   return db;
+}
+
+// -----------------------------------------------------------------------------
+// Returned rectifications (src/lib/rectificationResubmit.ts): findings.
+// returned_cases / returned_amount and finding_cases.returned (migration
+// 20261023130000_returned_rectification), read and written with SQL so no
+// regenerated Prisma client is needed. Before that migration: always 0.
+// -----------------------------------------------------------------------------
+
+let returnedColumns: boolean | null = null;
+let returnedCheckedAt = 0;
+
+async function hasReturnedColumns(client: DbClient): Promise<boolean> {
+  if (returnedColumns === true) return true;
+  if (returnedColumns === false && Date.now() - returnedCheckedAt < 60_000) return false;
+  returnedCheckedAt = Date.now();
+  try {
+    const rows = await client.$queryRaw<{ ok: boolean }[]>`
+      SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'findings' AND column_name = 'returned_cases') AS ok`;
+    returnedColumns = rows[0]?.ok === true;
+  } catch {
+    returnedColumns = false;
+  }
+  return returnedColumns;
+}
+
+async function readReturnedParts(db: Database, client: DbClient): Promise<void> {
+  if (!(await hasReturnedColumns(client))) return;
+  const parts = await client.$queryRaw<{ id: string; returned_cases: number; returned_amount: number }[]>`
+    SELECT id, returned_cases, returned_amount FROM findings WHERE returned_cases > 0 OR returned_amount > 0`;
+  if (parts.length > 0) {
+    const byId = new Map(parts.map((p) => [p.id, p]));
+    for (const f of db.findings) {
+      const p = byId.get(f.id);
+      if (p) {
+        f.returnedCases = Number(p.returned_cases);
+        f.returnedAmount = Number(p.returned_amount);
+      }
+    }
+  }
+  const cases = await client.$queryRaw<{ id: string }[]>`SELECT id FROM finding_cases WHERE returned = true`;
+  if (cases.length > 0) {
+    const ids = new Set(cases.map((c) => c.id));
+    for (const c of db.findingCases) if (ids.has(c.id)) c.returned = true;
+  }
+}
+
+async function writeReturnedParts(tx: Prisma.TransactionClient, before: Database, after: Database): Promise<void> {
+  const was = new Map(before.findings.map((f) => [f.id, f]));
+  const changed = after.findings.filter((f) => {
+    const b = was.get(f.id);
+    return (f.returnedCases ?? 0) !== (b?.returnedCases ?? 0) || (f.returnedAmount ?? 0) !== (b?.returnedAmount ?? 0);
+  });
+  const caseWas = new Map(before.findingCases.map((c) => [c.id, c]));
+  const changedCases = after.findingCases.filter((c) => Boolean(c.returned) !== Boolean(caseWas.get(c.id)?.returned));
+  if (changed.length === 0 && changedCases.length === 0) return;
+  if (!(await hasReturnedColumns(tx))) return;
+  for (const f of changed) {
+    await tx.$executeRaw`UPDATE findings SET returned_cases = ${f.returnedCases ?? 0}, returned_amount = ${f.returnedAmount ?? 0} WHERE id = ${f.id}`;
+  }
+  for (const c of changedCases) {
+    await tx.$executeRaw`UPDATE finding_cases SET returned = ${Boolean(c.returned)} WHERE id = ${c.id}`;
+  }
 }
 
 // =============================================================================
@@ -1126,6 +1190,7 @@ async function writeChanges(tx: Prisma.TransactionClient, before: Database, afte
   await syncCollection(tx.findingTransition, before.findingTransitions, after.findingTransitions, transitionToData);
   await syncCollection(tx.rectificationEntry, before.rectifications, after.rectifications, rectificationToData);
   await syncCollection(tx.findingCase, before.findingCases, after.findingCases, findingCaseToData);
+  await writeReturnedParts(tx, before, after);
   await syncCollection(tx.findingTransfer, before.findingTransfers, after.findingTransfers, transferToData);
   await syncCollection(tx.findingClosure, before.findingClosures, after.findingClosures, closureToData);
   await syncCollection(tx.findingAdjustment, before.findingAdjustments, after.findingAdjustments, adjustmentToData);

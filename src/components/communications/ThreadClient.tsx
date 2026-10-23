@@ -73,11 +73,10 @@ function BackLink() {
 
 function MessageCard({ m, highlighted, onChanged, onRemoved }: { m: MessageView; highlighted: boolean; onChanged: () => void; onRemoved: () => void }) {
   const [busy, setBusy] = useState(false);
-  const to = m.toAll
-    ? `All users (${m.recipientCount})`
-    : m.recipientCount > m.recipientNames.length
-      ? `${m.recipientNames.join(", ")} and ${m.recipientCount - m.recipientNames.length} more`
-      : m.recipientNames.join(", ");
+  const toCount = m.recipientCount - m.ccCount;
+  const list = (names: string[], count: number) => (count > names.length ? `${names.join(", ")} and ${count - names.length} more` : names.join(", "));
+  const to = m.toAll ? `All users (${m.recipientCount})` : list(m.recipientNames, toCount);
+  const cc = m.ccCount > 0 ? list(m.ccNames, m.ccCount) : null;
 
   async function withdraw() {
     setBusy(true);
@@ -110,6 +109,7 @@ function MessageCard({ m, highlighted, onChanged, onRemoved }: { m: MessageView;
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-slate-900">{m.senderName}</p>
           <p className="text-xs text-slate-500">To: {to}</p>
+          {cc && <p className="text-xs text-slate-500">Cc: {cc}</p>}
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1">
           <span className="text-xs text-slate-500">{formatDateTime(m.createdAt)}</span>

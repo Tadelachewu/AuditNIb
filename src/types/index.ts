@@ -588,6 +588,13 @@ export interface Finding {
   // bank-registered finding never went through District Review, so
   // District shouldn't gain rectification-return authority over it either.
   registeredByBankScope: boolean;
+  /**
+   * Rectified cases / amount returned for correction and not resubmitted yet
+   * (src/lib/rectificationResubmit.ts) - still counted in rectifiedCases /
+   * rectifiedAmount, out of the workflow until resubmitted. 0 / missing = none.
+   */
+  returnedCases?: number;
+  returnedAmount?: number;
   // Cumulative across all RectificationEntry rows for this finding.
   // Outstanding = caseCount - rectifiedCases / amount - rectifiedAmount,
   // computed on read rather than stored, so it can never drift.
@@ -694,6 +701,8 @@ export interface FindingCase {
   rectifiedAt?: string;
   rectifiedBy?: string;
   rectifiedByName?: string;
+  /** Rectified, returned for correction, not resubmitted yet. */
+  returned?: boolean;
   createdAt: string;
 }
 

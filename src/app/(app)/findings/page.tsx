@@ -15,6 +15,7 @@ import { TimeRangeFilter } from "@/components/reports/TimeRangeFilter";
 import { FilterBar } from "@/components/dashboard/FilterBar";
 import { FindingsTable, type FindingRow } from "@/components/findings/FindingsTable";
 import { getPreference } from "@/lib/userPreferences";
+import { isAwaitingDistrict } from "@/lib/rectificationResubmit";
 import { FILTERABLE_FINDING_STATUSES, type Finding } from "@/types";
 import { matchesOperationAndIrregularity } from "@/lib/dashboardFilters";
 import { currentPeriod, resolvePeriodFilter, sortPeriods } from "@/lib/periods";
@@ -188,6 +189,7 @@ export default async function FindingsPage({
     // live current status (which belongs to whatever period it's in now).
     isHistorical: slice ? !slice.isCurrentPeriod : false,
     transferredOutToCode: slice?.transferredOutToCode ?? null,
+    awaitingDistrict: isAwaitingDistrict(f),
     // Optional columns (Show / hide columns).
     periodCode: periodCode(slice ? periodId : f.periodId),
     findingDate: f.findingDate ?? "",

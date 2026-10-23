@@ -17,7 +17,7 @@ import {
   previewOf,
   replyRecipients,
   replySubject,
-  resolveRecipients,
+  resolveToAndCc,
 } from "./rules";
 import { emailHtml, htmlToText, sanitizeMessageHtml } from "./richText";
 import { ATTACHMENT_TYPES, LIMITS, type AttachmentInfo, type Directory, type InboxItem, type MessageView, type RecipientSelection, type SentItem, type ThreadView } from "./types";
@@ -52,13 +52,36 @@ export interface SendInput {
   body: string;
   /** The formatted message from the editor; sanitised here, and the plain text is derived from it. */
   bodyHtml?: string;
-  /** A new message: who it goes to. */
+  /** A new message: who it goes to (To), and who gets a copy (Cc - never "Everyone"). */
   selection?: RecipientSelection;
+  cc?: RecipientSelection;
   /** A reply: the message replied to, and whether to everyone on it. */
   replyToId?: string;
   replyAll?: boolean;
   /** Attachments uploaded beforehand (POST /api/communications/attachments). */
   attachmentIds: string[];
+}
+
+interface RawClient {
+  $queryRaw<T = unknown>(query: TemplateStringsArray, ...values: unknown[]): Promise<T>;
+  $executeRaw(query: TemplateStringsArray, ...values: unknown[]): Promise<number>;
+}
+
+let ccColumn: boolean | null = null;
+let ccCheckedAt = 0;
+/** Whether the Cc column exists yet (migration 20261023120000_communication_cc). */
+async function ccInstalled(): Promise<boolean> {
+  if (ccColumn === true) return true;
+  if (ccColumn === false && Date.now() - ccCheckedAt < 60_000) return false;
+  ccCheckedAt = Date.now();
+  try {
+    const rows = await (prisma as unknown as RawClient).$queryRaw<{ ok: boolean }[]>`
+      SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'communication_recipients' AND column_name = 'is_cc') AS ok`;
+    ccColumn = rows[0]?.ok === true;
+  } catch {
+    ccColumn = false;
+  }
+  return ccColumn;
 }
 
 export async function sendMessage(session: Session, input: SendInput): Promise<Result<{ id: string; recipients: number }>> {
@@ -76,6 +99,8 @@ export async function sendMessage(session: Session, input: SendInput): Promise<R
   let threadId: string;
   let parentId: string | null = null;
   let toAll = false;
+  /** Cc'd recipients (a subset of `recipients`). Someone in both To and Cc is To. */
+  let ccIds: string[] = [];
   const id = uuid();
 
   if (input.replyToId) {
@@ -93,7 +118,7 @@ export async function sendMessage(session: Session, input: SendInput): Promise<R
   } else {
     subject = (input.subject ?? "").trim();
     if (!input.selection) return fail(400, "Choose who the message goes to");
-    recipients = resolveRecipients(db, input.selection, senderId);
+    ({ recipients, ccIds } = resolveToAndCc(db, input.selection, input.cc, senderId));
     toAll = input.selection.toAll;
     threadId = id;
   }
@@ -153,6 +178,11 @@ export async function sendMessage(session: Session, input: SendInput): Promise<R
         await tx.communicationRecipient.createMany({
           data: recipients.map((r) => ({ id: uuid(), communicationId: id, userId: r.id, userName: r.name })),
         });
+        // Cc (column is_cc, migration 20261023120000_communication_cc). Before that
+        // migration a Cc'd person still receives the message - shown as To.
+        if (ccIds.length > 0 && (await ccInstalled())) {
+          await (tx as unknown as RawClient).$executeRaw`UPDATE communication_recipients SET is_cc = true WHERE communication_id = ${id} AND user_id = ANY(${ccIds}::text[])`;
+        }
         if (attachments.length > 0) {
           await tx.communicationAttachment.updateMany({ where: { id: { in: attachments.map((a) => a.id) } }, data: { communicationId: id } });
         }
@@ -285,10 +315,20 @@ export async function openThread(session: Session, messageId: string): Promise<R
   if (!visible.some((m) => m.id === messageId)) return fail(404, "Message not found");
 
   const reads = await readCounts(visible.filter((m) => m.senderId === viewerId).map((m) => m.id));
-  const names = new Map<string, string[]>();
+  const names = new Map<string, { to: string[]; cc: string[]; ccCount: number }>();
+  const withCc = await ccInstalled();
   for (const m of visible) {
-    const rows = await prisma.communicationRecipient.findMany({ where: { communicationId: m.id }, select: { userName: true }, orderBy: { userName: "asc" }, take: RECIPIENT_NAMES_SHOWN });
-    names.set(m.id, rows.map((r) => r.userName));
+    if (withCc) {
+      const rows = await (prisma as unknown as RawClient).$queryRaw<{ name: string; cc: boolean }[]>`
+        (SELECT user_name AS name, false AS cc FROM communication_recipients WHERE communication_id = ${m.id} AND is_cc = false ORDER BY user_name LIMIT ${RECIPIENT_NAMES_SHOWN})
+        UNION ALL
+        (SELECT user_name AS name, true AS cc FROM communication_recipients WHERE communication_id = ${m.id} AND is_cc = true ORDER BY user_name LIMIT ${RECIPIENT_NAMES_SHOWN})`;
+      const counted = await (prisma as unknown as RawClient).$queryRaw<{ n: bigint | number }[]>`SELECT count(*) AS n FROM communication_recipients WHERE communication_id = ${m.id} AND is_cc = true`;
+      names.set(m.id, { to: rows.filter((r) => !r.cc).map((r) => r.name), cc: rows.filter((r) => r.cc).map((r) => r.name), ccCount: Number(counted[0]?.n ?? 0) });
+    } else {
+      const rows = await prisma.communicationRecipient.findMany({ where: { communicationId: m.id }, select: { userName: true }, orderBy: { userName: "asc" }, take: RECIPIENT_NAMES_SHOWN });
+      names.set(m.id, { to: rows.map((r) => r.userName), cc: [], ccCount: 0 });
+    }
   }
 
   const toMark = mine.filter((r) => !r.readAt && visible.some((m) => m.id === r.communicationId)).map((r) => r.communicationId);
@@ -317,7 +357,9 @@ export async function openThread(session: Session, messageId: string): Promise<R
       createdAt,
       withdrawnAt,
       recipientCount: m._count.recipients,
-      recipientNames: names.get(m.id) ?? [],
+      recipientNames: names.get(m.id)?.to ?? [],
+      ccNames: names.get(m.id)?.cc ?? [],
+      ccCount: names.get(m.id)?.ccCount ?? 0,
       attachments: m.attachments.map(toAttachmentInfo),
       mine: m.senderId === viewerId,
       canWithdraw: canWithdraw({ senderId: m.senderId, createdAt, withdrawnAt }, viewerId, readCount, now),
@@ -384,7 +426,7 @@ export async function removeFromInbox(session: Session, messageId: string): Prom
 // ---------------------------------------------------------------------------
 // Attachments
 
-/** Stores one file for a message about to be sent (one request per file keeps each upload within the 10 MB request limit). */
+/** Stores one file for a message about to be sent (one request per file keeps each upload within the per-file limit, LIMITS.attachmentBytes). */
 export async function uploadAttachment(session: Session, file: { name: string; type: string; size: number }, content: Buffer): Promise<Result<AttachmentInfo>> {
   if (!canSendCommunications(session)) return fail(403, NOT_ALLOWED);
   const key = `communications-upload:${session.userId}`;

@@ -38,6 +38,7 @@ import type {
   OtherValueAllowedField,
 } from "@/types";
 import { appDate } from "@/lib/clock";
+import { rectifiedCaseRows } from "@/lib/rectificationResubmit";
 
 // Columns of the Evidence / Comments / Rectification Ledger row by how many of them show.
 const LOWER_GRID_COLS: Record<number, string> = { 1: "", 2: "lg:grid-cols-2", 3: "lg:grid-cols-2 xl:grid-cols-3" };
@@ -448,10 +449,27 @@ export function FindingDetailClient({
     }
   }
 
+  // Resubmitting a returned rectification: all of it, or only part - the rest
+  // goes back to outstanding (src/lib/rectificationResubmit.ts).
+  const resubmitRows = rectifiedCaseRows(findingCases, finding.closedCases);
+  const [keepCaseIds, setKeepCaseIds] = useState<string[] | null>(null);
+  const keptIds = keepCaseIds ?? resubmitRows.open.map((c) => c.id);
+  const [keepCases, setKeepCases] = useState<string>("");
+  const [keepAmount, setKeepAmount] = useState<string>("");
+  const keepCasesValue = keepCases === "" ? finding.rectifiedCases : Number(keepCases);
+  const keepAmountValue = keepAmount === "" ? finding.rectifiedAmount : Number(keepAmount);
+  const releasing = isItemized
+    ? resubmitRows.open.length - keptIds.length
+    : finding.rectifiedCases - keepCasesValue;
+
   async function handleResubmitRectification() {
     setBusy(true);
     try {
-      await apiSend(`/api/findings/${finding.id}/resubmit-rectification`, "POST");
+      const body = isItemized ? { keepCaseIds: keptIds } : { keepCases: keepCasesValue, keepAmount: keepAmountValue };
+      await apiSend(`/api/findings/${finding.id}/resubmit-rectification`, "POST", body);
+      setKeepCaseIds(null);
+      setKeepCases("");
+      setKeepAmount("");
       notify.success(notifications.finding.rectificationResubmitted);
       await refresh();
     } catch (err) {
@@ -1034,10 +1052,77 @@ export function FindingDetailClient({
               "A controller returned this finding - address the issue and resubmit."
             }
           />
-          <div className="p-4">
-            <Button onClick={handleResubmitRectification} disabled={busy}>
-              {busy ? "Resubmitting..." : "Resubmit for Verification"}
-            </Button>
+          <div className="flex flex-col gap-3 p-4 text-sm">
+            <p className="text-slate-600">
+              Resubmit all of it, or only part. Whatever you don&apos;t resubmit goes back to <strong>outstanding</strong> for the branch to rectify again.
+            </p>
+            {isItemized ? (
+              <div className="flex flex-col gap-1" role="group" aria-label="Cases to resubmit">
+                {resubmitRows.locked.map((c) => (
+                  <label key={c.id} className="flex items-center gap-2 text-slate-500">
+                    <input type="checkbox" checked disabled className="h-4 w-4" />
+                    Case {c.seq}
+                    {c.description ? ` - ${c.description}` : ""} · {finding.currency} {formatCurrency(c.amount)} <span className="text-xs">(closed - stays)</span>
+                  </label>
+                ))}
+                {resubmitRows.open.map((c) => (
+                  <label key={c.id} className="flex items-center gap-2 text-slate-800">
+                    <input
+                      type="checkbox"
+                      checked={keptIds.includes(c.id)}
+                      onChange={(e) => setKeepCaseIds(e.target.checked ? [...keptIds, c.id] : keptIds.filter((x) => x !== c.id))}
+                      className="h-4 w-4"
+                    />
+                    Case {c.seq}
+                    {c.description ? ` - ${c.description}` : ""} · {finding.currency} {formatCurrency(c.amount)}
+                  </label>
+                ))}
+              </div>
+            ) : (
+              <div className="flex flex-wrap items-end gap-3">
+                <div>
+                  <Label htmlFor="resubmit-cases">Cases to resubmit</Label>
+                  <Input
+                    id="resubmit-cases"
+                    type="number"
+                    min={finding.closedCases}
+                    max={finding.rectifiedCases}
+                    value={keepCases === "" ? String(finding.rectifiedCases) : keepCases}
+                    onChange={(e) => setKeepCases(e.target.value)}
+                    className="w-32"
+                  />
+                  <p className="mt-0.5 text-xs text-slate-500">
+                    of {finding.rectifiedCases} rectified{finding.closedCases > 0 ? `; at least ${finding.closedCases} (closed)` : ""}
+                  </p>
+                </div>
+                <div>
+                  <Label htmlFor="resubmit-amount">Amount to resubmit ({finding.currency})</Label>
+                  <Input
+                    id="resubmit-amount"
+                    type="number"
+                    step="0.01"
+                    min={finding.closedAmount}
+                    max={finding.rectifiedAmount}
+                    value={keepAmount === "" ? String(finding.rectifiedAmount) : keepAmount}
+                    onChange={(e) => setKeepAmount(e.target.value)}
+                    className="w-40"
+                  />
+                  <p className="mt-0.5 text-xs text-slate-500">
+                    of {formatCurrency(finding.rectifiedAmount)} rectified{finding.closedAmount > 0 ? `; at least ${formatCurrency(finding.closedAmount)} (closed)` : ""}
+                  </p>
+                </div>
+              </div>
+            )}
+            {releasing > 0 && (
+              <p className="text-xs font-medium text-amber-800">
+                {releasing} case(s) will go back to outstanding.
+              </p>
+            )}
+            <div>
+              <Button onClick={handleResubmitRectification} disabled={busy}>
+                {busy ? "Resubmitting..." : releasing > 0 ? "Resubmit selected for verification" : "Resubmit for Verification"}
+              </Button>
+            </div>
           </div>
         </Card>
       )}

@@ -30,6 +30,8 @@ const sendSchema = z.object({
   body: z.string().max(LIMITS.body + 500, `Message text must be at most ${LIMITS.body} characters`),
   bodyHtml: z.string().max(LIMITS.html, "The formatted message is too long").optional(),
   selection: z.object({ toAll: z.boolean().default(false), userIds: ids, roleCodes: ids, districtIds: ids, branchIds: ids, excludedUserIds: ids }).optional(),
+  // Cc: the same picker; "Everyone" isn't offered there.
+  cc: z.object({ toAll: z.literal(false).default(false), userIds: ids, roleCodes: ids, districtIds: ids, branchIds: ids, excludedUserIds: ids }).optional(),
   replyToId: z.string().min(1).optional(),
   replyAll: z.boolean().optional(),
   attachmentIds: z.array(z.string().min(1)).max(LIMITS.attachments, `At most ${LIMITS.attachments} attachments per message`).default([]),

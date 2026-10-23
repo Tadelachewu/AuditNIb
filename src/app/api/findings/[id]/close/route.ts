@@ -8,6 +8,7 @@ import { appendAuditLog } from "@/lib/audit";
 import { notifyUsers } from "@/lib/notifications";
 import type { FindingClosure } from "@/types";
 import { withApiHandler } from "@/lib/api/handler";
+import { isAwaitingDistrict } from "@/lib/rectificationResubmit";
 
 // District/HO Controller's verification duty (plan doc §3.6; master.txt's
 // Close row: "Case closes only when eligible remaining cases/amount are
@@ -54,8 +55,7 @@ async function handlePOST(_request: Request, { params }: { params: Promise<{ id:
   const closableCases = verifiedCases - existing.closedCases;
   const closableAmount = verifiedAmount - existing.closedAmount;
   if (closableCases <= 0 && closableAmount <= 0) {
-    const awaitingVerification =
-      existing.rectifiedCases > existing.districtVerifiedCases || existing.rectifiedAmount > existing.districtVerifiedAmount;
+    const awaitingVerification = isAwaitingDistrict(existing);
     return NextResponse.json(
       {
         error: awaitingVerification ? "Awaiting district verification before this can be closed" : "Nothing rectified is awaiting closure yet",

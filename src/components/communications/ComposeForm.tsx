@@ -26,6 +26,8 @@ export function ComposeForm() {
   const [dir, setDir] = useState<Directory | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selection, setSelection] = useState<RecipientSelection>(EMPTY_SELECTION);
+  // Cc: optional copies, the same picker without "Everyone".
+  const [cc, setCc] = useState<RecipientSelection>(EMPTY_SELECTION);
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState<RichMessageValue>({ html: "", text: "" });
   const [attachments, setAttachments] = useState<AttachmentInfo[]>([]);
@@ -69,6 +71,8 @@ export function ComposeForm() {
         body: message.text,
         bodyHtml: message.html,
         selection,
+        // No Cc with "Everyone" - everyone already receives it.
+        cc: selection.toAll ? undefined : cc,
         attachmentIds: attachments.map((a) => a.id),
       });
       notify.success(notifications.communications.sent, { description: `${res.recipients} recipient(s)` });
@@ -93,6 +97,22 @@ export function ComposeForm() {
           void send();
         }}
       >
+        {/* To and Cc at the top, side by side. */}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="flex min-w-0 flex-col gap-1">
+            <Label>To</Label>
+            <RecipientPicker dir={dir} value={selection} onChange={setSelection} label="To" />
+          </div>
+          <div className="flex min-w-0 flex-col gap-1">
+            <Label>Cc</Label>
+            {selection.toAll ? (
+              <p className="py-1.5 text-sm text-slate-500">Not needed - everyone receives it.</p>
+            ) : (
+              <RecipientPicker dir={dir} value={cc} onChange={setCc} label="Cc" allowEveryone={false} />
+            )}
+          </div>
+        </div>
+
         <div>
           <Label htmlFor="comm-subject">Subject</Label>
           <Input id="comm-subject" maxLength={LIMITS.subject} value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="What is it about?" />
@@ -104,12 +124,8 @@ export function ComposeForm() {
           <TextCounter text={message.text} />
         </div>
 
-        {/* Under the message: To at the bottom-left, attachments at the bottom-right. */}
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="flex min-w-0 flex-1 flex-col gap-1">
-            <Label>To</Label>
-            <RecipientPicker dir={dir} value={selection} onChange={setSelection} />
-          </div>
+        {/* Attachments at the bottom-right, under the message. */}
+        <div className="flex justify-end">
           <AttachmentPicker attachments={attachments} onChange={setAttachments} disabled={sending} onBusyChange={setUploading} align="end" />
         </div>
 

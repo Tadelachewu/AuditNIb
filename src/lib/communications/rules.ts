@@ -45,6 +45,23 @@ export function resolveRecipients(db: Pick<Database, "users"> & Partial<Pick<Dat
 }
 
 /**
+ * To + Cc of a new message: everyone To reaches, then the Cc'd people who
+ * aren't already in To (someone in both is To). No Cc with "Everyone".
+ */
+export function resolveToAndCc(
+  db: Pick<Database, "users"> & Partial<Pick<Database, "branches">>,
+  to: RecipientSelection,
+  cc: RecipientSelection | undefined,
+  senderId: string
+): { recipients: { id: string; name: string }[]; ccIds: string[] } {
+  const recipients = resolveRecipients(db, to, senderId);
+  if (!cc || to.toAll) return { recipients, ccIds: [] };
+  const inTo = new Set(recipients.map((r) => r.id));
+  const copies = resolveRecipients(db, { ...cc, toAll: false }, senderId).filter((r) => !inTo.has(r.id));
+  return { recipients: [...recipients, ...copies], ccIds: copies.map((r) => r.id) };
+}
+
+/**
  * Who a reply goes to.
  *   Reply      the message's sender; when you reply to your own message, its recipients.
  *   Reply all  the sender and every recipient, except yourself - not offered
@@ -97,7 +114,7 @@ export function messageProblem(subject: string, body: string): string | null {
  */
 export function attachmentProblem(file: { name: string; type: string; size: number }, content: Buffer): string | null {
   if (!ATTACHMENT_TYPES[file.type]) return "Only PDF, Word (.docx) and Excel (.xlsx) files can be attached";
-  if (file.size > LIMITS.attachmentBytes || content.length > LIMITS.attachmentBytes) return "A file must be at most 10 MB";
+  if (file.size > LIMITS.attachmentBytes || content.length > LIMITS.attachmentBytes) return `A file must be at most ${LIMITS.attachmentBytes / (1024 * 1024)} MB`;
   if (file.size === 0 || content.length === 0) return "The file is empty";
   // The type the browser claims is not trusted: the bytes must match it (same check as evidence).
   if (!evidenceContentMatchesType(content, file.type)) return "The file's content doesn't match its type - only real PDF, Word (.docx) and Excel (.xlsx) files can be attached";

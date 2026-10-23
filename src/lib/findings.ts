@@ -853,7 +853,9 @@ export function queueStatusesForSession(session: SessionData, db: Database): (fi
       // queue never promises something close/route.ts would then reject.
       const verifiedCases = Math.min(f.rectifiedCases, f.districtVerifiedCases);
       const verifiedAmount = Math.min(f.rectifiedAmount, f.districtVerifiedAmount);
-      return f.status !== "CLOSED" && (verifiedCases > f.closedCases || verifiedAmount > f.closedAmount);
+      // Not while a rectification is returned: it's the branch's turn, and the
+      // close action refuses it until it's resubmitted.
+      return f.status !== "CLOSED" && f.status !== "RECTIFICATION_RETURNED" && (verifiedCases > f.closedCases || verifiedAmount > f.closedAmount);
     });
   // Revolving findings (docs/revolving-findings.md): an adjustment awaiting
   // this user's review step (never their own - separation of duties), or

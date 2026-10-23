@@ -2,12 +2,13 @@ import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/guard";
 import { withApiHandler } from "@/lib/api/handler";
 import { uploadAttachment } from "@/lib/communications/service";
+import { LIMITS } from "@/lib/communications/types";
 import { respond } from "../respond";
 
 /**
  * POST - upload one attachment for a message about to be sent (multipart,
  * field "file"). One file per request keeps each upload within the app's
- * 10 MB request limit; the message then refers to the uploaded files.
+ * 25 MB file limit (LIMITS.attachmentBytes); the message then refers to the uploaded files.
  */
 async function handlePOST(request: Request) {
   const auth = await requireUser();
@@ -16,8 +17,8 @@ async function handlePOST(request: Request) {
   try {
     form = await request.formData();
   } catch {
-    // The request parser refuses a body over about 10 MB before this route sees it.
-    return NextResponse.json({ error: "A file must be at most 10 MB" }, { status: 400 });
+    // A body over the limit (src/proxy.ts / next.config.ts) never reaches the route whole.
+    return NextResponse.json({ error: `A file must be at most ${LIMITS.attachmentBytes / (1024 * 1024)} MB` }, { status: 400 });
   }
   const file = form.get("file");
   if (!file || !(file instanceof File)) return NextResponse.json({ error: "No file provided" }, { status: 400 });

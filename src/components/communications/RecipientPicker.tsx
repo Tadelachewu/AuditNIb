@@ -26,7 +26,21 @@ type Item = { id: string; label: string; detail?: string; count?: number };
  * people unticked are left out - the same selectionMatcher() the server uses,
  * so "N people" is exactly who receives it.
  */
-export function RecipientPicker({ dir, value, onChange }: { dir: Directory; value: RecipientSelection; onChange: (next: RecipientSelection) => void }) {
+export function RecipientPicker({
+  dir,
+  value,
+  onChange,
+  label = "To",
+  allowEveryone = true,
+}: {
+  dir: Directory;
+  value: RecipientSelection;
+  onChange: (next: RecipientSelection) => void;
+  /** "To" or "Cc" - names the dropdown and its radio group. */
+  label?: string;
+  /** Offer "Everyone" (To only - a copy to everyone makes no sense). */
+  allowEveryone?: boolean;
+}) {
   const [tab, setTab] = useState<Tab>("roles");
   const [filter, setFilter] = useState("");
   const [showList, setShowList] = useState(false);
@@ -136,7 +150,9 @@ export function RecipientPicker({ dir, value, onChange }: { dir: Directory; valu
   const buttonText = value.toAll
     ? `Everyone (${dir.users.length})`
     : reached.length === 0
-      ? "Choose recipients…"
+      ? label === "To"
+        ? "Choose recipients…"
+        : `Add people to ${label} (optional)…`
       : `${reached.length} ${reached.length === 1 ? "person" : "people"} · ${chosen.join(", ")}`;
 
   return (
@@ -153,17 +169,19 @@ export function RecipientPicker({ dir, value, onChange }: { dir: Directory; valu
       </button>
 
       {open && (
-    <div role="dialog" aria-label="Choose recipients" className="absolute bottom-full left-0 z-30 mb-1 flex w-[min(36rem,calc(100vw-3rem))] flex-col gap-2 rounded-md border border-slate-200 bg-white p-3 shadow-lg">
+    <div role="dialog" aria-label={label === "To" ? "Choose recipients" : `Choose ${label} recipients`} className="absolute left-0 top-full z-30 mt-1 flex w-[min(36rem,calc(100vw-3rem))] flex-col gap-2 rounded-md border border-slate-200 bg-white p-3 shadow-lg">
+      {allowEveryone && (
       <div className="flex flex-wrap items-center gap-4 text-sm text-slate-700">
         <label className="flex items-center gap-2">
-          <input type="radio" name="comm-to" checked={value.toAll} onChange={() => set({ toAll: true })} className="h-4 w-4" />
+          <input type="radio" name={`comm-${label}`} checked={value.toAll} onChange={() => set({ toAll: true })} className="h-4 w-4" />
           Everyone ({dir.users.length})
         </label>
         <label className="flex items-center gap-2">
-          <input type="radio" name="comm-to" checked={!value.toAll} onChange={() => set({ toAll: false })} className="h-4 w-4" />
+          <input type="radio" name={`comm-${label}`} checked={!value.toAll} onChange={() => set({ toAll: false })} className="h-4 w-4" />
           Choose
         </label>
       </div>
+      )}
 
       {!value.toAll && (
         <div className="rounded-md border border-slate-200">

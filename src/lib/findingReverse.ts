@@ -89,6 +89,7 @@ export function reverseFinding(
   for (const c of db.findingCases) {
     if (!isThisFinding(c) || stillClosed.has(c.id)) continue;
     c.status = "OUTSTANDING";
+    c.returned = false;
     c.rectificationId = undefined;
     c.rectifiedAt = undefined;
     c.rectifiedBy = undefined;
@@ -103,6 +104,8 @@ export function reverseFinding(
   finding.districtVerifiedAmount = keptAmount;
   finding.closedCases = keptCases;
   finding.closedAmount = keptAmount;
+  finding.returnedCases = 0;
+  finding.returnedAmount = 0;
   finding.lastReminderAt = undefined;
 
   transitionFinding(db, finding, { toStatus: REVERSED_STATUS, action: "REVERSE", userId: actor.userId, userName: actor.userName, reason });

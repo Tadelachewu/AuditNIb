@@ -10,9 +10,10 @@ import {
   replyRecipients,
   replySubject,
   resolveRecipients,
+  resolveToAndCc,
 } from "@/lib/communications/rules";
 import { emailForNotification, notificationPath } from "@/lib/emailQueue/rules";
-import { selectionMatcher, type RecipientSelection } from "@/lib/communications/types";
+import { LIMITS, selectionMatcher, type RecipientSelection } from "@/lib/communications/types";
 import type { Database, Notification } from "@/types";
 import { officeZip } from "./helpers/zip";
 
@@ -128,7 +129,7 @@ describe("message and attachment checks", () => {
     expect(messageProblem("", "Hi")).toMatch(/Subject/);
     expect(messageProblem("Hi", "  ")).toMatch(/text/);
     expect(messageProblem("x".repeat(201), "Hi")).toMatch(/200/);
-    expect(messageProblem("Hi", "x".repeat(5001))).toMatch(/5000/);
+    expect(messageProblem("Hi", "x".repeat(10001))).toMatch(/10000/);
     expect(messageProblem("Hi", "Hello")).toBeNull();
   });
   const pdf = Buffer.from("%PDF-1.7\n...");
@@ -144,7 +145,9 @@ describe("message and attachment checks", () => {
     expect(file("a.png", "image/png", Buffer.from([0x89, 0x50]))).toMatch(/Only PDF/);
     expect(file("a.pdf", "application/pdf", Buffer.from("<html>not a pdf</html>"))).toMatch(/content/);
     expect(attachmentProblem({ name: "a.pdf", type: "application/pdf", size: 0 }, Buffer.alloc(0))).toMatch(/empty/);
-    expect(attachmentProblem({ name: "a.pdf", type: "application/pdf", size: 11 * 1024 * 1024 }, pdf)).toMatch(/10 MB/);
+    // Up to 25 MB per file now; over it is refused.
+    expect(attachmentProblem({ name: "a.pdf", type: "application/pdf", size: 11 * 1024 * 1024 }, pdf)).toBeNull();
+    expect(attachmentProblem({ name: "a.pdf", type: "application/pdf", size: 26 * 1024 * 1024 }, pdf)).toMatch(/25 MB/);
   });
   it("a real PDF named like a program, a macro-enabled or zip-bomb Word / Excel file is refused", () => {
     expect(file("invoice.exe", "application/pdf", pdf)).toMatch(/\.pdf/);
@@ -192,5 +195,35 @@ describe("the email", () => {
   it("the bell shows a short preview", () => {
     expect(previewOf("x".repeat(400)).length).toBe(300);
     expect(previewOf("a\n\n b")).toBe("a b");
+  });
+});
+
+describe("To + Cc", () => {
+  it("Cc'd people receive it too; someone in both is To only; the sender never", () => {
+    const r = resolveToAndCc(db, { ...none, userIds: ["bm"] }, { ...none, userIds: ["bm", "bc", "ho"] }, "ho");
+    expect(ids(r.recipients)).toEqual(["bc", "bm"]);
+    expect(r.ccIds).toEqual(["bc"]);
+  });
+  it("Cc by group, narrowed like To", () => {
+    const r = resolveToAndCc(db, { ...none, userIds: ["dc"] }, { ...none, roleCodes: ["BRANCH_MANAGER"], districtIds: ["d1"] }, "ho");
+    expect(ids(r.recipients)).toEqual(["bm", "dc"]);
+    expect(r.ccIds).toEqual(["bm"]);
+  });
+  it("no Cc with Everyone (everyone already receives it)", () => {
+    const r = resolveToAndCc(db, { ...none, toAll: true }, { ...none, userIds: ["bm"] }, "ho");
+    expect(r.ccIds).toEqual([]);
+  });
+  it("no Cc: just To", () => {
+    expect(resolveToAndCc(db, { ...none, userIds: ["bm"] }, undefined, "ho")).toEqual({ recipients: [{ id: "bm", name: "BM" }], ccIds: [] });
+  });
+});
+
+describe("limits", () => {
+  it("message text up to 10,000 characters; up to 10 files of 25 MB each", () => {
+    expect(LIMITS.body).toBe(10_000);
+    expect(LIMITS.attachments).toBe(10);
+    expect(LIMITS.attachmentBytes).toBe(25 * 1024 * 1024);
+    expect(messageProblem("Subject", "x".repeat(10_000))).toBeNull();
+    expect(messageProblem("Subject", "x".repeat(10_001))).not.toBeNull();
   });
 });

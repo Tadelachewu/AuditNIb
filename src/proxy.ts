@@ -45,6 +45,8 @@ function pageCodeFor(pathname: string): string | null {
 // check of its own (every plain JSON POST/PATCH endpoint) before it's ever
 // read into memory by request.json().
 const MAX_API_BODY_BYTES = 11 * 1024 * 1024;
+// Communications attachments (one file per upload, up to 25 MB - LIMITS.attachmentBytes).
+const MAX_COMMUNICATION_UPLOAD_BYTES = 26 * 1024 * 1024;
 
 const STATE_CHANGING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
@@ -186,7 +188,8 @@ export async function proxy(request: NextRequest) {
   if (pathname.startsWith("/api")) {
     if (STATE_CHANGING_METHODS.has(request.method)) {
       const contentLength = Number(request.headers.get("content-length") ?? "0");
-      if (contentLength > MAX_API_BODY_BYTES) {
+      const maxBytes = pathname === "/api/communications/attachments" ? MAX_COMMUNICATION_UPLOAD_BYTES : MAX_API_BODY_BYTES;
+      if (contentLength > maxBytes) {
         return proxyError(413, "PAYLOAD_TOO_LARGE", "The request is too large.", requestId);
       }
       // /api/system/* is called by a server scheduler (cron, Windows Task

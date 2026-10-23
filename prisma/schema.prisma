@@ -784,6 +784,8 @@ model CommunicationRecipient {
   userName        String        @map("user_name")
   readAt          DateTime?     @map("read_at")
   removedAt       DateTime?     @map("removed_at")
+  /// Got a copy (Cc) rather than To. Used through raw SQL (src/lib/communications/service.ts).
+  isCc            Boolean       @default(false) @map("is_cc")
   communication   Communication @relation(fields: [communicationId], references: [id], onDelete: Cascade)
 
   @@unique([communicationId, userId])

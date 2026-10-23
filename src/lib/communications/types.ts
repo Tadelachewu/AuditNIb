@@ -9,17 +9,17 @@ export const COMMUNICATIONS_PAGE = "communications";
 
 export const LIMITS = {
   subject: 200,
-  body: 5000,
+  body: 10_000,
   /** Attachments per message. */
-  attachments: 5,
-  /** Bytes per attachment (one upload request each - see the attachments route). */
-  attachmentBytes: 10 * 1024 * 1024,
+  attachments: 10,
+  /** Bytes per attachment (one upload request each - see the attachments route; src/proxy.ts allows this size there). */
+  attachmentBytes: 25 * 1024 * 1024,
   /** A sender can withdraw a message this long after sending it, while nobody has opened it. */
   withdrawMinutes: 10,
   /** Bell notification preview of the body (the email carries the whole text). */
   preview: 300,
-  /** The formatted message's HTML (the 5,000-character limit applies to its text). */
-  html: 60_000,
+  /** The formatted message's HTML (the 10,000-character limit applies to its text). */
+  html: 120_000,
 } as const;
 
 /** Allowed attachment types: PDF, Word (.docx), Excel (.xlsx). */
@@ -134,8 +134,11 @@ export interface MessageView {
   createdAt: string;
   withdrawnAt: string | null;
   recipientCount: number;
-  /** Up to 50 names; recipientCount is the full number. */
+  /** To: up to 50 names; recipientCount - ccCount is the full number. */
   recipientNames: string[];
+  /** Cc: up to 50 names, and how many in all. */
+  ccNames: string[];
+  ccCount: number;
   attachments: AttachmentInfo[];
   /** This viewer sent it. */
   mine: boolean;
