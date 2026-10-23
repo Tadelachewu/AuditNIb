@@ -8,8 +8,14 @@ import { appDate } from "@/lib/clock";
 
 type Preset = "today" | "week" | "month" | "custom";
 
+/**
+ * A date as YYYY-MM-DD in LOCAL time. (toISOString() is UTC: in Addis Ababa,
+ * UTC+3, local midnight on the 1st is the previous day in UTC - "This Month"
+ * started on the last day of the month before, and "Today" was yesterday
+ * until 03:00.)
+ */
 function toDateInput(d: Date): string {
-  return d.toISOString().slice(0, 10);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 function presetRange(preset: Exclude<Preset, "custom">): { from: string; to: string } {
