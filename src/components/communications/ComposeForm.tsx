@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { countedChars, htmlToText, messageChars } from "@/lib/communications/plainText";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { apiGet, apiSend } from "@/lib/api-client";
@@ -20,8 +21,21 @@ import { EMPTY_SELECTION, RecipientPicker } from "./RecipientPicker";
  * Word / Excel files.
  * Recipients are notified in the app and by email (the email carries the
  * whole text; attachments stay here).
+ *
+ * Forward (`forwardId`): starts from the forwarded message - "Fwd:" subject,
+ * the original quoted, its files attached. Otherwise an unsent draft from
+ * earlier is restored (saved as you type, like Register Finding's - see
+ * /api/communications/draft), with a banner and Discard.
  */
-export function ComposeForm() {
+interface Draft {
+  subject: string;
+  html: string;
+  selection: RecipientSelection;
+  cc: RecipientSelection;
+  attachments: AttachmentInfo[];
+}
+
+export function ComposeForm({ forwardId }: { forwardId?: string } = {}) {
   const router = useRouter();
   const [dir, setDir] = useState<Directory | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -34,12 +48,72 @@ export function ComposeForm() {
   const [uploading, setUploading] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The editor's starting content (forward / restored draft); a new key remounts it with that content.
+  const [initialHtml, setInitialHtml] = useState<string | undefined>(undefined);
+  const [editorKey, setEditorKey] = useState(0);
+  const [ready, setReady] = useState(false);
+  const [restored, setRestored] = useState(false);
+  const sent = useRef(false);
 
   useEffect(() => {
     apiGet<Directory>("/api/communications/directory")
       .then(setDir)
       .catch((err) => setLoadError(presentError(err, notifications.communications.loadFailed).message));
   }, []);
+
+  function startWith(d: { subject: string; html: string; attachments: AttachmentInfo[]; selection?: RecipientSelection; cc?: RecipientSelection }) {
+    setSubject(d.subject);
+    setMessage({ html: d.html, text: htmlToText(d.html) });
+    setInitialHtml(d.html);
+    setAttachments(d.attachments);
+    if (d.selection) setSelection(d.selection);
+    if (d.cc) setCc(d.cc);
+    setEditorKey((k) => k + 1);
+  }
+
+  // Forward, or the draft from earlier - once, when the form opens.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (forwardId) {
+        try {
+          const f = await apiSend<{ subject: string; bodyHtml: string; attachments: AttachmentInfo[] }>(`/api/communications/${forwardId}/forward`, "POST");
+          if (!cancelled) startWith({ subject: f.subject, html: f.bodyHtml, attachments: f.attachments });
+        } catch (err) {
+          if (!cancelled) setError(presentError(err, notifications.communications.loadFailed).message);
+        }
+      } else {
+        const r = await apiGet<{ draft: Draft | null }>("/api/communications/draft").catch(() => ({ draft: null }));
+        const d = r.draft;
+        if (!cancelled && d && (d.subject || d.html || d.attachments?.length)) {
+          startWith({ subject: d.subject ?? "", html: d.html ?? "", attachments: d.attachments ?? [], selection: d.selection ?? EMPTY_SELECTION, cc: d.cc ?? EMPTY_SELECTION });
+          setRestored(true);
+        }
+      }
+      if (!cancelled) setReady(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [forwardId]);
+
+  // Saved as you type (a second after the last change); nothing typed = no draft.
+  useEffect(() => {
+    if (!ready || sent.current) return;
+    const timer = setTimeout(() => {
+      if (sent.current) return;
+      const empty = !subject.trim() && !message.text && attachments.length === 0;
+      if (empty) void apiSend("/api/communications/draft", "DELETE").catch(() => {});
+      else void apiSend("/api/communications/draft", "PATCH", { subject, html: message.html, selection, cc, attachments } satisfies Draft).catch(() => {});
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [ready, subject, message, selection, cc, attachments]);
+
+  async function discardDraft() {
+    setRestored(false);
+    startWith({ subject: "", html: "", attachments: [], selection: EMPTY_SELECTION, cc: EMPTY_SELECTION });
+    await apiSend("/api/communications/draft", "DELETE").catch(() => {});
+  }
 
   // Same rule as the server (selectionMatcher), so the count is who receives it.
   const reach = useMemo(() => {
@@ -51,11 +125,11 @@ export function ComposeForm() {
   const problem =
     reach === 0
       ? "Choose who the message goes to"
-      : subject.trim().length < LIMITS.minText
-        ? `Enter a subject (at least ${LIMITS.minText} characters)`
-        : message.text.trim().length < LIMITS.minText
-          ? `Write the message (at least ${LIMITS.minText} characters)`
-          : message.text.length > LIMITS.body
+      : countedChars(subject) < LIMITS.minText
+        ? `Enter a subject (at least ${LIMITS.minText} characters, spaces don't count)`
+        : messageChars(message) < LIMITS.minText
+          ? `Write the message (at least ${LIMITS.minText} characters, spaces and line breaks don't count)`
+          : messageChars(message) > LIMITS.body
             ? `The message is longer than ${LIMITS.body} characters`
             : uploading
               ? "Wait for the attachments to finish uploading"
@@ -75,6 +149,9 @@ export function ComposeForm() {
         cc: selection.toAll ? undefined : cc,
         attachmentIds: attachments.map((a) => a.id),
       });
+      // Sent: the draft has done its job.
+      sent.current = true;
+      void apiSend("/api/communications/draft", "DELETE").catch(() => {});
       notify.success(notifications.communications.sent, { description: `${res.recipients} recipient(s)` });
       router.push(`/communications/${res.id}`);
       router.refresh();
@@ -86,7 +163,7 @@ export function ComposeForm() {
   }
 
   if (loadError) return <p className="text-sm text-red-600">{loadError}</p>;
-  if (!dir) return <p className="text-sm text-slate-500">Loading…</p>;
+  if (!dir || !ready) return <p className="text-sm text-slate-500">Loading…</p>;
 
   return (
     <Card className="p-4">
@@ -97,6 +174,15 @@ export function ComposeForm() {
           void send();
         }}
       >
+        {restored && (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            <span>Restored an unsent message from earlier (e.g. after a refresh or connection loss).</span>
+            <Button type="button" variant="secondary" onClick={() => void discardDraft()}>
+              Discard
+            </Button>
+          </div>
+        )}
+
         {/* To and Cc at the top, side by side. */}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="flex min-w-0 flex-col gap-1">
@@ -120,8 +206,8 @@ export function ComposeForm() {
 
         <div>
           <Label htmlFor="comm-body">Message</Label>
-          <RichMessageEditor id="comm-body" placeholder="Write your message" disabled={sending} onChange={setMessage} />
-          <TextCounter text={message.text} />
+          <RichMessageEditor key={editorKey} id="comm-body" placeholder="Write your message" disabled={sending} onChange={setMessage} initialHtml={initialHtml} />
+          <TextCounter value={message} />
         </div>
 
         {/* Attachments at the bottom-right, under the message. */}
@@ -139,7 +225,9 @@ export function ComposeForm() {
             {sending ? "Sending…" : "Send"}
           </Button>
         </div>
-        <p className="text-xs text-slate-500">Each recipient is notified here and by email - the email carries the whole message; attachments are downloaded here.</p>
+        <p className="text-xs text-slate-500">
+          Each recipient is notified here and by email - the email carries the whole message; attachments are downloaded here. An unsent message is kept as a draft for 24 hours.
+        </p>
       </form>
     </Card>
   );

@@ -21,6 +21,12 @@ describe("RichMessageEditor", () => {
     }
   });
 
+  it("starts with the given content (a forwarded message's body)", async () => {
+    render(<RichMessageEditor id="comm-body" placeholder="Write your message" onChange={vi.fn()} initialHtml="<p><strong>Original</strong> message text</p>" />);
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "Write your message" }).textContent).toContain("Original message text"));
+    expect(screen.getByRole("textbox", { name: "Write your message" }).innerHTML).toContain("<strong>Original</strong>");
+  });
+
   it("everything the toolbar produces is kept by the server", () => {
     const editor = new Editor({ extensions: messageExtensions("x") });
     const c = () => editor.chain().focus("end");

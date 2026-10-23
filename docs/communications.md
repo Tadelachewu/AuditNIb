@@ -70,6 +70,19 @@ Opening a message shows the whole **conversation**: every message in it that you
 
 A reply's subject is **Re: …** automatically. Replies can have attachments too.
 
+### Forward
+
+**Forward** (on every message you can read: one you sent, or one you received that isn't withdrawn) opens the New message form with:
+- **Subject:** the **same subject** as the original.
+- **Message:** the **original message itself**, formatting kept. Edit it or add your own text.
+- **Attachments:** the original's files **copied** as your own attachments. Remove any with ✕; removing one never touches the original.
+
+Choose **To / Cc** and send. All the usual checks apply: recipients, 10 files, 25 MB in total, length rules. Server: `forwardDraft()` (`POST /api/communications/[id]/forward`).
+
+### Drafts
+
+The New message form saves what you've written **as you type**: subject, To / Cc, the formatted text and the attached files, kept **24 hours** (Redis, like Register Finding's draft). After a refresh, a closed tab or a lost connection it's **restored**, with a banner and **Discard**. It's cleared once the message is sent. A forward starts from the forwarded message instead of a draft. If Redis is down, nothing is saved, and writing still works. Server: `/api/communications/draft` (GET / PATCH / DELETE, your own draft only).
+
 ### Attachments
 
 Click a file to download it. Only the **sender** and the **recipients** of that message can download it; every download is recorded in the Audit Log.
@@ -107,7 +120,7 @@ An All users message to, say, 1,500 people queues 1,500 emails; the queue's rate
 
 | What | Limit |
 |---|---|
-| Subject / text | at least 3 characters each; at most 200 / 10,000 characters |
+| Subject / text | at least 3 characters each; at most 200 / 10,000 characters. **Spaces and line breaks never count.** The counter under the editor uses the server's own rule (`src/lib/communications/plainText.ts`), so the number shown is exactly the number checked |
 | Attachments | 10 per message, 25 MB in total (checked on the server when sending), PDF / .docx / .xlsx only. Checked **on the server**, whatever the browser checked: the real content must match the type (a renamed file is refused), the name's extension must match the type (a PDF can't be called `.exe`), and Word / Excel files must be sane archives (no "zip bombs") **without macros** ([uploadChecks.ts](../src/lib/uploadChecks.ts)) |
 | Messages sent | 20 per user per 10 minutes |
 | **All users** messages | 3 per user per hour |

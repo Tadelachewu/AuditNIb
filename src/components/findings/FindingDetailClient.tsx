@@ -14,10 +14,13 @@ import { Input, Label, FileInput, FIELD_FOCUS } from "@/components/ui/Field";
 import { Badge } from "@/components/ui/Badge";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { Trash2 } from "lucide-react";
-import { FindingStatusBadge } from "@/components/findings/FindingStatusBadge";
+import { FindingStatusBadge, PENDING_STATUS_LABELS } from "@/components/findings/FindingStatusBadge";
+
+/** A status as this page words it: rectified / partially rectified are "(pending)" until accepted. */
+const statusText = (s: string) => PENDING_STATUS_LABELS[s as FindingStatus] ?? findingStatusLabel(s as FindingStatus);
 import { NewFindingForm } from "@/components/findings/NewFindingForm";
 import { AdjustmentsCard } from "@/components/findings/AdjustmentsCard";
-import { findingStatusLabel } from "@/types";
+import { findingStatusLabel, type FindingStatus } from "@/types";
 import { amountError } from "@/lib/inputRules";
 import type {
   Finding,
@@ -614,7 +617,7 @@ export function FindingDetailClient({
             {lookups.districtName} · {lookups.periodCode}
           </p>
         </div>
-        <FindingStatusBadge status={finding.status} />
+        <FindingStatusBadge status={finding.status} label={PENDING_STATUS_LABELS[finding.status]} />
       </div>
 
 
@@ -1594,7 +1597,7 @@ export function FindingDetailClient({
                 <span className="text-slate-600">
                   <span className="font-medium text-slate-900">{t.userName}</span> {t.action.replaceAll("_", " ").toLowerCase()}{" "}
                   <span className="text-slate-500">
-                    ({findingStatusLabel(t.fromStatus)} → {findingStatusLabel(t.toStatus)})
+                    ({statusText(t.fromStatus)} → {statusText(t.toStatus)})
                   </span>
                   {t.reason && !isReturnEvent && <span className="text-slate-500"> — {t.reason}</span>}
                 </span>

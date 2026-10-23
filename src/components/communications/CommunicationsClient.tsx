@@ -102,7 +102,7 @@ export function CommunicationsClient({ canSend }: { canSend: boolean }) {
         <p className="p-6 text-center text-sm text-slate-500">{search ? "No messages match your search." : box === "inbox" ? "No messages yet." : "You haven't sent any messages yet."}</p>
       )}
       {data && data.items.length > 0 && (
-        <ul className="divide-y divide-slate-100">
+        <ul className="flex flex-col gap-2 p-3" aria-label="Messages">
           {data.items.map((m) => (box === "inbox" ? <InboxRow key={m.id} m={m as InboxItem} /> : <SentRow key={m.id} m={m as SentItem} />))}
         </ul>
       )}
@@ -115,12 +115,23 @@ export function CommunicationsClient({ canSend }: { canSend: boolean }) {
   );
 }
 
+/**
+ * Inbox / Sent rows: a soft gold tint (alternating), and on hover the New
+ * message button's own gold with its dark text (text-on-gold stays dark in
+ * both themes, so the row stays readable). Unread rows: a stronger tint and
+ * a dark-gold edge. Keyboard focus matches.
+ */
+const ROW =
+  "flex items-start gap-3 border-l-4 px-4 py-3 transition-colors hover:border-brand-gold-dark hover:bg-brand-gold hover:[&_*]:text-on-gold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-gold-dark";
+const UNREAD_ROW = "border-brand-gold-dark bg-brand-gold/25";
+const READ_ROW = "border-transparent";
+
 function InboxRow({ m }: { m: InboxItem }) {
   const unread = !m.readAt;
   return (
-    <li>
-      <Link href={`/communications/${m.id}`} className={`flex items-start gap-3 px-4 py-3 hover:bg-slate-50 ${unread ? "bg-sky-50/60" : ""}`}>
-        <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${unread ? "bg-sky-600" : "bg-transparent"}`} aria-hidden="true" />
+    <li className="overflow-hidden rounded-md border border-slate-200 shadow-sm odd:bg-white even:bg-slate-50">
+      <Link href={`/communications/${m.id}`} className={`${ROW} ${unread ? UNREAD_ROW : READ_ROW}`}>
+        <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${unread ? "bg-brand-gold-dark" : "bg-transparent"}`} aria-hidden="true" />
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline gap-2">
             <span className={`truncate text-sm ${unread ? "font-semibold text-slate-900" : "text-slate-700"}`}>{m.senderName}</span>
@@ -141,8 +152,8 @@ function InboxRow({ m }: { m: InboxItem }) {
 function SentRow({ m }: { m: SentItem }) {
   const to = m.toAll ? `All users (${m.recipientCount})` : m.recipientCount <= m.recipientNames.length ? m.recipientNames.join(", ") : `${m.recipientNames.join(", ")} +${m.recipientCount - m.recipientNames.length} more`;
   return (
-    <li>
-      <Link href={`/communications/${m.id}`} className="flex items-start gap-3 px-4 py-3 hover:bg-slate-50">
+    <li className="overflow-hidden rounded-md border border-slate-200 shadow-sm odd:bg-white even:bg-slate-50">
+      <Link href={`/communications/${m.id}`} className={`${ROW} ${READ_ROW}`}>
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline gap-2">
             <span className="truncate text-sm text-slate-700">To: {to}</span>

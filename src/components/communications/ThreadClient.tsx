@@ -1,9 +1,10 @@
 "use client";
 
+import { messageChars } from "@/lib/communications/plainText";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Download, FileText, Reply, ReplyAll, Trash2, Undo2 } from "lucide-react";
+import { ArrowLeft, Download, FileText, Forward, Reply, ReplyAll, Trash2, Undo2 } from "lucide-react";
 import { apiGet, apiSend } from "@/lib/api-client";
 import { formatDateTime } from "@/lib/format";
 import { Card } from "@/components/ui/Card";
@@ -55,7 +56,7 @@ export function ThreadClient({ id, canSend }: { id: string; canSend: boolean }) 
       <BackLink />
       <h1 className="text-lg font-semibold text-slate-900">{thread.subject}</h1>
       {thread.messages.map((m) => (
-        <MessageCard key={m.id} m={m} highlighted={m.id === thread.openedId} onChanged={() => void load()} onRemoved={() => router.push("/communications")} />
+        <MessageCard key={m.id} m={m} canForward={canSend} highlighted={m.id === thread.openedId} onChanged={() => void load()} onRemoved={() => router.push("/communications")} />
       ))}
       {canSend && !last.withdrawnAt && <ReplyBox message={last} onSent={(newId) => router.push(`/communications/${newId}`)} />}
     </div>
@@ -64,14 +65,18 @@ export function ThreadClient({ id, canSend }: { id: string; canSend: boolean }) 
 
 function BackLink() {
   return (
-    <Link href="/communications" className="inline-flex w-fit items-center gap-1 text-sm text-slate-600 hover:text-slate-900">
+    // Bold, on the brand gold - the same look as the app's Back button and New message.
+    <Link
+      href="/communications"
+      className="inline-flex w-fit items-center gap-1 rounded-md bg-brand-gold px-3 py-1.5 text-sm font-bold text-on-gold transition-colors hover:bg-brand-gold-dark"
+    >
       <ArrowLeft className="h-4 w-4" />
       Communications
     </Link>
   );
 }
 
-function MessageCard({ m, highlighted, onChanged, onRemoved }: { m: MessageView; highlighted: boolean; onChanged: () => void; onRemoved: () => void }) {
+function MessageCard({ m, canForward, highlighted, onChanged, onRemoved }: { m: MessageView; canForward: boolean; highlighted: boolean; onChanged: () => void; onRemoved: () => void }) {
   const [busy, setBusy] = useState(false);
   const toCount = m.recipientCount - m.ccCount;
   const list = (names: string[], count: number) => (count > names.length ? `${names.join(", ")} and ${count - names.length} more` : names.join(", "));
@@ -129,8 +134,18 @@ function MessageCard({ m, highlighted, onChanged, onRemoved }: { m: MessageView;
         )}
         {m.attachments.length > 0 && <Attachments items={m.attachments} />}
       </div>
-      {(m.canWithdraw || !m.mine) && (
+      {(m.canWithdraw || !m.mine || (canForward && !m.withdrawnAt)) && (
         <div className="flex flex-wrap justify-end gap-2 border-t border-slate-100 px-4 py-2">
+          {canForward && !m.withdrawnAt && (
+            // A new message, pre-filled: "Fwd:" subject, this message quoted, its files attached.
+            <Link
+              href={`/communications/new?forward=${m.id}`}
+              className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+            >
+              <Forward className="h-3.5 w-3.5" />
+              Forward
+            </Link>
+          )}
           {m.canWithdraw && (
             <Button variant="warning" className="px-2 py-1 text-xs" onClick={() => void withdraw()} disabled={busy} title={`Possible within ${LIMITS.withdrawMinutes} minutes of sending, while nobody has opened it`}>
               <Undo2 className="h-3.5 w-3.5" />
@@ -173,7 +188,7 @@ function ReplyBox({ message, onSent }: { message: MessageView; onSent: (id: stri
   const [attachments, setAttachments] = useState<AttachmentInfo[]>([]);
   const [uploading, setUploading] = useState(false);
   const [sending, setSending] = useState<"reply" | "all" | null>(null);
-  const empty = !reply.text || reply.text.length > LIMITS.body;
+  const empty = messageChars(reply) < LIMITS.minText || messageChars(reply) > LIMITS.body;
   const [error, setError] = useState<string | null>(null);
   // Reply all = the sender and everyone else on a message you received. Not
   // offered for an "All users" message (it would message everyone again), nor
@@ -211,7 +226,7 @@ function ReplyBox({ message, onSent }: { message: MessageView; onSent: (id: stri
         <div>
           <Label htmlFor="comm-reply">{label}</Label>
           <RichMessageEditor key={editorKey} id="comm-reply" placeholder="Write your reply" minHeight={120} disabled={sending !== null} onChange={setReply} />
-          <TextCounter text={reply.text} />
+          <TextCounter value={reply} />
         </div>
         <AttachmentPicker attachments={attachments} onChange={setAttachments} disabled={sending !== null} onBusyChange={setUploading} />
         {error && <p className="text-sm text-red-600">{error}</p>}

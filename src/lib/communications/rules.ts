@@ -1,3 +1,4 @@
+import { countedChars } from "./plainText";
 import { evidenceContentMatchesType } from "@/lib/evidence";
 import { officeFileProblem, officeKind, uploadNameProblem } from "@/lib/uploadChecks";
 import { ADMIN_ROLE_CODE } from "@/lib/notifications";
@@ -99,12 +100,13 @@ export function replySubject(subject: string): string {
 
 /** Subject and text, trimmed and checked. Plain text only. */
 export function messageProblem(subject: string, body: string): string | null {
+  // Spaces and line breaks never count (countedChars()).
   if (!subject.trim()) return "Subject is required";
-  if (subject.trim().length < LIMITS.minText) return `Subject must be at least ${LIMITS.minText} characters`;
-  if (subject.trim().length > LIMITS.subject) return `Subject must be at most ${LIMITS.subject} characters`;
+  if (countedChars(subject) < LIMITS.minText) return `Subject must be at least ${LIMITS.minText} characters (spaces don't count)`;
+  if (countedChars(subject) > LIMITS.subject) return `Subject must be at most ${LIMITS.subject} characters`;
   if (!body.trim()) return "Message text is required";
-  if (body.trim().length < LIMITS.minText) return `Message text must be at least ${LIMITS.minText} characters`;
-  if (body.trim().length > LIMITS.body) return `Message text must be at most ${LIMITS.body} characters`;
+  if (countedChars(body) < LIMITS.minText) return `Message text must be at least ${LIMITS.minText} characters (spaces and line breaks don't count)`;
+  if (countedChars(body) > LIMITS.body) return `Message text must be at most ${LIMITS.body} characters (spaces and line breaks don't count)`;
   return null;
 }
 

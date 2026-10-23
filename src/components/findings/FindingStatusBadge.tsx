@@ -30,6 +30,15 @@ const TONES: Record<FindingStatus, "green" | "gray" | "amber" | "red" | "blue"> 
   CLOSED: "green",
 };
 
+/**
+ * Rectified by the branch but not yet accepted (closed): "pending". Used by
+ * the All Findings table and the finding page; other screens keep the usual labels.
+ */
+export const PENDING_STATUS_LABELS: Partial<Record<FindingStatus, string>> = {
+  RECTIFIED: "Rectified (pending)",
+  PARTIALLY_RECTIFIED: "Partially Rectified (pending)",
+};
+
 /** `label` (optional) replaces the status's usual text - same colour. */
 export function FindingStatusBadge({ status, label }: { status: FindingStatus; label?: string }) {
   return <Badge tone={TONES[status]}>{label ?? findingStatusLabel(status)}</Badge>;

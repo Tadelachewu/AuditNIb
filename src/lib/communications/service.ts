@@ -19,7 +19,7 @@ import {
   replySubject,
   resolveToAndCc,
 } from "./rules";
-import { emailHtml, htmlToText, sanitizeMessageHtml } from "./richText";
+import { emailHtml, htmlToText, originalBodyHtml, sanitizeMessageHtml } from "./richText";
 import { ATTACHMENT_TYPES, LIMITS, type AttachmentInfo, type Directory, type InboxItem, type MessageView, type RecipientSelection, type SentItem, type ThreadView } from "./types";
 
 /**
@@ -533,6 +533,68 @@ export async function directory(session: Session): Promise<Result<Directory>> {
         .sort((a, b) => a.name.localeCompare(b.name)),
       districts: db.districts.filter((d) => d.status === "ACTIVE").map((d) => ({ id: d.id, name: d.name })).sort((a, b) => a.name.localeCompare(b.name)),
       branches: db.branches.filter((b) => b.status === "ACTIVE").map((b) => ({ id: b.id, name: b.name, districtId: b.districtId })).sort((a, b) => a.name.localeCompare(b.name)),
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Forward
+
+/** What the New message form starts with when forwarding a message. */
+export interface ForwardDraft {
+  subject: string;
+  bodyHtml: string;
+  /** The original's files, copied as this user's pending attachments (removable before sending). */
+  attachments: AttachmentInfo[];
+}
+
+/**
+ * Forward a message the viewer can read (its sender, or a recipient while it
+ * isn't withdrawn): the same subject, the original message as the body, and its files copied
+ * as the forwarder's own pending attachments - so the normal Send (its
+ * recipients, limits and checks) does the rest. Files that can't be read or
+ * wouldn't fit the limits are left out.
+ */
+export async function forwardDraft(session: Session, messageId: string): Promise<Result<ForwardDraft>> {
+  if (!canSendCommunications(session)) return fail(403, NOT_ALLOWED);
+  const viewerId = session.userId!;
+  const m = await prisma.communication.findUnique({ where: { id: messageId }, include: { attachments: { orderBy: { createdAt: "asc" } } } });
+  if (!m) return fail(404, "Message not found");
+  if (m.senderId !== viewerId) {
+    const isRecipient = await prisma.communicationRecipient.count({ where: { communicationId: m.id, userId: viewerId } });
+    if (!isRecipient || m.withdrawnAt) return fail(404, "Message not found");
+  }
+
+  // Copy the files (each a new stored copy, so removing one from the forward never touches the original).
+  await removeStalePending(viewerId);
+  const attachments: AttachmentInfo[] = [];
+  let bytes = 0;
+  for (const a of m.attachments) {
+    if (attachments.length >= LIMITS.attachments || bytes + a.size > LIMITS.attachmentBytes) break;
+    const content = readStoredFile("communications", a.storagePath);
+    if (!content) continue;
+    const storagePath = newStoredName(ATTACHMENT_TYPES[a.mimeType]?.extension ?? a.storagePath.split(".").pop() ?? "bin");
+    writeStoredFile("communications", storagePath, content);
+    try {
+      const row = await prisma.communicationAttachment.create({
+        data: { id: uuid(), communicationId: null, uploadedBy: viewerId, fileName: a.fileName, mimeType: a.mimeType, size: a.size, storagePath, createdAt: new Date() },
+      });
+      attachments.push(toAttachmentInfo(row));
+      bytes += a.size;
+    } catch (err) {
+      deleteStoredFile("communications", storagePath);
+      throw err;
+    }
+  }
+
+  return {
+    ok: true,
+    value: {
+      // The same subject, and the original message itself as the body
+      // (formatting kept; a plain-text message as paragraphs).
+      subject: m.subject.slice(0, LIMITS.subject),
+      bodyHtml: originalBodyHtml({ bodyHtml: m.bodyHtml ? sanitizeMessageHtml(m.bodyHtml) : null, body: m.body }),
+      attachments,
     },
   };
 }

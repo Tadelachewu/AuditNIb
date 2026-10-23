@@ -160,7 +160,7 @@ export function notifyHighRiskApproved(db: Database, finding: Pick<Finding, "id"
   notifyUsers(db, recipients, {
     type: "HIGH_RISK_APPROVED",
     title: `${finding.riskLevel}-risk finding approved: ${finding.reference}`,
-    message: `${finding.title} - ${branch}. ${finding.caseCount} case${finding.caseCount === 1 ? "" : "s"}, ${finding.currency} ${finding.amount.toLocaleString("en-US")}. Final approval by ${approver.name}. This finding needs branch action; the responsible person is ${manager ? `the Branch Manager, ${manager}` : "the Branch Manager (none assigned yet)"}.`,
+    message: `${finding.title} - ${branch}. ${finding.caseCount} case${finding.caseCount === 1 ? "" : "s"}, ${finding.currency} ${finding.amount.toLocaleString("en-US")}. This finding needs branch action; the responsible person is ${manager ? `the Branch Manager, ${manager}` : "the Branch Manager (none assigned yet)"}.`,
     entityType: "Finding",
     entityId: finding.id,
   });

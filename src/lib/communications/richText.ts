@@ -79,32 +79,8 @@ export function sanitizeMessageHtml(html: string): string {
     .trim();
 }
 
-const ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', "#39": "'", apos: "'", nbsp: " " };
-
-/**
- * The plain-text version of (sanitised) message HTML: paragraphs and list
- * items on their own lines, list items with "- ", links as "text (address)".
- * Used for search, previews, the bell notification, the length limit and
- * the plain-text part of the email.
- */
-export function htmlToText(html: string): string {
-  return html
-    .replace(/<a\b[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi, (_, href: string, text: string) => {
-      const label = text.replace(/<[^>]+>/g, "").trim();
-      const url = href.replace(/&amp;/g, "&");
-      return !label || label === url || `mailto:${label}` === url ? url : `${label} (${url})`;
-    })
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<li\b[^>]*>/gi, "- ")
-    .replace(/<\/(p|h[1-6]|li|blockquote)>/gi, "\n")
-    .replace(/<hr\s*\/?>/gi, "\n----\n")
-    .replace(/<[^>]+>/g, "")
-    .replace(/&(#39|[a-z]+);/gi, (m, name: string) => ENTITIES[name.toLowerCase()] ?? m)
-    .replace(/&#(\d+);/g, (_, n: string) => String.fromCharCode(Number(n)))
-    .replace(/[ \t]+\n/g, "\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-}
+// The plain text of a message, and how its characters are counted (shared with the browser).
+export { htmlToText } from "./plainText";
 
 /** The email's HTML: who sent it, the formatted message, and the attachment names (the files stay in the app). */
 export function emailHtml(senderName: string, messageHtml: string, attachmentNames: string[]): string {
@@ -113,4 +89,12 @@ export function emailHtml(senderName: string, messageHtml: string, attachmentNam
       ? `<p>Attachments (open the message in NIB Control360 to download):</p><ul>${attachmentNames.map((n) => `<li>${escapeHtml(n)}</li>`).join("")}</ul>`
       : "";
   return `<p><strong>From:</strong> ${escapeHtml(senderName)}</p>${messageHtml}${files}`;
+}
+
+/**
+ * A forwarded message's body: the original message itself - its formatting
+ * kept, or a plain-text message as paragraphs. Sanitised like any message.
+ */
+export function originalBodyHtml(original: { bodyHtml: string | null; body: string }): string {
+  return sanitizeMessageHtml(original.bodyHtml ?? original.body.split(/\n/).map((line) => `<p>${escapeHtml(line)}</p>`).join(""));
 }

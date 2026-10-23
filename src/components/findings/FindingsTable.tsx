@@ -10,7 +10,7 @@ import { pagedList } from "@/lib/gridPage";
 import { rememberFindingsListUrl } from "@/lib/findingsListReturn";
 import { Button } from "@/components/ui/Button";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
-import { FindingStatusBadge } from "@/components/findings/FindingStatusBadge";
+import { FindingStatusBadge, PENDING_STATUS_LABELS } from "@/components/findings/FindingStatusBadge";
 import { apiSend } from "@/lib/api-client";
 import { notify, notifications, presentError } from "@/lib/notify";
 import { formatDateTime, formatCurrency, formatNumber } from "@/lib/format";
@@ -91,14 +91,8 @@ const OPTIONAL_COLUMNS = [
 ] as const;
 const HIDDEN_BY_DEFAULT = Object.fromEntries(OPTIONAL_COLUMNS.map((id) => [id, false]));
 
-/**
- * This table's own status wording: rectified by the branch but not yet
- * accepted (closed) is "pending". Only here - other screens keep the usual labels.
- */
-const TABLE_STATUS_LABELS: Partial<Record<FindingStatus, string>> = {
-  RECTIFIED: "Rectified (pending)",
-  PARTIALLY_RECTIFIED: "Partially Rectified (pending)",
-};
+/** This table's status wording: rectified but not yet accepted (closed) is "pending". */
+const TABLE_STATUS_LABELS = PENDING_STATUS_LABELS;
 
 const num = (n: number) => <span className="tabular-nums">{formatNumber(n)}</span>;
 const money = (currency: string, n: number) => (
@@ -455,12 +449,12 @@ export function FindingsTable({
       { id: "priority", accessorKey: "priority", header: "Priority", size: 90 },
       { id: "currency", accessorKey: "currency", header: "Currency", size: 80, enableSorting: false },
       { id: "reportedAmount", accessorKey: "reportedAmount", header: "Registered Amount", Cell: ({ row }) => money(row.original.currency, row.original.reportedAmount) },
-      { id: "rectifiedCases", accessorKey: "rectifiedCases", header: "Rectified Cases (pending)", size: 110, Cell: ({ row }) => num(row.original.rectifiedCases) },
-      { id: "rectifiedAmount", accessorKey: "rectifiedAmount", header: "Rectified Amount (pending)", enableSorting: false, Cell: ({ row }) => money(row.original.currency, row.original.rectifiedAmount) },
+      { id: "rectifiedCases", accessorKey: "rectifiedCases", header: "Rectified (pending) Cases", size: 110, Cell: ({ row }) => num(row.original.rectifiedCases) },
+      { id: "rectifiedAmount", accessorKey: "rectifiedAmount", header: "Rectified (pending) Amount", enableSorting: false, Cell: ({ row }) => money(row.original.currency, row.original.rectifiedAmount) },
       { id: "verifiedCases", accessorKey: "districtVerifiedCases", header: "Verified Cases", size: 100, Cell: ({ row }) => num(row.original.districtVerifiedCases) },
       { id: "verifiedAmount", accessorKey: "districtVerifiedAmount", header: "Verified Amount", enableSorting: false, Cell: ({ row }) => money(row.original.currency, row.original.districtVerifiedAmount) },
-      { id: "closedCases", accessorKey: "closedCases", header: "Rectified Cases (closed)", size: 100, Cell: ({ row }) => num(row.original.closedCases) },
-      { id: "closedAmount", accessorKey: "closedAmount", header: "Rectified Amount (closed)", enableSorting: false, Cell: ({ row }) => money(row.original.currency, row.original.closedAmount) },
+      { id: "closedCases", accessorKey: "closedCases", header: "Rectified (closed) Cases", size: 100, Cell: ({ row }) => num(row.original.closedCases) },
+      { id: "closedAmount", accessorKey: "closedAmount", header: "Rectified (closed) Amount", enableSorting: false, Cell: ({ row }) => money(row.original.currency, row.original.closedAmount) },
       { id: "outstandingCases", accessorKey: "outstandingCases", header: "Outstanding Cases", size: 110, Cell: ({ row }) => num(row.original.outstandingCases) },
       { id: "outstandingAmount", accessorKey: "outstandingAmount", header: "Outstanding Amount", Cell: ({ row }) => money(row.original.currency, row.original.outstandingAmount) },
       { id: "description", accessorKey: "description", header: "Description", enableSorting: false, Cell: ({ row }) => longText(row.original.description) },

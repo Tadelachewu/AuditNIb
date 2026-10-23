@@ -1,5 +1,6 @@
 "use client";
 
+import { messageChars } from "@/lib/communications/plainText";
 import { useMemo } from "react";
 import MenuItem from "@mui/material/MenuItem";
 import StarterKit from "@tiptap/starter-kit";
@@ -159,12 +160,15 @@ export function RichMessageEditor({
   disabled = false,
   minHeight = 180,
   onChange,
+  initialHtml,
 }: {
   id?: string;
   placeholder: string;
   disabled?: boolean;
   minHeight?: number;
   onChange: (value: RichMessageValue) => void;
+  /** Starting content (e.g. a forwarded message) - read once, when the editor mounts. */
+  initialHtml?: string;
 }) {
   const extensions = useMemo(() => messageExtensions(placeholder), [placeholder]);
 
@@ -173,6 +177,7 @@ export function RichMessageEditor({
       extensions={extensions}
       // Rendered in the browser only (the page itself is server-rendered).
       immediatelyRender={false}
+      content={initialHtml}
       editable={!disabled}
       editorProps={{ attributes: { ...(id ? { id } : {}), "aria-label": placeholder, role: "textbox", "aria-multiline": "true" } }}
       onUpdate={({ editor }) => onChange({ html: editor.isEmpty ? "" : editor.getHTML(), text: editor.getText({ blockSeparator: "\n" }).trim() })}
@@ -228,11 +233,13 @@ export function RichMessageEditor({
 }
 
 /** "123 / 5000", red when over the limit. */
-export function TextCounter({ text }: { text: string }) {
-  const over = text.length > LIMITS.body;
+/** The message's counted characters (spaces and line breaks don't count) - the same number the server checks. */
+export function TextCounter({ value }: { value: RichMessageValue }) {
+  const n = messageChars(value);
+  const over = n > LIMITS.body;
   return (
-    <p className={`mt-1 text-right text-xs ${over ? "text-red-600" : "text-slate-500"}`}>
-      {text.length} / {LIMITS.body}
+    <p className={`mt-1 text-right text-xs ${over ? "text-red-600" : "text-slate-500"}`} title="Spaces and line breaks don't count">
+      {n} / {LIMITS.body}
     </p>
   );
 }
