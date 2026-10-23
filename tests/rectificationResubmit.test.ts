@@ -55,7 +55,7 @@ describe("not itemized: number of cases and amount to resubmit", () => {
 
 describe("HO My Queue", () => {
   it("doesn't list a returned rectification, even with verified cases not closed", () => {
-    const f = { id: "f1", status: "RECTIFICATION_RETURNED", createdBy: "x", ...figures() } as Finding;
+    const f = { ...figures(), id: "f1", status: "RECTIFICATION_RETURNED", createdBy: "x" } as Finding;
     const db = { findings: [f], findingAdjustments: [], settings: { hoApproval: { approverUserIds: [] } } } as unknown as Database;
     const ho = { userId: "ho", permissions: ["findings.ho-review", "findings.close", "findings.ho-return-rectification"] } as never;
     expect(queueStatusesForSession(ho, db)(f)).toBe(false);
