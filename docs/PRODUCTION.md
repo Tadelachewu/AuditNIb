@@ -448,6 +448,7 @@ sudo systemctl restart nib-control360-email    # or: nssm restart NIBControl360E
 |---|---|
 | Uploaded files, encryption, backups of files | [files.md](files.md) |
 | Email queue, worker, BullMQ driver | [email-queue.md](email-queue.md) |
+| Redis on Windows (Memurai): keep it running, the `redis.unavailable` warning, start order | [redis-memurai.md](redis-memurai.md) |
 | Email setup (SMTP) | [EMAIL_SETUP.md](EMAIL_SETUP.md) |
 | Evidence upload rules | [EVIDENCE_VALIDATION_RULES.md](../EVIDENCE_VALIDATION_RULES.md) |
 | Import rules | [IMPORT_VALIDATION_RULES.md](../IMPORT_VALIDATION_RULES.md) |
