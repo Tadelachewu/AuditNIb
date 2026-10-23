@@ -8,7 +8,7 @@ import { formatDate, formatDateTime, formatCurrency } from "@/lib/format";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { StickyActions } from "@/components/ui/StickyActions";
-import { Input, Select, Label } from "@/components/ui/Field";
+import { Input, Select } from "@/components/ui/Field";
 import { RuleInput } from "@/components/ui/RuleInput";
 import { currentPeriod, sortPeriods } from "@/lib/periods";
 import { amountError, findingDateError, findingDateInPeriodError, LIMITS, localDateOf, localToday, textError, titleError } from "@/lib/inputRules";
@@ -30,6 +30,18 @@ import type {
 } from "@/types";
 import { REQUIRABLE_FINDING_FIELDS } from "@/types";
 import { appNow } from "@/lib/clock";
+
+/**
+ * This form's field labels: semi-bold, like the finding page's labels (values
+ * stay normal weight). Local, so other forms' shared Label is unchanged.
+ */
+function Label({ children, htmlFor }: { children: React.ReactNode; htmlFor?: string }) {
+  return (
+    <label htmlFor={htmlFor} className="mb-1 block text-xs font-semibold text-slate-600">
+      {children}
+    </label>
+  );
+}
 
 interface SimilarFindingMatch {
   id: string;
