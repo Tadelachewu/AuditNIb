@@ -7,7 +7,7 @@ import { notify, notifications } from "@/lib/notify";
 import { Card } from "@/components/ui/Card";
 import { CollapsibleCard } from "@/components/ui/CollapsibleCard";
 import { Button } from "@/components/ui/Button";
-import { Input, Label } from "@/components/ui/Field";
+import { Input } from "@/components/ui/Field";
 import { PasswordRules } from "@/components/ui/PasswordRules";
 import { validatePasswordStrength } from "@/lib/passwordValidation";
 import { OPEN_CHANGE_PASSWORD_EVENT } from "@/components/layout/UserMenu";
@@ -159,5 +159,14 @@ export function ProfileClient({ forced }: { forced: boolean }) {
       </CollapsibleCard>
       </div>
     </div>
+  );
+}
+
+/** Semi-bold field label (this page's own - the shared Label stays as is). */
+function Label({ htmlFor, children }: { htmlFor: string; children: React.ReactNode }) {
+  return (
+    <label htmlFor={htmlFor} className="mb-1 block text-xs font-semibold text-slate-600">
+      {children}
+    </label>
   );
 }
