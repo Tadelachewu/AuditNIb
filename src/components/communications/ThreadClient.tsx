@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/Badge";
 import { notify, notifications, presentError } from "@/lib/notify";
 import { LIMITS, type AttachmentInfo, type MessageView, type ThreadView } from "@/lib/communications/types";
 import { AttachmentPicker, formatBytes } from "./AttachmentPicker";
+import { ForwardedLabel } from "./ForwardedLabel";
 import { RichMessageEditor, TextCounter, type RichMessageValue } from "./RichMessageEditor";
 
 /**
@@ -112,7 +113,10 @@ function MessageCard({ m, canForward, highlighted, onChanged, onRemoved }: { m: 
     <Card className={highlighted ? "ring-2 ring-sky-300" : ""}>
       <div className="flex flex-wrap items-start gap-2 border-b border-slate-200 px-4 py-3">
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-slate-900">{m.senderName}</p>
+          <p className="flex flex-wrap items-center gap-2 text-sm font-semibold text-slate-900">
+            {m.senderName}
+            {m.forwarded && <ForwardedLabel />}
+          </p>
           <p className="text-xs text-slate-500"><span className="font-semibold text-slate-600">To:</span> {to}</p>
           {cc && <p className="text-xs text-slate-500"><span className="font-semibold text-slate-600">Cc:</span> {cc}</p>}
         </div>
@@ -137,7 +141,7 @@ function MessageCard({ m, canForward, highlighted, onChanged, onRemoved }: { m: 
       {(m.canWithdraw || !m.mine || (canForward && !m.withdrawnAt)) && (
         <div className="flex flex-wrap justify-end gap-2 border-t border-slate-100 px-4 py-2">
           {canForward && !m.withdrawnAt && (
-            // A new message, pre-filled: "Fwd:" subject, this message quoted, its files attached.
+            // A new message, pre-filled: the same subject, this message as the body, its files attached; sent labelled "Forwarded".
             <Link
               href={`/communications/new?forward=${m.id}`}
               className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"

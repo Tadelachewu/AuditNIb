@@ -34,6 +34,7 @@ const sendSchema = z.object({
   cc: z.object({ toAll: z.literal(false).default(false), userIds: ids, roleCodes: ids, districtIds: ids, branchIds: ids, excludedUserIds: ids }).optional(),
   replyToId: z.string().min(1).optional(),
   replyAll: z.boolean().optional(),
+  forwardOfId: z.string().min(1).max(100).optional(),
   attachmentIds: z.array(z.string().min(1)).max(LIMITS.attachments, `At most ${LIMITS.attachments} attachments per message`).default([]),
 });
 

@@ -58,6 +58,8 @@ export interface SendInput {
   /** A reply: the message replied to, and whether to everyone on it. */
   replyToId?: string;
   replyAll?: boolean;
+  /** A forward: the message forwarded (one the sender can read). */
+  forwardOfId?: string;
   /** Attachments uploaded beforehand (POST /api/communications/attachments). */
   attachmentIds: string[];
 }
@@ -67,21 +69,35 @@ interface RawClient {
   $executeRaw(query: TemplateStringsArray, ...values: unknown[]): Promise<number>;
 }
 
-let ccColumn: boolean | null = null;
-let ccCheckedAt = 0;
-/** Whether the Cc column exists yet (migration 20261023120000_communication_cc). */
-async function ccInstalled(): Promise<boolean> {
-  if (ccColumn === true) return true;
-  if (ccColumn === false && Date.now() - ccCheckedAt < 60_000) return false;
-  ccCheckedAt = Date.now();
-  try {
-    const rows = await (prisma as unknown as RawClient).$queryRaw<{ ok: boolean }[]>`
-      SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'communication_recipients' AND column_name = 'is_cc') AS ok`;
-    ccColumn = rows[0]?.ok === true;
-  } catch {
-    ccColumn = false;
-  }
-  return ccColumn;
+/** Whether a column added by a later migration exists yet (re-checked each minute until it does). */
+function columnCheck(table: string, column: string): () => Promise<boolean> {
+  let installed: boolean | null = null;
+  let checkedAt = 0;
+  return async () => {
+    if (installed === true) return true;
+    if (installed === false && Date.now() - checkedAt < 60_000) return false;
+    checkedAt = Date.now();
+    try {
+      const rows = await (prisma as unknown as RawClient).$queryRaw<{ ok: boolean }[]>`
+        SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = ${table} AND column_name = ${column}) AS ok`;
+      installed = rows[0]?.ok === true;
+    } catch {
+      installed = false;
+    }
+    return installed;
+  };
+}
+/** The Cc column (migration 20261023120000_communication_cc). */
+const ccInstalled = columnCheck("communication_recipients", "is_cc");
+/** The Forward link (migration 20261025120000_communication_forwarded). */
+const forwardInstalled = columnCheck("communications", "forwarded_from_id");
+
+/** Of these messages, the ones that are forwards ("Forwarded" label). */
+async function forwardedIds(ids: string[]): Promise<Set<string>> {
+  if (ids.length === 0 || !(await forwardInstalled())) return new Set();
+  const rows = await (prisma as unknown as RawClient).$queryRaw<{ id: string }[]>`
+    SELECT id FROM communications WHERE id = ANY(${ids}::text[]) AND forwarded_from_id IS NOT NULL`;
+  return new Set(rows.map((r) => r.id));
 }
 
 export async function sendMessage(session: Session, input: SendInput): Promise<Result<{ id: string; recipients: number }>> {
@@ -101,6 +117,8 @@ export async function sendMessage(session: Session, input: SendInput): Promise<R
   let toAll = false;
   /** Cc'd recipients (a subset of `recipients`). Someone in both To and Cc is To. */
   let ccIds: string[] = [];
+  /** A forward: the message it forwards. */
+  let forwardedFromId: string | null = null;
   const id = uuid();
 
   if (input.replyToId) {
@@ -121,6 +139,12 @@ export async function sendMessage(session: Session, input: SendInput): Promise<R
     ({ recipients, ccIds } = resolveToAndCc(db, input.selection, input.cc, senderId));
     toAll = input.selection.toAll;
     threadId = id;
+    if (input.forwardOfId) {
+      // Only a message the sender may read (its sender, or a recipient while it isn't withdrawn).
+      const original = await prisma.communication.findUnique({ where: { id: input.forwardOfId }, include: { recipients: { where: { userId: senderId }, select: { userId: true } } } });
+      if (!original || (original.senderId !== senderId && (original.recipients.length === 0 || original.withdrawnAt))) return fail(404, "The forwarded message wasn't found");
+      forwardedFromId = original.id;
+    }
   }
   const problem = messageProblem(subject, body);
   if (problem) return fail(400, problem);
@@ -148,6 +172,7 @@ export async function sendMessage(session: Session, input: SendInput): Promise<R
 
   const now = new Date();
   const isReply = parentId !== null;
+  const isForward = forwardedFromId !== null;
   const names = attachments.map((a) => a.fileName);
   await updateDb(
     (current) => {
@@ -156,7 +181,7 @@ export async function sendMessage(session: Session, input: SendInput): Promise<R
         recipients.map((r) => r.id),
         {
           type: isReply ? "COMMUNICATION_REPLY" : "COMMUNICATION",
-          title: isReply ? `${senderName} replied: ${subject}` : `${senderName}: ${subject}`,
+          title: isReply ? `${senderName} replied: ${subject}` : isForward ? `${senderName} forwarded: ${subject}` : `${senderName}: ${subject}`,
           message: previewOf(body),
           entityType: "Communication",
           entityId: id,
@@ -170,7 +195,7 @@ export async function sendMessage(session: Session, input: SendInput): Promise<R
         action: isReply ? "COMMUNICATION_REPLIED" : "COMMUNICATION_SENT",
         entityType: "Communication",
         entityId: id,
-        newValue: { subject, toAll, recipients: recipients.length, attachments: names, threadId },
+        newValue: { subject, toAll, recipients: recipients.length, attachments: names, threadId, ...(isForward ? { forwardedFromId } : {}) },
       });
     },
     {
@@ -186,6 +211,11 @@ export async function sendMessage(session: Session, input: SendInput): Promise<R
         // migration a Cc'd person still receives the message - shown as To.
         if (ccIds.length > 0 && (await ccInstalled())) {
           await (tx as unknown as RawClient).$executeRaw`UPDATE communication_recipients SET is_cc = true WHERE communication_id = ${id} AND user_id = ANY(${ccIds}::text[])`;
+        }
+        // Forward (column forwarded_from_id, migration 20261025120000_communication_forwarded).
+        // Before that migration a forward is sent unlabelled.
+        if (forwardedFromId && (await forwardInstalled())) {
+          await (tx as unknown as RawClient).$executeRaw`UPDATE communications SET forwarded_from_id = ${forwardedFromId} WHERE id = ${id}`;
         }
         if (attachments.length > 0) {
           await tx.communicationAttachment.updateMany({ where: { id: { in: attachments.map((a) => a.id) } }, data: { communicationId: id } });
@@ -225,6 +255,7 @@ export async function listInbox(session: Session, opts: { page: number; pageSize
     }),
     prisma.communicationRecipient.count({ where }),
   ]);
+  const forwards = await forwardedIds(rows.map((r) => r.communication.id));
   return {
     ok: true,
     value: {
@@ -239,6 +270,7 @@ export async function listInbox(session: Session, opts: { page: number; pageSize
         readAt: r.readAt?.toISOString() ?? null,
         attachmentCount: r.communication._count.attachments,
         isReply: r.communication.parentId !== null,
+        forwarded: forwards.has(r.communication.id),
       })),
     },
   };
@@ -266,7 +298,7 @@ export async function listSent(session: Session, opts: { page: number; pageSize:
     }),
     prisma.communication.count({ where }),
   ]);
-  const reads = await readCounts(rows.map((r) => r.id));
+  const [reads, forwards] = await Promise.all([readCounts(rows.map((r) => r.id)), forwardedIds(rows.map((r) => r.id))]);
   return {
     ok: true,
     value: {
@@ -283,6 +315,7 @@ export async function listSent(session: Session, opts: { page: number; pageSize:
         createdAt: r.createdAt.toISOString(),
         withdrawnAt: r.withdrawnAt?.toISOString() ?? null,
         attachmentCount: r._count.attachments,
+        forwarded: forwards.has(r.id),
       })),
     },
   };
@@ -321,6 +354,7 @@ export async function openThread(session: Session, messageId: string): Promise<R
   const reads = await readCounts(visible.filter((m) => m.senderId === viewerId).map((m) => m.id));
   const names = new Map<string, { to: string[]; cc: string[]; ccCount: number }>();
   const withCc = await ccInstalled();
+  const forwards = await forwardedIds(visible.map((m) => m.id));
   for (const m of visible) {
     if (withCc) {
       const rows = await (prisma as unknown as RawClient).$queryRaw<{ name: string; cc: boolean }[]>`
@@ -358,6 +392,7 @@ export async function openThread(session: Session, messageId: string): Promise<R
       // Sanitised again on the way out, so nothing stored can ever render unsafely.
       bodyHtml: m.bodyHtml ? sanitizeMessageHtml(m.bodyHtml) : null,
       toAll: m.toAll,
+      forwarded: forwards.has(m.id),
       createdAt,
       withdrawnAt,
       recipientCount: m._count.recipients,

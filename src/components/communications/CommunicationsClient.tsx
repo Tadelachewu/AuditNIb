@@ -8,6 +8,7 @@ import { formatDateTime } from "@/lib/format";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Field";
 import { Badge } from "@/components/ui/Badge";
+import { ForwardedLabel } from "./ForwardedLabel";
 import { Pagination } from "@/components/ui/Pagination";
 import { ListSkeleton } from "@/components/ui/Skeleton";
 import { DEFAULT_PAGE_SIZE } from "@/lib/pagination";
@@ -140,6 +141,7 @@ function InboxRow({ m }: { m: InboxItem }) {
             <span className="ml-auto shrink-0 text-xs text-slate-500">{formatDateTime(m.createdAt)}</span>
           </div>
           <p className={`truncate text-sm ${unread ? "font-semibold text-slate-900" : "text-slate-800"}`}>
+            {m.forwarded && <ForwardedLabel className="mr-1.5" />}
             {m.subject}
             {m.attachmentCount > 0 && <Paperclip className="ml-1 inline h-3.5 w-3.5 text-slate-500" aria-label={`${m.attachmentCount} attachment(s)`} />}
           </p>
@@ -164,6 +166,7 @@ function SentRow({ m }: { m: SentItem }) {
             <span className="ml-auto shrink-0 text-xs text-slate-500">{formatDateTime(m.createdAt)}</span>
           </div>
           <p className="truncate text-sm text-slate-900">
+            {m.forwarded && <ForwardedLabel className="mr-1.5" />}
             {m.subject}
             {m.attachmentCount > 0 && <Paperclip className="ml-1 inline h-3.5 w-3.5 text-slate-500" aria-label={`${m.attachmentCount} attachment(s)`} />}
           </p>

@@ -23,8 +23,9 @@ import { EMPTY_SELECTION, RecipientPicker } from "./RecipientPicker";
  * Recipients are notified in the app and by email (the email carries the
  * whole text; attachments stay here).
  *
- * Forward (`forwardId`): starts from the forwarded message - "Fwd:" subject,
- * the original quoted, its files attached. Otherwise an unsent draft from
+ * Forward (`forwardId`): starts from the forwarded message - the same subject,
+ * the original as the body, its files attached - and is sent labelled
+ * "Forwarded" for both sides. Otherwise an unsent draft from
  * earlier is restored (saved as you type, like Register Finding's - see
  * /api/communications/draft), with a banner and Discard.
  */
@@ -148,6 +149,7 @@ export function ComposeForm({ forwardId }: { forwardId?: string } = {}) {
         selection,
         // No Cc with "Everyone" - everyone already receives it.
         cc: selection.toAll ? undefined : cc,
+        forwardOfId: forwardId,
         attachmentIds: attachments.map((a) => a.id),
       });
       // Sent: the draft has done its job.

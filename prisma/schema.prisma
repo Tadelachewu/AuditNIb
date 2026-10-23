@@ -768,6 +768,8 @@ model Communication {
   createdAt   DateTime                  @map("created_at")
   /// Withdrawn by its sender (within the allowed time, before anyone opened it).
   withdrawnAt DateTime?                 @map("withdrawn_at")
+  /// The message this one forwards (null when not a forward) - shown as "Forwarded".
+  forwardedFromId String?               @map("forwarded_from_id")
   recipients  CommunicationRecipient[]
   attachments CommunicationAttachment[]
 

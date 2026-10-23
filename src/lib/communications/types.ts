@@ -102,6 +102,8 @@ export interface InboxItem {
   readAt: string | null;
   attachmentCount: number;
   isReply: boolean;
+  /** A forwarded message (labelled "Forwarded"). */
+  forwarded: boolean;
 }
 
 /** One line of Sent. */
@@ -118,6 +120,8 @@ export interface SentItem {
   createdAt: string;
   withdrawnAt: string | null;
   attachmentCount: number;
+  /** A forwarded message (labelled "Forwarded"). */
+  forwarded: boolean;
 }
 
 /** A message as shown in a conversation. */
@@ -133,6 +137,8 @@ export interface MessageView {
   /** The formatted message (sanitised HTML), or null for a plain-text message. */
   bodyHtml: string | null;
   toAll: boolean;
+  /** A forwarded message (labelled "Forwarded"). */
+  forwarded: boolean;
   createdAt: string;
   withdrawnAt: string | null;
   recipientCount: number;

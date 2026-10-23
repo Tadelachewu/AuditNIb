@@ -79,6 +79,8 @@ A reply's subject is **Re: …** automatically. Replies can have attachments too
 
 Choose **To / Cc** and send. All the usual checks apply: recipients, 10 files, 25 MB in total, length rules. Server: `forwardDraft()` (`POST /api/communications/[id]/forward`).
 
+**The "Forwarded" label.** A forward is labelled **Forwarded** on both sides: in the recipient's **Inbox** and the forwarder's **Sent** (before the subject), and in the conversation (next to the sender's name). The recipient's bell notification reads *"<name> forwarded: <subject>"*. The label comes from what's stored when the message is sent (`communications.forwarded_from_id`, migration `20261025120000_communication_forwarded`), so it stays even if the forwarder edits the text. The server only accepts a message the sender may read as the forwarded one (otherwise 404), and the audit log's `COMMUNICATION_SENT` entry records `forwardedFromId`. Before the migration is applied, a forward is sent without the label.
+
 ### Drafts
 
 The New message form saves what you've written **as you type**: subject, To / Cc, the formatted text and the attached files, kept **24 hours** (Redis, like Register Finding's draft). After a refresh, a closed tab or a lost connection it's **restored**, with a banner and **Discard**. It's cleared once the message is sent. A forward starts from the forwarded message instead of a draft. If Redis is down, nothing is saved, and writing still works. Server: `/api/communications/draft` (GET / PATCH / DELETE, your own draft only).
