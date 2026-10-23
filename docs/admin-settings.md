@@ -228,7 +228,7 @@ The Users admin page and both create/edit API routes drive district/branch/depar
 
 ### 4.2 The OPEN ↔ LOCKED lifecycle
 
-`PATCH /api/admin/reporting-periods/[id]` (requires `reporting-periods.lock`) drives every status change. A `reason` of ≥5 characters is required on every call (`reporting-periods/[id]/route.ts:15`), and it's recorded on the period (`lockReason`) and in the audit log (`route.ts:145-170`). The route also supports:
+`PATCH /api/admin/reporting-periods/[id]` (requires `reporting-periods.lock`) drives every status change. A `reason` of ≥3 characters is required on every call (`reporting-periods/[id]/route.ts:15`), and it's recorded on the period (`lockReason`) and in the audit log (`route.ts:145-170`). The route also supports:
 - **Flag-only touch-ups** on an already-LOCKED period (toggling `draftsAllowedWhileLocked` without a full unlock/relock cycle) (`route.ts:9-20`).
 - **Editing the submission window** independently of lock status.
 - **Editing the period's own `startsAt`/`endsAt`** — only permitted while the period has **zero** findings referencing it, since reference-number sequences, dedupe keys, and every period-scoped stat are already keyed off the current dates (`route.ts:94-117`).

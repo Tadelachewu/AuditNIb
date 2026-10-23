@@ -11,7 +11,7 @@
 | **Permission** | **Findings › Reverse Closed / Partially Closed Findings**. The Administrator has it and can grant it to other roles. |
 | **Scope** | The finding must be in your organisational scope (branch / district / bank) |
 | **Locked periods** | Don't matter. A finding can be reversed whether its periods are open or locked ([locked-periods.md](locked-periods.md)). |
-| **Reason** | Required (at least 5 characters), in a confirmation dialog before anything changes |
+| **Reason** | Required (at least 3 characters), in a confirmation dialog before anything changes |
 | **Resulting status** | **Sent to Branch Manager/R**: the branch must rectify it again |
 
 ## Which period is reversed

@@ -127,10 +127,14 @@ describe("replies", () => {
 describe("message and attachment checks", () => {
   it("subject and text are required and limited", () => {
     expect(messageProblem("", "Hi")).toMatch(/Subject/);
-    expect(messageProblem("Hi", "  ")).toMatch(/text/);
-    expect(messageProblem("x".repeat(201), "Hi")).toMatch(/200/);
-    expect(messageProblem("Hi", "x".repeat(10001))).toMatch(/10000/);
-    expect(messageProblem("Hi", "Hello")).toBeNull();
+    expect(messageProblem("Hello", "  ")).toMatch(/text/);
+    expect(messageProblem("x".repeat(201), "Hello")).toMatch(/200/);
+    expect(messageProblem("Hello", "x".repeat(10001))).toMatch(/10000/);
+    expect(messageProblem("Hello", "Hello")).toBeNull();
+    // At least 3 characters each.
+    expect(messageProblem("Hi", "Hello")).toMatch(/Subject must be at least 3/);
+    expect(messageProblem("Hey", "ok")).toMatch(/text must be at least 3/);
+    expect(messageProblem("Hey", "yes")).toBeNull();
   });
   const pdf = Buffer.from("%PDF-1.7\n...");
   const DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";

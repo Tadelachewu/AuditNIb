@@ -132,6 +132,10 @@ export async function sendMessage(session: Session, input: SendInput): Promise<R
     ? await prisma.communicationAttachment.findMany({ where: { id: { in: attachmentIds }, uploadedBy: senderId, communicationId: null } })
     : [];
   if (attachments.length !== attachmentIds.length) return fail(400, "An attachment is missing or was already sent - attach it again");
+  // All the files together, not each one.
+  if (attachments.reduce((sum, a) => sum + a.size, 0) > LIMITS.attachmentBytes) {
+    return fail(400, `Attachments together must be at most ${LIMITS.attachmentBytes / (1024 * 1024)} MB`);
+  }
 
   const sendKey = `communications-send:${senderId}`;
   const allKey = `communications-send-all:${senderId}`;

@@ -10,9 +10,11 @@ export const COMMUNICATIONS_PAGE = "communications";
 export const LIMITS = {
   subject: 200,
   body: 10_000,
+  /** At least this many characters in the subject and in the message text. */
+  minText: 3,
   /** Attachments per message. */
   attachments: 10,
-  /** Bytes per attachment (one upload request each - see the attachments route; src/proxy.ts allows this size there). */
+  /** Bytes for ALL of a message's attachments together (each upload is one file, never more than this). */
   attachmentBytes: 25 * 1024 * 1024,
   /** A sender can withdraw a message this long after sending it, while nobody has opened it. */
   withdrawMinutes: 10,

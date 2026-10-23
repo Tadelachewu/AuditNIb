@@ -23,7 +23,7 @@ export const LIMITS = {
   title: { min: 3, max: 200 },
   longText: { max: 5000 },
   shortText: { max: 500 },
-  reason: { min: 5, max: 500 },
+  reason: { min: 3, max: 500 },
   listItem: { min: 2, max: 100 },
   email: { max: 254 },
   amount: { max: 1_000_000_000_000 },

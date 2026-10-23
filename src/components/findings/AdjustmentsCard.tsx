@@ -184,28 +184,18 @@ export function AdjustmentsCard({ finding }: { finding: FindingFigures }) {
               {finding.currency} {formatCurrency(finding.registeredAmount)} ({plural(finding.registeredCaseCount, "case")})
             </dd>
           </div>
-          {view.periodStay ? (
-            <div>
-              <dt className="text-xs text-slate-500">
-                In {view.periodStay.periodCode} (transferred from {view.periodStay.fromPeriodCode})
-              </dt>
-              <dd className="text-slate-900">
-                {/* Only what the transfer carried in - approved adjustments are counted in Outstanding. */}
-                {finding.currency} {formatCurrency(view.periodStay.transferredAmount)} ({plural(view.periodStay.transferredCases, "case")})
-              </dd>
-            </div>
-          ) : (
-            <div>
-              <dt className="text-xs text-slate-500">Current total (original + approved adjustments)</dt>
-              <dd className={original ? "font-semibold text-slate-900" : "text-slate-900"}>
-                {finding.currency} {formatCurrency(finding.amount)} ({plural(finding.caseCount, "case")})
-              </dd>
-            </div>
-          )}
+          {/* The same two boxes for every finding: what was transferred into this
+              period (0 when it wasn't transferred), and the outstanding. */}
           <div>
             <dt className="text-xs text-slate-500">
-              {view.periodStay ? "Outstanding (transferred + adjustments - rectified)" : "Outstanding (current total - rectified)"}
+              In this period (transferred){view.periodStay ? ` - from ${view.periodStay.fromPeriodCode}` : ""}
             </dt>
+            <dd className="text-slate-900">
+              {finding.currency} {formatCurrency(view.periodStay?.transferredAmount ?? 0)} ({plural(view.periodStay?.transferredCases ?? 0, "case")})
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs text-slate-500">Outstanding (outstanding + adjustments - rectified)</dt>
             <dd className="font-semibold text-slate-900">
               {finding.currency} {formatCurrency(outstandingOf(finding).amount)} ({plural(outstandingOf(finding).cases, "case")})
             </dd>
@@ -443,9 +433,6 @@ function AdjustDialog({
             </div>
             <div>
               <span className="text-xs text-slate-500">After this adjustment</span>
-              <div className="text-slate-900">
-                {stayLabel} {plural(stayCases + added, "case")} · {finding.currency} {formatCurrency(Math.round((stayAmount + change) * 100) / 100)}
-              </div>
               <div className="font-semibold text-slate-900">
                 Outstanding {plural(resultOutstanding.cases, "case")} · {finding.currency} {formatCurrency(resultOutstanding.amount)}
               </div>

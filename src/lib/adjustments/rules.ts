@@ -118,7 +118,7 @@ export interface ResolvedChange {
 export function resolveChange(db: Database, f: Finding, input: AdjustmentInput): { ok: true; change: ResolvedChange } | { ok: false; problem: string } {
   const fail = (problem: string) => ({ ok: false as const, problem });
   if (!Number.isInteger(input.addedCases) || input.addedCases < 0) return fail("Cases can only be added (a whole number of 0 or more)");
-  if ((input.reason ?? "").trim().length < 5) return fail("A reason of at least 5 characters is required");
+  if ((input.reason ?? "").trim().length < 3) return fail("A reason of at least 3 characters is required");
 
   const rows = caseRowsOf(db, f.id);
   const itemized = rows.length > 0;

@@ -35,7 +35,7 @@ Use category **Other Case**, branch B, **1,000 per case** (amount = cases × 1,0
 |---|---|
 | **Close N** | Branch Manager: **Record Rectification** for N cases (N × 1,000) → District Controller: **Verify** → HO Controller: **Verify & Close → Accept** |
 | **Transfer → P** | District Controller: **Transfer to Another Period** → choose P → reason → **Transfer** |
-| **Reverse** | Administrator: **Reverse** → enter a reason (5+ characters) → **Reverse Finding** |
+| **Reverse** | Administrator: **Reverse** → enter a reason (3+ characters) → **Reverse Finding** |
 | **Period figures for P** | **Reports → Report Templates → Category Performance Summary**, Period = P, row *Other Case*: **Rectified** and **Unrectified** |
 
 Before each Reverse, write down the period figures for **every** period the finding has been in, so you can compare them afterwards.

@@ -100,8 +100,10 @@ export function replySubject(subject: string): string {
 /** Subject and text, trimmed and checked. Plain text only. */
 export function messageProblem(subject: string, body: string): string | null {
   if (!subject.trim()) return "Subject is required";
+  if (subject.trim().length < LIMITS.minText) return `Subject must be at least ${LIMITS.minText} characters`;
   if (subject.trim().length > LIMITS.subject) return `Subject must be at most ${LIMITS.subject} characters`;
   if (!body.trim()) return "Message text is required";
+  if (body.trim().length < LIMITS.minText) return `Message text must be at least ${LIMITS.minText} characters`;
   if (body.trim().length > LIMITS.body) return `Message text must be at most ${LIMITS.body} characters`;
   return null;
 }

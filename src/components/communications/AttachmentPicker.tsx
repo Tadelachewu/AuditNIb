@@ -46,15 +46,18 @@ export function AttachmentPicker({
       chosen.splice(room);
     }
     const local: string[] = [];
+    // All of the message's files together at most LIMITS.attachmentBytes.
+    let used = attachments.reduce((sum, a) => sum + a.size, 0);
     for (const f of chosen) {
       if (!ATTACHMENT_TYPES[f.type]) {
         setError(`${f.name}: only PDF, Word (.docx) and Excel (.xlsx) files can be attached`);
         continue;
       }
-      if (f.size > LIMITS.attachmentBytes) {
-        setError(`${f.name} is larger than ${LIMITS.attachmentBytes / (1024 * 1024)} MB`);
+      if (used + f.size > LIMITS.attachmentBytes) {
+        setError(`${f.name} doesn't fit: attachments together must be at most ${LIMITS.attachmentBytes / (1024 * 1024)} MB`);
         continue;
       }
+      used += f.size;
       local.push(f.name);
     }
     if (local.length === 0) return;
@@ -105,7 +108,7 @@ export function AttachmentPicker({
           <Paperclip className="h-4 w-4" />
           Attach files
         </button>
-        <span className="text-xs text-slate-500">PDF, Word (.docx) or Excel (.xlsx) - up to {LIMITS.attachments} files, {LIMITS.attachmentBytes / (1024 * 1024)} MB each</span>
+        <span className="text-xs text-slate-500">PDF, Word (.docx) or Excel (.xlsx) - up to {LIMITS.attachments} files, {LIMITS.attachmentBytes / (1024 * 1024)} MB in total</span>
       </div>
       {(attachments.length > 0 || uploading.length > 0) && (
         <ul className={`flex flex-col gap-1 ${align === "end" ? "w-full sm:w-80" : ""}`}>

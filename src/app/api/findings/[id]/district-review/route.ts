@@ -13,8 +13,8 @@ const reviewSchema = z
     decision: z.enum(["APPROVE", "REJECT", "RETURN"]),
     reason: zText("Reason", 500).optional(),
   })
-  .refine((v) => v.decision === "APPROVE" || (v.reason && v.reason.trim().length >= 5), {
-    message: "A reason of at least 5 characters is required to reject or return a finding",
+  .refine((v) => v.decision === "APPROVE" || (v.reason && v.reason.trim().length >= 3), {
+    message: "A reason of at least 3 characters is required to reject or return a finding",
     path: ["reason"],
   });
 

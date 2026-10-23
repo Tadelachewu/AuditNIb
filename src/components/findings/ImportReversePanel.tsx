@@ -29,7 +29,7 @@ export function ImportReversePanel({ batch, onDone, onCancel }: { batch: ImportB
   }, [batch.id]);
 
   const hasActivity = (impact?.withActivity.length ?? 0) > 0;
-  const canSubmit = Boolean(impact) && reason.trim().length >= 5 && (!hasActivity || acknowledged) && busy === null;
+  const canSubmit = Boolean(impact) && reason.trim().length >= 3 && (!hasActivity || acknowledged) && busy === null;
 
   async function submit(deleteRecord: boolean) {
     setBusy(deleteRecord ? "delete" : "reverse");

@@ -51,10 +51,10 @@ export function ComposeForm() {
   const problem =
     reach === 0
       ? "Choose who the message goes to"
-      : !subject.trim()
-        ? "Enter a subject"
-        : !message.text
-          ? "Write the message"
+      : subject.trim().length < LIMITS.minText
+        ? `Enter a subject (at least ${LIMITS.minText} characters)`
+        : message.text.trim().length < LIMITS.minText
+          ? `Write the message (at least ${LIMITS.minText} characters)`
           : message.text.length > LIMITS.body
             ? `The message is longer than ${LIMITS.body} characters`
             : uploading

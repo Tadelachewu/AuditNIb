@@ -299,8 +299,8 @@ export function reviewAdjustment(
   const f = findingOf(db, findingId);
   const adj = adjustmentOf(db, findingId, adjustmentId);
   rule(reviewerProblem(db, session, adj, f));
-  if (decision !== "APPROVE" && (reason ?? "").trim().length < 5) {
-    throw new ValidationError("A reason of at least 5 characters is required to return or reject an adjustment");
+  if (decision !== "APPROVE" && (reason ?? "").trim().length < 3) {
+    throw new ValidationError("A reason of at least 3 characters is required to return or reject an adjustment");
   }
   const step = adj.status;
   if (!isReviewStep(step)) throw new BusinessRuleError("BUSINESS_RULE_VIOLATION", "This adjustment isn't awaiting a review");

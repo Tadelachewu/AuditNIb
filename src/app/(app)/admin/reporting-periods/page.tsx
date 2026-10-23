@@ -169,8 +169,8 @@ export default function ReportingPeriodsPage() {
   const renameTarget = periods.find((x) => x.id === renamingId) ?? null;
 
   async function saveRename(p: PeriodWithTransferPreview) {
-    if (renameReason.trim().length < 5) {
-      setRenameError("A reason of at least 5 characters is required");
+    if (renameReason.trim().length < 3) {
+      setRenameError("A reason of at least 3 characters is required");
       return;
     }
     setRenameBusy(true);

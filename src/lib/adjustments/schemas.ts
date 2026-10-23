@@ -15,7 +15,7 @@ export const adjustmentInputSchema = z.object({
     .array(z.object({ caseId: z.string().min(1), to: z.number().finite().positive("A decrease can't take a case to 0 or below").max(MAX_AMOUNT) }))
     .max(MAX_CASES)
     .optional(),
-  reason: z.string().trim().min(5, "A reason of at least 5 characters is required").max(1000, "The reason must be at most 1000 characters"),
+  reason: z.string().trim().min(3, "A reason of at least 3 characters is required").max(1000, "The reason must be at most 1000 characters"),
 });
 
 export const createAdjustmentSchema = adjustmentInputSchema.extend({ submit: z.boolean().default(false) });
@@ -28,8 +28,8 @@ export const updateAdjustmentSchema = z.discriminatedUnion("action", [
 
 export const reviewAdjustmentSchema = z
   .object({ decision: z.enum(["APPROVE", "RETURN", "REJECT"]), reason: z.string().trim().max(1000).optional() })
-  .refine((v) => v.decision === "APPROVE" || (v.reason ?? "").length >= 5, {
-    message: "A reason of at least 5 characters is required to return or reject an adjustment",
+  .refine((v) => v.decision === "APPROVE" || (v.reason ?? "").length >= 3, {
+    message: "A reason of at least 3 characters is required to return or reject an adjustment",
     path: ["reason"],
   });
 

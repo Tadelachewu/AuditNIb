@@ -862,7 +862,11 @@ export function NewFindingForm({
             <RuleInput
               id="findingDate"
               type="date"
-              max={localToday()}
+              // The latest allowed date: the selected period's last day (or
+              // today, if earlier). The calendar opens at it, so it shows the
+              // selected period's month, not the current one; earlier dates
+              // stay allowed (findingDateInPeriodError()).
+              max={selectedPeriod && localDateOf(selectedPeriod.endsAt) < localToday() ? localDateOf(selectedPeriod.endsAt) : localToday()}
               check={dateProblem}
               showProblemNow
               required={requiredFields.findingDate}

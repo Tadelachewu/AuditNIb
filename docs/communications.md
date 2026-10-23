@@ -29,7 +29,7 @@ Open **Communications** in the sidebar (under My Profile and Support). The numbe
 | **Cc** (top right, next to To) | Optional: people who get a **copy**, picked the same way (no *Everyone*). They receive the message, the notification and the email like To recipients, and the message shows a separate **Cc:** line. Someone in both To and Cc counts once, as To. Not offered when To is *Everyone*. **Reply all** includes them. Stored as `communication_recipients.is_cc` (migration `20261023120000_communication_cc`) |
 | **Subject** | Required, up to 200 characters |
 | **Message** | Required, up to 10,000 characters of text. A formatting toolbar offers headings 1-6, font family, size, weight and line height, text and highlight colour, alignment, bold, italic, underline, strikethrough, sub- / superscript, lists, quotes, a dividing line and links (see *Formatting* below) |
-| **Attach files** | Optional: **PDF, Word (.docx), Excel (.xlsx)**; up to **10 files, 25 MB each**. The picker sits at the bottom right, under the message. Each file uploads as soon as you pick it; remove it with ✕ |
+| **Attach files** | Optional: **PDF, Word (.docx), Excel (.xlsx)**; up to **10 files, 25 MB in total** (all files together). The picker sits at the bottom right, under the message. Each file uploads as soon as you pick it; remove it with ✕ |
 
 **Send** is enabled once someone is chosen, the subject and text are filled in, and every attachment has finished uploading. If something is missing, the reason shows next to the button.
 
@@ -107,8 +107,8 @@ An All users message to, say, 1,500 people queues 1,500 emails; the queue's rate
 
 | What | Limit |
 |---|---|
-| Subject / text | 200 / 10,000 characters |
-| Attachments | 10 per message, 25 MB each, PDF / .docx / .xlsx only. Checked **on the server**, whatever the browser checked: the real content must match the type (a renamed file is refused), the name's extension must match the type (a PDF can't be called `.exe`), and Word / Excel files must be sane archives (no "zip bombs") **without macros** ([uploadChecks.ts](../src/lib/uploadChecks.ts)) |
+| Subject / text | at least 3 characters each; at most 200 / 10,000 characters |
+| Attachments | 10 per message, 25 MB in total (checked on the server when sending), PDF / .docx / .xlsx only. Checked **on the server**, whatever the browser checked: the real content must match the type (a renamed file is refused), the name's extension must match the type (a PDF can't be called `.exe`), and Word / Excel files must be sane archives (no "zip bombs") **without macros** ([uploadChecks.ts](../src/lib/uploadChecks.ts)) |
 | Messages sent | 20 per user per 10 minutes |
 | **All users** messages | 3 per user per hour |
 | Uploads | 30 files per user per 10 minutes |
