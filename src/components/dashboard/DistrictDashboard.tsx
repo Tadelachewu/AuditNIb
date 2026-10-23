@@ -301,7 +301,7 @@ export function DistrictDashboard({
 
       <TimeRangeFilter />
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 [&_.stat-label]:font-semibold [&_.stat-value]:font-normal">
         <StatCard
           icon={ICON.totalFindings}
           label="Total Findings"

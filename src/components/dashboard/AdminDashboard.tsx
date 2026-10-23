@@ -58,7 +58,7 @@ export function AdminDashboard({ user, db }: { user: SessionData; db: Database }
     <div>
       <DashboardHeader title="Admin Dashboard" scope="Bank-wide · Configuration and user administration" user={user} />
 
-      <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+      <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5 [&_.stat-label]:font-semibold [&_.stat-value]:font-normal">
         <StatCard icon={ICON.activeUsers} label="Active Users" value={activeUsers} hint={`${db.users.length} total`} />
         <StatCard icon={ICON.districts} label="Districts" value={activeDistricts} hint={`${db.districts.length} total`} />
         <StatCard icon={ICON.branches} label="Branches" value={activeBranches} hint={`${db.branches.length} total`} />
