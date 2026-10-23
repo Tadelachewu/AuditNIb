@@ -85,7 +85,7 @@ export function TimeRangeFilter() {
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <span className="text-xs font-medium text-slate-500">Date range:</span>
+      <span className="text-xs font-semibold text-slate-600">Date range:</span>
       <Button variant={activePreset === "today" ? "primary" : "secondary"} onClick={() => applyPreset("today")}>
         Today
       </Button>
