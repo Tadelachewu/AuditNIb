@@ -367,7 +367,11 @@ function buildCsv(slug: string, db: Database, params: URLSearchParams): string |
         "Case Age Today - Submit (days)",
         "Case Age Today - Approved (days)",
         "Case Age Today - Finding Date (days)",
+        "Counted in Totals",
       ];
+      // Each finding counted once: its latest listed hop (rows are most recent first).
+      const countedHop = new Map<string, string>();
+      for (const r of rows) if (!countedHop.has(r.finding.id)) countedHop.set(r.finding.id, r.transfer.id);
       const dataRows = rows.map((r) => [
         r.finding.reference,
         r.finding.id,
@@ -398,6 +402,7 @@ function buildCsv(slug: string, db: Database, params: URLSearchParams): string |
         r.agesNow.submit ?? "",
         r.agesNow.approved ?? "",
         r.agesNow.findingDate ?? "",
+        countedHop.get(r.finding.id) === r.transfer.id ? "Yes" : "No",
       ]);
       return toCsv(header, dataRows);
     }

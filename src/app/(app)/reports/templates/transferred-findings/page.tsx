@@ -3,7 +3,6 @@ import Link from "next/link";
 import { AutoFilterForm } from "@/components/reports/AutoFilterForm";
 import { StickyBack } from "@/components/ui/StickyBack";
 import { addCurrency, formatCurrencyTotals, type CurrencyTotals } from "@/lib/currency";
-import { netTransferMovement } from "@/lib/findings";
 import { SESSION_ENDED_PATH } from "@/lib/session";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
@@ -43,20 +42,30 @@ export default async function TransferredFindingsPage({
   const fromPeriodId = typeof params.fromPeriodId === "string" ? params.fromPeriodId : "";
   const toPeriodId = typeof params.toPeriodId === "string" ? params.toPeriodId : "";
 
-  const rows = getTransferredFindings(db, {
+  const listed = getTransferredFindings(db, {
     fromPeriodId: fromPeriodId || undefined,
     toPeriodId: toPeriodId || undefined,
   });
 
-  // What really moved: each finding once, a return cancelling the transfer it
-  // undoes (netTransferMovement()) - not the sum of every hop listed below.
-  const moved = netTransferMovement(rows.map((r) => r.transfer));
-  const findingsTransferred = new Set(rows.map((r) => r.finding.id)).size;
-  const currencyOf = new Map(rows.map((r) => [r.finding.id, r.finding.currency]));
-  const totalCasesTransferred = [...moved.values()].reduce((sum, m) => sum + m.cases, 0);
+  // Each finding counts ONCE, however many of its hops are listed: its latest
+  // listed hop (the list is most recent first) is the one counted in the
+  // totals. All hops stay listed below - grouped under their finding - as the
+  // audit trail.
+  const counted = new Map<string, (typeof listed)[number]>();
+  for (const r of listed) if (!counted.has(r.finding.id)) counted.set(r.finding.id, r);
+  const countedIds = new Set([...counted.values()].map((r) => r.transfer.id));
+  // Grouped: findings by their latest listed hop, each finding's hops most recent first.
+  const order = [...counted.keys()];
+  const rows = [...listed].sort((a, b) => order.indexOf(a.finding.id) - order.indexOf(b.finding.id));
+  const hopsListed = new Map<string, number>();
+  for (const r of listed) hopsListed.set(r.finding.id, (hopsListed.get(r.finding.id) ?? 0) + 1);
+
+  const findingsTransferred = counted.size;
+  const totalCasesTransferred = [...counted.values()].reduce((sum, r) => sum + r.transfer.casesTransferred, 0);
   // Per currency - never added across currencies.
-  const totalAmountTransferred = [...moved.entries()].reduce((t, [id, m]) => addCurrency(t, currencyOf.get(id) ?? "", m.amount), {} as CurrencyTotals);
-  const stillOutstandingCount = rows.filter((r) => r.isLatestHop && r.currentOutstandingCases > 0 && r.currentStatus !== "CLOSED").length;
+  const totalAmountTransferred = [...counted.values()].reduce((t, r) => addCurrency(t, r.finding.currency, r.transfer.amountTransferred), {} as CurrencyTotals);
+  // Open today - judged on the finding itself, once per finding.
+  const stillOutstandingCount = [...counted.values()].filter((r) => r.currentOutstandingCases > 0 && r.currentStatus !== "CLOSED").length;
   const periodsSorted = [...db.reportingPeriods].sort((a, b) => b.code.localeCompare(a.code));
 
   return (
@@ -109,21 +118,39 @@ export default async function TransferredFindingsPage({
       </AutoFilterForm>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatCard label="Findings Transferred" value={findingsTransferred} hint={`${rows.length} transfer hop(s) - each finding once`} />
-        <StatCard label="Net Cases Moved" value={formatNumber(totalCasesTransferred)} hint="Each finding once; a return cancels the transfer it undoes" />
-        <StatCard label="Net Amount Moved" value={formatCurrencyTotals(totalAmountTransferred)} hint="Each finding once; a return cancels the transfer it undoes" />
-        <StatCard label="Still Outstanding" value={stillOutstandingCount} hint="Latest hop, not yet closed" />
+        <StatCard label="Findings Transferred" value={findingsTransferred} hint={`${listed.length} transfer hop(s) listed - each finding counted once`} />
+        <StatCard label="Cases Transferred" value={formatNumber(totalCasesTransferred)} hint="Each finding once (its latest transfer in this list)" />
+        <StatCard label="Amount Transferred" value={formatCurrencyTotals(totalAmountTransferred)} hint="Each finding once (its latest transfer in this list)" />
+        <StatCard label="Still Outstanding" value={stillOutstandingCount} hint="Findings not yet closed today, each once" />
       </div>
 
       <Card>
         <CardHeader
           title="Transfer Register"
-          description={rows.length === 0 ? "No transfers match this filter." : `${rows.length} transfer hop(s), most recent first`}
+          description={
+            listed.length === 0
+              ? "No transfers match this filter."
+              : `${findingsTransferred} finding(s), ${listed.length} transfer hop(s) - grouped by finding, most recent first`
+          }
         />
         <div className="flex flex-col gap-3 divide-y divide-slate-100 p-4">
           {rows.length === 0 && <p className="py-6 text-center text-sm text-slate-500">No transfers recorded yet.</p>}
-          {rows.map((r) => (
+          {rows.map((r, i) => (
             <div key={r.transfer.id} className="flex flex-col gap-2 pt-3 first:pt-0">
+              {/* A finding's heading, above its first (latest) listed hop. */}
+              {(i === 0 || rows[i - 1].finding.id !== r.finding.id) && (
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+                  <span className="font-semibold text-slate-900">
+                    {r.finding.reference}
+                    <span className="ml-2 font-normal text-slate-500">
+                      {hopsListed.get(r.finding.id)} hop(s) listed
+                    </span>
+                  </span>
+                  <span className="text-xs text-slate-600">
+                    Counted once: {formatNumber(r.transfer.casesTransferred)} case(s) · {r.finding.currency} {formatCurrency(r.transfer.amountTransferred)}
+                  </span>
+                </div>
+              )}
               <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
                 <div className="flex flex-wrap items-center gap-2">
                   <Link href={`/findings/${r.finding.id}`} className="font-mono text-xs text-blue-800 hover:underline">
@@ -132,6 +159,11 @@ export default async function TransferredFindingsPage({
                   <Badge tone={r.transfer.method === "AUTOMATIC" ? "blue" : "gray"}>
                     {r.transfer.method === "AUTOMATIC" ? "Auto Transfer" : "Manual Transfer"}
                   </Badge>
+                  {countedIds.has(r.transfer.id) ? (
+                    <Badge tone="green">Counted in totals</Badge>
+                  ) : (
+                    <Badge tone="gray">Not counted (earlier hop)</Badge>
+                  )}
                   {r.totalHops > 1 && (
                     <Badge tone="gray">
                       Hop {r.hopNumber} of {r.totalHops}
