@@ -1,3 +1,4 @@
+import type { Finding as DashboardFinding } from "@/types";
 import { averageApprovedAge } from "@/lib/caseAge";
 import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import Link from "next/link";
@@ -48,6 +49,12 @@ export function BranchDashboard({
   dateRange?: DateRange;
   filters?: DashboardFilters;
 }) {
+  // Performance % follows the filters too (source, category, risk, status,
+  // operation area, irregularity, date range) - within the active scoring
+  // rule's categories and sources. Organisation is set per figure (each
+  // ranking row is its own district / branch), so it isn't part of this.
+  const matchesFilters = (f: DashboardFinding) =>
+    inDateRange(dateRange, f.findingDate) && applyDashboardFilters([f], { ...filters, districtId: "", branchId: "" }).length === 1;
   const branch = db.branches.find((b) => b.id === user.branchId);
   const district = db.districts.find((d) => d.id === user.districtId);
   // FilterBar's own period picker takes priority over "whichever period is
@@ -136,13 +143,13 @@ export function BranchDashboard({
   const rejectedFindings = periodFindings.filter((f) => f.status === "REJECTED").length;
   // periodId: undefined (allPeriodsSelected) is computePerformance()'s own
   // "lifetime, no period filter" mode - exactly what "All periods" means.
-  const performanceScope = { branchId: branch.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id };
+  const performanceScope = { findingFilter: matchesFilters, branchId: branch.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id };
   const performance = hasPeriodScope ? computePerformance(db, performanceScope) : null;
   // Same eligible-case counts computePerformance() itself divides to get
   // that percentage - surfaced so the StatCard can show its own math on
   // click (see StatCard's `detail` prop) instead of a bare, unexplained %.
   const eligibleCounts = hasPeriodScope
-    ? computeEligibleCaseCounts(db, { branchId: branch.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id })
+    ? computeEligibleCaseCounts(db, { findingFilter: matchesFilters, branchId: branch.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id })
     : null;
   // Period-residency-aware (see sumAmountByCurrencyInPeriod()'s doc
   // comment in src/lib/currency.ts) - a finding partially rectified here
@@ -180,7 +187,7 @@ export function BranchDashboard({
   // and scope, since both are meant to be the exact same headline number.
   const scoredCounts =
     branch && hasPeriodScope
-      ? computeEligibleCaseCounts(db, { branchId: branch.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id })
+      ? computeEligibleCaseCounts(db, { findingFilter: matchesFilters, branchId: branch.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id })
       : null;
   const otherCaseTotal = scoredCounts?.totalCases ?? 0;
   const otherCaseRectified = scoredCounts?.rectifiedCases ?? 0;
@@ -288,10 +295,10 @@ export function BranchDashboard({
     .map((b) => ({
       branch: b,
       performance: hasPeriodScope
-        ? computePerformance(db, { branchId: b.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id })
+        ? computePerformance(db, { findingFilter: matchesFilters, branchId: b.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id })
         : null,
       // The counts behind the % (shown when the % is clicked).
-      counts: hasPeriodScope ? computeEligibleCaseCounts(db, { branchId: b.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id }) : null,
+      counts: hasPeriodScope ? computeEligibleCaseCounts(db, { findingFilter: matchesFilters, branchId: b.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id }) : null,
     }))
     .sort((a, b) => (b.performance ?? -1) - (a.performance ?? -1));
 
@@ -321,7 +328,7 @@ export function BranchDashboard({
         fixedDistrict={district ? { id: district.id, name: district.name } : undefined}
         fixedBranch={{ id: branch.id, name: branch.name }}
         statusOptions={HO_APPROVED_OR_LATER_STATUSES}
-        hint="Filters apply immediately. Performance % always reflects the full scoring formula, not narrowed by source/category/risk/status."
+        hint="Filters apply immediately, Performance % included (within the scoring rule's categories and sources)."
       />
 
       <TimeRangeFilter />
@@ -410,7 +417,7 @@ export function BranchDashboard({
         </div>
       </Card>
 
-      <CaseBasedPerformance db={db} scope={{ branchId: branch.id }} openPeriod={openPeriod} allPeriods={allPeriodsSelected} />
+      <CaseBasedPerformance db={db} scope={{ findingFilter: matchesFilters, branchId: branch.id }} openPeriod={openPeriod} allPeriods={allPeriodsSelected} />
 
       {db.settings.rankingVisibility.branches ? (
         <Card>
@@ -447,7 +454,7 @@ export function BranchDashboard({
       <SourcePerformanceSummary
         db={db}
         sources={sourcesInScope}
-        scope={{ branchId: branch.id }}
+        scope={{ findingFilter: matchesFilters, branchId: branch.id }}
         openPeriod={openPeriod}
         allPeriods={allPeriodsSelected}
       />

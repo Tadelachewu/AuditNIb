@@ -902,6 +902,8 @@ export function originalPeriodId(db: Database, f: Finding): string {
 }
 
 export interface PerformanceScope {
+  /** Only findings this accepts (a dashboard's source / category / risk / status / area / date filters). */
+  findingFilter?: (f: Finding) => boolean;
   branchId?: string;
   districtId?: string;
   periodId?: string;
@@ -1193,6 +1195,7 @@ export function computeEligibleCaseCounts(db: Database, scope: PerformanceScope)
       rule.categories.includes(f.categoryId) &&
       rule.sources.includes(f.sourceId) &&
       isHoApproved(f) &&
+      (!scope.findingFilter || scope.findingFilter(f)) &&
       (!scope.branchId || f.branchId === scope.branchId) &&
       (!scope.districtId || f.districtId === scope.districtId) &&
       (!scope.sourceIds

@@ -13,7 +13,7 @@ import {
 import { usersWithFindingsPermission, notifyUsers } from "@/lib/notifications";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
 import { withApiHandler } from "@/lib/api/handler";
-import { applyReturn, isAwaitingDistrict, rectificationStatus } from "@/lib/rectificationResubmit";
+import { applyReturn, isAwaitingDistrict } from "@/lib/rectificationResubmit";
 
 // Deliberately excludes SENT_TO_BRANCH_MANAGER - "return for correction"
 // only ever makes sense once the Branch Manager has actually recorded
@@ -135,14 +135,16 @@ async function handlePOST(request: Request, { params }: { params: Promise<{ id: 
   const updated = await updateDb((current) => {
     const f = current.findings.find((x) => x.id === id)!;
 
-    // The part returned (src/lib/rectificationResubmit.ts): District returns
-    // what awaited District; HO (or anyone when nothing awaits District)
-    // returns everything not closed, and its verification is cleared.
+    // The part returned (src/lib/rectificationResubmit.ts) goes back to
+    // outstanding: District returns what awaited District; HO (or anyone when
+    // nothing awaits District) returns everything not closed, and its
+    // verification is cleared. The branch then records it again (Record
+    // Rectification) - the status moves on by itself from there.
     const mode = !hasHoOnly && isAwaitingDistrict(f) ? "district" : "all";
     applyReturn(f, (current.findingCases ?? []).filter((c) => c.findingId === id), mode);
 
     transitionFinding(current, f, {
-      toStatus: rectificationStatus(f),
+      toStatus: "RECTIFICATION_RETURNED",
       action: "RETURN_RECTIFICATION",
       userId: auth.session.userId!,
       userName: auth.session.name!,

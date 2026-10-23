@@ -1,3 +1,4 @@
+import type { Finding as DashboardFinding } from "@/types";
 import { averageApprovedAge } from "@/lib/caseAge";
 import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import Link from "next/link";
@@ -53,6 +54,12 @@ export function DistrictDashboard({
   dateRange?: DateRange;
   filters?: DashboardFilters;
 }) {
+  // Performance % follows the filters too (source, category, risk, status,
+  // operation area, irregularity, date range) - within the active scoring
+  // rule's categories and sources. Organisation is set per figure (each
+  // ranking row is its own district / branch), so it isn't part of this.
+  const matchesFilters = (f: DashboardFinding) =>
+    inDateRange(dateRange, f.findingDate) && applyDashboardFilters([f], { ...filters, districtId: "", branchId: "" }).length === 1;
   const district = db.districts.find((d) => d.id === user.districtId);
   const branches = district ? db.branches.filter((b) => b.districtId === district.id) : [];
   // FilterBar's own period picker takes priority over "whichever period is
@@ -151,7 +158,7 @@ export function DistrictDashboard({
     ? db.findingTransfers.filter((t) => districtFindingIds.has(t.findingId))
     : [];
   const { transferredFindings, transferredCases } = transferTotals(db, districtTransfers, allPeriodsSelected ? undefined : openPeriod?.id);
-  const districtPerformanceScope = { districtId: district.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id };
+  const districtPerformanceScope = { findingFilter: matchesFilters, districtId: district.id, branchId: filters.branchId || undefined, periodId: allPeriodsSelected ? undefined : openPeriod?.id };
   const performance = hasPeriodScope ? computePerformance(db, districtPerformanceScope) : null;
   // The counts behind it, for the card's "click % for detail" calculation.
   const performanceCounts = hasPeriodScope ? computeEligibleCaseCounts(db, districtPerformanceScope) : null;
@@ -186,7 +193,7 @@ export function DistrictDashboard({
     .map((d) => ({
       district: d,
       performance: hasPeriodScope
-        ? computePerformance(db, { districtId: d.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id })
+        ? computePerformance(db, { findingFilter: matchesFilters, districtId: d.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id })
         : null,
     }))
     .sort((a, b) => (b.performance ?? -1) - (a.performance ?? -1));
@@ -206,7 +213,7 @@ export function DistrictDashboard({
   const branchRanking = branchesInScope
     .map((b) => {
       const perf = hasPeriodScope
-        ? computePerformance(db, { branchId: b.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id })
+        ? computePerformance(db, { findingFilter: matchesFilters, branchId: b.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id })
         : null;
       // Same isHoApproved() gate as everywhere else on this dashboard - a
       // volume count feeding "Findings by Branch" shouldn't grow the moment
@@ -289,7 +296,7 @@ export function DistrictDashboard({
         defaultPeriodId={currentPeriod(db.reportingPeriods)?.id}
         fixedDistrict={{ id: district.id, name: district.name }}
         statusOptions={[...HO_APPROVED_OR_LATER_STATUSES, "REJECTED"]}
-        hint="Filters apply immediately. Performance % always reflects the full scoring formula, not narrowed by source/category/risk/status."
+        hint="Filters apply immediately, Performance % included (within the scoring rule's categories and sources)."
       />
 
       <TimeRangeFilter />
@@ -390,7 +397,7 @@ export function DistrictDashboard({
 
       <CaseBasedPerformance
         db={db}
-        scope={{ districtId: district.id, branchId: filters.branchId || undefined }}
+        scope={{ findingFilter: matchesFilters, districtId: district.id, branchId: filters.branchId || undefined }}
         openPeriod={openPeriod}
         allPeriods={allPeriodsSelected}
       />
@@ -412,6 +419,7 @@ export function DistrictDashboard({
             </div>
           </Card>
           <DistrictRankingTable
+            findingFilter={matchesFilters}
             db={db}
             districts={db.districts}
             openPeriod={openPeriod}
@@ -438,7 +446,7 @@ export function DistrictDashboard({
                     <Badge tone={i === 0 ? "green" : "gray"}>#{i + 1}</Badge>
                     <span className="text-slate-900">{row.branch.name}</span>
                   </Link>
-                  <PerformancePct counts={computeEligibleCaseCounts(db, { branchId: row.branch.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id })} />
+                  <PerformancePct counts={computeEligibleCaseCounts(db, { findingFilter: matchesFilters, branchId: row.branch.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id })} />
                 </div>
               ))}
             </div>
@@ -454,7 +462,7 @@ export function DistrictDashboard({
                     <Badge tone="red">Rank #{branchRanking.findIndex((r) => r.branch.id === row.branch.id) + 1}</Badge>
                     <span className="text-slate-900">{row.branch.name}</span>
                   </Link>
-                  <PerformancePct counts={computeEligibleCaseCounts(db, { branchId: row.branch.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id })} />
+                  <PerformancePct counts={computeEligibleCaseCounts(db, { findingFilter: matchesFilters, branchId: row.branch.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id })} />
                 </div>
               ))}
             </div>
@@ -464,6 +472,7 @@ export function DistrictDashboard({
 
       {db.settings.rankingVisibility.branches ? (
         <BranchPerformanceTable
+            findingFilter={matchesFilters}
           db={db}
           branches={branchesInScope}
           openPeriod={openPeriod}
@@ -481,7 +490,7 @@ export function DistrictDashboard({
       <SourcePerformanceSummary
         db={db}
         sources={sourcesInScope}
-        scope={{ districtId: district.id, branchId: filters.branchId || undefined }}
+        scope={{ findingFilter: matchesFilters, districtId: district.id, branchId: filters.branchId || undefined }}
         openPeriod={openPeriod}
         allPeriods={allPeriodsSelected}
       />

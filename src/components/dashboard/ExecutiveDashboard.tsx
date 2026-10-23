@@ -1,3 +1,4 @@
+import type { Finding as DashboardFinding } from "@/types";
 import { averageApprovedAge } from "@/lib/caseAge";
 import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import { HO_APPROVED_OR_LATER_STATUSES, type Database } from "@/types";
@@ -43,6 +44,12 @@ export function ExecutiveDashboard({
   dateRange?: DateRange;
   filters?: DashboardFilters;
 }) {
+  // Performance % follows the filters too (source, category, risk, status,
+  // operation area, irregularity, date range) - within the active scoring
+  // rule's categories and sources. Organisation is set per figure (each
+  // ranking row is its own district / branch), so it isn't part of this.
+  const matchesFilters = (f: DashboardFinding) =>
+    inDateRange(dateRange, f.findingDate) && applyDashboardFilters([f], { ...filters, districtId: "", branchId: "" }).length === 1;
   // Same FilterBar/period-picker model as HODashboard - both are BANK-
   // scoped with no fixed district/branch, so a period picked here follows
   // the exact same "picking a locked/past period reviews dashboard
@@ -77,10 +84,10 @@ export function ExecutiveDashboard({
   // Rejected findings of the period, bank-wide (same rule as the District dashboard).
   const rejectedFindings = periodFindings.filter((f) => f.status === "REJECTED").length;
   const bankPerformance = hasPeriodScope
-    ? computePerformance(db, { periodId: allPeriodsSelected ? undefined : openPeriod?.id })
+    ? computePerformance(db, { findingFilter: matchesFilters, districtId: filters.districtId || undefined, branchId: filters.branchId || undefined, periodId: allPeriodsSelected ? undefined : openPeriod?.id })
     : null;
   // The counts behind it, for the card's "click % for detail" calculation.
-  const performanceCounts = hasPeriodScope ? computeEligibleCaseCounts(db, { periodId: allPeriodsSelected ? undefined : openPeriod?.id }) : null;
+  const performanceCounts = hasPeriodScope ? computeEligibleCaseCounts(db, { findingFilter: matchesFilters, districtId: filters.districtId || undefined, branchId: filters.branchId || undefined, periodId: allPeriodsSelected ? undefined : openPeriod?.id }) : null;
   const activeScoringRule = db.scoringRules.find((r) => r.active);
   const activeSources = db.sources.filter((s) => s.active);
   // Period-residency-aware (see findingCaseTotalsInPeriod()'s doc comment
@@ -169,7 +176,7 @@ export function ExecutiveDashboard({
   const districtRanking = districtsInScope
     .map((d) => ({
       district: d,
-      performance: hasPeriodScope ? computePerformance(db, { districtId: d.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id }) : null,
+      performance: hasPeriodScope ? computePerformance(db, { findingFilter: matchesFilters, districtId: d.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id }) : null,
     }))
     .filter((r) => r.performance !== null)
     .sort((a, b) => (b.performance ?? 0) - (a.performance ?? 0));
@@ -179,7 +186,7 @@ export function ExecutiveDashboard({
   const branchRanking = branchesInScope
     .map((b) => ({
       branch: b,
-      performance: hasPeriodScope ? computePerformance(db, { branchId: b.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id }) : null,
+      performance: hasPeriodScope ? computePerformance(db, { findingFilter: matchesFilters, branchId: b.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id }) : null,
     }))
     .filter((r) => r.performance !== null)
     .sort((a, b) => (b.performance ?? 0) - (a.performance ?? 0));
@@ -240,7 +247,7 @@ export function ExecutiveDashboard({
         irregularityTypes={db.settings.irregularityTypes}
         defaultPeriodId={currentPeriod(db.reportingPeriods)?.id}
         statusOptions={[...HO_APPROVED_OR_LATER_STATUSES, "REJECTED"]}
-        hint="Filters apply immediately. Performance % always reflects the full scoring formula, not narrowed by source/category/risk/status."
+        hint="Filters apply immediately, Performance % included (within the scoring rule's categories and sources)."
       />
 
       <TimeRangeFilter />
@@ -312,7 +319,7 @@ export function ExecutiveDashboard({
 
       <CaseBasedPerformance
         db={db}
-        scope={{ districtId: filters.districtId || undefined, branchId: filters.branchId || undefined }}
+        scope={{ findingFilter: matchesFilters, districtId: filters.districtId || undefined, branchId: filters.branchId || undefined }}
         openPeriod={openPeriod}
         allPeriods={allPeriodsSelected}
       />
@@ -329,7 +336,7 @@ export function ExecutiveDashboard({
                     <Badge tone={i === 0 ? "green" : "gray"}>#{i + 1}</Badge>
                     {row.district.name}
                   </span>
-                  <PerformancePct counts={computeEligibleCaseCounts(db, { districtId: row.district.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id })} />
+                  <PerformancePct counts={computeEligibleCaseCounts(db, { findingFilter: matchesFilters, districtId: row.district.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id })} />
                 </div>
               ))}
             </div>
@@ -345,7 +352,7 @@ export function ExecutiveDashboard({
                     <Badge tone="red">Rank #{districtRanking.findIndex((r) => r.district.id === row.district.id) + 1}</Badge>
                     {row.district.name}
                   </span>
-                  <PerformancePct counts={computeEligibleCaseCounts(db, { districtId: row.district.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id })} />
+                  <PerformancePct counts={computeEligibleCaseCounts(db, { findingFilter: matchesFilters, districtId: row.district.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id })} />
                 </div>
               ))}
             </div>
@@ -370,7 +377,7 @@ export function ExecutiveDashboard({
                     <Badge tone={i === 0 ? "green" : "gray"}>#{i + 1}</Badge>
                     {row.branch.name}
                   </span>
-                  <PerformancePct counts={computeEligibleCaseCounts(db, { branchId: row.branch.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id })} />
+                  <PerformancePct counts={computeEligibleCaseCounts(db, { findingFilter: matchesFilters, branchId: row.branch.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id })} />
                 </div>
               ))}
             </div>
@@ -386,7 +393,7 @@ export function ExecutiveDashboard({
                     <Badge tone="red">Rank #{branchRanking.findIndex((r) => r.branch.id === row.branch.id) + 1}</Badge>
                     {row.branch.name}
                   </span>
-                  <PerformancePct counts={computeEligibleCaseCounts(db, { branchId: row.branch.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id })} />
+                  <PerformancePct counts={computeEligibleCaseCounts(db, { findingFilter: matchesFilters, branchId: row.branch.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id })} />
                 </div>
               ))}
             </div>
@@ -402,7 +409,7 @@ export function ExecutiveDashboard({
       <SourcePerformanceSummary
         db={db}
         sources={sourcesInScope}
-        scope={{ districtId: filters.districtId || undefined, branchId: filters.branchId || undefined }}
+        scope={{ findingFilter: matchesFilters, districtId: filters.districtId || undefined, branchId: filters.branchId || undefined }}
         openPeriod={openPeriod}
         allPeriods={allPeriodsSelected}
       />

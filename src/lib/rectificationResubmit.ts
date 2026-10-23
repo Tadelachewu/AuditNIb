@@ -87,31 +87,43 @@ export function rectificationStatus(f: Pick<Finding, "caseCount" | "amount" | "r
 }
 
 /**
- * Returns part of a rectification for correction (changes `f` and `cases`).
+ * Returns part of a rectification for correction (changes `f` and `cases`):
+ * that part goes straight back to OUTSTANDING, and the branch records it
+ * again with Record Rectification, like any fresh rectification - there is
+ * no separate resubmit step.
  * "district": what awaited District (rectified, not yet verified).
  * "all": everything not closed, and its verification is cleared.
- * Itemized: the rectified cases after the kept ones (rectification order)
- * are marked returned, and the returned amount is theirs.
+ * Itemized: the rectified cases after the kept ones (rectification order).
  */
 export function applyReturn(f: Finding, cases: FindingCase[], mode: "district" | "all"): void {
   if (mode === "all") {
     f.districtVerifiedCases = Math.min(f.districtVerifiedCases, f.closedCases);
     f.districtVerifiedAmount = Math.min(f.districtVerifiedAmount, f.closedAmount);
   }
-  const keepCases = Math.max(mode === "all" ? f.closedCases : f.districtVerifiedCases, 0);
-  const keepAmount = Math.max(mode === "all" ? f.closedAmount : f.districtVerifiedAmount, 0);
+  const keepCases = Math.max(mode === "all" ? f.closedCases : f.districtVerifiedCases, f.closedCases, 0);
+  const keepAmount = Math.max(mode === "all" ? f.closedAmount : f.districtVerifiedAmount, f.closedAmount, 0);
   if (cases.length > 0) {
     const rectified = cases
       .filter((c) => c.status === "RECTIFIED")
       .sort((a, b) => (a.rectifiedAt ?? "").localeCompare(b.rectifiedAt ?? "") || a.seq - b.seq);
-    const returned = rectified.slice(Math.min(keepCases, rectified.length));
-    for (const c of rectified) c.returned = returned.includes(c);
-    f.returnedCases = returned.length;
-    f.returnedAmount = round2(returned.reduce((s, c) => s + c.amount, 0));
-    return;
+    const released = rectified.slice(Math.min(keepCases, rectified.length));
+    for (const c of released) {
+      c.status = "OUTSTANDING";
+      c.returned = false;
+      c.rectificationId = undefined;
+      c.rectifiedAt = undefined;
+      c.rectifiedBy = undefined;
+      c.rectifiedByName = undefined;
+    }
+    f.rectifiedCases = Math.max(f.rectifiedCases - released.length, f.closedCases);
+    f.rectifiedAmount = Math.max(round2(f.rectifiedAmount - released.reduce((s, c) => s + c.amount, 0)), f.closedAmount);
+  } else {
+    f.rectifiedCases = Math.min(f.rectifiedCases, keepCases);
+    f.rectifiedAmount = Math.min(f.rectifiedAmount, round2(keepAmount));
   }
-  f.returnedCases = Math.max(f.rectifiedCases - keepCases, 0);
-  f.returnedAmount = Math.max(round2(f.rectifiedAmount - keepAmount), 0);
+  // Nothing is held as "returned": it is outstanding again.
+  f.returnedCases = 0;
+  f.returnedAmount = 0;
 }
 
 /**

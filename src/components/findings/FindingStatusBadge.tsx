@@ -30,6 +30,7 @@ const TONES: Record<FindingStatus, "green" | "gray" | "amber" | "red" | "blue"> 
   CLOSED: "green",
 };
 
-export function FindingStatusBadge({ status }: { status: FindingStatus }) {
-  return <Badge tone={TONES[status]}>{findingStatusLabel(status)}</Badge>;
+/** `label` (optional) replaces the status's usual text - same colour. */
+export function FindingStatusBadge({ status, label }: { status: FindingStatus; label?: string }) {
+  return <Badge tone={TONES[status]}>{label ?? findingStatusLabel(status)}</Badge>;
 }

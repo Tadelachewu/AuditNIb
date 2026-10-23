@@ -1,3 +1,4 @@
+import type { Finding as DashboardFinding } from "@/types";
 import Link from "next/link";
 import type { Database, Branch, ReportingPeriod } from "@/types";
 import { computePerformance, computeEligibleCaseCounts, findPreviousPeriod, isHoApproved, isOutstandingFinding } from "@/lib/findings";
@@ -64,6 +65,7 @@ export function BranchPerformanceTable({
   branches,
   openPeriod,
   allPeriods = false,
+  findingFilter,
   title = "Branch Performance",
   description = "Rank, cases, and performance by branch, current period",
 }: {
@@ -72,6 +74,8 @@ export function BranchPerformanceTable({
   openPeriod?: ReportingPeriod;
   /** FilterBar's "All periods" choice (ALL_PERIODS_VALUE) - aggregates across every period instead of one; `openPeriod` is undefined in this mode. */
   allPeriods?: boolean;
+  /** The dashboard's filters (source, category, ...) - the % follows them. */
+  findingFilter?: (f: DashboardFinding) => boolean;
   title?: string;
   description?: string;
 }) {
@@ -91,13 +95,13 @@ export function BranchPerformanceTable({
     // Performance % in this same row - not a hand-rolled raw findings
     // reduce (every category, self-reported rectifiedCases), which could
     // disagree with what the percentage right next to it actually means.
-    const eligible = hasScope ? computeEligibleCaseCounts(db, { branchId: b.id, periodId: allPeriods ? undefined : openPeriod!.id }) : null;
+    const eligible = hasScope ? computeEligibleCaseCounts(db, { findingFilter, branchId: b.id, periodId: allPeriods ? undefined : openPeriod!.id }) : null;
     const totalCases = eligible?.totalCases ?? 0;
     const rectifiedCases = eligible?.rectifiedCases ?? 0;
     const performance = hasScope
-      ? computePerformance(db, { branchId: b.id, periodId: allPeriods ? undefined : openPeriod!.id })
+      ? computePerformance(db, { findingFilter, branchId: b.id, periodId: allPeriods ? undefined : openPeriod!.id })
       : null;
-    const prevPerformance = previousPeriod ? computePerformance(db, { branchId: b.id, periodId: previousPeriod.id }) : null;
+    const prevPerformance = previousPeriod ? computePerformance(db, { findingFilter, branchId: b.id, periodId: previousPeriod.id }) : null;
     // isHoApproved() gate, same as every other "official" figure - a
     // finding still in DISTRICT_REVIEW/HO_REVIEW hasn't cleared approval
     // yet and shouldn't count toward the "High-Risk Branch" callout (or

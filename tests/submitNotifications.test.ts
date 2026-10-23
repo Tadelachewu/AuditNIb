@@ -110,7 +110,7 @@ describe("High / Critical risk finding approved -> Executive Dashboard users", (
     notifyHighRiskApproved(db, risky("Critical"), ho);
     expect(sentTo(db)).toEqual(["exec1", "exec2"]);
     expect(db.notifications[0]).toMatchObject({ type: "HIGH_RISK_APPROVED", title: "Critical-risk finding approved: F-1", entityType: "Finding", entityId: "f1" });
-    expect(db.notifications[0].message).toBe("Vault shortage - Bole Branch. 2 cases, ETB 250,000. Final approval by Selam; it is now with the branch for rectification.");
+    expect(db.notifications[0].message).toBe("Vault shortage - Bole Branch. 2 cases, ETB 250,000. Final approval by Selam. This finding needs branch action; the responsible person is the Branch Manager (none assigned yet).");
   });
 
   it("says nothing for Low / Medium risk", () => {

@@ -1,3 +1,4 @@
+import type { Finding } from "@/types";
 import type { Database, District } from "@/types";
 import { computePerformance, computeEligibleCaseCounts } from "@/lib/findings";
 import { RankingGrid } from "@/components/dashboard/RankingGrid";
@@ -29,6 +30,7 @@ export function DistrictRankingTable({
   districts,
   openPeriod,
   allPeriods = false,
+  findingFilter,
   title = "District Ranking",
   description = "All districts, ranked by performance, current period",
 }: {
@@ -37,6 +39,8 @@ export function DistrictRankingTable({
   openPeriod?: { id: string };
   /** FilterBar's "All periods" choice (ALL_PERIODS_VALUE) - aggregates across every period instead of one; `openPeriod` is undefined in this mode. */
   allPeriods?: boolean;
+  /** The dashboard's filters (source, category, ...) - the % follows them. */
+  findingFilter?: (f: Finding) => boolean;
   title?: string;
   description?: string;
 }) {
@@ -44,12 +48,12 @@ export function DistrictRankingTable({
   const rows: DistrictRow[] = districts.map((d) => {
     const branchCount = db.branches.filter((b) => b.districtId === d.id && b.status === "ACTIVE").length;
     const eligible = hasScope
-      ? computeEligibleCaseCounts(db, { districtId: d.id, periodId: allPeriods ? undefined : openPeriod!.id })
+      ? computeEligibleCaseCounts(db, { findingFilter, districtId: d.id, periodId: allPeriods ? undefined : openPeriod!.id })
       : null;
     const totalCases = eligible?.totalCases ?? 0;
     const rectifiedCases = eligible?.rectifiedCases ?? 0;
     const performance = hasScope
-      ? computePerformance(db, { districtId: d.id, periodId: allPeriods ? undefined : openPeriod!.id })
+      ? computePerformance(db, { findingFilter, districtId: d.id, periodId: allPeriods ? undefined : openPeriod!.id })
       : null;
     return { district: d, branchCount, totalCases, rectifiedCases, outstandingCases: totalCases - rectifiedCases, performance };
   });

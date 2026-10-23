@@ -1,5 +1,6 @@
 import { v4 as uuid } from "uuid";
 import { permissionKey } from "@/lib/permissions/registry";
+import { findBranchManager } from "@/lib/org";
 import { emailForNotification } from "@/lib/emailQueue/rules";
 import type { NotificationEventType } from "@/lib/notificationEvents";
 import type { Database, Finding, Notification } from "@/types";
@@ -154,10 +155,12 @@ export function notifyHighRiskApproved(db: Database, finding: Pick<Finding, "id"
   const recipients = usersWithPermissionKey(db, permissionKey("executive-dashboard", "view")).filter((id) => id !== approver.userId);
   if (recipients.length === 0) return;
   const branch = db.branches.find((b) => b.id === finding.branchId)?.name ?? "Unknown branch";
+  // Who must act: the branch's manager (by name), or a note when none is assigned.
+  const manager = findBranchManager(db, finding.branchId)?.name;
   notifyUsers(db, recipients, {
     type: "HIGH_RISK_APPROVED",
     title: `${finding.riskLevel}-risk finding approved: ${finding.reference}`,
-    message: `${finding.title} - ${branch}. ${finding.caseCount} case${finding.caseCount === 1 ? "" : "s"}, ${finding.currency} ${finding.amount.toLocaleString("en-US")}. Final approval by ${approver.name}; it is now with the branch for rectification.`,
+    message: `${finding.title} - ${branch}. ${finding.caseCount} case${finding.caseCount === 1 ? "" : "s"}, ${finding.currency} ${finding.amount.toLocaleString("en-US")}. Final approval by ${approver.name}. This finding needs branch action; the responsible person is ${manager ? `the Branch Manager, ${manager}` : "the Branch Manager (none assigned yet)"}.`,
     entityType: "Finding",
     entityId: finding.id,
   });

@@ -1,3 +1,4 @@
+import type { Finding as DashboardFinding } from "@/types";
 import { averageApprovedAge } from "@/lib/caseAge";
 import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import Link from "next/link";
@@ -45,6 +46,12 @@ export function HODashboard({
   dateRange?: DateRange;
   filters?: DashboardFilters;
 }) {
+  // Performance % follows the filters too (source, category, risk, status,
+  // operation area, irregularity, date range) - within the active scoring
+  // rule's categories and sources. Organisation is set per figure (each
+  // ranking row is its own district / branch), so it isn't part of this.
+  const matchesFilters = (f: DashboardFinding) =>
+    inDateRange(dateRange, f.findingDate) && applyDashboardFilters([f], { ...filters, districtId: "", branchId: "" }).length === 1;
   // FilterBar's own period picker takes priority over "whichever period is
   // currently OPEN" - picking a locked/past period is exactly how you'd
   // review dashboard history, not just the live one.
@@ -104,10 +111,10 @@ export function HODashboard({
   const avgOutstandingAgeDays = averageApprovedAge(db, approvedPeriodFindings.filter((f) => isOutstandingFinding(f)));
   const outstandingFindings = approvedPeriodFindings.filter((f) => isOutstandingFinding(f)).length;
   const bankPerformance = hasPeriodScope
-    ? computePerformance(db, { periodId: allPeriodsSelected ? undefined : openPeriod?.id })
+    ? computePerformance(db, { findingFilter: matchesFilters, districtId: filters.districtId || undefined, branchId: filters.branchId || undefined, periodId: allPeriodsSelected ? undefined : openPeriod?.id })
     : null;
   // The counts behind it, for the card's "click % for detail" calculation.
-  const performanceCounts = hasPeriodScope ? computeEligibleCaseCounts(db, { periodId: allPeriodsSelected ? undefined : openPeriod?.id }) : null;
+  const performanceCounts = hasPeriodScope ? computeEligibleCaseCounts(db, { findingFilter: matchesFilters, districtId: filters.districtId || undefined, branchId: filters.branchId || undefined, periodId: allPeriodsSelected ? undefined : openPeriod?.id }) : null;
   // Period-residency-aware (see sumAmountByCurrencyInPeriod()'s doc
   // comment in src/lib/currency.ts) - a finding partially rectified here
   // and then transferred must have its amount split between this period
@@ -161,7 +168,7 @@ export function HODashboard({
   const districtRanking = districtsInScope
     .map((d) => {
       const perf = hasPeriodScope
-        ? computePerformance(db, { districtId: d.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id })
+        ? computePerformance(db, { findingFilter: matchesFilters, districtId: d.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id })
         : null;
       // Same isHoApproved() gate as everywhere else on this dashboard - a
       // volume count feeding "Findings by District" shouldn't grow the
@@ -185,7 +192,7 @@ export function HODashboard({
   const branchRanking = branchesInScope
     .map((b) => {
       const perf = hasPeriodScope
-        ? computePerformance(db, { branchId: b.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id })
+        ? computePerformance(db, { findingFilter: matchesFilters, branchId: b.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id })
         : null;
       const findings = approvedPeriodFindings.filter((f) => f.branchId === b.id);
       return { branch: b, performance: perf, total: findings.length };
@@ -337,7 +344,7 @@ export function HODashboard({
         irregularityTypes={db.settings.irregularityTypes}
         defaultPeriodId={currentPeriod(db.reportingPeriods)?.id}
         statusOptions={[...HO_APPROVED_OR_LATER_STATUSES, "REJECTED"]}
-        hint="Filters apply immediately. Performance % always reflects the full scoring formula, not narrowed by source/category/risk/status."
+        hint="Filters apply immediately, Performance % included (within the scoring rule's categories and sources)."
       />
 
       <TimeRangeFilter />
@@ -447,7 +454,7 @@ export function HODashboard({
 
       <CaseBasedPerformance
         db={db}
-        scope={{ districtId: filters.districtId || undefined, branchId: filters.branchId || undefined }}
+        scope={{ findingFilter: matchesFilters, districtId: filters.districtId || undefined, branchId: filters.branchId || undefined }}
         openPeriod={openPeriod}
         allPeriods={allPeriodsSelected}
       />
@@ -464,7 +471,7 @@ export function HODashboard({
                     <Badge tone={i === 0 ? "green" : "gray"}>#{i + 1}</Badge>
                     <span className="text-slate-900">{row.district.name}</span>
                   </Link>
-                  <PerformancePct counts={computeEligibleCaseCounts(db, { districtId: row.district.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id })} />
+                  <PerformancePct counts={computeEligibleCaseCounts(db, { findingFilter: matchesFilters, districtId: row.district.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id })} />
                 </div>
               ))}
             </div>
@@ -480,7 +487,7 @@ export function HODashboard({
                     <Badge tone="red">Rank #{districtRanking.findIndex((r) => r.district.id === row.district.id) + 1}</Badge>
                     <span className="text-slate-900">{row.district.name}</span>
                   </Link>
-                  <PerformancePct counts={computeEligibleCaseCounts(db, { districtId: row.district.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id })} />
+                  <PerformancePct counts={computeEligibleCaseCounts(db, { findingFilter: matchesFilters, districtId: row.district.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id })} />
                 </div>
               ))}
             </div>
@@ -505,6 +512,7 @@ export function HODashboard({
             </div>
           </Card>
           <DistrictRankingTable
+            findingFilter={matchesFilters}
             db={db}
             districts={districtsInScope}
             openPeriod={openPeriod}
@@ -532,7 +540,7 @@ export function HODashboard({
                       <Badge tone={i === 0 ? "green" : "gray"}>#{i + 1}</Badge>
                       <span className="text-slate-900">{row.branch.name}</span>
                     </Link>
-                    <PerformancePct counts={computeEligibleCaseCounts(db, { branchId: row.branch.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id })} />
+                    <PerformancePct counts={computeEligibleCaseCounts(db, { findingFilter: matchesFilters, branchId: row.branch.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id })} />
                   </div>
                 ))}
               </div>
@@ -548,7 +556,7 @@ export function HODashboard({
                       <Badge tone="red">Rank #{branchRanking.findIndex((r) => r.branch.id === row.branch.id) + 1}</Badge>
                       <span className="text-slate-900">{row.branch.name}</span>
                     </Link>
-                    <PerformancePct counts={computeEligibleCaseCounts(db, { branchId: row.branch.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id })} />
+                    <PerformancePct counts={computeEligibleCaseCounts(db, { findingFilter: matchesFilters, branchId: row.branch.id, periodId: allPeriodsSelected ? undefined : openPeriod?.id })} />
                   </div>
                 ))}
               </div>
@@ -556,6 +564,7 @@ export function HODashboard({
           </div>
 
           <BranchPerformanceTable
+            findingFilter={matchesFilters}
             db={db}
             branches={branchesInScope}
             openPeriod={openPeriod}
@@ -569,7 +578,7 @@ export function HODashboard({
       <SourcePerformanceSummary
         db={db}
         sources={sourcesInScope}
-        scope={{ districtId: filters.districtId || undefined, branchId: filters.branchId || undefined }}
+        scope={{ findingFilter: matchesFilters, districtId: filters.districtId || undefined, branchId: filters.branchId || undefined }}
         openPeriod={openPeriod}
         allPeriods={allPeriodsSelected}
       />

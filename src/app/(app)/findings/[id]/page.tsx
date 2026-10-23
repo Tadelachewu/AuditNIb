@@ -9,7 +9,7 @@ import { userPerformedApprovalOrVerifyAction, hasRectificationAfterLastTransfer,
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
 import { Card } from "@/components/ui/Card";
 import { FindingDetailClient } from "@/components/findings/FindingDetailClient";
-import { hasReturned, isAwaitingDistrict } from "@/lib/rectificationResubmit";
+import { isAwaitingDistrict } from "@/lib/rectificationResubmit";
 
 export default async function FindingDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
@@ -275,8 +275,9 @@ export default async function FindingDetailPage({ params }: { params: Promise<{ 
         canReturnRectification,
         canDistrictReturnRectification,
         canHoReturnRectification,
-        // Something returned for correction and not resubmitted yet (any status).
-        canResubmitRectification: has("rectify") && finding.status !== "CLOSED" && hasReturned(finding),
+        // No separate resubmit: a returned rectification is outstanding again,
+        // and the branch records it with Record Rectification (canRectify).
+        canResubmitRectification: false,
         // Settings.hoApproval's single approval step for a bank-registered
         // finding - both gates required, matching bank-approval/route.ts's
         // own server-side check: the permission (an eligible role) and the

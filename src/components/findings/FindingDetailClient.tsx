@@ -721,11 +721,21 @@ export function FindingDetailClient({
                 {finding.caseCount === 1 ? "" : "s"})
               </dd>
             </div>
+            {/* Outstanding only drops when HO accepts (closes); what the branch
+                rectified but District hasn't verified yet shows as pending. */}
             <div>
-              <dt className="text-xs text-slate-500">Outstanding</dt>
+              <dt className="text-xs text-slate-500">Outstanding (until accepted)</dt>
               <dd className="text-slate-900">
-                {finding.currency} {formatCurrency(outstandingAmount)} ({outstandingCases} case
-                {outstandingCases === 1 ? "" : "s"})
+                {finding.currency} {formatCurrency(finding.amount - finding.closedAmount)} ({finding.caseCount - finding.closedCases} case
+                {finding.caseCount - finding.closedCases === 1 ? "" : "s"})
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs text-slate-500">Pending verification</dt>
+              <dd className="text-slate-900">
+                {finding.currency} {formatCurrency(Math.max(finding.rectifiedAmount - finding.districtVerifiedAmount, 0))} (
+                {Math.max(finding.rectifiedCases - finding.districtVerifiedCases, 0)} case
+                {Math.max(finding.rectifiedCases - finding.districtVerifiedCases, 0) === 1 ? "" : "s"})
               </dd>
             </div>
             <div>
@@ -871,7 +881,7 @@ export function FindingDetailClient({
         <Card>
           <CardHeader
             title="Record Rectification"
-            description={`Outstanding: ${finding.currency} ${formatCurrency(outstandingAmount)} across ${outstandingCases} case(s)`}
+            description={`Left to rectify: ${finding.currency} ${formatCurrency(outstandingAmount)} across ${outstandingCases} case(s)`}
           />
           {rectifying ? (
             <div className="flex flex-col gap-3 p-4">
