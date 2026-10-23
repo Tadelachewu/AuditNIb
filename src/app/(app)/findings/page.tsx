@@ -234,11 +234,19 @@ export default async function FindingsPage({
       </div>
 
       <div className="mt-4 flex gap-2">
-        <Link href={queueOnly ? "/findings" : "/findings?queue=1"}>
-          <Button variant={queueOnly ? "primary" : "secondary"}>
-            {queueOnly ? "Showing: My Queue" : "Show My Queue"}
-          </Button>
-        </Link>
+        {queueOnly ? (
+          <Link href="/findings">
+            <Button variant="primary">Showing: My Queue</Button>
+          </Link>
+        ) : (
+          // Off: a soft tint - set apart from the page, but close to it (see-through, so it suits both themes).
+          <Link
+            href="/findings?queue=1"
+            className="inline-flex items-center rounded-md border border-sky-500/40 bg-sky-500/10 px-3 py-1.5 text-sm font-medium text-slate-800 transition-colors hover:bg-sky-500/20"
+          >
+            Show My Queue
+          </Link>
+        )}
       </div>
 
       <div className="mt-4">
