@@ -1,10 +1,11 @@
+import { caseAgeIndex } from "@/lib/caseAge";
 import { redirect } from "next/navigation";
 import { SESSION_ENDED_PATH } from "@/lib/session";
 import { canReverse } from "@/lib/findingReverse";
 import { getCurrentUser } from "@/lib/session";
 import { readDb } from "@/lib/db";
 import { assertFindingInScope } from "@/lib/findings-scope";
-import { caseAgeDays, userPerformedApprovalOrVerifyAction, hasRectificationAfterLastTransfer, hoReturnBlockedReason, assertPeriodOpenForSubmission } from "@/lib/findings";
+import { userPerformedApprovalOrVerifyAction, hasRectificationAfterLastTransfer, hoReturnBlockedReason, assertPeriodOpenForSubmission } from "@/lib/findings";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
 import { Card } from "@/components/ui/Card";
 import { FindingDetailClient } from "@/components/findings/FindingDetailClient";
@@ -140,6 +141,8 @@ export default async function FindingDetailPage({ params }: { params: Promise<{ 
   // scoped booleans above separately for button labeling / tooltips.
   const canReturnRectification = canDistrictReturnRectification || canHoReturnRectification;
 
+  const ages = caseAgeIndex(db);
+
   return (
     <FindingDetailClient
       finding={finding}
@@ -151,7 +154,9 @@ export default async function FindingDetailPage({ params }: { params: Promise<{ 
       evidence={evidence}
       comments={comments}
       otherOpenPeriods={otherOpenPeriods}
-      caseAgeDays={caseAgeDays(finding)}
+      // Case ages now and at each transfer (src/lib/caseAge.ts).
+      caseAges={ages(finding)}
+      transferAges={Object.fromEntries(transfers.map((t) => [t.id, ages(finding, new Date(t.createdAt).getTime())]))}
       operationAreas={db.settings.operationAreas}
       priorityLevels={db.settings.priorityLevels}
       irregularityTypes={db.settings.irregularityTypes}

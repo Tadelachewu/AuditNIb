@@ -1,3 +1,4 @@
+import { caseAgeIndex } from "@/lib/caseAge";
 import { NextResponse } from "next/server";
 import { requirePermission } from "@/lib/guard";
 import { readDb } from "@/lib/db";
@@ -80,7 +81,8 @@ async function handleGET(request: Request) {
     resident = resident.filter((r) => (r.slice === null || r.slice.isCurrentPeriod) && isQueued(r.finding));
   }
   const periodCodeOf = (id: string) => db.reportingPeriods.find((p) => p.id === id)?.code ?? "";
-  const names = { districtName, branchName, departmentName, categoryName, sourceName, periodCode: periodCodeOf };
+  const caseAge = caseAgeIndex(db);
+  const names = { districtName, branchName, departmentName, categoryName, sourceName, periodCode: periodCodeOf, caseAge };
   resident = filterFindingsByText(resident, url.searchParams.get("q") ?? "", names);
   resident = sortFindings(
     resident,
@@ -130,6 +132,9 @@ async function handleGET(request: Request) {
     "Registered Bank-wide",
     "Imported",
     "Registered On",
+    "Case Age - Submit (days)",
+    "Case Age - Approved (days)",
+    "Case Age - Finding Date (days)",
   ];
   const userName = (id: string) => db.users.find((u) => u.id === id)?.name ?? "";
 
@@ -190,6 +195,9 @@ async function handleGET(request: Request) {
       f.registeredByBankScope ? "Yes" : "No",
       f.importBatchId ? "Yes" : "No",
       f.createdAt,
+      caseAge(f).submit ?? "",
+      caseAge(f).approved ?? "",
+      caseAge(f).findingDate ?? "",
     ]
       .map(csvCell)
       .join(",");

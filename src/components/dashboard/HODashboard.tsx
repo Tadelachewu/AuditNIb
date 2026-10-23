@@ -1,8 +1,9 @@
+import { averageApprovedAge } from "@/lib/caseAge";
 import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import Link from "next/link";
 import { HO_APPROVED_OR_LATER_STATUSES, type Database } from "@/types";
 import type { SessionData } from "@/lib/session";
-import { computePerformance, computeEligibleCaseCounts, findingCaseTotals, findingCaseTotalsInPeriod, transferTotals, averageCaseAgeDays, isHoApproved, isOutstandingFinding } from "@/lib/findings";
+import { computePerformance, computeEligibleCaseCounts, findingCaseTotals, findingCaseTotalsInPeriod, transferTotals, isHoApproved, isOutstandingFinding } from "@/lib/findings";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
 import { sumAmountByCurrency, sumOutstandingByCurrency, sumAmountByCurrencyInPeriod, sumOutstandingByCurrencyInPeriod, addCurrency, mergeCurrencyTotals, formatCurrencyTotals, type CurrencyTotals } from "@/lib/currency";
 import { inDateRange, type DateRange } from "@/lib/dateRange";
@@ -97,6 +98,10 @@ export function HODashboard({
   // Outstanding, Source Comparison, etc. don't inflate before a finding's
   // actually been approved.
   const approvedPeriodFindings = periodFindings.filter(isHoApproved);
+  // Avg. Backlog Age: the average Case age (approved, src/lib/caseAge.ts) of
+  // exactly the findings the Outstanding card counts - same period and every
+  // filter (district/branch/source/category/risk/status/area/date range).
+  const avgOutstandingAgeDays = averageApprovedAge(db, approvedPeriodFindings.filter((f) => isOutstandingFinding(f)));
   const outstandingFindings = approvedPeriodFindings.filter((f) => isOutstandingFinding(f)).length;
   const bankPerformance = hasPeriodScope
     ? computePerformance(db, { periodId: allPeriodsSelected ? undefined : openPeriod?.id })
@@ -123,13 +128,6 @@ export function HODashboard({
     !allPeriodsSelected && openPeriod
       ? sumAmountByCurrencyInPeriod(db, openPeriod.id, approvedAllFindingsInRange, "closed")
       : sumAmountByCurrency(approvedPeriodFindings, "closedAmount");
-  // "How stale is our backlog?" - all periods, not just the open one, since
-  // a stale finding that got transferred forward is still part of the same
-  // outstanding backlog. Narrowed by allFindingsInRange (district/branch/
-  // source/category/risk/status/date-range), same as every other stat card
-  // here - only the period restriction is deliberately skipped ("all
-  // periods" is the point of this one).
-  const avgOutstandingAgeDays = averageCaseAgeDays(allFindingsInRange.filter((f) => isOutstandingFinding(f)));
 
   // HO Controller also holds findings.create (bank-registered Internal
   // Audit findings - icfms.txt), so the same "MY own drafts/pending
@@ -389,8 +387,8 @@ export function HODashboard({
         <StatCard
           icon={ICON.backlogAge}
           label="Avg. Backlog Age"
-          value={avgOutstandingAgeDays !== null ? `${avgOutstandingAgeDays}d` : "--"}
-          hint="Outstanding findings, all periods"
+          value={hasPeriodScope && avgOutstandingAgeDays !== null ? `${avgOutstandingAgeDays}d` : "--"}
+          hint="Case age (approved), the Outstanding findings shown"
         />
         {canRegister && (
           <StatCard icon={ICON.pendingApproval} label="Pending Approval" value={ownPendingApprovalFindings} hint="Review pending, your registrations" />

@@ -1,4 +1,5 @@
-import { computeEligibleCaseCounts, caseAgeDays, findingsResidentInPeriod, isHoApproved, originalPeriodId, registeredCasesOf, approvedAdjustmentsOf } from "@/lib/findings";
+import { caseAgeIndex, type CaseAges } from "@/lib/caseAge";
+import { computeEligibleCaseCounts, findingsResidentInPeriod, isHoApproved, originalPeriodId, registeredCasesOf, approvedAdjustmentsOf } from "@/lib/findings";
 import { formatNumber } from "@/lib/format";
 import { addCurrency, mergeCurrencyTotals, type CurrencyTotals } from "@/lib/currency";
 import type { Database, Branch, District, ReportingPeriod, ClassifiedCategory, BranchCoverageNote, Finding, Source } from "@/types";
@@ -933,7 +934,9 @@ export interface TransferredFindingRow {
   currentStatus: Finding["status"];
   currentOutstandingCases: number;
   currentOutstandingAmount: number;
-  caseAgeDaysNow: number;
+  /** Case ages now and at this transfer (src/lib/caseAge.ts). */
+  agesNow: CaseAges;
+  agesAtTransfer: CaseAges;
 }
 
 export function getTransferredFindings(
@@ -941,6 +944,7 @@ export function getTransferredFindings(
   filters?: { fromPeriodId?: string; toPeriodId?: string }
 ): TransferredFindingRow[] {
   const templateSourceIds = getTemplateSourceIds(db, "transferred-findings");
+  const ages = caseAgeIndex(db);
   const hopsByFinding = new Map<string, Database["findingTransfers"]>();
   for (const t of db.findingTransfers) {
     const list = hopsByFinding.get(t.findingId) ?? [];
@@ -987,7 +991,8 @@ export function getTransferredFindings(
         // Outstanding = not yet formally closed (same basis as the dashboards).
         currentOutstandingCases: finding.caseCount - finding.closedCases,
         currentOutstandingAmount: finding.amount - finding.closedAmount,
-        caseAgeDaysNow: caseAgeDays(finding),
+        agesNow: ages(finding),
+        agesAtTransfer: ages(finding, new Date(t.createdAt).getTime()),
       };
     })
     .filter((r): r is TransferredFindingRow => r !== null)

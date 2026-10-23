@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { appNow, clockOffsetMs, resetClockForTests, testClockProblem } from "@/lib/clock";
 import { currentPeriod } from "@/lib/periods";
 import { localToday, findingDateError } from "@/lib/inputRules";
-import { caseAgeDays } from "@/lib/findings";
+import { caseAges } from "@/lib/caseAge";
 import type { Finding } from "@/types";
 
 // The business clock (docs/test-clock.md): APP_TEST_NOW simulates the date on
@@ -61,8 +61,9 @@ describe("test clock", () => {
     expect(localToday()).toBe("2026-11-01");
     expect(findingDateError("2026-10-31")).toBeNull();
     expect(findingDateError("2026-11-02")).toMatch(/future/);
-    const f = { createdAt: new Date("2026-10-22T00:05:00").toISOString() } as Finding;
-    expect(caseAgeDays(f)).toBe(10);
+    const submittedAt = new Date("2026-10-22T00:05:00").toISOString();
+    const f = { id: "f1", status: "SUBMITTED", createdAt: submittedAt, updatedAt: submittedAt } as Finding;
+    expect(caseAges(f, [{ findingId: "f1", action: "SUBMIT", toStatus: "SUBMITTED", createdAt: submittedAt } as never]).submit).toBe(10);
 
     withEnv({ APP_TEST_NOW: "2026-10-31T23:50:00", APP_ENV: "development" });
     expect(currentPeriod(periods)?.code).toBe("2026-09");

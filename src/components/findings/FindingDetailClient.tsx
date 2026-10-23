@@ -38,6 +38,7 @@ import type {
   OtherValueAllowedField,
 } from "@/types";
 import { appDate } from "@/lib/clock";
+import { ageSummary, formatAge, type CaseAges } from "@/lib/caseAge";
 import { rectifiedCaseRows } from "@/lib/rectificationResubmit";
 
 // Columns of the Evidence / Comments / Rectification Ledger row by how many of them show.
@@ -95,7 +96,8 @@ export function FindingDetailClient({
   evidence,
   comments,
   otherOpenPeriods,
-  caseAgeDays,
+  caseAges,
+  transferAges,
   operationAreas,
   priorityLevels,
   irregularityTypes,
@@ -123,7 +125,10 @@ export function FindingDetailClient({
   evidence: Evidence[];
   comments: Comment[];
   otherOpenPeriods: { id: string; code: string; earlier: boolean; locked: boolean }[];
-  caseAgeDays: number;
+  /** Case ages now (src/lib/caseAge.ts). */
+  caseAges: CaseAges;
+  /** Case ages at each transfer, by transfer id. */
+  transferAges: Record<string, CaseAges>;
   operationAreas: string[];
   priorityLevels: string[];
   irregularityTypes: string[];
@@ -657,11 +662,27 @@ export function FindingDetailClient({
               <dt className="text-xs text-slate-500">Finding date</dt>
               <dd className="text-slate-900">{finding.findingDate}</dd>
             </div>
+            {/* Case ages (src/lib/caseAge.ts): an import is submitted and approved at once - one age. */}
+            {caseAges.imported ? (
+              <div>
+                <dt className="text-xs text-slate-500">Case age (submit / approved)</dt>
+                <dd className="text-slate-900">{formatAge(caseAges.approved)}</dd>
+              </div>
+            ) : (
+              <>
+                <div>
+                  <dt className="text-xs text-slate-500">Case age (submit){caseAges.estimated ? " (est.)" : ""}</dt>
+                  <dd className="text-slate-900">{formatAge(caseAges.submit)}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-slate-500">Case age (approved){caseAges.estimated ? " (est.)" : ""}</dt>
+                  <dd className="text-slate-900">{formatAge(caseAges.approved)}</dd>
+                </div>
+              </>
+            )}
             <div>
-              <dt className="text-xs text-slate-500">Case age</dt>
-              <dd className="text-slate-900">
-                {caseAgeDays} day{caseAgeDays === 1 ? "" : "s"}
-              </dd>
+              <dt className="text-xs text-slate-500">Case age (finding date)</dt>
+              <dd className="text-slate-900">{formatAge(caseAges.findingDate)}</dd>
             </div>
             {/* Imported findings only: the source system's own id for it
                 (Excel import's "External Reference" column). */}
@@ -1131,7 +1152,7 @@ export function FindingDetailClient({
         <Card>
           <CardHeader
             title="Transfer to Another Period"
-            description={`Case age: ${caseAgeDays} day${caseAgeDays === 1 ? "" : "s"} since original finding date.`}
+            description={`Case age: ${ageSummary(caseAges)}.`}
           />
           {transferring ? (
             otherOpenPeriods.length === 0 ? (
@@ -1207,8 +1228,8 @@ export function FindingDetailClient({
                       <dd className="font-medium text-slate-900">You (current user)</dd>
                     </div>
                     <div className="flex justify-between gap-2">
-                      <dt className="text-slate-500">Case Age (days)</dt>
-                      <dd className="font-medium text-slate-900">{caseAgeDays}</dd>
+                      <dt className="text-slate-500">Case Age</dt>
+                      <dd className="text-right font-medium text-slate-900">{ageSummary(caseAges)}</dd>
                     </div>
                     <div className="flex justify-between gap-2 sm:col-span-2">
                       <dt className="text-slate-500">Transfer History (prior hops)</dt>
@@ -1495,8 +1516,8 @@ export function FindingDetailClient({
                       </div>
                       <div className="flex justify-between gap-2">
                         <dt className="text-slate-500">Case Age at Transfer</dt>
-                        <dd className="font-medium text-slate-800">
-                          {t.caseAgeAtTransferDays} day{t.caseAgeAtTransferDays === 1 ? "" : "s"}
+                        <dd className="text-right font-medium text-slate-800">
+                          {transferAges[t.id] ? ageSummary(transferAges[t.id]) : formatAge(t.caseAgeAtTransferDays)}
                         </dd>
                       </div>
                       <div className="flex justify-between gap-2">

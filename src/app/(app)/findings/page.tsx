@@ -1,3 +1,4 @@
+import { caseAgeIndex } from "@/lib/caseAge";
 import Link from "next/link";
 import { SESSION_ENDED_PATH } from "@/lib/session";
 import { redirect } from "next/navigation";
@@ -92,7 +93,8 @@ export default async function FindingsPage({
   // here, server-side, across every matching finding rather than just the
   // visible page; the CSV export reuses the same helpers so it always
   // matches the list (src/lib/findingListQuery.ts).
-  const names = { districtName, branchName, departmentName, categoryName, sourceName, periodCode };
+  const caseAge = caseAgeIndex(db);
+  const names = { districtName, branchName, departmentName, categoryName, sourceName, periodCode, caseAge };
   const searchText = get("q");
   const sort = parseFindingSort(get("sort"), get("dir"));
   resident = filterFindingsByText(resident, searchText, names);
@@ -210,6 +212,11 @@ export default async function FindingsPage({
     imported: Boolean(f.importBatchId),
     createdAt: f.createdAt,
     lastReminderAt: f.lastReminderAt ?? "",
+    // Case ages now (src/lib/caseAge.ts).
+    ageSubmit: caseAge(f).submit,
+    ageApproved: caseAge(f).approved,
+    ageFindingDate: caseAge(f).findingDate,
+    ageImported: caseAge(f).imported,
   }));
 
   return (

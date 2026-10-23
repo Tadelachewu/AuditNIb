@@ -518,7 +518,8 @@ export function validateImportRow(
   }
 
   const now = new Date().toISOString();
-  // caseAgeDays() (src/lib/findings.ts) measures age from createdAt, per
+  // (Case age now: src/lib/caseAge.ts - an import counts from the import, plus
+  // a Finding-date age.) Previously caseAgeDays() measured age from createdAt, per
   // master.txt §8's "track case age from original finding date" - for a
   // live registration createdAt and Finding Date are always close (the
   // form is filled in near-realtime), but a historical import's whole

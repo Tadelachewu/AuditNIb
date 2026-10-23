@@ -1,3 +1,4 @@
+import { ageSummary } from "@/lib/caseAge";
 import Link from "next/link";
 import { AutoFilterForm } from "@/components/reports/AutoFilterForm";
 import { StickyBack } from "@/components/ui/StickyBack";
@@ -171,7 +172,7 @@ export default async function TransferredFindingsPage({
                     </div>
                     <div className="flex justify-between gap-2">
                       <dt className="text-slate-500">Case Age at Transfer</dt>
-                      <dd className="font-medium text-slate-800">{r.transfer.caseAgeAtTransferDays}d</dd>
+                      <dd className="text-right font-medium text-slate-800">{ageSummary(r.agesAtTransfer)}</dd>
                     </div>
                   </dl>
                 </div>
@@ -223,7 +224,7 @@ export default async function TransferredFindingsPage({
                     </div>
                     <div className="flex justify-between gap-2">
                       <dt className="text-slate-500">Case Age Today</dt>
-                      <dd className="font-medium text-slate-800">{r.caseAgeDaysNow}d</dd>
+                      <dd className="text-right font-medium text-slate-800">{ageSummary(r.agesNow)}</dd>
                     </div>
                   </dl>
                 </div>

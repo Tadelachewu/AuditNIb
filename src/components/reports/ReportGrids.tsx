@@ -164,7 +164,10 @@ export interface TransferRow {
   outstandingAmount: number;
   originalCases: number;
   outstandingCases: number;
-  caseAgeDays: number;
+  /** Case ages at the transfer (src/lib/caseAge.ts): approved, submit, finding date. */
+  caseAgeDays: number | null;
+  caseAgeSubmitDays: number | null;
+  caseAgeFindingDateDays: number | null;
   method: "AUTOMATIC" | "MANUAL";
   createdByName: string;
   createdAt: string;
@@ -200,7 +203,9 @@ export function TransfersGridClient({ grid }: { grid: GridPage<TransferRow> }) {
       },
       { accessorKey: "originalCases", header: "Original Cases", filterVariant: "range", Cell: ({ cell }) => <>{formatNumber(cell.getValue<number>())}</> },
       { accessorKey: "outstandingCases", header: "Outstanding Cases", filterVariant: "range", Cell: ({ cell }) => <>{formatNumber(cell.getValue<number>())}</> },
-      { accessorKey: "caseAgeDays", header: "Case Age (days)", filterVariant: "range" },
+      { accessorKey: "caseAgeSubmitDays", header: "Age at Transfer - Submit (days)", filterVariant: "range" },
+      { accessorKey: "caseAgeDays", header: "Age at Transfer - Approved (days)", filterVariant: "range" },
+      { accessorKey: "caseAgeFindingDateDays", header: "Age at Transfer - Finding Date (days)", filterVariant: "range" },
       {
         id: "method",
         header: "Method",

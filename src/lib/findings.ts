@@ -1,3 +1,4 @@
+import { caseAges } from "@/lib/caseAge";
 import { v4 as uuid } from "uuid";
 import { appendAuditLog } from "@/lib/audit";
 import { hasPermission, permissionKey } from "@/lib/permissions/registry";
@@ -71,7 +72,12 @@ export function transferFinding(
     // the finding by a later reader - see the type's own doc comment.
     originalCaseCount: finding.caseCount,
     originalAmount: finding.amount,
-    caseAgeAtTransferDays: caseAgeDays(finding),
+    // Case age (approved) at this transfer (src/lib/caseAge.ts) - kept for the
+    // record; screens and reports compute all three ages at the transfer time.
+    caseAgeAtTransferDays: (() => {
+      const ages = caseAges(finding, db.findingTransitions.filter((t) => t.findingId === finding.id));
+      return ages.approved ?? ages.submit ?? 0;
+    })(),
     reason: opts.reason,
     createdBy: opts.userId,
     createdByName: opts.userName,
@@ -182,25 +188,6 @@ export function findPreviousPeriod(db: Database, period: ReportingPeriod): Repor
   return [...db.reportingPeriods]
     .filter((p) => p.year < period.year || (p.year === period.year && p.month < period.month))
     .sort((a, b) => b.year - a.year || b.month - a.month)[0];
-}
-
-/** Days since the finding was originally registered - unaffected by any transfer, since transferFinding() never touches createdAt (master.txt §8: "track case age from original finding date"). */
-export function caseAgeDays(finding: Finding): number {
-  return Math.floor((appNow() - new Date(finding.createdAt).getTime()) / 86_400_000);
-}
-
-/**
- * "How stale is the outstanding backlog?" - a real, calculable metric
- * (mean caseAgeDays() across whatever's passed in) that no dashboard
- * surfaced before, despite Document_3 §15 already tracking case age at
- * every transfer hop. Callers pass in whichever outstanding-findings set
- * is already in scope (bank-wide, one district, one branch) rather than
- * this function re-deriving "outstanding" itself. Returns null on an
- * empty set rather than a misleading 0.
- */
-export function averageCaseAgeDays(findings: Finding[]): number | null {
-  if (findings.length === 0) return null;
-  return Math.round(findings.reduce((sum, f) => sum + caseAgeDays(f), 0) / findings.length);
 }
 
 // A finding isn't "official" for dashboard-counting purposes until it's

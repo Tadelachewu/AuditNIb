@@ -350,7 +350,9 @@ function buildCsv(slug: string, db: Database, params: URLSearchParams): string |
         "Previous Reporting Month",
         "New Reporting Month",
         "Transfer Date",
-        "Case Age at Transfer",
+        "Case Age at Transfer - Submit (days)",
+        "Case Age at Transfer - Approved (days)",
+        "Case Age at Transfer - Finding Date (days)",
         "Original Case Count",
         "Original Amount",
         "Resolved Before Transfer (Cases)",
@@ -362,7 +364,9 @@ function buildCsv(slug: string, db: Database, params: URLSearchParams): string |
         "Current Status",
         "Current Outstanding Cases",
         "Current Outstanding Amount",
-        "Case Age Today",
+        "Case Age Today - Submit (days)",
+        "Case Age Today - Approved (days)",
+        "Case Age Today - Finding Date (days)",
       ];
       const dataRows = rows.map((r) => [
         r.finding.reference,
@@ -377,7 +381,9 @@ function buildCsv(slug: string, db: Database, params: URLSearchParams): string |
         r.fromPeriod?.code ?? r.transfer.fromPeriodId,
         r.toPeriod?.code ?? r.transfer.toPeriodId,
         r.transfer.createdAt.slice(0, 10),
-        r.transfer.caseAgeAtTransferDays,
+        r.agesAtTransfer.submit ?? "",
+        r.agesAtTransfer.approved ?? "",
+        r.agesAtTransfer.findingDate ?? "",
         r.transfer.originalCaseCount,
         r.transfer.originalAmount,
         r.resolvedBeforeTransferCases,
@@ -389,7 +395,9 @@ function buildCsv(slug: string, db: Database, params: URLSearchParams): string |
         r.currentStatus,
         r.currentOutstandingCases,
         r.currentOutstandingAmount,
-        r.caseAgeDaysNow,
+        r.agesNow.submit ?? "",
+        r.agesNow.approved ?? "",
+        r.agesNow.findingDate ?? "",
       ]);
       return toCsv(header, dataRows);
     }

@@ -73,6 +73,12 @@ export interface FindingRow {
   imported: boolean;
   createdAt: string;
   lastReminderAt: string;
+  /** Case ages in days (null = not submitted / not approved yet / no finding date). */
+  ageSubmit: number | null;
+  ageApproved: number | null;
+  ageFindingDate: number | null;
+  /** Imported: submit and approved are the same moment. */
+  ageImported: boolean;
 }
 
 /** Columns hidden at first (every finding field not shown by default) - tick them in Show / hide columns. */
@@ -81,6 +87,7 @@ const OPTIONAL_COLUMNS = [
   "rectifiedCases", "rectifiedAmount", "verifiedCases", "verifiedAmount", "closedCases", "closedAmount",
   "outstandingCases", "outstandingAmount", "description", "recommendation", "rootCause", "evidenceNote",
   "externalReference", "registeredBy", "registeredBankWide", "imported", "createdAt", "lastReminderAt",
+  "ageSubmit", "ageApproved", "ageFindingDate",
 ] as const;
 const HIDDEN_BY_DEFAULT = Object.fromEntries(OPTIONAL_COLUMNS.map((id) => [id, false]));
 
@@ -456,6 +463,9 @@ export function FindingsTable({
       { id: "registeredBankWide", accessorKey: "registeredBankWide", header: "Registered Bank-wide", size: 90, enableSorting: false, Cell: ({ row }) => (row.original.registeredBankWide ? "Yes" : "No") },
       { id: "imported", accessorKey: "imported", header: "Imported", size: 80, enableSorting: false, Cell: ({ row }) => (row.original.imported ? "Yes" : "No") },
       { id: "createdAt", accessorKey: "createdAt", header: "Registered On", Cell: ({ row }) => <span className="whitespace-nowrap text-xs text-slate-500">{formatDateTime(row.original.createdAt)}</span> },
+      { id: "ageSubmit", accessorKey: "ageSubmit", header: "Case Age (submit)", size: 100, muiTableHeadCellProps: { title: "Days since first submitted (an import: since the import)" }, Cell: ({ row }) => <span className="tabular-nums">{row.original.ageSubmit === null ? "—" : `${formatNumber(row.original.ageSubmit)}d`}</span> },
+      { id: "ageApproved", accessorKey: "ageApproved", header: "Case Age (approved)", size: 100, muiTableHeadCellProps: { title: "Days since final approval (an import: since the import)" }, Cell: ({ row }) => <span className="tabular-nums">{row.original.ageApproved === null ? "—" : `${formatNumber(row.original.ageApproved)}d`}</span> },
+      { id: "ageFindingDate", accessorKey: "ageFindingDate", header: "Case Age (finding date)", size: 100, muiTableHeadCellProps: { title: "Days since the Finding date" }, Cell: ({ row }) => <span className="tabular-nums">{row.original.ageFindingDate === null ? "—" : `${formatNumber(row.original.ageFindingDate)}d`}</span> },
       { id: "lastReminderAt", accessorKey: "lastReminderAt", header: "Last Reminder", enableSorting: false, Cell: ({ row }) => <span className="whitespace-nowrap text-xs text-slate-500">{row.original.lastReminderAt ? formatDateTime(row.original.lastReminderAt) : "—"}</span> },
     ],
     []

@@ -1,7 +1,8 @@
+import { averageApprovedAge } from "@/lib/caseAge";
 import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import { HO_APPROVED_OR_LATER_STATUSES, type Database } from "@/types";
 import type { SessionData } from "@/lib/session";
-import { computePerformance, computeEligibleCaseCounts, findingCaseTotals, findingCaseTotalsInPeriod, transferTotals, averageCaseAgeDays, isHoApproved, isOutstandingFinding } from "@/lib/findings";
+import { computePerformance, computeEligibleCaseCounts, findingCaseTotals, findingCaseTotalsInPeriod, transferTotals, isHoApproved, isOutstandingFinding } from "@/lib/findings";
 import { sumAmountByCurrency, sumOutstandingByCurrency, sumAmountByCurrencyInPeriod, sumOutstandingByCurrencyInPeriod, addCurrency, mergeCurrencyTotals, formatCurrencyTotals, type CurrencyTotals } from "@/lib/currency";
 import { inDateRange, type DateRange } from "@/lib/dateRange";
 import { applyDashboardFilters, dashboardFindingsHref, EMPTY_DASHBOARD_FILTERS, ALL_PERIODS_VALUE, type DashboardFilters } from "@/lib/dashboardFilters";
@@ -95,6 +96,10 @@ export function ExecutiveDashboard({
   // not just the "official" figures; RiskDistribution applies this same
   // gate internally now too).
   const approvedPeriodFindings = periodFindings.filter(isHoApproved);
+  // Avg. Backlog Age: the average Case age (approved, src/lib/caseAge.ts) of
+  // exactly the findings the Outstanding card counts - same period and every
+  // filter (district/branch/source/category/risk/status/area/date range).
+  const avgOutstandingAgeDays = averageApprovedAge(db, approvedPeriodFindings.filter((f) => isOutstandingFinding(f)));
   const inScopeFindingIds = new Set(allFindingsInRange.map((f) => f.id));
   const bankTransfers = hasPeriodScope
     ? db.findingTransfers.filter(
@@ -132,8 +137,6 @@ export function ExecutiveDashboard({
   const outstanding = approvedPeriodFindings.filter((f) => isOutstandingFinding(f));
   const pendingApproval = periodFindings.filter((f) => ["SUBMITTED", "DISTRICT_REVIEW", "HO_REVIEW", "PENDING_BANK_APPROVAL"].includes(f.status));
   const pendingBankApproval = pendingApproval.filter((f) => f.status === "PENDING_BANK_APPROVAL").length;
-  // "How stale is our backlog?" - all periods on purpose, same as HO.
-  const avgOutstandingAgeDays = averageCaseAgeDays(allFindingsInRange.filter((f) => isOutstandingFinding(f)));
   // Top two tiers of Settings.riskLevels, matched case-insensitively -
   // same convention as HODashboard/BranchDashboard's own High-Risk stat.
   // Previously hard-coded to "HIGH"/"CRITICAL" (uppercase), which never
@@ -287,8 +290,8 @@ export function ExecutiveDashboard({
         <StatCard
           icon={ICON.backlogAge}
           label="Avg. Backlog Age"
-          value={avgOutstandingAgeDays !== null ? `${avgOutstandingAgeDays}d` : "--"}
-          hint="Outstanding findings, all periods"
+          value={hasPeriodScope && avgOutstandingAgeDays !== null ? `${avgOutstandingAgeDays}d` : "--"}
+          hint="Case age (approved), the Outstanding findings shown"
         />
         <StatCard
           icon={ICON.totalFindings}

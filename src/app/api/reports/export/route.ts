@@ -74,10 +74,10 @@ async function handleGET(request: Request) {
   out.push("");
 
   out.push(line([`Transfers (${data.transferRows.length})`]));
-  out.push(line(["Finding", "From Period", "To Period", "Currency", "Original Amount", "Outstanding Amount", "Original Cases", "Outstanding Cases", "Case Age (days)", "Method", "Transferred By", "Transfer Date", "Reason"]));
+  out.push(line(["Finding", "From Period", "To Period", "Currency", "Original Amount", "Outstanding Amount", "Original Cases", "Outstanding Cases", "Age at Transfer - Submit (days)", "Age at Transfer - Approved (days)", "Age at Transfer - Finding Date (days)", "Method", "Transferred By", "Transfer Date", "Reason"]));
   for (const t of data.transferRows) {
     out.push(
-      line([t.reference, t.fromCode, t.toCode, t.currency, t.originalAmount, t.outstandingAmount, t.originalCases, t.outstandingCases, t.caseAgeDays, t.method, t.createdByName, t.createdAt, t.reason])
+      line([t.reference, t.fromCode, t.toCode, t.currency, t.originalAmount, t.outstandingAmount, t.originalCases, t.outstandingCases, t.caseAgeSubmitDays, t.caseAgeDays, t.caseAgeFindingDateDays, t.method, t.createdByName, t.createdAt, t.reason])
     );
   }
 

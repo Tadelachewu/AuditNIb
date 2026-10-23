@@ -1,3 +1,4 @@
+import { averageApprovedAge } from "@/lib/caseAge";
 import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import Link from "next/link";
 import { HO_APPROVED_OR_LATER_STATUSES, type Database } from "@/types";
@@ -126,6 +127,10 @@ export function BranchDashboard({
   // HO_REVIEW doesn't inflate Total Amount, Outstanding, Category Totals,
   // etc. before anyone's actually approved it.
   const approvedPeriodFindings = periodFindings.filter(isHoApproved);
+  // Avg. Backlog Age: the average Case age (approved, src/lib/caseAge.ts) of
+  // exactly the findings the Outstanding card counts - same period and every
+  // filter (district/branch/source/category/risk/status/area/date range).
+  const avgOutstandingAgeDays = averageApprovedAge(db, approvedPeriodFindings.filter((f) => isOutstandingFinding(f)));
   const outstandingFindings = approvedPeriodFindings.filter((f) => isOutstandingFinding(f)).length;
   // Rejected findings of the period, this branch (same rule as HO / District).
   const rejectedFindings = periodFindings.filter((f) => f.status === "REJECTED").length;
@@ -367,6 +372,12 @@ export function BranchDashboard({
         <StatCard icon={ICON.totalAmount} label="Total Amount" value={hasPeriodScope ? totalAmount : "--"} hint="All findings" />
         <StatCard icon={ICON.resolvedAmount} label="Resolved Amount" value={hasPeriodScope ? resolvedAmount : "--"} hint="Cumulative closed only" />
         <StatCard icon={ICON.outstandingAmount} label="Outstanding Amount" value={hasPeriodScope ? outstandingAmount : "--"} hint="Still owed" />
+        <StatCard
+          icon={ICON.backlogAge}
+          label="Avg. Backlog Age"
+          value={hasPeriodScope && avgOutstandingAgeDays !== null ? `${avgOutstandingAgeDays}d` : "--"}
+          hint="Case age (approved), the Outstanding findings shown"
+        />
         {canRegister && (
           <StatCard icon={ICON.pendingApproval} label="Pending Approval" value={pendingApprovalFindings} hint="District/HO review, your registrations" />
         )}

@@ -1,3 +1,4 @@
+import { averageApprovedAge } from "@/lib/caseAge";
 import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import Link from "next/link";
 import { HO_APPROVED_OR_LATER_STATUSES, type Database } from "@/types";
@@ -126,6 +127,10 @@ export function DistrictDashboard({
   // Outstanding, Category Totals, etc. don't inflate before a finding's
   // actually been approved.
   const approvedPeriodFindings = periodFindings.filter(isHoApproved);
+  // Avg. Backlog Age: the average Case age (approved, src/lib/caseAge.ts) of
+  // exactly the findings the Outstanding card counts - same period and every
+  // filter (district/branch/source/category/risk/status/area/date range).
+  const avgOutstandingAgeDays = averageApprovedAge(db, approvedPeriodFindings.filter((f) => isOutstandingFinding(f)));
   const outstandingFindings = approvedPeriodFindings.filter((f) => isOutstandingFinding(f)).length;
   // High-risk = the top two tiers of Settings.riskLevels (case-insensitive),
   // open and approved - same rule as the HO and Branch dashboards.
@@ -333,6 +338,12 @@ export function DistrictDashboard({
         <StatCard icon={ICON.totalAmount} label="Total Amount" value={hasPeriodScope ? totalAmount : "--"} hint="All findings" />
         <StatCard icon={ICON.resolvedAmount} label="Resolved Amount" value={hasPeriodScope ? resolvedAmount : "--"} hint="Cumulative closed only" />
         <StatCard icon={ICON.outstandingAmount} label="Outstanding Amount" value={hasPeriodScope ? outstandingAmount : "--"} hint="Still owed" />
+        <StatCard
+          icon={ICON.backlogAge}
+          label="Avg. Backlog Age"
+          value={hasPeriodScope && avgOutstandingAgeDays !== null ? `${avgOutstandingAgeDays}d` : "--"}
+          hint="Case age (approved), the Outstanding findings shown"
+        />
         <StatCard icon={ICON.requiringReview} label="Requiring Review" value={hasPeriodScope ? requiringReviewFindings : "--"} hint="Awaiting district decision" />
         <AdjustmentStatCards
           user={user}

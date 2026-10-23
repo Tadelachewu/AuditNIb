@@ -1,3 +1,4 @@
+import type { CaseAges } from "@/lib/caseAge";
 import { findingStatusLabel, type Finding } from "@/types";
 import { ALL_ROWS } from "@/lib/pagination";
 import { registeredAmountOf } from "@/lib/findings";
@@ -10,6 +11,8 @@ import { registeredAmountOf } from "@/lib/findings";
  */
 
 export interface FindingNames {
+  /** Case ages for the age columns' sort (src/lib/caseAge.ts). */
+  caseAge?: (f: Finding) => CaseAges;
   /** For the Period column's sort (optional: the code is compared when given). */
   periodCode?: (id: string) => string;
   districtName: (id: string) => string;
@@ -24,6 +27,7 @@ export const FINDING_SORT_KEYS = [
   // Optional columns (hidden until shown with Show / hide columns).
   "casesIn", "casesOut", "period", "findingDate", "operationArea", "irregularityType", "priority", "reportedAmount",
   "rectifiedCases", "verifiedCases", "closedCases", "outstandingCases", "outstandingAmount", "externalReference", "createdAt",
+  "ageSubmit", "ageApproved", "ageFindingDate",
 ] as const;
 export type FindingSortKey = (typeof FINDING_SORT_KEYS)[number];
 
@@ -156,6 +160,13 @@ export function sortFindings<T extends { finding: Finding; amount?: number }>(
         return f.externalReference ?? "";
       case "createdAt":
         return f.createdAt;
+      // Case ages; no age yet (a draft, not approved) sorts as -1.
+      case "ageSubmit":
+        return names.caseAge?.(f).submit ?? -1;
+      case "ageApproved":
+        return names.caseAge?.(f).approved ?? -1;
+      case "ageFindingDate":
+        return names.caseAge?.(f).findingDate ?? -1;
       case "status":
         return statusInPeriod({ finding: f, slice });
       case "updatedAt":

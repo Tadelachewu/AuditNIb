@@ -1,3 +1,4 @@
+import { caseAgeIndex } from "@/lib/caseAge";
 import { findingsInScope } from "@/lib/findings-scope";
 import { computePerformance, computeEligibleCaseCounts, findingsResidentInPeriod, type FindingPeriodSlice, registeredCasesOf } from "@/lib/findings";
 import { paginate, parsePage } from "@/lib/pagination";
@@ -135,8 +136,11 @@ export function buildReportsData(db: Database, user: SessionData, get: (key: str
     .filter((t) => findingIdsInScope.has(t.findingId))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
+  const ages = caseAgeIndex(db);
   const transferRows: TransferRow[] = transfers.map((t) => {
     const finding = db.findings.find((f) => f.id === t.findingId);
+    // Case ages at the transfer (src/lib/caseAge.ts); the stored value for a finding that's gone.
+    const at = finding ? ages(finding, new Date(t.createdAt).getTime()) : null;
     return {
       id: t.id,
       findingId: t.findingId,
@@ -148,7 +152,9 @@ export function buildReportsData(db: Database, user: SessionData, get: (key: str
       outstandingAmount: t.amountTransferred,
       originalCases: t.originalCaseCount,
       outstandingCases: t.casesTransferred,
-      caseAgeDays: t.caseAgeAtTransferDays,
+      caseAgeDays: at ? at.approved : t.caseAgeAtTransferDays,
+      caseAgeSubmitDays: at ? at.submit : null,
+      caseAgeFindingDateDays: at ? at.findingDate : null,
       method: t.method,
       createdByName: t.createdByName,
       createdAt: t.createdAt,
