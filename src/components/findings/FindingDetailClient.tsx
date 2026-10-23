@@ -1174,7 +1174,7 @@ export function FindingDetailClient({
             ) : (
               <div className="flex flex-col gap-3 p-4">
                 <div>
-                  <Label htmlFor="t-period">Destination period</Label>
+                  <label htmlFor="t-period" className="mb-1 block text-xs font-semibold text-slate-600">Destination period</label>
                   <select
                     id="t-period"
                     className={`w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 ${FIELD_FOCUS}`}
@@ -1198,67 +1198,61 @@ export function FindingDetailClient({
                   <div className="border-b border-slate-200 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
                     15. Transfer Data — Preview
                   </div>
-                  <dl className="grid grid-cols-1 gap-x-4 gap-y-2 p-3 text-sm sm:grid-cols-2">
-                    <div className="flex justify-between gap-2">
-                      <dt className="text-slate-500">Original Finding ID</dt>
-                      <dd className="font-mono text-xs text-slate-900">{finding.id}</dd>
+                  {/* Always two columns, never merged: matching pairs side by side
+                      (before / after the transfer), each label above its value. */}
+                  <dl className="grid grid-cols-2 gap-x-6 gap-y-3 p-3 text-sm">
+                    <div className="flex min-w-0 flex-col gap-0.5">
+                      <dt className="font-semibold text-slate-600">Previous Reporting Month</dt>
+                      <dd className="break-words text-slate-900">{lookups.periodCode}</dd>
                     </div>
-                    <div className="flex justify-between gap-2">
-                      <dt className="text-slate-500">Previous Reporting Month</dt>
-                      <dd className="font-medium text-slate-900">{lookups.periodCode}</dd>
+                    <div className="flex min-w-0 flex-col gap-0.5">
+                      <dt className="font-semibold text-slate-600">New Reporting Month</dt>
+                      <dd className="break-words text-slate-900">{otherOpenPeriods.find((p) => p.id === transferPeriodId)?.code ?? "--"}</dd>
                     </div>
-                    <div className="flex justify-between gap-2">
-                      <dt className="text-slate-500">New Reporting Month</dt>
-                      <dd className="font-medium text-slate-900">
-                        {otherOpenPeriods.find((p) => p.id === transferPeriodId)?.code ?? "--"}
-                      </dd>
+                    <div className="flex min-w-0 flex-col gap-0.5">
+                      <dt className="font-semibold text-slate-600">Original Amount</dt>
+                      <dd className="break-words text-slate-900">{finding.currency} {formatCurrency(finding.amount)}</dd>
                     </div>
-                    <div className="flex justify-between gap-2">
-                      <dt className="text-slate-500">Original Amount</dt>
-                      <dd className="font-medium text-slate-900">
-                        {finding.currency} {formatCurrency(finding.amount)}
-                      </dd>
+                    <div className="flex min-w-0 flex-col gap-0.5">
+                      <dt className="font-semibold text-slate-600">Outstanding Amount</dt>
+                      <dd className="break-words text-amber-700">{finding.currency} {formatCurrency(transferOutstandingAmount)}</dd>
                     </div>
-                    <div className="flex justify-between gap-2">
-                      <dt className="text-slate-500">Outstanding Amount</dt>
-                      <dd className="font-medium text-amber-700">
-                        {finding.currency} {formatCurrency(transferOutstandingAmount)}
-                      </dd>
+                    <div className="flex min-w-0 flex-col gap-0.5">
+                      <dt className="font-semibold text-slate-600">Original Case Count</dt>
+                      <dd className="break-words text-slate-900">{formatNumber(finding.caseCount)}</dd>
                     </div>
-                    <div className="flex justify-between gap-2">
-                      <dt className="text-slate-500">Original Case Count</dt>
-                      <dd className="font-medium text-slate-900">{formatNumber(finding.caseCount)}</dd>
+                    <div className="flex min-w-0 flex-col gap-0.5">
+                      <dt className="font-semibold text-slate-600">Outstanding Case Count</dt>
+                      <dd className="break-words text-amber-700">{formatNumber(transferOutstandingCases)}</dd>
                     </div>
-                    <div className="flex justify-between gap-2">
-                      <dt className="text-slate-500">Outstanding Case Count</dt>
-                      <dd className="font-medium text-amber-700">{formatNumber(transferOutstandingCases)}</dd>
+                    <div className="flex min-w-0 flex-col gap-0.5">
+                      <dt className="font-semibold text-slate-600">Transfer Date</dt>
+                      <dd className="break-words text-slate-900">{appDate().toISOString().slice(0, 10)}</dd>
                     </div>
-                    <div className="flex justify-between gap-2">
-                      <dt className="text-slate-500">Transfer Date</dt>
-                      <dd className="font-medium text-slate-900">{appDate().toISOString().slice(0, 10)}</dd>
+                    <div className="flex min-w-0 flex-col gap-0.5">
+                      <dt className="font-semibold text-slate-600">Transferred By</dt>
+                      <dd className="break-words text-slate-900">You (current user)</dd>
                     </div>
-                    <div className="flex justify-between gap-2">
-                      <dt className="text-slate-500">Transferred By</dt>
-                      <dd className="font-medium text-slate-900">You (current user)</dd>
+                    <div className="flex min-w-0 flex-col gap-0.5">
+                      <dt className="font-semibold text-slate-600">Original Finding ID</dt>
+                      <dd className="break-words font-mono text-xs break-all text-slate-900">{finding.id}</dd>
                     </div>
-                    <div className="flex justify-between gap-2">
-                      <dt className="text-slate-500">Case Age</dt>
-                      <dd className="text-right font-medium text-slate-900">{ageSummary(caseAges)}</dd>
+                    <div className="flex min-w-0 flex-col gap-0.5">
+                      <dt className="font-semibold text-slate-600">Case Age</dt>
+                      <dd className="break-words text-slate-900">{ageSummary(caseAges)}</dd>
                     </div>
-                    <div className="flex justify-between gap-2 sm:col-span-2">
-                      <dt className="text-slate-500">Transfer History (prior hops)</dt>
-                      <dd className="font-medium text-slate-900">
-                        {transfers.length === 0 ? "None — first transfer." : `${transfers.length} prior transfer(s).`}
-                      </dd>
+                    <div className="flex min-w-0 flex-col gap-0.5">
+                      <dt className="font-semibold text-slate-600">Transfer History (prior hops)</dt>
+                      <dd className="break-words text-slate-900">{transfers.length === 0 ? "None - first transfer." : `${transfers.length} prior transfer(s).`}</dd>
                     </div>
-                    <div className="flex justify-between gap-2 sm:col-span-2">
-                      <dt className="text-slate-500">Transfer Reason</dt>
-                      <dd className="text-slate-700">Entered at confirmation step (required).</dd>
+                    <div className="flex min-w-0 flex-col gap-0.5">
+                      <dt className="font-semibold text-slate-600">Transfer Reason</dt>
+                      <dd className="break-words text-slate-700">Entered at confirmation step (required).</dd>
                     </div>
                   </dl>
                 </div>
 
-                <div className="flex gap-2">
+                <div className="flex justify-end gap-2">
                   <Button variant="cancel" onClick={() => setTransferring(false)} disabled={busy}>
                     Cancel
                   </Button>

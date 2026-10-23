@@ -1,9 +1,18 @@
 "use client";
 
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import { Select, Label } from "@/components/ui/Field";
+import { Select } from "@/components/ui/Field";
 import { findingStatusLabel, type ReportingPeriod, type District, type Branch, type Source, type ClassifiedCategory, type FindingStatus } from "@/types";
 import { ALL_PERIODS_VALUE, type DashboardFilters } from "@/lib/dashboardFilters";
+
+/** The filter labels: semi-bold, like the dashboard cards' labels (the chosen values stay normal). */
+function Label({ children, htmlFor }: { children: React.ReactNode; htmlFor?: string }) {
+  return (
+    <label htmlFor={htmlFor} className="mb-1 block text-xs font-semibold text-slate-600">
+      {children}
+    </label>
+  );
+}
 
 export interface FilterBarProps {
   periods: ReportingPeriod[];
