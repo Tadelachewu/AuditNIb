@@ -68,6 +68,8 @@ Opening a message shows the whole **conversation**: every message in it that you
 | **Reply all** | The sender and everyone else on the message. Not offered for an **All users** message (it would message everyone again) |
 | **Follow up to the recipients** | On your own message: its recipients. For an All users message, send a new message instead |
 
+**Reply / Reply all on every message.** Each message you **received** in the conversation (not withdrawn) has its own **Reply** and **Reply all** buttons, like Outlook - not only the last one. Clicking one points the reply box at the bottom to that message (*"Reply to <name>'s message of <date>"*) and scrolls to it; **Reply to the latest message instead** switches back. The box keeps both choices, so pick **Reply** or **Reply all** there to send. Your own messages don't have these buttons (the box's **Follow up to the recipients** covers them).
+
 A reply's subject is **Re: …** automatically. Replies can have attachments too.
 
 ### Forward

@@ -27,6 +27,8 @@ export function ThreadClient({ id, canSend }: { id: string; canSend: boolean }) 
   const router = useRouter();
   const [thread, setThread] = useState<ThreadView | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /** The message Reply / Reply all was clicked on (null: the last one). */
+  const [replyToId, setReplyToId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -52,16 +54,37 @@ export function ThreadClient({ id, canSend }: { id: string; canSend: boolean }) 
   if (!thread) return <p className="text-sm text-slate-500">Loading…</p>;
 
   const last = thread.messages[thread.messages.length - 1];
+  // The reply box answers the last message, or the one whose Reply / Reply all was clicked.
+  const target = thread.messages.find((m) => m.id === replyToId && !m.withdrawnAt) ?? last;
+  function replyTo(id: string) {
+    setReplyToId(id);
+    requestAnimationFrame(() => document.getElementById("comm-reply-box")?.scrollIntoView({ behavior: "smooth", block: "center" }));
+  }
   return (
     <div className="flex flex-col gap-4">
       <BackLink />
       <h1 className="text-lg font-semibold text-slate-900">{thread.subject}</h1>
       {thread.messages.map((m) => (
-        <MessageCard key={m.id} m={m} canForward={canSend} highlighted={m.id === thread.openedId} onChanged={() => void load()} onRemoved={() => router.push("/communications")} />
+        <MessageCard
+          key={m.id}
+          m={m}
+          canSend={canSend}
+          highlighted={m.id === thread.openedId}
+          onReply={() => replyTo(m.id)}
+          onChanged={() => void load()}
+          onRemoved={() => router.push("/communications")}
+        />
       ))}
-      {canSend && !last.withdrawnAt && <ReplyBox message={last} onSent={(newId) => router.push(`/communications/${newId}`)} />}
+      {canSend && !target.withdrawnAt && (
+        <ReplyBox message={target} isLast={target.id === last.id} onBackToLast={() => setReplyToId(null)} onSent={(newId) => router.push(`/communications/${newId}`)} />
+      )}
     </div>
   );
+}
+
+/** Reply all = the sender and everyone else on a message you received. Not for an "All users" message (it would message everyone again), nor your own message (Reply already goes to all its recipients). */
+function canReplyAll(m: MessageView): boolean {
+  return !m.mine && !m.toAll && m.recipientCount > 1;
 }
 
 function BackLink() {
@@ -77,7 +100,25 @@ function BackLink() {
   );
 }
 
-function MessageCard({ m, canForward, highlighted, onChanged, onRemoved }: { m: MessageView; canForward: boolean; highlighted: boolean; onChanged: () => void; onRemoved: () => void }) {
+function MessageCard({
+  m,
+  canSend,
+  highlighted,
+  onReply,
+  onChanged,
+  onRemoved,
+}: {
+  m: MessageView;
+  canSend: boolean;
+  highlighted: boolean;
+  /** Points the reply box at this message. */
+  onReply: () => void;
+  onChanged: () => void;
+  onRemoved: () => void;
+}) {
+  const canForward = canSend;
+  // Reply / Reply all on every message you received (not withdrawn), like Outlook.
+  const canReply = canSend && !m.mine && !m.withdrawnAt;
   const [busy, setBusy] = useState(false);
   const toCount = m.recipientCount - m.ccCount;
   const list = (names: string[], count: number) => (count > names.length ? `${names.join(", ")} and ${count - names.length} more` : names.join(", "));
@@ -141,6 +182,18 @@ function MessageCard({ m, canForward, highlighted, onChanged, onRemoved }: { m: 
       </div>
       {(m.canWithdraw || !m.mine || (canForward && !m.withdrawnAt)) && (
         <div className="flex flex-wrap justify-end gap-2 border-t border-slate-100 px-4 py-2">
+          {canReply && (
+            <Button variant="secondary" className="px-2 py-1 text-xs" onClick={onReply} title={`Reply to ${m.senderName}`}>
+              <Reply className="h-3.5 w-3.5" />
+              Reply
+            </Button>
+          )}
+          {canReply && canReplyAll(m) && (
+            <Button variant="secondary" className="px-2 py-1 text-xs" onClick={onReply} title="Reply to the sender and everyone on this message">
+              <ReplyAll className="h-3.5 w-3.5" />
+              Reply all
+            </Button>
+          )}
           {canForward && !m.withdrawnAt && (
             // A new message, pre-filled: the same subject, this message as the body, its files attached; sent labelled "Forwarded".
             <Link
@@ -208,7 +261,7 @@ function Attachments({ items }: { items: AttachmentInfo[] }) {
   );
 }
 
-function ReplyBox({ message, onSent }: { message: MessageView; onSent: (id: string) => void }) {
+function ReplyBox({ message, isLast, onBackToLast, onSent }: { message: MessageView; isLast: boolean; onBackToLast: () => void; onSent: (id: string) => void }) {
   const [reply, setReply] = useState<RichMessageValue>({ html: "", text: "" });
   // Changing it remounts (clears) the editor after a reply is sent.
   const [editorKey, setEditorKey] = useState(0);
@@ -217,10 +270,7 @@ function ReplyBox({ message, onSent }: { message: MessageView; onSent: (id: stri
   const [sending, setSending] = useState<"reply" | "all" | null>(null);
   const empty = countedChars(reply.html ? htmlToText(reply.html) : reply.text) < LIMITS.minText || messageWords(reply) > LIMITS.body;
   const [error, setError] = useState<string | null>(null);
-  // Reply all = the sender and everyone else on a message you received. Not
-  // offered for an "All users" message (it would message everyone again), nor
-  // on your own message (Reply already goes to all its recipients).
-  const canReplyAll = !message.mine && !message.toAll && message.recipientCount > 1;
+  const replyAll = canReplyAll(message);
 
   async function send(all: boolean) {
     if (empty || uploading) return;
@@ -246,12 +296,19 @@ function ReplyBox({ message, onSent }: { message: MessageView; onSent: (id: stri
     }
   }
 
-  const label = message.mine ? "Follow up to the recipients" : `Reply to ${message.senderName}`;
+  const label = message.mine ? "Follow up to the recipients" : isLast ? `Reply to ${message.senderName}` : `Reply to ${message.senderName}'s message of ${formatDateTime(message.createdAt)}`;
   return (
     <Card className="p-4">
-      <div className="flex flex-col gap-3">
+      <div id="comm-reply-box" className="flex scroll-mt-20 flex-col gap-3">
         <div>
-          <FieldLabel htmlFor="comm-reply">{label}</FieldLabel>
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <FieldLabel htmlFor="comm-reply">{label}</FieldLabel>
+            {!isLast && (
+              <button type="button" onClick={onBackToLast} className="text-xs text-sky-700 hover:underline">
+                Reply to the latest message instead
+              </button>
+            )}
+          </div>
           <RichMessageEditor key={editorKey} id="comm-reply" placeholder="Write your reply" minHeight={120} disabled={sending !== null} onChange={setReply} />
           <TextCounter value={reply} />
         </div>
@@ -262,7 +319,7 @@ function ReplyBox({ message, onSent }: { message: MessageView; onSent: (id: stri
             <span className="mr-auto text-xs text-slate-500">To follow up a message sent to all users, send a new message.</span>
           ) : (
             <>
-              {canReplyAll && (
+              {replyAll && (
                 <Button variant="secondary" onClick={() => void send(true)} disabled={empty || uploading || sending !== null}>
                   <ReplyAll className="h-4 w-4" />
                   {sending === "all" ? "Sending…" : "Reply all"}
