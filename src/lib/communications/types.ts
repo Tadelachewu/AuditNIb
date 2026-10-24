@@ -127,6 +127,15 @@ export interface SentItem {
   forwarded: boolean;
 }
 
+/** The original of a forwarded message: who wrote it, when, to whom (first 20 names), and its subject. */
+export interface ForwardOrigin {
+  senderName: string;
+  createdAt: string;
+  subject: string;
+  to: string;
+  cc: string | null;
+}
+
 /** A message as shown in a conversation. */
 export interface MessageView {
   id: string;
@@ -142,8 +151,8 @@ export interface MessageView {
   toAll: boolean;
   /** A forwarded message (labelled "Forwarded"). */
   forwarded: boolean;
-  /** The forwarded message's author and when they sent it (null when not a forward, or it's gone). */
-  forwardedFrom: { senderName: string; createdAt: string } | null;
+  /** Where a forward came from, read from the stored original (null when not a forward, or it's gone). */
+  forwardedFrom: ForwardOrigin | null;
   createdAt: string;
   withdrawnAt: string | null;
   recipientCount: number;

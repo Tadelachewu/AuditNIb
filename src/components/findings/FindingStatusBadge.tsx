@@ -39,6 +39,20 @@ export const PENDING_STATUS_LABELS: Partial<Record<FindingStatus, string>> = {
   PARTIALLY_RECTIFIED: "Partially Rectified (pending)",
 };
 
+/**
+ * The status wording for one finding: "(pending)" only while some of what the
+ * branch rectified is still waiting for HO to close it. Partially rectified
+ * with everything rectified so far already closed is plain "Partially Rectified".
+ */
+export function pendingStatusLabel(status: FindingStatus, awaitingClose: boolean): string | undefined {
+  return awaitingClose ? PENDING_STATUS_LABELS[status] : undefined;
+}
+
+/** Rectified (by the branch) beyond what HO has closed - cases or amount. */
+export function isAwaitingClose(f: { rectifiedCases: number; rectifiedAmount: number; closedCases: number; closedAmount: number }): boolean {
+  return f.rectifiedCases > f.closedCases || f.rectifiedAmount > f.closedAmount;
+}
+
 /** `label` (optional) replaces the status's usual text - same colour. */
 export function FindingStatusBadge({ status, label }: { status: FindingStatus; label?: string }) {
   return <Badge tone={TONES[status]}>{label ?? findingStatusLabel(status)}</Badge>;

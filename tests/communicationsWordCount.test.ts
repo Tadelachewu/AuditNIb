@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { countWords, countedChars, messageWords } from "@/lib/communications/plainText";
 import { messageProblem } from "@/lib/communications/rules";
-import { forwardHeaderHtml } from "@/lib/communications/richText";
 
 // Communications: the message is counted in words, like Microsoft Word, and
 // the editor's counter uses the server's own rule (same number both sides).
@@ -35,15 +34,3 @@ describe("word counting", () => {
   });
 });
 
-describe("forward header", () => {
-  it("shows where the forwarded message came from", () => {
-    const html = forwardHeaderHtml({ senderName: "Abebe <K>", sentAt: "10/21/2026, 10:15:00 AM", to: "Sara", cc: "Dawit", subject: "Cash count" });
-    expect(html).toContain("Forwarded message");
-    expect(html).toContain("<strong>From:</strong> Abebe &lt;K&gt;");
-    expect(html).toContain("<strong>Sent:</strong> 10/21/2026, 10:15:00 AM");
-    expect(html).toContain("<strong>To:</strong> Sara");
-    expect(html).toContain("<strong>Cc:</strong> Dawit");
-    expect(html).toContain("<strong>Subject:</strong> Cash count");
-    expect(forwardHeaderHtml({ senderName: "A", sentAt: "now", to: "B", cc: null, subject: "S" })).not.toContain("Cc:");
-  });
-});

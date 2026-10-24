@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/Button";
 import { TimeRangeFilter } from "@/components/reports/TimeRangeFilter";
 import { FilterBar } from "@/components/dashboard/FilterBar";
 import { FindingsTable, type FindingRow } from "@/components/findings/FindingsTable";
+import { isAwaitingClose } from "@/components/findings/FindingStatusBadge";
 import { getPreference } from "@/lib/userPreferences";
 import { isAwaitingDistrict } from "@/lib/rectificationResubmit";
 import { FILTERABLE_FINDING_STATUSES, type Finding } from "@/types";
@@ -183,6 +184,8 @@ export default async function FindingsPage({
     districtVerifiedAmount: slice ? slice.verifiedAmount : f.districtVerifiedAmount,
     closedCases: slice ? slice.closedCases : f.closedCases,
     closedAmount: slice ? slice.closedAmount : f.closedAmount,
+    // The status is the live one, so its "(pending)" follows the live totals.
+    awaitingClose: isAwaitingClose(f),
     createdBy: f.createdBy,
     // A period filter can surface a finding that has since transferred
     // away from it (see findingsResidentInPeriod()) - that entry is this

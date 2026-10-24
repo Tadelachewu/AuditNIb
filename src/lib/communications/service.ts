@@ -19,10 +19,9 @@ import {
   replySubject,
   resolveToAndCc,
 } from "./rules";
-import { emailHtml, forwardHeaderHtml, htmlToText, originalBodyHtml, sanitizeMessageHtml } from "./richText";
+import { emailHtml, htmlToText, originalBodyHtml, sanitizeMessageHtml } from "./richText";
 import { messageWords } from "./plainText";
-import { formatDateTime } from "@/lib/format";
-import { ATTACHMENT_TYPES, LIMITS, type AttachmentInfo, type Directory, type InboxItem, type MessageView, type RecipientSelection, type SentItem, type ThreadView } from "./types";
+import { ATTACHMENT_TYPES, LIMITS, type AttachmentInfo, type Directory, type ForwardOrigin, type InboxItem, type MessageView, type RecipientSelection, type SentItem, type ThreadView } from "./types";
 
 /**
  * Communications workflow (docs/communications.md). Messages live in their
@@ -94,13 +93,57 @@ const ccInstalled = columnCheck("communication_recipients", "is_cc");
 /** The Forward link (migration 20261025120000_communication_forwarded). */
 const forwardInstalled = columnCheck("communications", "forwarded_from_id");
 
-/** Of these messages, the forwards ("Forwarded" label) and where each came from (null: the original is gone). */
-async function forwardedIds(ids: string[]): Promise<Map<string, { senderName: string; createdAt: string } | null>> {
+/** Of these messages, the ones that are forwards ("Forwarded" label). */
+async function forwardedIds(ids: string[]): Promise<Set<string>> {
+  if (ids.length === 0 || !(await forwardInstalled())) return new Set();
+  const rows = await (prisma as unknown as RawClient).$queryRaw<{ id: string }[]>`
+    SELECT id FROM communications WHERE id = ANY(${ids}::text[]) AND forwarded_from_id IS NOT NULL`;
+  return new Set(rows.map((r) => r.id));
+}
+
+/** Names for a forward's origin: the first 20, then "and N more". */
+function names(list: string[]): string {
+  const shown = list.slice(0, 20).join(", ");
+  return list.length > 20 ? `${shown} and ${list.length - 20} more` : shown;
+}
+
+/**
+ * Where each of these forwards came from, read from the stored original (not
+ * from the forward's text, which the forwarder could edit): its author, when
+ * it was sent, its To / Cc and subject. null: the original is gone.
+ */
+async function forwardOrigins(ids: string[]): Promise<Map<string, ForwardOrigin | null>> {
   if (ids.length === 0 || !(await forwardInstalled())) return new Map();
-  const rows = await (prisma as unknown as RawClient).$queryRaw<{ id: string; sender_name: string | null; created_at: Date | null }[]>`
-    SELECT c.id, o.sender_name, o.created_at FROM communications c LEFT JOIN communications o ON o.id = c.forwarded_from_id
+  const raw = prisma as unknown as RawClient;
+  const rows = await raw.$queryRaw<{ id: string; original_id: string; sender_name: string | null; created_at: Date | null; subject: string | null; to_all: boolean | null }[]>`
+    SELECT c.id, c.forwarded_from_id AS original_id, o.sender_name, o.created_at, o.subject, o.to_all
+    FROM communications c LEFT JOIN communications o ON o.id = c.forwarded_from_id
     WHERE c.id = ANY(${ids}::text[]) AND c.forwarded_from_id IS NOT NULL`;
-  return new Map(rows.map((r) => [r.id, r.sender_name && r.created_at ? { senderName: r.sender_name, createdAt: r.created_at.toISOString() } : null]));
+  const originalIds = rows.filter((r) => r.sender_name !== null).map((r) => r.original_id);
+  const withCc = await ccInstalled();
+  const people = originalIds.length === 0
+    ? []
+    : withCc
+      ? await raw.$queryRaw<{ communication_id: string; user_name: string; cc: boolean }[]>`
+          SELECT communication_id, user_name, is_cc AS cc FROM communication_recipients WHERE communication_id = ANY(${originalIds}::text[]) ORDER BY user_name`
+      : (await prisma.communicationRecipient.findMany({ where: { communicationId: { in: originalIds } }, select: { communicationId: true, userName: true }, orderBy: { userName: "asc" } })).map((r) => ({ communication_id: r.communicationId, user_name: r.userName, cc: false }));
+  return new Map(
+    rows.map((r) => {
+      if (r.sender_name === null || r.created_at === null) return [r.id, null];
+      const own = people.filter((p) => p.communication_id === r.original_id);
+      const cc = own.filter((p) => p.cc).map((p) => p.user_name);
+      return [
+        r.id,
+        {
+          senderName: r.sender_name,
+          createdAt: r.created_at.toISOString(),
+          subject: r.subject ?? "",
+          to: r.to_all ? "All users" : names(own.filter((p) => !p.cc).map((p) => p.user_name)),
+          cc: cc.length > 0 ? names(cc) : null,
+        },
+      ];
+    })
+  );
 }
 
 export async function sendMessage(session: Session, input: SendInput): Promise<Result<{ id: string; recipients: number }>> {
@@ -357,7 +400,7 @@ export async function openThread(session: Session, messageId: string): Promise<R
   const reads = await readCounts(visible.filter((m) => m.senderId === viewerId).map((m) => m.id));
   const names = new Map<string, { to: string[]; cc: string[]; ccCount: number }>();
   const withCc = await ccInstalled();
-  const forwards = await forwardedIds(visible.map((m) => m.id));
+  const forwards = await forwardOrigins(visible.map((m) => m.id));
   for (const m of visible) {
     if (withCc) {
       const rows = await (prisma as unknown as RawClient).$queryRaw<{ name: string; cc: boolean }[]>`
@@ -594,12 +637,6 @@ export interface ForwardDraft {
  * recipients, limits and checks) does the rest. Files that can't be read or
  * wouldn't fit the limits are left out.
  */
-/** Names for a forward's header: the first 20, then "and N more". */
-function names(rows: { userName: string }[]): string {
-  const shown = rows.slice(0, 20).map((r) => r.userName).join(", ");
-  return rows.length > 20 ? `${shown} and ${rows.length - 20} more` : shown;
-}
-
 export async function forwardDraft(session: Session, messageId: string): Promise<Result<ForwardDraft>> {
   if (!canSendCommunications(session)) return fail(403, NOT_ALLOWED);
   const viewerId = session.userId!;
@@ -632,27 +669,15 @@ export async function forwardDraft(session: Session, messageId: string): Promise
     }
   }
 
-  // Its To / Cc for the header (Cc: column is_cc, once installed).
-  const people = (await ccInstalled())
-    ? await (prisma as unknown as RawClient).$queryRaw<{ userName: string; cc: boolean }[]>`
-        SELECT user_name AS "userName", is_cc AS cc FROM communication_recipients WHERE communication_id = ${m.id} ORDER BY user_name`
-    : (await prisma.communicationRecipient.findMany({ where: { communicationId: m.id }, select: { userName: true }, orderBy: { userName: "asc" } })).map((r) => ({ userName: r.userName, cc: false }));
-
   return {
     ok: true,
     value: {
       // The same subject, and the original message itself as the body
       // (formatting kept; a plain-text message as paragraphs).
       subject: m.subject.slice(0, LIMITS.subject),
-      // Where it came from (From / Sent / To / Cc / Subject), then the original.
-      bodyHtml:
-        forwardHeaderHtml({
-          senderName: m.senderName,
-          sentAt: formatDateTime(m.createdAt.toISOString()),
-          to: m.toAll ? "All users" : names(people.filter((r) => !r.cc)),
-          cc: people.some((r) => r.cc) ? names(people.filter((r) => r.cc)) : null,
-          subject: m.subject,
-        }) + originalBodyHtml({ bodyHtml: m.bodyHtml ? sanitizeMessageHtml(m.bodyHtml) : null, body: m.body }),
+      // Where it came from isn't written into the text: the recipient sees it
+      // read from the stored original (forwardOrigins()).
+      bodyHtml: originalBodyHtml({ bodyHtml: m.bodyHtml ? sanitizeMessageHtml(m.bodyHtml) : null, body: m.body }),
       attachments,
     },
   };

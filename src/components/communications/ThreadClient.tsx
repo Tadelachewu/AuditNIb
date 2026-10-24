@@ -12,7 +12,7 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { notify, notifications, presentError } from "@/lib/notify";
-import { LIMITS, type AttachmentInfo, type MessageView, type ThreadView } from "@/lib/communications/types";
+import { LIMITS, type AttachmentInfo, type ForwardOrigin, type MessageView, type ThreadView } from "@/lib/communications/types";
 import { AttachmentPicker, formatBytes } from "./AttachmentPicker";
 import { ForwardedLabel } from "./ForwardedLabel";
 import { RichMessageEditor, TextCounter, type RichMessageValue } from "./RichMessageEditor";
@@ -119,11 +119,6 @@ function MessageCard({ m, canForward, highlighted, onChanged, onRemoved }: { m: 
           </p>
           <p className="text-xs text-slate-500"><span className="font-semibold text-slate-600">To:</span> {to}</p>
           {cc && <p className="text-xs text-slate-500"><span className="font-semibold text-slate-600">Cc:</span> {cc}</p>}
-          {m.forwardedFrom && (
-            <p className="text-xs text-slate-500">
-              <span className="font-semibold text-slate-600">Originally from:</span> {m.forwardedFrom.senderName}, {formatDateTime(m.forwardedFrom.createdAt)}
-            </p>
-          )}
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1">
           <span className="text-xs text-slate-500">{formatDateTime(m.createdAt)}</span>
@@ -135,6 +130,7 @@ function MessageCard({ m, canForward, highlighted, onChanged, onRemoved }: { m: 
         </div>
       </div>
       <div className="px-4 py-3">
+        {m.forwardedFrom && <ForwardOriginBox origin={m.forwardedFrom} />}
         {m.bodyHtml ? (
           // Sanitised on the server when saved and again when sent here (src/lib/communications/richText.ts).
           <div className="comm-rich break-words text-sm text-slate-900" dangerouslySetInnerHTML={{ __html: m.bodyHtml }} />
@@ -170,6 +166,28 @@ function MessageCard({ m, canForward, highlighted, onChanged, onRemoved }: { m: 
         </div>
       )}
     </Card>
+  );
+}
+
+/** Where a forward came from - from the stored original, not the forward's text (the forwarder can't change it). */
+function ForwardOriginBox({ origin }: { origin: ForwardOrigin }) {
+  const row = (label: string, value: string) => (
+    <div className="flex gap-2">
+      <dt className="w-16 shrink-0 font-semibold text-slate-600">{label}:</dt>
+      <dd className="min-w-0 break-words text-slate-800">{value}</dd>
+    </div>
+  );
+  return (
+    <div className="mb-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs">
+      <p className="mb-1 font-semibold text-slate-700">Forwarded message</p>
+      <dl className="flex flex-col gap-0.5">
+        {row("From", origin.senderName)}
+        {row("Sent", formatDateTime(origin.createdAt))}
+        {row("To", origin.to)}
+        {origin.cc && row("Cc", origin.cc)}
+        {row("Subject", origin.subject)}
+      </dl>
+    </div>
   );
 }
 

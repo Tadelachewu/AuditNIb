@@ -10,7 +10,7 @@ import { pagedList } from "@/lib/gridPage";
 import { rememberFindingsListUrl } from "@/lib/findingsListReturn";
 import { Button } from "@/components/ui/Button";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
-import { FindingStatusBadge, PENDING_STATUS_LABELS } from "@/components/findings/FindingStatusBadge";
+import { FindingStatusBadge, pendingStatusLabel } from "@/components/findings/FindingStatusBadge";
 import { apiSend } from "@/lib/api-client";
 import { notify, notifications, presentError } from "@/lib/notify";
 import { formatDateTime, formatCurrency, formatNumber } from "@/lib/format";
@@ -43,6 +43,8 @@ export interface FindingRow {
   districtVerifiedAmount: number;
   closedCases: number;
   closedAmount: number;
+  /** Something the branch rectified still waits for HO to close (the live finding, whatever the period) - "(pending)". */
+  awaitingClose: boolean;
   // Who registered it - submit/route.ts requires the caller to be the
   // finding's own creator, not just org-scope/permission, so bulk Submit
   // has to know this per row too (see isSubmittable() below).
@@ -90,9 +92,6 @@ const OPTIONAL_COLUMNS = [
   "ageSubmit", "ageApproved", "ageFindingDate",
 ] as const;
 const HIDDEN_BY_DEFAULT = Object.fromEntries(OPTIONAL_COLUMNS.map((id) => [id, false]));
-
-/** This table's status wording: rectified but not yet accepted (closed) is "pending". */
-const TABLE_STATUS_LABELS = PENDING_STATUS_LABELS;
 
 const num = (n: number) => <span className="tabular-nums">{formatNumber(n)}</span>;
 const money = (currency: string, n: number) => (
@@ -437,7 +436,7 @@ export function FindingsTable({
               Transferred → {row.original.transferredOutToCode ?? "—"}
             </span>
           ) : (
-            <FindingStatusBadge status={row.original.status} label={TABLE_STATUS_LABELS[row.original.status]} />
+            <FindingStatusBadge status={row.original.status} label={pendingStatusLabel(row.original.status, row.original.awaitingClose)} />
           ),
       },
       {

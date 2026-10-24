@@ -14,7 +14,7 @@ import { Input, Label, FileInput, FIELD_FOCUS } from "@/components/ui/Field";
 import { Badge } from "@/components/ui/Badge";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { Trash2 } from "lucide-react";
-import { FindingStatusBadge, PENDING_STATUS_LABELS } from "@/components/findings/FindingStatusBadge";
+import { FindingStatusBadge, PENDING_STATUS_LABELS, isAwaitingClose, pendingStatusLabel } from "@/components/findings/FindingStatusBadge";
 
 /** A status as this page words it: rectified / partially rectified are "(pending)" until accepted. */
 const statusText = (s: string) => PENDING_STATUS_LABELS[s as FindingStatus] ?? findingStatusLabel(s as FindingStatus);
@@ -617,7 +617,7 @@ export function FindingDetailClient({
             {lookups.districtName} · {lookups.periodCode}
           </p>
         </div>
-        <FindingStatusBadge status={finding.status} label={PENDING_STATUS_LABELS[finding.status]} />
+        <FindingStatusBadge status={finding.status} label={pendingStatusLabel(finding.status, isAwaitingClose(finding))} />
       </div>
 
 
