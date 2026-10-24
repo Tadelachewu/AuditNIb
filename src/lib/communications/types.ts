@@ -9,9 +9,12 @@ export const COMMUNICATIONS_PAGE = "communications";
 
 export const LIMITS = {
   subject: 200,
+  /** Words in the message text (counted like Microsoft Word - countWords()). */
   body: 10_000,
-  /** At least this many characters in the subject and in the message text. */
+  /** At least this many characters in the subject and in the message text (spaces don't count). */
   minText: 3,
+  /** The message's plain text, in characters - only a safety cap for the 10,000 words. */
+  bodyChars: 200_000,
   /** Attachments per message. */
   attachments: 10,
   /** Bytes for ALL of a message's attachments together (each upload is one file, never more than this). */
@@ -20,8 +23,8 @@ export const LIMITS = {
   withdrawMinutes: 10,
   /** Bell notification preview of the body (the email carries the whole text). */
   preview: 300,
-  /** The formatted message's HTML (the 10,000-character limit applies to its text). */
-  html: 120_000,
+  /** The formatted message's HTML (the 10,000-word limit applies to its text). */
+  html: 500_000,
 } as const;
 
 /** Allowed attachment types: PDF, Word (.docx), Excel (.xlsx). */
@@ -139,6 +142,8 @@ export interface MessageView {
   toAll: boolean;
   /** A forwarded message (labelled "Forwarded"). */
   forwarded: boolean;
+  /** The forwarded message's author and when they sent it (null when not a forward, or it's gone). */
+  forwardedFrom: { senderName: string; createdAt: string } | null;
   createdAt: string;
   withdrawnAt: string | null;
   recipientCount: number;

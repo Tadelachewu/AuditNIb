@@ -129,7 +129,7 @@ describe("message and attachment checks", () => {
     expect(messageProblem("", "Hi")).toMatch(/Subject/);
     expect(messageProblem("Hello", "  ")).toMatch(/text/);
     expect(messageProblem("x".repeat(201), "Hello")).toMatch(/200/);
-    expect(messageProblem("Hello", "x".repeat(10001))).toMatch(/10000/);
+    expect(messageProblem("Hello", "x ".repeat(10001))).toMatch(/10,000 words/);
     expect(messageProblem("Hello", "Hello")).toBeNull();
     // At least 3 characters each.
     expect(messageProblem("Hi", "Hello")).toMatch(/Subject must be at least 3/);
@@ -223,11 +223,11 @@ describe("To + Cc", () => {
 });
 
 describe("limits", () => {
-  it("message text up to 10,000 characters; up to 10 files of 25 MB each", () => {
+  it("message text up to 10,000 words; up to 10 files, 25 MB in total", () => {
     expect(LIMITS.body).toBe(10_000);
     expect(LIMITS.attachments).toBe(10);
     expect(LIMITS.attachmentBytes).toBe(25 * 1024 * 1024);
-    expect(messageProblem("Subject", "x".repeat(10_000))).toBeNull();
-    expect(messageProblem("Subject", "x".repeat(10_001))).not.toBeNull();
+    expect(messageProblem("Subject", "x ".repeat(10_000))).toBeNull();
+    expect(messageProblem("Subject", "x ".repeat(10_001))).not.toBeNull();
   });
 });

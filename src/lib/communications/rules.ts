@@ -1,4 +1,4 @@
-import { countedChars } from "./plainText";
+import { countWords, countedChars } from "./plainText";
 import { evidenceContentMatchesType } from "@/lib/evidence";
 import { officeFileProblem, officeKind, uploadNameProblem } from "@/lib/uploadChecks";
 import { ADMIN_ROLE_CODE } from "@/lib/notifications";
@@ -98,15 +98,19 @@ export function replySubject(subject: string): string {
   return `Re: ${base}`.slice(0, LIMITS.subject);
 }
 
-/** Subject and text, trimmed and checked. Plain text only. */
-export function messageProblem(subject: string, body: string): string | null {
-  // Spaces and line breaks never count (countedChars()).
+/**
+ * Subject and text, trimmed and checked. `words`: the text's words when it's
+ * a formatted message (messageWords() - its visible words), else counted from
+ * the plain text.
+ */
+export function messageProblem(subject: string, body: string, words = countWords(body)): string | null {
+  // The minimum: spaces and line breaks never count (countedChars()).
   if (!subject.trim()) return "Subject is required";
   if (countedChars(subject) < LIMITS.minText) return `Subject must be at least ${LIMITS.minText} characters (spaces don't count)`;
   if (countedChars(subject) > LIMITS.subject) return `Subject must be at most ${LIMITS.subject} characters`;
   if (!body.trim()) return "Message text is required";
   if (countedChars(body) < LIMITS.minText) return `Message text must be at least ${LIMITS.minText} characters (spaces and line breaks don't count)`;
-  if (countedChars(body) > LIMITS.body) return `Message text must be at most ${LIMITS.body} characters (spaces and line breaks don't count)`;
+  if (words > LIMITS.body || body.length > LIMITS.bodyChars) return `Message text must be at most ${LIMITS.body.toLocaleString("en-US")} words`;
   return null;
 }
 

@@ -98,3 +98,13 @@ export function emailHtml(senderName: string, messageHtml: string, attachmentNam
 export function originalBodyHtml(original: { bodyHtml: string | null; body: string }): string {
   return sanitizeMessageHtml(original.bodyHtml ?? original.body.split(/\n/).map((line) => `<p>${escapeHtml(line)}</p>`).join(""));
 }
+
+/**
+ * Where a forwarded message came from, as Outlook shows it - above the
+ * original's text in the forward: who wrote it, when, to whom, its subject.
+ */
+export function forwardHeaderHtml(original: { senderName: string; sentAt: string; to: string; cc: string | null; subject: string }): string {
+  const line = (label: string, value: string) => `<strong>${label}:</strong> ${escapeHtml(value)}`;
+  const lines = [line("From", original.senderName), line("Sent", original.sentAt), line("To", original.to), ...(original.cc ? [line("Cc", original.cc)] : []), line("Subject", original.subject)];
+  return `<p>---------- Forwarded message ----------</p><p>${lines.join("<br>")}</p>`;
+}

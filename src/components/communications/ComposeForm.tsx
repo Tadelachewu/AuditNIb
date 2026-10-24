@@ -1,6 +1,6 @@
 "use client";
 
-import { countedChars, htmlToText, messageChars } from "@/lib/communications/plainText";
+import { countedChars, htmlToText, messageWords } from "@/lib/communications/plainText";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -129,10 +129,10 @@ export function ComposeForm({ forwardId }: { forwardId?: string } = {}) {
       ? "Choose who the message goes to"
       : countedChars(subject) < LIMITS.minText
         ? `Enter a subject (at least ${LIMITS.minText} characters, spaces don't count)`
-        : messageChars(message) < LIMITS.minText
+        : countedChars(message.html ? htmlToText(message.html) : message.text) < LIMITS.minText
           ? `Write the message (at least ${LIMITS.minText} characters, spaces and line breaks don't count)`
-          : messageChars(message) > LIMITS.body
-            ? `The message is longer than ${LIMITS.body} characters`
+          : messageWords(message) > LIMITS.body
+            ? `The message is longer than ${LIMITS.body.toLocaleString("en-US")} words`
             : uploading
               ? "Wait for the attachments to finish uploading"
               : null;

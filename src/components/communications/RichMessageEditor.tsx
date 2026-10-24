@@ -1,6 +1,6 @@
 "use client";
 
-import { messageChars } from "@/lib/communications/plainText";
+import { messageWords } from "@/lib/communications/plainText";
 import { useMemo } from "react";
 import MenuItem from "@mui/material/MenuItem";
 import StarterKit from "@tiptap/starter-kit";
@@ -232,14 +232,13 @@ export function RichMessageEditor({
   );
 }
 
-/** "123 / 5000", red when over the limit. */
-/** The message's counted characters (spaces and line breaks don't count) - the same number the server checks. */
+/** "123 / 10,000 words" (counted like Microsoft Word) - the same number the server checks; red when over. */
 export function TextCounter({ value }: { value: RichMessageValue }) {
-  const n = messageChars(value);
+  const n = messageWords(value);
   const over = n > LIMITS.body;
   return (
-    <p className={`mt-1 text-right text-xs ${over ? "text-red-600" : "text-slate-500"}`} title="Spaces and line breaks don't count">
-      {n} / {LIMITS.body}
+    <p className={`mt-1 text-right text-xs ${over ? "text-red-600" : "text-slate-500"}`}>
+      {n.toLocaleString("en-US")} / {LIMITS.body.toLocaleString("en-US")} words
     </p>
   );
 }

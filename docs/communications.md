@@ -28,7 +28,7 @@ Open **Communications** in the sidebar (under My Profile and Support). The numbe
 | **To** (top left) | **Everyone**, or **Choose**: four tabs - **Roles**, **Districts**, **Branches**, **People** - each a tick list with a count per item, a filter box and *Select all (shown)*. Ticks within a tab add up; **tabs narrow each other**: ticked roles *in* the ticked districts / branches (Branch Manager + Addis = Addis's branch managers, not every manager plus all of Addis). The Branches tab lists the ticked districts' branches; ticking a branch sends to that branch only, not its whole district. In **People**, ticked = receives it: untick someone to leave them out, tick anyone to add them. The selection shows under the tabs (× removes); **→ N people** opens the list of names by branch. The server applies the same rule (`selectionMatcher()` in `src/lib/communications/types.ts`), so the count is exactly who receives it |
 | **Cc** (top right, next to To) | Optional: people who get a **copy**, picked the same way (no *Everyone*). They receive the message, the notification and the email like To recipients, and the message shows a separate **Cc:** line. Someone in both To and Cc counts once, as To. Not offered when To is *Everyone*. **Reply all** includes them. Stored as `communication_recipients.is_cc` (migration `20261023120000_communication_cc`) |
 | **Subject** | Required, up to 200 characters |
-| **Message** | Required, up to 10,000 characters of text. A formatting toolbar offers headings 1-6, font family, size, weight and line height, text and highlight colour, alignment, bold, italic, underline, strikethrough, sub- / superscript, lists, quotes, a dividing line and links (see *Formatting* below) |
+| **Message** | Required, up to **10,000 words** (counted like Microsoft Word; the counter under the editor shows *n / 10,000 words*). A formatting toolbar offers headings 1-6, font family, size, weight and line height, text and highlight colour, alignment, bold, italic, underline, strikethrough, sub- / superscript, lists, quotes, a dividing line and links (see *Formatting* below) |
 | **Attach files** | Optional: **PDF, Word (.docx), Excel (.xlsx)**; up to **10 files, 25 MB in total** (all files together). The picker sits at the bottom right, under the message. Each file uploads as soon as you pick it; remove it with ✕ |
 
 **Send** is enabled once someone is chosen, the subject and text are filled in, and every attachment has finished uploading. If something is missing, the reason shows next to the button.
@@ -54,7 +54,7 @@ The message box is a rich text editor (Tiptap). Its toolbar offers exactly what 
 | Link | Select text, then the link button; web (`https://`) and email (`mailto:`) addresses only. Links always open in a new tab |
 | Remove formatting, undo, redo | |
 
-**Pasting** from Word or a web page keeps the same kinds of formatting (headings, fonts, sizes, colours, alignment ...) and drops the rest, such as tables, images, borders and spacing. Images and documents go in as **attachments**. The 10,000-character limit counts the text, not the formatting.
+**Pasting** from Word or a web page keeps the same kinds of formatting (headings, fonts, sizes, colours, alignment ...) and drops the rest, such as tables, images, borders and spacing. Images and documents go in as **attachments**. The 10,000-word limit counts the visible words, not the formatting.
 
 **Colours in dark mode:** a colour chosen for the text is kept as chosen, so very dark text can be hard to read for someone using dark mode (and very light text in light mode). Prefer mid-tone colours.
 
@@ -78,6 +78,8 @@ A reply's subject is **Re: …** automatically. Replies can have attachments too
 - **Attachments:** the original's files **copied** as your own attachments. Remove any with ✕; removing one never touches the original.
 
 Choose **To / Cc** and send. All the usual checks apply: recipients, 10 files, 25 MB in total, length rules. Server: `forwardDraft()` (`POST /api/communications/[id]/forward`).
+
+**Where it came from.** The forward's text starts with the original's details, as Outlook shows them: *---------- Forwarded message ----------* then **From**, **Sent**, **To**, **Cc** (when it had any) and **Subject** of the original, then the original message (`forwardHeaderHtml()`). In the conversation, a forward also shows **Originally from:** *author, date* under To / Cc. That line comes from the stored link, so it stays even if the forwarder edits the header out.
 
 **The "Forwarded" label.** A forward is labelled **Forwarded** on both sides: in the recipient's **Inbox** and the forwarder's **Sent** (before the subject), and in the conversation (next to the sender's name). The recipient's bell notification reads *"<name> forwarded: <subject>"*. The label comes from what's stored when the message is sent (`communications.forwarded_from_id`, migration `20261025120000_communication_forwarded`), so it stays even if the forwarder edits the text. The server only accepts a message the sender may read as the forwarded one (otherwise 404), and the audit log's `COMMUNICATION_SENT` entry records `forwardedFromId`. Before the migration is applied, a forward is sent without the label.
 
@@ -122,7 +124,7 @@ An All users message to, say, 1,500 people queues 1,500 emails; the queue's rate
 
 | What | Limit |
 |---|---|
-| Subject / text | at least 3 characters each; at most 200 / 10,000 characters. **Spaces and line breaks never count.** The counter under the editor uses the server's own rule (`src/lib/communications/plainText.ts`), so the number shown is exactly the number checked |
+| Subject / text | at least 3 characters each (spaces and line breaks don't count); the subject at most 200 characters; the text at most **10,000 words**. Words are counted like Microsoft Word: anything between spaces or line breaks that holds a letter or digit; a link counts its words, not its address; list bullets don't count. The counter under the editor uses the server's own rule (`countWords()` / `messageWords()` in `src/lib/communications/plainText.ts`), so the number shown is exactly the number checked |
 | Attachments | 10 per message, 25 MB in total (checked on the server when sending), PDF / .docx / .xlsx only. Checked **on the server**, whatever the browser checked: the real content must match the type (a renamed file is refused), the name's extension must match the type (a PDF can't be called `.exe`), and Word / Excel files must be sane archives (no "zip bombs") **without macros** ([uploadChecks.ts](../src/lib/uploadChecks.ts)) |
 | Messages sent | 20 per user per 10 minutes |
 | **All users** messages | 3 per user per hour |

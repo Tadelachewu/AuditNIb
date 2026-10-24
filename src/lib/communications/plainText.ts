@@ -1,7 +1,7 @@
 /**
- * A message's plain text and how its characters are counted - one rule for
- * the editor's counter (browser) and the server's checks, so the number the
- * user sees is exactly the number checked. No server-only imports here.
+ * A message's plain text and how its words are counted - one rule for the
+ * editor's counter (browser) and the server's checks, so the number the user
+ * sees is exactly the number checked. No server-only imports here.
  */
 
 const ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', "#39": "'", apos: "'", nbsp: " " };
@@ -36,7 +36,24 @@ export function countedChars(text: string): number {
   return text.replace(/\s/g, "").length;
 }
 
-/** The counted characters of what the editor holds: its HTML turned into the server's plain text. */
-export function messageChars(value: { html: string; text: string }): number {
-  return countedChars(value.html ? htmlToText(value.html) : value.text);
+/**
+ * Words, counted like Microsoft Word: anything between spaces or line breaks,
+ * as long as it holds a letter or a digit (a stray "-" or "*" isn't a word).
+ */
+export function countWords(text: string): number {
+  return (text.match(/\S+/g) ?? []).filter((t) => /[\p{L}\p{N}]/u.test(t)).length;
+}
+
+/**
+ * The words of what the editor holds - its visible text only: a link counts
+ * its words, not its address; list bullets don't count.
+ */
+export function messageWords(value: { html: string; text: string }): number {
+  if (!value.html) return countWords(value.text);
+  const visible = value.html
+    .replace(/<(br|hr)\b[^>]*>|<\/(p|h[1-6]|li|blockquote)>/gi, " ")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&(#39|[a-z]+);/gi, (m, name: string) => ENTITIES[name.toLowerCase()] ?? m)
+    .replace(/&#(\d+);/g, (_, n: string) => String.fromCharCode(Number(n)));
+  return countWords(visible);
 }

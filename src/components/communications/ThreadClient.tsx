@@ -1,7 +1,7 @@
 "use client";
 
 import { FieldLabel } from "./FieldLabel";
-import { messageChars } from "@/lib/communications/plainText";
+import { countedChars, htmlToText, messageWords } from "@/lib/communications/plainText";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -119,6 +119,11 @@ function MessageCard({ m, canForward, highlighted, onChanged, onRemoved }: { m: 
           </p>
           <p className="text-xs text-slate-500"><span className="font-semibold text-slate-600">To:</span> {to}</p>
           {cc && <p className="text-xs text-slate-500"><span className="font-semibold text-slate-600">Cc:</span> {cc}</p>}
+          {m.forwardedFrom && (
+            <p className="text-xs text-slate-500">
+              <span className="font-semibold text-slate-600">Originally from:</span> {m.forwardedFrom.senderName}, {formatDateTime(m.forwardedFrom.createdAt)}
+            </p>
+          )}
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1">
           <span className="text-xs text-slate-500">{formatDateTime(m.createdAt)}</span>
@@ -192,7 +197,7 @@ function ReplyBox({ message, onSent }: { message: MessageView; onSent: (id: stri
   const [attachments, setAttachments] = useState<AttachmentInfo[]>([]);
   const [uploading, setUploading] = useState(false);
   const [sending, setSending] = useState<"reply" | "all" | null>(null);
-  const empty = messageChars(reply) < LIMITS.minText || messageChars(reply) > LIMITS.body;
+  const empty = countedChars(reply.html ? htmlToText(reply.html) : reply.text) < LIMITS.minText || messageWords(reply) > LIMITS.body;
   const [error, setError] = useState<string | null>(null);
   // Reply all = the sender and everyone else on a message you received. Not
   // offered for an "All users" message (it would message everyone again), nor

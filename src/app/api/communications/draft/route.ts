@@ -11,7 +11,7 @@ import { canSendCommunications } from "@/lib/communications/rules";
 // failed autosave never interrupts writing the message.
 
 const TTL_SECONDS = 24 * 60 * 60;
-const MAX_BYTES = 300_000;
+const MAX_BYTES = 600_000;
 const draftKey = (userId: string) => `communication-draft-autosave:${userId}`;
 const logRedisFailure = (op: string, err: unknown) => logFailure(op, err, "Communication draft Redis operation failed");
 

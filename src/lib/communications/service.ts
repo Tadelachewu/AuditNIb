@@ -19,7 +19,9 @@ import {
   replySubject,
   resolveToAndCc,
 } from "./rules";
-import { emailHtml, htmlToText, originalBodyHtml, sanitizeMessageHtml } from "./richText";
+import { emailHtml, forwardHeaderHtml, htmlToText, originalBodyHtml, sanitizeMessageHtml } from "./richText";
+import { messageWords } from "./plainText";
+import { formatDateTime } from "@/lib/format";
 import { ATTACHMENT_TYPES, LIMITS, type AttachmentInfo, type Directory, type InboxItem, type MessageView, type RecipientSelection, type SentItem, type ThreadView } from "./types";
 
 /**
@@ -92,12 +94,13 @@ const ccInstalled = columnCheck("communication_recipients", "is_cc");
 /** The Forward link (migration 20261025120000_communication_forwarded). */
 const forwardInstalled = columnCheck("communications", "forwarded_from_id");
 
-/** Of these messages, the ones that are forwards ("Forwarded" label). */
-async function forwardedIds(ids: string[]): Promise<Set<string>> {
-  if (ids.length === 0 || !(await forwardInstalled())) return new Set();
-  const rows = await (prisma as unknown as RawClient).$queryRaw<{ id: string }[]>`
-    SELECT id FROM communications WHERE id = ANY(${ids}::text[]) AND forwarded_from_id IS NOT NULL`;
-  return new Set(rows.map((r) => r.id));
+/** Of these messages, the forwards ("Forwarded" label) and where each came from (null: the original is gone). */
+async function forwardedIds(ids: string[]): Promise<Map<string, { senderName: string; createdAt: string } | null>> {
+  if (ids.length === 0 || !(await forwardInstalled())) return new Map();
+  const rows = await (prisma as unknown as RawClient).$queryRaw<{ id: string; sender_name: string | null; created_at: Date | null }[]>`
+    SELECT c.id, o.sender_name, o.created_at FROM communications c LEFT JOIN communications o ON o.id = c.forwarded_from_id
+    WHERE c.id = ANY(${ids}::text[]) AND c.forwarded_from_id IS NOT NULL`;
+  return new Map(rows.map((r) => [r.id, r.sender_name && r.created_at ? { senderName: r.sender_name, createdAt: r.created_at.toISOString() } : null]));
 }
 
 export async function sendMessage(session: Session, input: SendInput): Promise<Result<{ id: string; recipients: number }>> {
@@ -146,7 +149,7 @@ export async function sendMessage(session: Session, input: SendInput): Promise<R
       forwardedFromId = original.id;
     }
   }
-  const problem = messageProblem(subject, body);
+  const problem = messageProblem(subject, body, messageWords({ html: bodyHtml ?? "", text: body }));
   if (problem) return fail(400, problem);
   if (recipients.length === 0) return fail(400, "Nobody to send to - choose at least one active user");
 
@@ -393,6 +396,7 @@ export async function openThread(session: Session, messageId: string): Promise<R
       bodyHtml: m.bodyHtml ? sanitizeMessageHtml(m.bodyHtml) : null,
       toAll: m.toAll,
       forwarded: forwards.has(m.id),
+      forwardedFrom: forwards.get(m.id) ?? null,
       createdAt,
       withdrawnAt,
       recipientCount: m._count.recipients,
@@ -590,6 +594,12 @@ export interface ForwardDraft {
  * recipients, limits and checks) does the rest. Files that can't be read or
  * wouldn't fit the limits are left out.
  */
+/** Names for a forward's header: the first 20, then "and N more". */
+function names(rows: { userName: string }[]): string {
+  const shown = rows.slice(0, 20).map((r) => r.userName).join(", ");
+  return rows.length > 20 ? `${shown} and ${rows.length - 20} more` : shown;
+}
+
 export async function forwardDraft(session: Session, messageId: string): Promise<Result<ForwardDraft>> {
   if (!canSendCommunications(session)) return fail(403, NOT_ALLOWED);
   const viewerId = session.userId!;
@@ -622,13 +632,27 @@ export async function forwardDraft(session: Session, messageId: string): Promise
     }
   }
 
+  // Its To / Cc for the header (Cc: column is_cc, once installed).
+  const people = (await ccInstalled())
+    ? await (prisma as unknown as RawClient).$queryRaw<{ userName: string; cc: boolean }[]>`
+        SELECT user_name AS "userName", is_cc AS cc FROM communication_recipients WHERE communication_id = ${m.id} ORDER BY user_name`
+    : (await prisma.communicationRecipient.findMany({ where: { communicationId: m.id }, select: { userName: true }, orderBy: { userName: "asc" } })).map((r) => ({ userName: r.userName, cc: false }));
+
   return {
     ok: true,
     value: {
       // The same subject, and the original message itself as the body
       // (formatting kept; a plain-text message as paragraphs).
       subject: m.subject.slice(0, LIMITS.subject),
-      bodyHtml: originalBodyHtml({ bodyHtml: m.bodyHtml ? sanitizeMessageHtml(m.bodyHtml) : null, body: m.body }),
+      // Where it came from (From / Sent / To / Cc / Subject), then the original.
+      bodyHtml:
+        forwardHeaderHtml({
+          senderName: m.senderName,
+          sentAt: formatDateTime(m.createdAt.toISOString()),
+          to: m.toAll ? "All users" : names(people.filter((r) => !r.cc)),
+          cc: people.some((r) => r.cc) ? names(people.filter((r) => r.cc)) : null,
+          subject: m.subject,
+        }) + originalBodyHtml({ bodyHtml: m.bodyHtml ? sanitizeMessageHtml(m.bodyHtml) : null, body: m.body }),
       attachments,
     },
   };
