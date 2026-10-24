@@ -109,8 +109,8 @@ async function handleGET(request: Request) {
     "Cases In",
     "Cases Out",
     "Total Cases",
-    "Rectified Amount (recorded)",
-    "Rectified Cases (recorded)",
+    "Rectified (pending) Amount",
+    "Rectified (pending) Cases",
     "Outstanding Amount",
     "Outstanding Cases",
     "Finding Date",
@@ -147,8 +147,10 @@ async function handleGET(request: Request) {
     // DRAFT in a period it left long ago.
     const amount = slice ? slice.eligibleAmount : f.amount;
     const caseCount = slice ? slice.eligibleCases : f.caseCount;
-    // Recorded rectifications (in the filtered period when there is one), and
-    // Outstanding = not yet formally closed - the same meaning as the list's columns.
+    // Rectified (pending) and Verified: recorded / verified less what's closed
+    // (in the filtered period when there is one); Outstanding = not yet formally
+    // closed - the same meaning as the list's columns.
+    const notClosed = (value: number, closed: number) => Math.max(0, Math.round((value - closed) * 100) / 100);
     const rectifiedAmount = slice ? slice.rectifiedAmount : f.rectifiedAmount;
     const rectifiedCases = slice ? slice.rectifiedCases : f.rectifiedCases;
     const closedAmount = slice ? slice.closedAmount : f.closedAmount;
@@ -172,8 +174,8 @@ async function handleGET(request: Request) {
       slice ? slice.casesIn : "",
       slice ? slice.casesOut : "",
       caseCount,
-      rectifiedAmount,
-      rectifiedCases,
+      notClosed(rectifiedAmount, closedAmount),
+      notClosed(rectifiedCases, closedCases),
       amount - closedAmount,
       caseCount - closedCases,
       f.findingDate,
@@ -182,8 +184,8 @@ async function handleGET(request: Request) {
       f.irregularityType ?? "",
       f.priority ?? "",
       slice ? slice.reportedAmount : registeredAmountOf(f),
-      slice ? slice.verifiedCases : f.districtVerifiedCases,
-      slice ? slice.verifiedAmount : f.districtVerifiedAmount,
+      notClosed(slice ? slice.verifiedCases : f.districtVerifiedCases, closedCases),
+      notClosed(slice ? slice.verifiedAmount : f.districtVerifiedAmount, closedAmount),
       closedCases,
       closedAmount,
       f.description ?? "",

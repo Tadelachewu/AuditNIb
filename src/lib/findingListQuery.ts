@@ -146,10 +146,11 @@ export function sortFindings<T extends { finding: Finding; amount?: number }>(
         return f.priority ?? "";
       case "reportedAmount":
         return slice ? slice.reportedAmount : registeredAmountOf(f);
+      // Less what's closed - as the Rectified (pending) / Verified columns show them.
       case "rectifiedCases":
-        return slice ? slice.rectifiedCases : f.rectifiedCases;
+        return Math.max(0, slice ? slice.rectifiedCases - slice.closedCases : f.rectifiedCases - f.closedCases);
       case "verifiedCases":
-        return slice ? slice.verifiedCases : f.districtVerifiedCases;
+        return Math.max(0, slice ? slice.verifiedCases - slice.closedCases : f.districtVerifiedCases - f.closedCases);
       case "closedCases":
         return slice ? slice.closedCases : f.closedCases;
       case "outstandingCases":

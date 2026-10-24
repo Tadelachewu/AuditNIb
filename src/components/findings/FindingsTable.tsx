@@ -107,6 +107,11 @@ const longText = (t: string) => (
   </span>
 );
 
+/** Rectified / verified less what's since been closed (the "pending" part). */
+function notClosed(value: number, closed: number): number {
+  return Math.max(0, Math.round((value - closed) * 100) / 100);
+}
+
 export interface BulkPermissions {
   canDistrictReview: boolean;
   canHoReview: boolean;
@@ -449,10 +454,11 @@ export function FindingsTable({
       { id: "priority", accessorKey: "priority", header: "Priority", size: 90 },
       { id: "currency", accessorKey: "currency", header: "Currency", size: 80, enableSorting: false },
       { id: "reportedAmount", accessorKey: "reportedAmount", header: "Registered Amount", Cell: ({ row }) => money(row.original.currency, row.original.reportedAmount) },
-      { id: "rectifiedCases", accessorKey: "rectifiedCases", header: "Rectified (pending) Cases", size: 110, Cell: ({ row }) => num(row.original.rectifiedCases) },
-      { id: "rectifiedAmount", accessorKey: "rectifiedAmount", header: "Rectified (pending) Amount", enableSorting: false, Cell: ({ row }) => money(row.original.currency, row.original.rectifiedAmount) },
-      { id: "verifiedCases", accessorKey: "districtVerifiedCases", header: "Verified Cases", size: 100, Cell: ({ row }) => num(row.original.districtVerifiedCases) },
-      { id: "verifiedAmount", accessorKey: "districtVerifiedAmount", header: "Verified Amount", enableSorting: false, Cell: ({ row }) => money(row.original.currency, row.original.districtVerifiedAmount) },
+      // Rectified (pending) and Verified never include closed cases: closing takes them off both.
+      { id: "rectifiedCases", accessorKey: "rectifiedCases", header: "Rectified (pending) Cases", size: 110, Cell: ({ row }) => num(notClosed(row.original.rectifiedCases, row.original.closedCases)) },
+      { id: "rectifiedAmount", accessorKey: "rectifiedAmount", header: "Rectified (pending) Amount", enableSorting: false, Cell: ({ row }) => money(row.original.currency, notClosed(row.original.rectifiedAmount, row.original.closedAmount)) },
+      { id: "verifiedCases", accessorKey: "districtVerifiedCases", header: "Verified Cases", size: 100, Cell: ({ row }) => num(notClosed(row.original.districtVerifiedCases, row.original.closedCases)) },
+      { id: "verifiedAmount", accessorKey: "districtVerifiedAmount", header: "Verified Amount", enableSorting: false, Cell: ({ row }) => money(row.original.currency, notClosed(row.original.districtVerifiedAmount, row.original.closedAmount)) },
       { id: "closedCases", accessorKey: "closedCases", header: "Rectified (closed) Cases", size: 100, Cell: ({ row }) => num(row.original.closedCases) },
       { id: "closedAmount", accessorKey: "closedAmount", header: "Rectified (closed) Amount", enableSorting: false, Cell: ({ row }) => money(row.original.currency, row.original.closedAmount) },
       { id: "outstandingCases", accessorKey: "outstandingCases", header: "Outstanding Cases", size: 110, Cell: ({ row }) => num(row.original.outstandingCases) },
