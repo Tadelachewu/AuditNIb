@@ -101,6 +101,14 @@ async function forwardedIds(ids: string[]): Promise<Set<string>> {
   return new Set(rows.map((r) => r.id));
 }
 
+/** The author of the message this one forwards (null: not a forward, or the original is gone). */
+async function forwardedFromSender(messageId: string): Promise<string | null> {
+  if (!(await forwardInstalled())) return null;
+  const rows = await (prisma as unknown as RawClient).$queryRaw<{ sender_id: string }[]>`
+    SELECT o.sender_id FROM communications c JOIN communications o ON o.id = c.forwarded_from_id WHERE c.id = ${messageId}`;
+  return rows[0]?.sender_id ?? null;
+}
+
 /** Names for a forward's origin: the first 20, then "and N more". */
 function names(list: string[]): string {
   const shown = list.slice(0, 20).join(", ");
@@ -173,7 +181,14 @@ export async function sendMessage(session: Session, input: SendInput): Promise<R
     const isRecipient = Boolean(original?.recipients.some((r) => r.userId === senderId));
     if (!original || (!isSender && (!isRecipient || original.withdrawnAt))) return fail(404, "Message not found");
     if (original.withdrawnAt) return fail(409, "This message was withdrawn - it can't be replied to");
-    const who = replyRecipients(db, { senderId: original.senderId, toAll: original.toAll, recipientIds: original.recipients.map((r) => r.userId) }, senderId, Boolean(input.replyAll));
+    // Reply all on a forward also reaches the forwarded message's author.
+    const forwardedFromSenderId = input.replyAll ? await forwardedFromSender(original.id) : null;
+    const who = replyRecipients(
+      db,
+      { senderId: original.senderId, toAll: original.toAll, recipientIds: original.recipients.map((r) => r.userId), forwardedFromSenderId },
+      senderId,
+      Boolean(input.replyAll)
+    );
     if ("error" in who) return fail(400, who.error);
     recipients = who;
     subject = replySubject(original.subject);

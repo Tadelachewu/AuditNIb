@@ -82,9 +82,14 @@ export function ThreadClient({ id, canSend }: { id: string; canSend: boolean }) 
   );
 }
 
-/** Reply all = the sender and everyone else on a message you received. Not for an "All users" message (it would message everyone again), nor your own message (Reply already goes to all its recipients). */
+/**
+ * Reply all = the sender and everyone else on a message you received - on a
+ * forward, also the original's author. Not for an "All users" message (it
+ * would message everyone again), nor your own message (Reply already goes to
+ * all its recipients).
+ */
 function canReplyAll(m: MessageView): boolean {
-  return !m.mine && !m.toAll && m.recipientCount > 1;
+  return !m.mine && !m.toAll && (m.recipientCount > 1 || m.forwardedFrom !== null);
 }
 
 function BackLink() {

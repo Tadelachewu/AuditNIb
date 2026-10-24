@@ -106,6 +106,11 @@ describe("replies", () => {
   it("Reply goes to the sender; Reply all to the sender and the other recipients", () => {
     expect(ids(replyRecipients(db, msg, "bc", false))).toEqual(["ho"]);
     expect(ids(replyRecipients(db, msg, "bc", true))).toEqual(["bm", "dc", "ho"]);
+    // Reply all on a forward also reaches the forwarded message's author (never yourself).
+    const fwd = { senderId: "ho", toAll: false, recipientIds: ["bc"], forwardedFromSenderId: "dc" };
+    expect(ids(replyRecipients(db, fwd, "bc", true))).toEqual(["dc", "ho"]);
+    expect(ids(replyRecipients(db, fwd, "bc", false))).toEqual(["ho"]);
+    expect(ids(replyRecipients(db, { ...fwd, forwardedFromSenderId: "bc" }, "bc", true))).toEqual(["ho"]);
   });
   it("the sender following up their own message reaches its recipients", () => {
     expect(ids(replyRecipients(db, msg, "ho", false))).toEqual(["bc", "bm", "dc"]);

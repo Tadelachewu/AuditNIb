@@ -67,11 +67,13 @@ export function resolveToAndCc(
  *   Reply      the message's sender; when you reply to your own message, its recipients.
  *   Reply all  the sender and every recipient, except yourself - not offered
  *              for an "All users" message (it would message everyone again).
+ *              On a forward, also the forwarded message's author
+ *              (`forwardedFromSenderId`).
  * Only people who can still receive messages (active, not administrators).
  */
 export function replyRecipients(
   db: Pick<Database, "users">,
-  message: { senderId: string; toAll: boolean; recipientIds: string[] },
+  message: { senderId: string; toAll: boolean; recipientIds: string[]; forwardedFromSenderId?: string | null },
   viewerId: string,
   all: boolean
 ): { id: string; name: string }[] | { error: string } {
@@ -80,6 +82,7 @@ export function replyRecipients(
   if (all) {
     ids.add(message.senderId);
     message.recipientIds.forEach((id) => ids.add(id));
+    if (message.forwardedFromSenderId) ids.add(message.forwardedFromSenderId);
   } else if (message.senderId === viewerId) {
     if (message.toAll) return { error: "To follow up a message sent to all users, send a new message" };
     message.recipientIds.forEach((id) => ids.add(id));
