@@ -5,7 +5,8 @@ This is the deep, standalone reference for the three self-service authentication
 message, cited `file:line` against the running code. `docs/platform-and-access.md` §1 covers the same
 ground at summary depth (plus Sessions, `requireUser()`/`requirePermission()`, Logout, `/api/auth/me`,
 and self-service Change Password, which this document doesn't repeat); this document goes one level
-deeper on the two flows the task specifically asked for. For what to do when self-service recovery is
+deeper on the two flows the task specifically asked for. When a password change is *forced*, the
+rules for a new password and every time limit, in plain terms: `docs/password-change-rules.md`. For what to do when self-service recovery is
 **itself unusable** (a locked-out sole admin, a placeholder email on file), see
 `docs/ACCOUNT_RECOVERY.md` — a DB/CLI escape-hatch playbook, deliberately out of scope here.
 
@@ -187,10 +188,11 @@ the `/forgot-password` page's own UI (never exposed as a different status code o
 
 Only reached for a real, deliverable-email match:
 
-1. **Token**: `crypto.randomBytes(32).toString("base64url")` — 256 bits of entropy, stored **raw** (not
-   hashed) in Postgres `PasswordResetToken.token` (`forgot-password/route.ts:148`; schema
-   `prisma/schema.prisma:114-130`, whose own comment explains storing it raw is acceptable specifically
-   *because* it's already single-use and this much entropy).
+1. **Token**: `crypto.randomBytes(32).toString("base64url")` — 256 bits of entropy. Only its
+   **SHA-256 hash** is stored in Postgres `PasswordResetToken.token` (`hashResetToken()`,
+   `src/lib/resetToken.ts`); the raw token exists only in the emailed link, and
+   `reset-password` hashes the presented token the same way to look it up. A database leak
+   therefore exposes no usable reset links.
 2. **TTL: exactly 30 minutes** (`TOKEN_TTL_MS = 30 * 60 * 1000`, `forgot-password/route.ts:17`).
 3. **Any prior unused token for this user is invalidated first** — `updateMany({ where: { userId,
    usedAt: null }, data: { usedAt: new Date() } })` inside the same Postgres transaction that creates

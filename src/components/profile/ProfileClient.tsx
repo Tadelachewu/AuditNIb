@@ -7,7 +7,7 @@ import { notify, notifications } from "@/lib/notify";
 import { Card } from "@/components/ui/Card";
 import { CollapsibleCard } from "@/components/ui/CollapsibleCard";
 import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Field";
+import { PasswordInput } from "@/components/auth/PasswordInput";
 import { PasswordRules } from "@/components/ui/PasswordRules";
 import { validatePasswordStrength } from "@/lib/passwordValidation";
 import { OPEN_CHANGE_PASSWORD_EVENT } from "@/components/layout/UserMenu";
@@ -108,9 +108,8 @@ export function ProfileClient({ forced }: { forced: boolean }) {
         <form onSubmit={savePassword} className="flex flex-col gap-3 p-4 sm:max-w-sm">
           <div>
             <Label htmlFor="current-password">Current password</Label>
-            <Input
+            <PasswordInput
               id="current-password"
-              type="password"
               required
               value={currentPassword}
               onChange={(e) => setCurrentPassword(e.target.value)}
@@ -118,9 +117,8 @@ export function ProfileClient({ forced }: { forced: boolean }) {
           </div>
           <div>
             <Label htmlFor="new-password">New password</Label>
-            <Input
+            <PasswordInput
               id="new-password"
-              type="password"
               required
               autoComplete="new-password"
               value={newPassword}
@@ -132,9 +130,8 @@ export function ProfileClient({ forced }: { forced: boolean }) {
           </div>
           <div>
             <Label htmlFor="confirm-password">Confirm new password</Label>
-            <Input
+            <PasswordInput
               id="confirm-password"
-              type="password"
               required
               autoComplete="new-password"
               value={confirmPassword}

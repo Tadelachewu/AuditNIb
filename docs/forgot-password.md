@@ -2,7 +2,8 @@
 
 How a user who forgot their password sets a new one, and every rule along the way.
 For the full technical reference (code locations, response shapes, rate-limit keys) see
-[login-and-password.md](login-and-password.md) §2–3.
+[login-and-password.md](login-and-password.md) §2–3. When the system forces a password change,
+the password rules and every time limit: [password-change-rules.md](password-change-rules.md).
 
 ---
 

@@ -6,7 +6,8 @@ import Link from "next/link";
 import { apiSend } from "@/lib/api-client";
 import { notify, notifications } from "@/lib/notify";
 import { Button } from "@/components/ui/Button";
-import { Input, Label } from "@/components/ui/Field";
+import { Label } from "@/components/ui/Field";
+import { PasswordInput } from "@/components/auth/PasswordInput";
 import { validatePasswordStrength } from "@/lib/passwordValidation";
 import { PasswordRules } from "@/components/ui/PasswordRules";
 import { AuthBackdrop, AUTH_PANEL_CLASS } from "@/components/auth/AuthBackdrop";
@@ -124,9 +125,8 @@ export function ResetPasswordClient({ token: token }: { token: string | null }) 
         <form onSubmit={handleSubmit}>
           <div className="mb-4">
             <Label htmlFor="newPassword" brand>New password</Label>
-            <Input
+            <PasswordInput
               id="newPassword"
-              type="password"
               autoFocus
               autoComplete="new-password"
               value={newPassword}
@@ -144,9 +144,8 @@ export function ResetPasswordClient({ token: token }: { token: string | null }) 
           </div>
           <div className="mb-4">
             <Label htmlFor="confirmPassword" brand>Confirm new password</Label>
-            <Input
+            <PasswordInput
               id="confirmPassword"
-              type="password"
               autoComplete="new-password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
